@@ -1,0 +1,123 @@
+/* Print Styles */
+@media screen {
+  .print-container {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background-color: white;
+    font-family: Arial, sans-serif;
+  }
+  
+  .no-print-button {
+    margin: 20px 0;
+    text-align: center;
+  }
+  
+  .no-print-button button {
+    background-color: #4a6cf7;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  
+  .no-print-button button:hover {
+    background-color: #3a59d9;
+  }
+}
+
+@media print {
+  body {
+    background-color: white;
+    font-family: Arial, sans-serif;
+    font-size: 12pt;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .print-container {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .no-print-button {
+    display: none;
+  }
+  
+  /* Page breaks */
+  .page-break {
+    page-break-after: always;
+    height: 0;
+    display: block;
+  }
+}
+
+/* Common styles for both print and screen */
+.print-header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #333;
+}
+
+.print-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 24pt;
+  color: #333;
+}
+
+.print-date {
+  margin: 0;
+  font-size: 12pt;
+  color: #666;
+}
+
+.print-content {
+  margin-bottom: 30px;
+}
+
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.print-table th, 
+.print-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.print-table th {
+  width: 30%;
+  background-color: #f5f5f5;
+  font-weight: bold;
+}
+
+.print-footer {
+  margin-top: 30px;
+  padding-top: 15px;
+  border-top: 1px solid #ddd;
+  text-align: center;
+  font-size: 10pt;
+  color: #666;
+}
+
+/* Loading and error states */
+.print-loading,
+.print-error {
+  text-align: center;
+  padding: 40px;
+  font-size: 16pt;
+}
+
+.print-error {
+  color: #e53935;
+} 

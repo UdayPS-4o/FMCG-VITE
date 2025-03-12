@@ -1,0 +1,106 @@
+[
+  {
+    "date": "2024-09-05",
+    "voucherNo": "123",
+    "party": "CT000",
+    "series": "Ss",
+    "amount": "12343",
+    "discount": 3444
+  },
+  {
+    "date": "2024-09-01",
+    "voucherNo": "12",
+    "party": "CT001",
+    "series": "123",
+    "amount": "123",
+    "discount": "123"
+  },
+  {
+    "date": "2024-09-01",
+    "voucherNo": "12314",
+    "party": "CT000",
+    "series": "1234",
+    "amount": "1324234324234123412341",
+    "discount": 123412341234
+  },
+  {
+    "date": "2024-09-01",
+    "voucherNo": "11234",
+    "party": "CT001",
+    "series": "1234",
+    "amount": "1234",
+    "discount": "1234"
+  },
+  {
+    "date": "2024-09-01",
+    "voucherNo": "1",
+    "party": "AA001",
+    "series": "T",
+    "amount": "12",
+    "discount": "12"
+  },
+  {
+    "date": "2024-09-01",
+    "voucherNo": "16668",
+    "party": "AA001",
+    "series": "12123",
+    "amount": "12123123234234",
+    "discount": 1212312334
+  },
+  {
+    "date": "2024-09-16",
+    "series": "S",
+    "amount": "22224",
+    "discount": 23412312,
+    "voucherNo": "16670",
+    "party": "CT003"
+  },
+  {
+    "date": "2024-09-18",
+    "series": "111",
+    "amount": "1234",
+    "discount": 1234,
+    "voucherNo": "16672",
+    "party": "CT001"
+  },
+  {
+    "date": "2024-09-26",
+    "series": "ST",
+    "amount": "134123412341234",
+    "discount": 1234213412341234,
+    "voucherNo": "16674",
+    "party": "CT002"
+  },
+  {
+    "date": "2024-09-05",
+    "series": "1234",
+    "amount": "12341234",
+    "discount": 12,
+    "voucherNo": "MyNigga",
+    "party": "CT007"
+  },
+  {
+    "date": "2024-09-08",
+    "series": "O",
+    "amount": "12314",
+    "discount": 12,
+    "voucherNo": "orcus01",
+    "party": "AA001"
+  },
+  {
+    "date": "2024-10-06",
+    "series": "X",
+    "amount": "23",
+    "discount": "",
+    "voucherNo": "12342134123532",
+    "party": "AA001"
+  },
+  {
+    "date": "2024-10-06",
+    "series": "x",
+    "amount": "13241234",
+    "discount": 12,
+    "voucherNo": "asdfasdfsdavasd23123",
+    "party": "CT001"
+  }
+]

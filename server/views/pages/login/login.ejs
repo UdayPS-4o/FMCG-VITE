@@ -1,0 +1,87 @@
+<%- include('../../partials/top') %>
+
+<style>
+  aside.left-sidebar.with-vertical,
+  header.topbar {
+    display: none;
+  }
+
+  .container-fluid {
+    display: flex;
+    justify-content: center;
+  }
+
+  .page-wrapper {
+    margin-left: 0px !important;
+  }
+
+  .body-wrapper {
+    padding-top: 0 !important;
+  }
+</style>
+
+<div class="col-xl-5 col-xxl-4">
+  <div
+    class="authentication-login min-vh-100 bg-body row justify-content-center align-items-center p-4"
+  >
+    <div class="auth-max-width col-sm-8 col-md-6 col-xl-7 px-4">
+
+      <div class="row">
+       
+      
+      <form action="/api/login" method="POST">
+        
+        <div class="mb-3">
+          <label for="firm" class="form-label">Firm</label>
+          <select class="form-select" id="firm" name="firm">
+          </select>
+        </div>
+
+
+        <div class="mb-3">
+          <label for="exampleInputEmail1" class="form-label">Username</label>
+          <input
+            type="text"
+            class="form-control"
+            id="exampleInputEmail1"
+            aria-describedby="emailHelp"
+            name="username"
+          />
+        </div>
+        <div class="mb-4">
+          <label for="exampleInputPassword1" class="form-label">Password</label>
+          <input
+            type="password"
+            class="form-control"
+            id="exampleInputPassword1"
+            name="password"
+          />
+        </div>
+        <div class="d-flex align-items-center justify-content-between mb-4">
+       
+         
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-8 mb-4 rounded-2">
+          login In
+        </button>
+        <div class="d-flex align-items-center justify-content-center">
+         
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<script>
+  let firmss = <%- JSON.stringify(firm) %>;
+  firmss = firmss.filter((firm) => firm.SHOW_YR == 'Y');
+
+  firmss.forEach((firm) => {
+    document.getElementById('firm').innerHTML += `<option value="${firm.FY}">${firm.FIRM} | ${firm.FY}</option>`;
+  });
+</script>
+
+<%- include('../../partials/bottom') %>
+
+

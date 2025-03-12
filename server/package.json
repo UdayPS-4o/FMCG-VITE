@@ -1,0 +1,40 @@
+{
+  "dependencies": {
+    "axios": "^1.7.2",
+    "cheerio": "^1.0.0-rc.12",
+    "cookie-parser": "^1.4.6",
+    "date-fns": "^4.1.0",
+    "dbf": "^0.2.0",
+    "dbf-reader": "^1.0.3",
+    "dbffile": "^1.9.3",
+    "ejs": "^3.1.9",
+    "ethers": "5.7.2",
+    "express": "^4.18.3",
+    "fetch": "^1.1.0",
+    "html-template-02": "github:UdayPS-4o/html-template-02",
+    "i": "^0.3.7",
+    "io": "^1.5.0",
+    "jsoncrush": "^1.1.8",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "node-dbf": "^0.4.0",
+    "node-xlsx": "^0.23.0",
+    "npm": "^10.5.0",
+    "shapefile": "^0.6.6",
+    "socket.io": "^4.7.5",
+    "xlsx": "^0.19.3"
+  },
+  "name": "fmcg",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "nodemon -e .js app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

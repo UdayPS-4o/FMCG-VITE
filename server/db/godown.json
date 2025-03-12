@@ -1,0 +1,1324 @@
+[
+  {
+    "date": "2024-07-20",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "03",
+    "id": "7",
+    "items": [
+      {
+        "code": "GJ947",
+        "qty": "1",
+        "unit": "01"
+      },
+      {
+        "code": "GJ847",
+        "qty": "3",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "5",
+        "unit": "01"
+      },
+      {
+        "code": "H3537",
+        "qty": "10",
+        "unit": "01"
+      },
+      {
+        "code": "ME032",
+        "qty": "30",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "10",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "25",
+        "unit": "01"
+      },
+      {
+        "code": "ME006",
+        "qty": "25",
+        "unit": "01"
+      },
+      {
+        "code": "H1977",
+        "qty": "13",
+        "unit": "01"
+      },
+      {
+        "code": "H1977",
+        "qty": "5",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "10",
+        "unit": "01"
+      },
+      {
+        "code": "H2528",
+        "qty": "1",
+        "unit": "01"
+      },
+      {
+        "code": "ME006",
+        "qty": "12",
+        "unit": "01"
+      },
+      {
+        "code": "ME006",
+        "qty": "12",
+        "unit": "01"
+      },
+      {
+        "code": "DA005",
+        "qty": "16",
+        "unit": "01"
+      }
+    ]
+  },
+  {
+    "date": "2024-07-20",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "01",
+    "id": "4",
+    "items": [
+      {
+        "code": "GJ910",
+        "qty": "5",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "1",
+        "unit": "01"
+      }
+    ]
+  },
+  {
+    "date": "2024-07-20",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "01",
+    "id": "5",
+    "items": [
+      {
+        "code": "DA001",
+        "qty": "20",
+        "unit": "02"
+      },
+      {
+        "code": "DA004",
+        "qty": "10",
+        "unit": "02"
+      },
+      {
+        "code": "GJ819",
+        "qty": "50",
+        "unit": "01"
+      }
+    ]
+  },
+  {
+    "date": "2024-07-20",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "04",
+    "id": "6",
+    "items": [
+      {
+        "code": "GJ820",
+        "qty": "10",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "50",
+        "unit": "01"
+      },
+      {
+        "code": "GJ818",
+        "qty": "25",
+        "unit": "01"
+      }
+    ]
+  },
+  {
+    "date": "2024-07-20",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "03",
+    "id": "7",
+    "items": [
+      {
+        "code": "GJ947",
+        "qty": "1",
+        "unit": "01"
+      },
+      {
+        "code": "GJ847",
+        "qty": "3",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "5",
+        "unit": "01"
+      },
+      {
+        "code": "H3537",
+        "qty": "10",
+        "unit": "01"
+      },
+      {
+        "code": "ME032",
+        "qty": "30",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "10",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "25",
+        "unit": "01"
+      },
+      {
+        "code": "ME006",
+        "qty": "25",
+        "unit": "01"
+      },
+      {
+        "code": "H1977",
+        "qty": "13",
+        "unit": "01"
+      },
+      {
+        "code": "H1977",
+        "qty": "5",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "10",
+        "unit": "01"
+      },
+      {
+        "code": "H2528",
+        "qty": "1",
+        "unit": "02"
+      },
+      {
+        "code": "ME006",
+        "qty": "12",
+        "unit": "01"
+      },
+      {
+        "code": "ME006",
+        "qty": "12",
+        "unit": "01"
+      },
+      {
+        "code": "DA005",
+        "qty": "16",
+        "unit": "01"
+      }
+    ]
+  },
+  {
+    "date": "2024-07-20",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "01",
+    "id": "8",
+    "items": [
+      {
+        "code": "GJ947",
+        "qty": "5",
+        "unit": "01"
+      },
+      {
+        "code": "GJ910",
+        "qty": "2",
+        "unit": "01"
+      },
+      {
+        "code": "GJ910",
+        "qty": "5",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "4",
+        "unit": "01"
+      },
+      {
+        "code": "GJ819",
+        "qty": "3",
+        "unit": "01"
+      },
+      {
+        "code": "ME006",
+        "qty": "2",
+        "unit": "01"
+      },
+      {
+        "code": "H3676",
+        "qty": "10",
+        "unit": "01"
+      }
+    ]
+  },
+  {
+    "date": "2024-07-20",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "01",
+    "id": "9",
+    "items": [
+      {
+        "code": "DA001",
+        "qty": "1000",
+        "unit": "01"
+      }
+    ]
+  },
+  {
+    "date": "2024-09-08",
+    "series": "T",
+    "fromGodown": "03",
+    "toGodown": "04",
+    "items": [
+      {
+        "code": "MK010",
+        "qty": 2,
+        "unit": "PCS"
+      }
+    ],
+    "id": 10
+  },
+  {
+    "date": "2024-09-08",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "id": 11,
+    "items": [
+      {
+        "code": "GJ947",
+        "qty": 0.6666666666666666,
+        "unit": "PCS"
+      },
+      {
+        "code": "GJ847",
+        "qty": "3",
+        "unit": "PCS"
+      },
+      {
+        "code": "GJ819",
+        "qty": "5",
+        "unit": "PCS"
+      },
+      {
+        "code": "H3537",
+        "qty": "10",
+        "unit": "PCS"
+      },
+      {
+        "code": "ME032",
+        "qty": "30",
+        "unit": "BOX"
+      },
+      {
+        "code": "GJ819",
+        "qty": "10",
+        "unit": "PCS"
+      },
+      {
+        "code": "GJ819",
+        "qty": "25",
+        "unit": "PCS"
+      },
+      {
+        "code": "ME006",
+        "qty": "25",
+        "unit": "BOX"
+      },
+      {
+        "code": "H1977",
+        "qty": "13",
+        "unit": "PCS"
+      },
+      {
+        "code": "H1977",
+        "qty": "5",
+        "unit": "PCS"
+      },
+      {
+        "code": "GJ819",
+        "qty": "10",
+        "unit": "PCS"
+      },
+      {
+        "code": "H2528",
+        "qty": "1",
+        "unit": "PCS"
+      },
+      {
+        "code": "ME006",
+        "qty": "12",
+        "unit": "BOX"
+      },
+      {
+        "code": "ME006",
+        "qty": "12",
+        "unit": "BOX"
+      },
+      {
+        "code": "DA005",
+        "qty": "16",
+        "unit": "PCS"
+      }
+    ]
+  },
+  {
+    "date": "2024-09-12",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "id": 12,
+    "items": [
+      {
+        "code": "GJ947",
+        "qty": "1",
+        "unit": "PCS"
+      },
+      {
+        "code": "GJ819",
+        "qty": "5",
+        "unit": "PCS"
+      },
+      {
+        "code": "H3537",
+        "qty": "10",
+        "unit": "PCS"
+      },
+      {
+        "code": "ME032",
+        "qty": "30",
+        "unit": "BOX"
+      },
+      {
+        "code": "GJ819",
+        "qty": "10",
+        "unit": "PCS"
+      },
+      {
+        "code": "GJ819",
+        "qty": "25",
+        "unit": "PCS"
+      },
+      {
+        "code": "ME006",
+        "qty": "25",
+        "unit": "BOX"
+      },
+      {
+        "code": "H1977",
+        "qty": "13",
+        "unit": "PCS"
+      },
+      {
+        "code": "H1977",
+        "qty": "5",
+        "unit": "PCS"
+      },
+      {
+        "code": "GJ819",
+        "qty": "10",
+        "unit": "PCS"
+      },
+      {
+        "code": "H2528",
+        "qty": "1",
+        "unit": "PCS"
+      },
+      {
+        "code": "ME006",
+        "qty": "12",
+        "unit": "BOX"
+      },
+      {
+        "code": "ME006",
+        "qty": "12",
+        "unit": "BOX"
+      },
+      {
+        "code": "DA005",
+        "qty": "16",
+        "unit": "PCS"
+      }
+    ]
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 13
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 14
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 15
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "",
+        "unit": "PCS"
+      },
+      {
+        "code": "MK009",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 16
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "",
+        "unit": "PCS"
+      },
+      {
+        "code": "MK009",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 17
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "",
+        "unit": "PCS"
+      },
+      {
+        "code": "MK009",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 18
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "",
+        "unit": "PCS"
+      },
+      {
+        "code": "MK009",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 19
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "",
+        "unit": "PCS"
+      },
+      {
+        "code": "MK009",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 20
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "",
+        "unit": "PCS"
+      },
+      {
+        "code": "MK009",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 21
+  },
+  {
+    "date": "2024-10-02",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "",
+        "unit": "PCS"
+      },
+      {
+        "code": "MK009",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 22
+  },
+  {
+    "date": "2024-10-04",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 23
+  },
+  {
+    "date": "2024-10-04",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 24
+  },
+  {
+    "date": "2024-10-04",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 25
+  },
+  {
+    "date": "2024-10-04",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 26
+  },
+  {
+    "date": "2024-10-04",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 27
+  },
+  {
+    "date": "2024-10-04",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "",
+        "qty": "",
+        "unit": ""
+      }
+    ],
+    "id": 28
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK007",
+        "qty": "10",
+        "unit": "BOX"
+      }
+    ],
+    "id": 29
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK007",
+        "qty": "10",
+        "unit": "BOX"
+      }
+    ],
+    "id": 30
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK007",
+        "qty": "10",
+        "unit": "BOX"
+      }
+    ],
+    "id": 31
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK007",
+        "qty": "10",
+        "unit": "BOX"
+      }
+    ],
+    "id": 32
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK007",
+        "qty": "10",
+        "unit": "BOX"
+      }
+    ],
+    "id": 33
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK007",
+        "qty": "10",
+        "unit": "BOX"
+      }
+    ],
+    "id": 34
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK005",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 35
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK005",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 36
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK005",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 37
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK005",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 38
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK005",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 39
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK005",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 40
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 41
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 42
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 43
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 44
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 45
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 46
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 47
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 48
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 49
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 50
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 51
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 52
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 53
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 54
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 55
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 56
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 57
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 58
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "id": 59
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "ME006",
+        "qty": "",
+        "unit": "BOX"
+      }
+    ],
+    "id": 60
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "ME006",
+        "qty": "",
+        "unit": "BOX"
+      }
+    ],
+    "id": 61
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "ME006",
+        "qty": "",
+        "unit": "BOX"
+      }
+    ],
+    "id": 62
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "ME006",
+        "qty": 157,
+        "unit": "BOX"
+      }
+    ],
+    "id": 63
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK009",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 64
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "ME006",
+        "qty": "",
+        "unit": "BOX"
+      }
+    ],
+    "id": 65
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "ME006",
+        "qty": "",
+        "unit": "BOX"
+      }
+    ],
+    "id": 66
+  },
+  {
+    "date": "2024-10-06",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK005",
+        "qty": "",
+        "unit": "PCS"
+      }
+    ],
+    "id": 67
+  },
+  {
+    "date": "2024-10-19",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": 2637,
+        "unit": "PCS"
+      },
+      {
+        "code": "ME006",
+        "qty": 132,
+        "unit": "BOX"
+      }
+    ],
+    "id": 68
+  },
+  {
+    "date": "2024-10-19",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": 659,
+        "unit": "Box"
+      }
+    ],
+    "id": 69
+  },
+  {
+    "date": "2024-10-23",
+    "series": "T",
+    "fromGodown": "",
+    "toGodown": "",
+    "items": [
+      {
+        "code": "MK009",
+        "qty": 852,
+        "unit": "PCS"
+      }
+    ],
+    "id": 70
+  }
+]

@@ -1,0 +1,51 @@
+/* Custom scrollbar styles */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb, rgba(156, 163, 175, 0.5)) transparent;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  border-radius: 0.375rem; /* rounded-md */
+}
+
+/* Custom scrollbar for webkit browsers */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb, rgba(156, 163, 175, 0.5));
+  border-radius: 4px;
+  border: 2px solid transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover, rgba(156, 163, 175, 0.7));
+}
+
+/* Dark mode scrollbars */
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-dark, rgba(75, 85, 99, 0.5));
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-dark-hover, rgba(75, 85, 99, 0.7));
+}
+
+/* Prevent horizontal overflow on container elements */
+.container {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Ensure tables inside the scrollable area don't cause overflow */
+.custom-scrollbar table {
+  min-width: 100%;
+  width: auto;
+} 

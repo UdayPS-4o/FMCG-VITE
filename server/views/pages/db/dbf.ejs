@@ -1,0 +1,106 @@
+<%- include('../../partials/top') %>
+
+
+
+<div class="container-xxl flex-grow-1 container-p-y">
+   <h4 class="fw-bold py-3 mb-4">
+      <!-- <span class="text-muted fw-light">Account Settings /</span> -->
+      <%- name %>
+   </h4>
+
+   <div class="row">
+      <div class="col-md-12">
+
+         <div class="row">
+            <div class="col-12">
+              <!-- start File export -->
+              <div class="card">
+                <div class="card-body">
+                 
+
+                  <div class="table-responsive">
+                    <table id="tabxp" class="table border w-100 table-striped table-bordered display text-nowrap">
+                      <thead>
+                        <!-- start row -->
+                        
+                        <!-- end row -->
+                      </thead>
+
+                      <tbody>
+                      </tbody>
+
+                      
+                    </table>
+                  </div>
+                </div>
+              </div> 
+
+
+
+
+   </div>
+</div>
+
+
+<%- include('../../partials/bottom') %>
+
+   <script>
+     let json = <%- JSON.stringify(dbfFiles) %>;
+     // replace null values with empty string
+      json.forEach(item => {
+        for (const key in item) {
+          if (item[key] === null) {
+            item[key] = "";
+          }
+        }
+      });
+      // // keep top 100
+      (async () => {
+
+        //  const url = "/json/< %- file %>";
+        //  const response = await fetch(url);
+        //  const json = await response.json();
+        //  const modifiedJson = originalJson.map(item => ({
+        //     name: item.C_NAME,
+        //     email: item.C_CODE
+        //   }));
+
+        // add a last column for action
+        if (json[0].name && Object.keys(json[0]).length == 1) {
+          json.forEach(item => {
+            item.action = `
+            <a type="button" data-bs-toggle="modal" class="editbutton" onclick="action('view','${item.name}')">
+              <i class="fa fa-eye"></i>
+              </a> &nbsp;             
+            `
+          })
+        }else{
+          document.querySelector(".table-responsive").style.setProperty("overflow-x", "auto", "important");
+        }
+
+
+         renderJsonToDataTable("#tabxp", json, true)
+
+     
+
+
+      })()
+
+      function action(action, id) {
+        console.log(action, id);
+        if (action === "view") {
+          console.log("view");
+          window.location.href = `/dbf/${id}`;
+        } else if (action === "del") {
+          console.log("del");
+        }
+      }
+      
+
+   </script>
+
+
+
+</body>
+
+</html>

@@ -1,0 +1,76 @@
+
+<script>
+  function fillForm(data) {
+
+    function ddMMYYYY(date) {
+      return date.split("-").reverse().join(".");
+    }
+
+    // Update elements with the provided data
+    document.querySelector("p strong span").textContent =
+      data.companyName || "Ekta Enterprises";
+    document.querySelector("p:nth-of-type(2) span").textContent =
+      data.address || "Budhwari Bazar, Gn Road Seoni, Seoni";
+    document.querySelector(
+      "table > thead > tr:nth-child(1) > td:nth-child(1) > p > strong:nth-child(4) > span"
+    ).textContent = ddMMYYYY(data.date) || "--";
+    document.querySelector(
+      "table > thead > tr:nth-child(1) > td:nth-child(3) > p > strong:nth-child(4) > span"
+    ).textContent = data.receiptNo || "---";
+
+    // Update the elements for "Naresh Ahuja Seoni,seoni"and "BU216"specifically
+    document.querySelector(
+      "table > tbody:nth-child(2) > tr:nth-child(1) > td:nth-child(1) > p:nth-child(2) > span:nth-child(2)"
+    ).textContent = data.name || "-----";
+    document.querySelector(
+      "table > tbody:nth-child(2) > tr:nth-child(1) > td:nth-child(2) > p > span:nth-child(4)"
+    ).textContent = data.party || "----";
+    document.querySelector(
+      "table > tbody:nth-child(2) > tr:nth-child(1) > td:nth-child(3) > p > span:nth-child(4)"
+    ).textContent = data.amount || "---";
+
+    // Update the element for "By R/no S.-5810"
+    document.querySelector(
+      "table > tbody:nth-child(2) > tr:nth-child(2) > td:nth-child(1) > p:nth-child(1) > span:nth-child(4)"
+    ).textContent = "By R/no "+ data.series +".-"+ (data.receiptNo || "---");
+
+    // Update other elements as needed
+    // ...
+    document.querySelector("section > table > tbody:nth-child(2) > tr:nth-child(4) > td:nth-child(1) > p > span:nth-child(4)")
+    .textContent = data.inWords || "----";
+  }
+  function parseQueryString(queryString) {
+    // Split the query string into key-value pairs
+    var pairs = queryString.split("&");
+
+    // Initialize an empty object to store key-value pairs
+    var result = {};
+
+    // Iterate through each pair
+    pairs.forEach(function (pair) {
+      // Split the pair into key and value
+      var keyValue = pair.split("=");
+
+      // Decode the key and value (in case they're URL encoded)
+      var key = decodeURIComponent(keyValue[0]);
+      var value = decodeURIComponent(keyValue[1]);
+
+      // Assign key-value pair to the result object
+      result[key] = value;
+    });
+
+    return result;
+  }
+
+  // Example query string
+  var queryString = document.location.search.substring(1);
+
+  // Parse the query string into a JSON object
+  var jsonData = parseQueryString(queryString);
+  fillForm(jsonData);
+  // Display the JSON object
+  console.log(jsonData);
+</script>
+
+
+</section>

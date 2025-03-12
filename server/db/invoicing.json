@@ -1,0 +1,58 @@
+[
+  {
+    "date": "2025-03-12",
+    "series": "T",
+    "cash": "N",
+    "party": "AA001",
+    "partyName": "SHRI BALRAM SEVLANI",
+    "sm": "SM004",
+    "smName": "KESHAV THAKUR S/O VIJAY BINWAR",
+    "ref": "",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "MK001",
+        "godown": "02",
+        "unit": "PCS",
+        "rate": 675,
+        "qty": "72",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "48600.00",
+        "netAmount": "48600.00"
+      }
+    ],
+    "id": "1",
+    "createdAt": "2025-03-12T10:16:01.177Z"
+  },
+  {
+    "date": "2025-03-12",
+    "series": "T",
+    "cash": "N",
+    "party": "AA001",
+    "partyName": "SHRI BALRAM SEVLANI",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
+    "ref": "",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "ME032",
+        "godown": "03",
+        "unit": "BOX",
+        "rate": 430,
+        "qty": "120",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "51600.00",
+        "netAmount": "51600.00"
+      }
+    ],
+    "id": "2",
+    "createdAt": "2025-03-12T10:17:41.504Z"
+  }
+]

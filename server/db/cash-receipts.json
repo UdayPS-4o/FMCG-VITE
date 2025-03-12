@@ -1,0 +1,204 @@
+[
+  {
+    "date": "2024-07-31",
+    "receiptNo": "80",
+    "party": "CT000",
+    "series": "Incididunt",
+    "amount": "80",
+    "discount": "76"
+  },
+  {
+    "date": "2024-03-31",
+    "receiptNo": "81",
+    "party": "CT000",
+    "series": "2345",
+    "amount": "4444",
+    "discount": "0.07"
+  },
+  {
+    "date": "2015-08-15",
+    "receiptNo": "38",
+    "party": "CT000",
+    "series": "I",
+    "amount": "27",
+    "discount": "22"
+  },
+  {
+    "date": "2017-04-08",
+    "receiptNo": "41",
+    "party": "AA001",
+    "series": "Laborum Architecto ",
+    "amount": "16",
+    "discount": "85"
+  },
+  {
+    "date": "2024-04-03",
+    "receiptNo": "42",
+    "party": "CT000",
+    "series": "ABCD",
+    "amount": "12334",
+    "discount": ""
+  },
+  {
+    "date": "2024-04-03",
+    "receiptNo": "43",
+    "party": "AA001",
+    "series": "X",
+    "amount": "250",
+    "discount": ""
+  },
+  {
+    "date": "2024-04-03",
+    "series": "",
+    "receiptNo": "44",
+    "party": "BG006",
+    "amount": "1000",
+    "discount": ""
+  },
+  {
+    "date": "2024-04-06",
+    "series": "A",
+    "receiptNo": "45",
+    "party": "CT000",
+    "amount": "123",
+    "discount": ""
+  },
+  {
+    "date": "2024-04-13",
+    "series": "Q",
+    "receiptNo": "46",
+    "party": "AA001",
+    "amount": "1200",
+    "discount": ""
+  },
+  {
+    "date": "2024-06-05",
+    "series": "X",
+    "receiptNo": "47",
+    "party": "CT000",
+    "amount": "150",
+    "discount": ""
+  },
+  {
+    "date": "2024-07-13",
+    "series": "X",
+    "receiptNo": "48",
+    "party": "AA001",
+    "amount": "69",
+    "discount": "10"
+  },
+  {
+    "date": "2024-07-13",
+    "series": "X",
+    "receiptNo": "49",
+    "party": "AA001",
+    "amount": "123",
+    "discount": "1"
+  },
+  {
+    "date": "2024-07-13",
+    "series": "X",
+    "receiptNo": "50",
+    "party": "CT000",
+    "name": "TRADE CREDITORS",
+    "amount": "69",
+    "discount": "1"
+  },
+  {
+    "date": "2024-07-13",
+    "series": "X",
+    "receiptNo": "51",
+    "party": "AA001",
+    "name": "SHRI BALRAM SEVLANI",
+    "amount": "699",
+    "discount": "2"
+  },
+  {
+    "date": "2024-07-13",
+    "series": "X",
+    "receiptNo": "52",
+    "party": "AA001",
+    "name": "SHRI BALRAM SEVLANI",
+    "amount": "699",
+    "discount": "2"
+  },
+  {
+    "date": "2024-07-20",
+    "series": "X",
+    "receiptNo": "53",
+    "party": "AA001",
+    "amount": "12",
+    "discount": ""
+  },
+  {
+    "date": "2024-07-20",
+    "series": "V",
+    "receiptNo": "54",
+    "party": "CT000",
+    "amount": "12",
+    "discount": ""
+  },
+  {
+    "date": "2024-09-28",
+    "series": "1212342314",
+    "amount": "123424123432",
+    "discount": "123423412342314",
+    "receiptNo": "74",
+    "party": "CT000"
+  },
+  {
+    "date": "2024-09-20",
+    "series": "asdf",
+    "amount": "1234",
+    "discount": "1234",
+    "receiptNo": "75",
+    "party": "AA001"
+  },
+  {
+    "date": "2024-09-27",
+    "series": "SS",
+    "amount": "1234",
+    "discount": "1234",
+    "receiptNo": "76",
+    "party": "CT002"
+  },
+  {
+    "date": "2024-05-01",
+    "series": "Sint voluptatem mini",
+    "amount": "Dolor magnam delenit",
+    "discount": "74",
+    "receiptNo": "77",
+    "party": "CT000"
+  },
+  {
+    "date": "2024-10-02",
+    "series": "s",
+    "amount": "s",
+    "discount": "1",
+    "receiptNo": "78"
+  },
+  {
+    "date": "2024-10-04",
+    "series": "w",
+    "amount": "1",
+    "discount": "1",
+    "receiptNo": "79",
+    "party": "CT001"
+  },
+  {
+    "date": "2024-10-06",
+    "series": "x",
+    "amount": "12341234",
+    "discount": "2",
+    "receiptNo": "82",
+    "party": "CT000"
+  },
+  {
+    "date": "2024-10-17",
+    "series": "2",
+    "amount": "12",
+    "discount": "12",
+    "receiptNo": "83",
+    "party": "OB000"
+  }
+]

@@ -1,0 +1,126 @@
+[
+  {
+    "id": 1,
+    "name": "Piyush",
+    "username": "harkrishna",
+    "number": "7223969469",
+    "password": "7223969469",
+    "routeAccess": [
+      "Admin"
+    ],
+    "powers": [
+      "Read",
+      "Write"
+    ],
+    "token": "kcmv2b",
+    "subgroup": {
+      "title": "BHAIROGUNJ",
+      "subgroupCode": "BG007"
+    }
+  },
+  {
+    "id": 3,
+    "name": "1234",
+    "username": "admin",
+    "number": "12341234",
+    "password": "12341234",
+    "routeAccess": [
+      "Account Master",
+      "Cash Receipts"
+    ],
+    "powers": [
+      "Write"
+    ],
+    "subgroup": {
+      "title": "BHAIROGUNJ",
+      "subgroupCode": "BG007"
+    }
+  },
+  {
+    "id": 4,
+    "name": "1234",
+    "username": "admin",
+    "number": "12341234",
+    "password": "12341234",
+    "routeAccess": [
+      "Account Master",
+      "Cash Receipt"
+    ],
+    "powers": [
+      "Write"
+    ],
+    "subgroup": {
+      "title": "BHAIROGUNJ",
+      "subgroupCode": "BG007"
+    }
+  },
+  {
+    "id": 5,
+    "name": "asdfasdf",
+    "username": "admin",
+    "number": "1342344444444444444444444444444",
+    "password": "123441234",
+    "routeAccess": [
+      "Account Master"
+    ],
+    "powers": [
+      "Read"
+    ],
+    "subgroup": {
+      "title": "ADEGAON"
+    }
+  },
+  {
+    "id": 6,
+    "name": "Uday Pratap Singh Parihar",
+    "username": "admin",
+    "number": "2",
+    "password": "2",
+    "routeAccess": [
+      "Admin"
+    ],
+    "powers": [
+      "Write"
+    ],
+    "subgroup": {
+      "title": "BARAPATHAR"
+    },
+    "token": "13hnln"
+  },
+  {
+    "id": 7,
+    "name": "udayps",
+    "username": "admin",
+    "number": "8819923334",
+    "password": "8819923334",
+    "routeAccess": [
+      "Admin"
+    ],
+    "powers": [
+      "Write",
+      "Read"
+    ],
+    "subgroup": {
+      "title": "ADEGAON"
+    },
+    "token": "5753y"
+  },
+  {
+    "id": 8,
+    "name": "SHUBHAM",
+    "username": "admin",
+    "number": "9179174888",
+    "password": "9179174888",
+    "routeAccess": [
+      "Invoicing",
+      "Cash Receipts",
+      "Cash Payments",
+      "Godown Transfer"
+    ],
+    "powers": [
+      "Write"
+    ],
+    "subgroup": null,
+    "token": "13zdi7"
+  }
+]

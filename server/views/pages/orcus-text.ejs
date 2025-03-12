@@ -1,0 +1,43 @@
+<%- include('../partials/top') %>
+
+<div class="container-xxl flex-grow-1 container-p-y">
+  <input
+    type="text"
+    id="tags"
+    name="tags"
+    placeholder="Enter tags..."
+    class="form-control"
+    required
+    onkeyup="appendToTags()"
+  />
+  <div id="tags-container"></div>
+  <%- include('../partials/bottom') %>
+</div>
+
+<script>
+  let tags = [];
+  function appendToTags() {
+    let input = document.getElementById("tags");
+    let tagsContainer = document.getElementById("tags-container");
+    let value = input.value;
+    // when enter key is pressed
+    if (value.length > 0 && event.keyCode === 13) {
+      tags.push(value);
+      input.value = "";
+      tagsContainer.innerHTML = "";
+      tags.forEach((tag) => {
+        tagsContainer.innerHTML += `<span class="badge bg-primary">${tag}</span> <button 
+        class="btn-close" onclick="removeTag('${tag}')"
+        >x </button>`;
+      });
+    }
+  }
+  function removeTag(tag) {
+    tags = tags.filter((t) => t !== tag);
+    let tagsContainer = document.getElementById("tags-container");
+    tagsContainer.innerHTML = "";
+    tags.forEach((tag) => {
+      tagsContainer.innerHTML += `<span class="badge bg-primary">${tag}</span>`;
+    });
+  }
+</script>

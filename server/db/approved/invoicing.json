@@ -1,0 +1,30 @@
+[
+  {
+    "date": "2025-03-10",
+    "series": "T",
+    "cash": "N",
+    "party": "CT021",
+    "partyName": "PARAM INDUSTRIES LTD INDORE",
+    "sm": "SM005",
+    "smName": "MAHESH YADAV SALESMAN",
+    "ref": "",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "ME025",
+        "godown": "02",
+        "unit": "BOX",
+        "rate": 325,
+        "qty": "10",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "3250.00",
+        "netAmount": "3250.00"
+      }
+    ],
+    "id": "1",
+    "createdAt": "2025-03-10T14:56:38.578Z"
+  }
+]

@@ -1,0 +1,49 @@
+<%- include('../partials/top') %>
+
+
+<div class="container-xxl flex-grow-1 container-p-y">
+   <h4 class="fw-bold py-3 mb-4">
+      <!-- <span class="text-muted fw-light">Account Settings /</span> -->
+      <!-- Print -->
+      <button class="btn btn-primary" onclick="formprint()">Print</button>
+   </h4>
+
+   <div class="row">
+      <div class="card">
+         <div class="card-body" style="overflow: auto;">
+            <section id="printable">
+            <%- include('../partials/print-godown') %>
+         </section>
+         </div>
+       </div>
+   </div>
+</div>
+
+<div style="display: none;">
+<iframe src="" id="myIframe" frameborder="0"></iframe>
+</div>
+
+<%- include('../partials/bottom') %>
+
+   <script>
+      let iframWritten = false;
+      function formprint() {
+         if (iframWritten) {
+            let iframe = document.querySelector("#myIframe");
+            iframe.contentWindow.print();
+            return;
+         }
+         let iframe = document.querySelector("#myIframe");
+         iframe.contentDocument.write(document.querySelector("#printable .body").innerHTML+"<style>body{height:720px; width:1500px;}</style>");
+         iframWritten = true;
+         iframe.contentWindow.focus(); // Required for some browsers
+         iframe.contentWindow.print();
+      }
+   </script>
+   </script>
+
+
+
+</body>
+
+</html>
