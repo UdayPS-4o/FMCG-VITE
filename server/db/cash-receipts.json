@@ -8,38 +8,6 @@
     "discount": "76"
   },
   {
-    "date": "2024-03-31",
-    "receiptNo": "81",
-    "party": "CT000",
-    "series": "2345",
-    "amount": "4444",
-    "discount": "0.07"
-  },
-  {
-    "date": "2015-08-15",
-    "receiptNo": "38",
-    "party": "CT000",
-    "series": "I",
-    "amount": "27",
-    "discount": "22"
-  },
-  {
-    "date": "2017-04-08",
-    "receiptNo": "41",
-    "party": "AA001",
-    "series": "Laborum Architecto ",
-    "amount": "16",
-    "discount": "85"
-  },
-  {
-    "date": "2024-04-03",
-    "receiptNo": "42",
-    "party": "CT000",
-    "series": "ABCD",
-    "amount": "12334",
-    "discount": ""
-  },
-  {
     "date": "2024-04-03",
     "receiptNo": "43",
     "party": "AA001",
@@ -200,5 +168,14 @@
     "discount": "12",
     "receiptNo": "83",
     "party": "OB000"
+  },
+  {
+    "date": "2025-03-17",
+    "series": "fdsf",
+    "amount": "123",
+    "discount": "123",
+    "receiptNo": 84,
+    "party": "AA001",
+    "createdAt": "2025-03-17T23:40:22.455Z"
   }
 ]

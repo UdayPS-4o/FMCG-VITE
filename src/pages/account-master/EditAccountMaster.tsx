@@ -71,7 +71,19 @@ const EditAccountMaster: React.FC = () => {
         // Fetch account data
         console.log('Fetching account data for:', id);
         
-        const response = await fetch(`${constants.baseURL}/edit/account-master/${id}`);
+        // Extract subgroup from URL if available
+        const urlParams = new URLSearchParams(window.location.search);
+        const subgroupFromUrl = urlParams.get('subgroup');
+        
+        // Check if we're editing an approved record
+        const isApproved = urlParams.get('approved') === 'true';
+        const editEndpoint = isApproved ? 
+          `${constants.baseURL}/edit/approved/account-master/${id}` : 
+          `${constants.baseURL}/edit/account-master/${id}`;
+          
+        console.log(`Using ${isApproved ? 'approved' : 'regular'} endpoint: ${editEndpoint}`);
+        
+        const response = await fetch(editEndpoint);
         
         if (!response.ok) {
           throw new Error(`Failed to fetch account data: ${response.status}`);
@@ -83,10 +95,6 @@ const EditAccountMaster: React.FC = () => {
         if (!accountData || Object.keys(accountData).length === 0) {
           throw new Error('Empty or invalid account data received');
         }
-        
-        // Extract subgroup from URL if available
-        const urlParams = new URLSearchParams(window.location.search);
-        const subgroupFromUrl = urlParams.get('subgroup');
         
         // Map API field names to our form field names
         setFormValues({
@@ -387,7 +395,18 @@ const EditAccountMaster: React.FC = () => {
       
       console.log('Submitting data to API:', apiData);
       
-      const response = await fetch(`${constants.baseURL}/edit/account-master`, {
+      // Check if we're editing an approved record
+      const urlParams = new URLSearchParams(window.location.search);
+      const isApproved = urlParams.get('approved') === 'true';
+      
+      // Use different endpoint based on whether it's approved
+      const saveEndpoint = isApproved
+        ? `${constants.baseURL}/edit/approved/account-master`
+        : `${constants.baseURL}/edit/account-master`;
+      
+      console.log(`Saving to ${isApproved ? 'approved' : 'regular'} endpoint: ${saveEndpoint}`);
+      
+      const response = await fetch(saveEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -406,9 +425,9 @@ const EditAccountMaster: React.FC = () => {
         type: 'success',
       });
       
-      // Redirect to database page after successful update
+      // Redirect to appropriate page after successful update
       setTimeout(() => {
-        navigate('/db/account-master');
+        navigate(isApproved ? '/approved/account-master' : '/db/account-master');
       }, 2000);
       
     } catch (error) {

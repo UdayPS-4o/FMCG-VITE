@@ -173,12 +173,31 @@ app.post('/approve', async (req, res) => {
       path.resolve(__dirname, `../db/${endpoint}.json`),
       JSON.stringify(remainingjson, null, 2),
     );
-    console.log('updatedJson', approvedjson);
-    await fs.mkdir(path.resolve(__dirname, '../db/approved'), { recursive: true });
+    
+    // Read existing approved items (if any)
+    let existingApproved = [];
+    try {
+      await fs.mkdir(path.resolve(__dirname, '../db/approved'), { recursive: true });
+      const approvedData = await fs.readFile(
+        path.resolve(__dirname, `../db/approved/${endpoint}.json`),
+        { encoding: 'utf8' }
+      );
+      existingApproved = JSON.parse(approvedData);
+    } catch (err) {
+      // If the file doesn't exist or has invalid content, start with an empty array
+      existingApproved = [];
+    }
+    
+    // Combine existing approved items with newly approved items
+    const combinedApproved = [...existingApproved, ...approvedjson];
+    
+    // Save the combined approved items
     await fs.writeFile(
       path.resolve(__dirname, `../db/approved/${endpoint}.json`),
-      JSON.stringify(approvedjson, null, 2),
+      JSON.stringify(combinedApproved, null, 2),
     );
+    
+    console.log('updatedJson', approvedjson);
     res.send(approvedjson);
   } catch (error) {
     console.log(error);
@@ -220,12 +239,31 @@ app.post('/toDBF', async (req, res) => {
       path.resolve(__dirname, `../db/${endpoint}.json`),
       JSON.stringify(remainingjson, null, 2),
     );
-    console.log('updatedJson', approvedjson);
-    await fs.mkdir(path.resolve(__dirname, '../db/approved'), { recursive: true });
+    
+    // Read existing approved items (if any)
+    let existingApproved = [];
+    try {
+      await fs.mkdir(path.resolve(__dirname, '../db/approved'), { recursive: true });
+      const approvedData = await fs.readFile(
+        path.resolve(__dirname, `../db/approved/${endpoint}.json`),
+        { encoding: 'utf8' }
+      );
+      existingApproved = JSON.parse(approvedData);
+    } catch (err) {
+      // If the file doesn't exist or has invalid content, start with an empty array
+      existingApproved = [];
+    }
+    
+    // Combine existing approved items with newly approved items
+    const combinedApproved = [...existingApproved, ...approvedjson];
+    
+    // Save the combined approved items
     await fs.writeFile(
       path.resolve(__dirname, `../db/approved/${endpoint}.json`),
-      JSON.stringify(approvedjson, null, 2),
+      JSON.stringify(combinedApproved, null, 2),
     );
+    
+    console.log('updatedJson', approvedjson);
     res.send(approvedjson);
   } catch (error) {
     console.log(error);

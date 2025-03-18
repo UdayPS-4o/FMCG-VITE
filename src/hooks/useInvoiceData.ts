@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import constants from '../constants';
 
 export interface Option {
@@ -18,8 +18,17 @@ export const useInvoiceData = () => {
   const [godownOptions, setGodownOptions] = useState<Option[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchControllerRef = useRef<AbortController | null>(null);
+  const dataFetchedRef = useRef<boolean>(false);
 
   useEffect(() => {
+    // Don't fetch if we already have data (prevents double fetching in StrictMode)
+    if (dataFetchedRef.current) return;
+    
+    // Create a new AbortController for this fetch operation
+    fetchControllerRef.current = new AbortController();
+    const signal = fetchControllerRef.current.signal;
+
     const loadAllData = async () => {
       try {
         setLoading(true);
@@ -30,24 +39,27 @@ export const useInvoiceData = () => {
           (async () => {
             try {
               // Try primary endpoint
-              const accRes = await fetch(`${constants.baseURL}/api/dbf/acm.json`);
+              const accRes = await fetch(`${constants.baseURL}/api/dbf/acm.json`, { signal });
               if (!accRes.ok) throw new Error('Primary endpoint failed');
               return await accRes.json();
-            } catch {
+            } catch (error) {
+              if ((error as Error).name === 'AbortError') {
+                throw error;
+              }
               // Try fallback endpoint
-              const cmplRes = await fetch(`${constants.baseURL}/cmpl`);
+              const cmplRes = await fetch(`${constants.baseURL}/cmpl`, { signal });
               if (!cmplRes.ok) throw new Error('Fallback endpoint failed');
               return await cmplRes.json();
             }
           })(),
           // Fetch PMPL data
-          fetch(`${constants.baseURL}/api/dbf/pmpl.json`).then(res => res.json()),
+          fetch(`${constants.baseURL}/api/dbf/pmpl.json`, { signal }).then(res => res.json()),
           // Fetch stock data
-          fetch(`${constants.baseURL}/api/stock`).then(res => res.json()),
+          fetch(`${constants.baseURL}/api/stock`, { signal }).then(res => res.json()),
           // Fetch godown data
-          fetch(`${constants.baseURL}/api/dbf/godown.json`).then(res => res.json()),
+          fetch(`${constants.baseURL}/api/dbf/godown.json`, { signal }).then(res => res.json()),
           // Fetch balance data
-          fetch(`${constants.baseURL}/json/balance`).then(res => res.json())
+          fetch(`${constants.baseURL}/json/balance`, { signal }).then(res => res.json())
         ]);
 
         // Helper function to get balance for a party code
@@ -112,16 +124,28 @@ export const useInvoiceData = () => {
           label: gdn.GDN_NAME 
         })));
 
+        // Mark that we've successfully fetched the data
+        dataFetchedRef.current = true;
         setError(null);
       } catch (err) {
-        console.error('Failed to load invoice data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load data');
+        // Don't set error if it was just an abort
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Failed to load invoice data:', err);
+          setError(err instanceof Error ? err.message : 'Failed to load data');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     loadAllData();
+
+    // Cleanup function to abort fetch if component unmounts
+    return () => {
+      if (fetchControllerRef.current) {
+        fetchControllerRef.current.abort();
+      }
+    };
   }, []);
 
   return {

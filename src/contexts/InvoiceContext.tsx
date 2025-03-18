@@ -41,6 +41,8 @@ export interface InvoiceContextType {
   removeItem: (index: number) => void;
   addItem: () => void;
   calculateTotal: () => string;
+  loading: boolean;
+  error: string | null;
 }
 
 export const InvoiceContext = createContext<InvoiceContextType>({
@@ -53,9 +55,9 @@ export const InvoiceContext = createContext<InvoiceContextType>({
   updateItem: () => {},
   removeItem: () => {},
   addItem: () => {},
-  calculateTotal: () => '0.00'
+  calculateTotal: () => '0.00',
+  loading: false,
+  error: null
 });
 
-export const useInvoiceContext = () => useContext(InvoiceContext);
-
-export default InvoiceContext; 
+export const useInvoiceContext = () => useContext(InvoiceContext); 

@@ -118,69 +118,61 @@ async function calculateCurrentStock() {
   const localTransferResponse = (await fs.readFile(`./db/godown.json`, 'utf8')) || '[]';
   const localTransferData = await JSON.parse(localTransferResponse);
 
-  // Initialize a dictionary to track the stock
-  let tempStock = {};
-  let stock = {};
+  // Initialize stock object
+  const stock = {};
 
   // Process purchases to increment stock
   for (const purchase of purchaseData) {
-    const { CODE: code, GDN_CODE: gdn_code, QTY: qty, MULT_F: multF, UNIT: unit, FREE: free } = purchase;
-    tempStock[code] = tempStock[code] || { pieces: 0, godowns: {} };
-    tempStock[code].godowns[gdn_code] = tempStock[code].godowns[gdn_code] || { pieces: 0 };
+    const { CODE: code, QTY: qty, MULT_F: multF, UNIT: unit, FREE: free, GDN_CODE: gdn } = purchase;
+    stock[code] = stock[code] || {};
+    stock[code][gdn] = stock[code][gdn] || 0;
     
     let qtyInPieces = qty;
     if (unit === 'BOX' || unit === 'Box') {
       qtyInPieces *= multF;
     }
     
-    tempStock[code].pieces += qtyInPieces;
-    tempStock[code].godowns[gdn_code].pieces += qtyInPieces;
+    stock[code][gdn] += qtyInPieces;
     
     if (free) {
-      tempStock[code].pieces += free;
-      tempStock[code].godowns[gdn_code].pieces += free;
+      stock[code][gdn] += free;
     }
   }
 
   // Process sales to decrement stock
   for (const sale of salesData) {
-    const { CODE: code, GDN_CODE: gdn_code, QTY: qty, MULT_F: multF, UNIT: unit, FREE: free } = sale;
-    if (tempStock[code]) {
-      let qtyInPieces = qty;
-      if (unit === 'BOX' || unit === 'Box') {
-        qtyInPieces *= multF;
-      }
-      
-      tempStock[code].godowns[gdn_code] = tempStock[code].godowns[gdn_code] || { pieces: 0 };
-      tempStock[code].pieces -= qtyInPieces;
-      tempStock[code].godowns[gdn_code].pieces -= qtyInPieces;
-      
-      if (free) {
-        tempStock[code].pieces -= free;
-        tempStock[code].godowns[gdn_code].pieces -= free;
-      }
+    const { CODE: code, QTY: qty, MULT_F: multF, UNIT: unit, FREE: free, GDN_CODE: gdn } = sale;
+    if (!stock[code]) {
+      stock[code] = {};
+    }
+    
+    if (!stock[code][gdn]) {
+      stock[code][gdn] = 0;
+    }
+    
+    let qtyInPieces = qty;
+    if (unit === 'BOX' || unit === 'Box') {
+      qtyInPieces *= multF;
+    }
+    
+    stock[code][gdn] -= qtyInPieces;
+    
+    if (free) {
+      stock[code][gdn] -= free;
     }
   }
 
   // Process DBF transfers
   for (const transfer of transferData) {
-    const {
-      CODE: code,
-      GDN_CODE: from_gdn,
-      TRF_TO: to_gdn,
-      QTY: qty,
-      MULT_F: multF,
-      UNIT: unit,
-    } = transfer;
-    
+    const { CODE: code, QTY: qty, MULT_F: multF, UNIT: unit, TRF_TO: toGdn, GDN_CODE: fromGdn } = transfer;
     const qtyInPieces = (unit === 'BOX' || unit === 'Box') ? qty * multF : qty;
     
-    tempStock[code] = tempStock[code] || { pieces: 0, godowns: {} };
-    tempStock[code].godowns[from_gdn] = tempStock[code].godowns[from_gdn] || { pieces: 0 };
-    tempStock[code].godowns[to_gdn] = tempStock[code].godowns[to_gdn] || { pieces: 0 };
+    stock[code] = stock[code] || {};
+    stock[code][fromGdn] = stock[code][fromGdn] || 0;
+    stock[code][toGdn] = stock[code][toGdn] || 0;
     
-    tempStock[code].godowns[from_gdn].pieces -= qtyInPieces;
-    tempStock[code].godowns[to_gdn].pieces += qtyInPieces;
+    stock[code][fromGdn] -= qtyInPieces;
+    stock[code][toGdn] += qtyInPieces;
   }
 
   // Process local godown transfers
@@ -192,20 +184,19 @@ async function calculateCurrentStock() {
       const multF = pmplData.find((pmpl) => pmpl.CODE === code)?.MULT_F || 1;
       const qtyInPieces = (unit === 'BOX' || unit === 'Box') ? qty * multF : qty;
       
-      tempStock[code] = tempStock[code] || { pieces: 0, godowns: {} };
-      tempStock[code].godowns[fromGodown] = tempStock[code].godowns[fromGodown] || { pieces: 0 };
-      tempStock[code].godowns[toGodown] = tempStock[code].godowns[toGodown] || { pieces: 0 };
+      stock[code] = stock[code] || {};
+      stock[code][fromGodown] = stock[code][fromGodown] || 0;
+      stock[code][toGodown] = stock[code][toGodown] || 0;
       
-      tempStock[code].godowns[fromGodown].pieces -= qtyInPieces;
-      tempStock[code].godowns[toGodown].pieces += qtyInPieces;
+      stock[code][fromGodown] -= qtyInPieces;
+      stock[code][toGodown] += qtyInPieces;
     }
   }
 
-  // Convert to the original output format
-  for (const code in tempStock) {
-    stock[code] = {};
-    for (const gdn in tempStock[code].godowns) {
-      stock[code][gdn] = Math.round(tempStock[code].godowns[gdn].pieces);
+  // Round all stock values to integers
+  for (const code in stock) {
+    for (const gdn in stock[code]) {
+      stock[code][gdn] = Math.round(stock[code][gdn]);
     }
   }
 

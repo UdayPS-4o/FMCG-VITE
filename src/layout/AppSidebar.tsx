@@ -5,6 +5,10 @@ import {
   BoxIcon,
   DatabaseIcon,
   UserIcon,
+  CashReceiptIcon,
+  CashPaymentIcon,
+  InvoiceIcon,
+  WarehouseIcon
 } from '../components/icons';
 import { useSidebar } from "../context/SidebarContext";
 
@@ -29,20 +33,33 @@ const ChevronDownIcon: React.FC<{ className?: string }> = ({ className }) => (
 const HorizontaLDots: React.FC<{ className?: string }> = ({ className }) => (
   <svg
     className={className}
-    fill="currentColor"
+    fill="none"
+    stroke="currentColor"
     viewBox="0 0 24 24"
     xmlns="http://www.w3.org/2000/svg"
   >
-    <path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z"
+    />
   </svg>
 );
 
-type NavItem = {
+interface SubNavItem {
   name: string;
+  path: string;
+  pro?: boolean;
+  new?: boolean;
+}
+
+interface NavItem {
   icon: React.ReactNode;
+  name: string;
   path?: string;
-  subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
-};
+  subItems?: SubNavItem[];
+}
 
 const fmcgItems: NavItem[] = [
   {
@@ -51,9 +68,29 @@ const fmcgItems: NavItem[] = [
     path: "/account-master",
   },
   {
-    icon: <UserIcon />,
+    icon: <InvoiceIcon />,
     name: "Invoicing",
     path: "/invoicing",
+  },
+  {
+    icon: <WarehouseIcon />,
+    name: "Godown Transfer",
+    path: "/godown-transfer",
+  },
+  {
+    icon: <CashReceiptIcon />,
+    name: "Cash Receipt",
+    path: "/cash-receipt",
+  },
+  {
+    icon: <CashPaymentIcon />,
+    name: "Cash Payment",
+    path: "/cash-payment",
+  },
+  {
+    icon: <UserIcon />,
+    name: "Add User",
+    path: "/add-user",
   },
   {
     icon: <DatabaseIcon />,
@@ -61,6 +98,9 @@ const fmcgItems: NavItem[] = [
     subItems: [
       { name: "Account Master", path: "/db/account-master", pro: false },
       { name: "Invoicing", path: "/db/invoicing", pro: false },
+      { name: "Godown Transfer", path: "/db/godown-transfer", pro: false },
+      { name: "Cash Receipts", path: "/db/cash-receipts", pro: false },
+      { name: "Cash Payments", path: "/db/cash-payments", pro: false },
     ],
   },
   {
@@ -69,6 +109,9 @@ const fmcgItems: NavItem[] = [
     subItems: [
       { name: "Account Master", path: "/approved/account-master", pro: false },
       { name: "Invoicing", path: "/approved/invoicing", pro: false },
+      { name: "Godown Transfer", path: "/approved/godown-transfer", pro: false },
+      { name: "Cash Receipts", path: "/approved/cash-receipts", pro: false },
+      { name: "Cash Payments", path: "/approved/cash-payments", pro: false },
     ],
   },
 ];

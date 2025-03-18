@@ -20,6 +20,7 @@ app.get('/json/:file', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
 app.get('/approved/json/:file', async (req, res) => {
   console.log('approved');
   const { file } = req.params;

@@ -555,7 +555,7 @@ function qtyRules(i) {
   const transferData = await transferResponse.json();
 
   // Fetch the local godown transfer data
-  const localTransferResponse = await fetch("http://localhost/json/godown");
+  const localTransferResponse = await fetch("/json/godown");
   const localTransferData = await localTransferResponse.json();
 
   // Initialize a dictionary to track the stock

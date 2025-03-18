@@ -1,7 +1,7 @@
 [
   {
     "id": 1,
-    "name": "Piyush",
+    "name": "Piyush s",
     "username": "harkrishna",
     "number": "7223969469",
     "password": "7223969469",
@@ -14,8 +14,7 @@
     ],
     "token": "kcmv2b",
     "subgroup": {
-      "title": "BHAIROGUNJ",
-      "subgroupCode": "BG007"
+      "title": "BHAIROGUNJ"
     }
   },
   {
@@ -34,40 +33,6 @@
     "subgroup": {
       "title": "BHAIROGUNJ",
       "subgroupCode": "BG007"
-    }
-  },
-  {
-    "id": 4,
-    "name": "1234",
-    "username": "admin",
-    "number": "12341234",
-    "password": "12341234",
-    "routeAccess": [
-      "Account Master",
-      "Cash Receipt"
-    ],
-    "powers": [
-      "Write"
-    ],
-    "subgroup": {
-      "title": "BHAIROGUNJ",
-      "subgroupCode": "BG007"
-    }
-  },
-  {
-    "id": 5,
-    "name": "asdfasdf",
-    "username": "admin",
-    "number": "1342344444444444444444444444444",
-    "password": "123441234",
-    "routeAccess": [
-      "Account Master"
-    ],
-    "powers": [
-      "Read"
-    ],
-    "subgroup": {
-      "title": "ADEGAON"
     }
   },
   {
@@ -103,7 +68,7 @@
     "subgroup": {
       "title": "ADEGAON"
     },
-    "token": "5753y"
+    "token": "kunlou"
   },
   {
     "id": 8,

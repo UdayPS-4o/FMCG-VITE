@@ -57,9 +57,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     const updatedData = {
       ...item,
       item: selectedItem.CODE,
-      stock: `0 (Total: ${totalStock})`, // Show total stock even before godown selection
+      stock: totalStock > 0 ? totalStock.toString() : '', // Just show the total stock number
       stockLimit: 0, // Will be updated when godown is selected
-      godown: '',
+      godown: '', // Reset godown when item changes
       pack: selectedItem.PACK,
       gst: selectedItem.GST,
       pcBx: selectedItem.MULT_F,
@@ -77,7 +77,17 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
   };
 
   const handleGodownChange = (newValue: string | null) => {
-    if (!newValue || !item.selectedItem) return;
+    if (!newValue || !item.selectedItem) {
+      // If godown is cleared, clear stock as well
+      const updatedData = {
+        ...item,
+        godown: '',
+        stock: '',
+        stockLimit: 0,
+      };
+      updateItem(index, updatedData);
+      return;
+    }
     
     // Get stock for selected godown
     const godownStock = stockList[item.selectedItem.CODE]?.[newValue] || '0';
@@ -105,7 +115,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     const updatedData = {
       ...item,
       godown: newValue,
-      stock: `${godownStock} (Total: ${totalStock})`, // Show both selected godown stock and total stock
+      stock: totalStock > 0 ? `${totalStock}` : '', // Standardize format to just show the number
       stockLimit: stockLimit,
     };
 
@@ -121,13 +131,19 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     };
 
     // Recalculate stockLimit based on the new unit
-    let stockLimit;
-    if (newValue === item.selectedItem?.UNIT_2) {
-      // Unit is BOX
-      stockLimit = Math.floor(parseInt(item.stock, 10) / parseInt(item.pcBx, 10));
-    } else {
-      // Unit is PCS
-      stockLimit = parseInt(item.stock, 10);
+    let stockLimit = 0;
+    
+    if (item.godown && item.selectedItem) {
+      const godownStock = stockList[item.selectedItem.CODE]?.[item.godown] || '0';
+      const stockValue = parseInt(godownStock, 10);
+      
+      if (newValue === item.selectedItem?.UNIT_2) {
+        // Unit is BOX
+        stockLimit = Math.floor(stockValue / parseInt(item.pcBx, 10));
+      } else {
+        // Unit is PCS
+        stockLimit = stockValue;
+      }
     }
 
     updatedData.stockLimit = stockLimit;
@@ -301,12 +317,8 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
             <div>
               <Input
                 id={`stock-${index}`}
-                label={`Total Stock (${item.unit || ''})`}
-                value={
-                  item.unit === item.selectedItem?.UNIT_2
-                    ? Math.floor(parseInt(item.stock, 10) / parseInt(item.pcBx, 10)).toString()
-                    : item.stock
-                }
+                label="Total Stock"
+                value={item.stock}
                 disabled
                 variant="outlined"
               />
@@ -315,14 +327,15 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
               <Autocomplete
                 id={`godown-${index}`}
                 label="Godown"
-                options={Object.keys(stockList[item.item] || {}).map((gdnCode) => {
-                  const stock = stockList[item.item]?.[gdnCode] || '0';
-                  const godown = godownOptions.find((gdn) => gdn.value === gdnCode);
-                  return {
-                    value: gdnCode,
-                    label: `${godown?.label || ''} | Stock: ${stock}`
-                  };
-                })}
+                options={Object.entries(stockList[item.item] || {})
+                  .filter(([gdnCode, stock]) => gdnCode && parseInt(stock as string, 10) > 0)
+                  .map(([gdnCode, stock]) => {
+                    const godown = godownOptions.find((gdn) => gdn.value === gdnCode);
+                    return {
+                      value: gdnCode,
+                      label: `${godown?.label || ''} | ${stock}`
+                    };
+                  })}
                 onChange={handleGodownChange}
                 defaultValue={item.godown}
               />

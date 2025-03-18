@@ -318,6 +318,15 @@ app.post('/edit/:formType', async (req, res) => {
         entryIndex = dbData.findIndex((entry) => entry.voucherNo === formData.voucherNo);
       } else if (formData.id) {
         entryIndex = dbData.findIndex((entry) => String(entry.id) === String(formData.id));
+      } else if (formType === 'account-master' && formData.subgroup) {
+        console.log(`Looking for account-master record with subgroup: ${formData.subgroup}`);
+        entryIndex = dbData.findIndex((entry) => String(entry.subgroup) === String(formData.subgroup));
+        
+        // Only if not found by subgroup and achead exists, try achead as fallback
+        if (entryIndex === -1 && formData.achead) {
+          console.log(`Not found by subgroup, trying achead: ${formData.achead}`);
+          entryIndex = dbData.findIndex((entry) => String(entry.achead) === String(formData.achead));
+        }
       }
     }
 
@@ -518,6 +527,132 @@ app.get('/api/TRFLAST', async (req, res) => {
   const LOCALLAST = parseInt(godownJSON[godownJSON.length - 1].id);
 
   res.send(`${Math.max(TRFLAST, LOCALLAST) + 1}`);
+});
+
+// Add a route for editing approved records
+app.post('/edit/approved/:formType', async (req, res) => {
+  const { formType } = req.params;
+  const formData = req.body;
+  console.log({formData});
+  console.log(`Processing edit request for approved ${formType}`);
+  console.log('Request body keys:', Object.keys(formData));
+  
+  // Handle items parsing more robustly
+  if (formData.items && typeof formData.items === 'string') {
+    try {
+      formData.items = JSON.parse(formData.items);
+      console.log(`Successfully parsed ${formData.items.length} items`);
+    } catch (error) {
+      console.error('Failed to parse items:', error);
+      return res.status(400).send('Invalid format for items.');
+    }
+  }
+
+  // Handle party data
+  if (formData.party && typeof formData.party === 'string') {
+    try {
+      // Check if party is already a string ID or needs parsing
+      if (formData.party.startsWith('{') || formData.party.startsWith('[')) {
+        const parsed = JSON.parse(formData.party);
+        formData.party = Array.isArray(parsed) ? parsed[0].value : parsed.value;
+      }
+      // Store the original party value if it wasn't JSON
+      console.log('Using party as string:', formData.party);
+    } catch (error) {
+      // If parsing fails, keep the original string value
+      console.log('Using party as string (parse failed):', formData.party);
+    }
+  }
+
+  const filePath = path.join(__dirname, '..', 'db', 'approved', `${formType}.json`);
+
+  console.log(`Checking if the approved file exists: ${filePath}`);
+
+  try {
+    let dbData = [];
+    try {
+      const data = await fs.promises.readFile(filePath, 'utf8');
+      dbData = JSON.parse(data);
+      console.log(`Successfully read ${dbData.length} records from approved ${formType} database`);
+    } catch (readError) {
+      if (readError.code === 'ENOENT') {
+        console.log(`Approved file not found: ${filePath}, creating new file`);
+        // Ensure directory exists
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+      } else {
+        console.error('Error reading approved database file:', readError);
+        return res.status(500).send('Approved database file read error: ' + readError.message);
+      }
+    }
+
+    // Find entry using appropriate identifiers based on form type
+    let entryIndex = -1;
+    
+    if (formType === 'account-master' && formData.subgroup) {
+      console.log(`Looking for approved account-master record with subgroup: ${formData.subgroup}`);
+      entryIndex = dbData.findIndex((entry) => String(entry.subgroup) === String(formData.subgroup));
+      
+      // Only if not found by subgroup and achead exists, try achead as fallback
+      if (entryIndex === -1 && formData.achead) {
+        console.log(`Not found by subgroup, trying achead: ${formData.achead}`);
+        entryIndex = dbData.findIndex((entry) => String(entry.achead) === String(formData.achead));
+      }
+    } else {
+      // For other types, try standard identifiers
+      if (formData.receiptNo) {
+        entryIndex = dbData.findIndex((entry) => entry.receiptNo === formData.receiptNo);
+      } else if (formData.voucherNo) {
+        entryIndex = dbData.findIndex((entry) => entry.voucherNo === formData.voucherNo);
+      } else if (formData.id) {
+        entryIndex = dbData.findIndex((entry) => String(entry.id) === String(formData.id));
+      }
+    }
+
+    if (entryIndex > -1) {
+      console.log(`Found approved entry at index ${entryIndex}, updating...`);
+      
+      // Create a new object by merging the existing data with the updated data
+      dbData[entryIndex] = { 
+        ...dbData[entryIndex], 
+        ...formData,
+        // Add an updated timestamp
+        lastUpdated: new Date().toISOString()
+      };
+      
+      try {
+        await fs.promises.writeFile(filePath, JSON.stringify(dbData, null, 2), 'utf8');
+        console.log(`Successfully updated approved ${formType} record`);
+        res.status(200).json({ 
+          message: 'Approved entry updated successfully.'
+        });
+      } catch (writeError) {
+        console.error('Error writing to approved database file:', writeError);
+        res.status(500).send('Failed to write updated approved data: ' + writeError.message);
+      }
+    } else {
+      console.log('Approved entry not found, adding as new entry');
+      
+      // Add a timestamp
+      formData.createdAt = new Date().toISOString();
+      
+      // Add the data to the database
+      dbData.push(formData);
+      
+      try {
+        await fs.promises.writeFile(filePath, JSON.stringify(dbData, null, 2), 'utf8');
+        console.log(`Successfully added new approved ${formType} record`);
+        res.status(200).json({ 
+          message: 'Approved entry added successfully.'
+        });
+      } catch (writeError) {
+        console.error('Error writing to approved database file:', writeError);
+        res.status(500).send('Failed to write new approved data: ' + writeError.message);
+      }
+    }
+  } catch (err) {
+    console.error('Unexpected error:', err);
+    res.status(500).send('Failed to edit approved data: ' + err.message);
+  }
 });
 
 module.exports = app;

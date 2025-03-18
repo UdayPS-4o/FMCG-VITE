@@ -1,5 +1,5 @@
 import GridShape from "../../components/common/GridShape";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 
 export default function NotFound() {
@@ -24,7 +24,7 @@ export default function NotFound() {
           />
 
           <p className="mt-10 mb-6 text-base text-gray-700 dark:text-gray-400 sm:text-lg">
-            We can’t seem to find the page you are looking for!
+            We can't seem to find the page you are looking for!
           </p>
 
           <Link

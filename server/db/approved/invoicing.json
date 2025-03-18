@@ -1,30 +1,30 @@
 [
   {
-    "date": "2025-03-10",
+    "date": "2025-03-12",
     "series": "T",
     "cash": "N",
-    "party": "CT021",
-    "partyName": "PARAM INDUSTRIES LTD INDORE",
-    "sm": "SM005",
-    "smName": "MAHESH YADAV SALESMAN",
+    "party": "AA001",
+    "partyName": "SHRI BALRAM SEVLANI",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
     "ref": "",
     "dueDays": "",
     "items": [
       {
-        "item": "ME025",
-        "godown": "02",
+        "item": "ME032",
+        "godown": "03",
         "unit": "BOX",
-        "rate": 325,
-        "qty": "10",
+        "rate": 430,
+        "qty": "120",
         "cess": "",
         "schRs": "",
         "sch": "",
         "cd": "",
-        "amount": "3250.00",
-        "netAmount": "3250.00"
+        "amount": "51600.00",
+        "netAmount": "51600.00"
       }
     ],
-    "id": "1",
-    "createdAt": "2025-03-10T14:56:38.578Z"
+    "id": "2",
+    "createdAt": "2025-03-12T10:17:41.504Z"
   }
 ]

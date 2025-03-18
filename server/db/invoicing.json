@@ -1,6 +1,62 @@
 [
   {
-    "date": "2025-03-12",
+    "date": "2025-03-13",
+    "series": "T",
+    "cash": "N",
+    "party": "CT000",
+    "partyName": "TRADE CREDITORS",
+    "sm": "SM004",
+    "smName": "KESHAV THAKUR S/O VIJAY BINWAR",
+    "ref": "",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "H1594",
+        "godown": "02",
+        "unit": "PCS",
+        "rate": "250",
+        "qty": "",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "",
+        "netAmount": ""
+      }
+    ],
+    "id": "1",
+    "createdAt": "2025-03-13T16:25:55.135Z"
+  },
+  {
+    "date": "2025-03-15",
+    "series": "T",
+    "cash": "N",
+    "party": "LD175",
+    "partyName": "AWADHIYA AGENCY AND KIRANA",
+    "sm": "SM003",
+    "smName": "SHOP SALE",
+    "ref": "",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "MK007",
+        "godown": "03",
+        "unit": "BOX",
+        "rate": 1980,
+        "qty": "",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "",
+        "netAmount": ""
+      }
+    ],
+    "id": "2",
+    "createdAt": "2025-03-15T16:02:44.984Z"
+  },
+  {
+    "date": "2025-03-16",
     "series": "T",
     "cash": "N",
     "party": "AA001",
@@ -11,48 +67,20 @@
     "dueDays": "",
     "items": [
       {
-        "item": "MK001",
+        "item": "ME006",
         "godown": "02",
-        "unit": "PCS",
-        "rate": 675,
-        "qty": "72",
-        "cess": "",
-        "schRs": "",
-        "sch": "",
-        "cd": "",
-        "amount": "48600.00",
-        "netAmount": "48600.00"
-      }
-    ],
-    "id": "1",
-    "createdAt": "2025-03-12T10:16:01.177Z"
-  },
-  {
-    "date": "2025-03-12",
-    "series": "T",
-    "cash": "N",
-    "party": "AA001",
-    "partyName": "SHRI BALRAM SEVLANI",
-    "sm": "SM002",
-    "smName": "GANESH BAGHEL",
-    "ref": "",
-    "dueDays": "",
-    "items": [
-      {
-        "item": "ME032",
-        "godown": "03",
         "unit": "BOX",
-        "rate": 430,
-        "qty": "120",
+        "rate": 440,
+        "qty": "52",
         "cess": "",
         "schRs": "",
         "sch": "",
         "cd": "",
-        "amount": "51600.00",
-        "netAmount": "51600.00"
+        "amount": "22880.00",
+        "netAmount": "22880.00"
       }
     ],
-    "id": "2",
-    "createdAt": "2025-03-12T10:17:41.504Z"
+    "id": "3",
+    "createdAt": "2025-03-16T15:37:09.863Z"
   }
 ]

@@ -266,6 +266,9 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
       return;
     }
     
+    // Check if we're on an approved page
+    const isApproved = tableId?.includes('approved');
+    
     // For account-master, we need to find the relevant row to get the subgroup field
     if (endpoint === 'account-master') {
       // Find the row data for the given ID
@@ -279,16 +282,16 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
         const subgroup = rowData.subgroup || rowData.SUBGROUP || '';
         console.log('Editing account with ID:', id, 'Subgroup:', subgroup);
         // Pass the ID first, then include subgroup as a query parameter
-        navigate(`/account-master/edit/${id}?subgroup=${encodeURIComponent(subgroup)}`);
+        navigate(`/account-master/edit/${id}?subgroup=${encodeURIComponent(subgroup)}${isApproved ? '&approved=true' : ''}`);
       } else {
         console.error('Could not find row data for ID:', id);
         toast.error('Could not find account data');
       }
     } else if (endpoint === 'invoicing') {
       // Change from hard redirect to React Router navigation
-      navigate(`/invoicing/edit/${id}`);
+      navigate(`/invoicing/edit/${id}${isApproved ? '?approved=true' : ''}`);
     } else {
-      navigate(`/${endpoint}/edit/${id}`);
+      navigate(`/${endpoint}/edit/${id}${isApproved ? '?approved=true' : ''}`);
     }
   };
 
@@ -315,8 +318,14 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     if (!idToDelete) return;
 
     try {
-      console.log(`Attempting to delete ${endpoint} record with ID: ${idToDelete}`);
-      const response = await fetch(`${constants.baseURL}/delete/${endpoint}/${idToDelete}`);
+      // Determine if we're dealing with approved records based on tableId
+      const isApproved = tableId?.includes('approved');
+      const deleteEndpoint = isApproved ? `/delete/approved/${endpoint}/${idToDelete}` : `/delete/${endpoint}/${idToDelete}`;
+      
+      console.log(`Attempting to delete ${isApproved ? 'approved' : ''} ${endpoint} record with ID: ${idToDelete}`);
+      console.log(`Using endpoint: ${deleteEndpoint}`);
+      
+      const response = await fetch(`${constants.baseURL}${deleteEndpoint}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -487,6 +496,11 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
       return 'unknown';
     }
     
+    // For specific endpoints, use known ID fields
+    if (endpoint === 'cash-receipts' && row.receiptNo) return String(row.receiptNo);
+    if (endpoint === 'cash-payments' && row.voucherNo) return String(row.voucherNo);
+    if (endpoint === 'account-master' && row.subgroup) return String(row.subgroup);
+    
     // First try standard ID fields
     if (row.id) return String(row.id);
     if (row._id) return String(row._id);
@@ -494,11 +508,6 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     // For Account Master, often uses these fields
     if (row.achead) return String(row.achead);
     if (row.Achead) return String(row.Achead);
-    
-    // For specific endpoints, use known ID fields
-    if (endpoint === 'cash-receipts' && row.receiptNo) return String(row.receiptNo);
-    if (endpoint === 'cash-payments' && row.voucherNo) return String(row.voucherNo);
-    if (endpoint === 'account-master' && row.subgroup) return String(row.subgroup);
     
     // Try to find any field with 'id' in it (case insensitive)
     const idField = Object.keys(row).find(key => 
@@ -724,17 +733,20 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
                         
                         <TableCell className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => handlePrint(getRowId(row))}
-                              className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                              title="Print"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                                <rect x="6" y="14" width="12" height="8"></rect>
-                              </svg>
-                            </button>
+                            {/* Only show print button if endpoint is not account-master */}
+                            {endpoint !== 'account-master' && (
+                              <button
+                                onClick={() => handlePrint(getRowId(row))}
+                                className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                title="Print"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                  <rect x="6" y="14" width="12" height="8"></rect>
+                                </svg>
+                              </button>
+                            )}
                             
                             <button
                               onClick={() => handleEdit(getRowId(row))}

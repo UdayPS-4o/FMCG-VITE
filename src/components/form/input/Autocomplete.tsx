@@ -95,7 +95,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
 
   // Filter options based on search term
   const filteredOptions = options.filter(option =>
-    option.label.toLowerCase().includes(searchTerm.toLowerCase())
+    option && option.label && option.label.toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,19 +204,16 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
       
       {/* Dropdown menu */}
       {isOpen && (
-        <div className="fixed z-50 mt-1 w-full max-h-60 overflow-auto rounded-md bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 custom-scrollbar" style={{
-          width: dropdownRef.current?.offsetWidth + 'px',
-          left: dropdownRef.current?.getBoundingClientRect().left + 'px',
-          top: (dropdownRef.current?.getBoundingClientRect().bottom || 0) + 5 + 'px',
-          overflowY: 'auto'
-        }}>
+        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-md bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 custom-scrollbar"
+          style={{ top: '100%', left: 0 }}
+        >
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <div
                 key={option.value}
-                className={`px-4 py-2.5 text-sm cursor-pointer text-gray-700 dark:text-gray-200 transition-colors duration-150 hover:bg-gray-200/90 dark:hover:bg-gray-700/90 ${
+                className={`px-4 py-2.5 text-sm cursor-pointer text-gray-700 dark:text-gray-200 transition-colors duration-150 hover:bg-brand-50 dark:hover:bg-brand-900/10 ${
                   selectedOption?.value === option.value 
-                    ? 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400' 
+                    ? 'bg-brand-100 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400' 
                     : ''
                 }`}
                 onClick={() => handleOptionSelect(option)}

@@ -1,182 +1,148 @@
-# TailAdmin React - Free React Tailwind Admin Dashboard Template
+# FMCG_VITE Project Structure
 
-TailAdmin is a free and open-source admin dashboard template built on **React and Tailwind CSS**, providing developers with everything they need to create a comprehensive, data-driven back-end,
-dashboard, or admin panel solution for upcoming web projects.
+This document maps out the routing structure of the FMCG_VITE application, showing which page components correspond to which routes, and where these files are located in the project.
 
-With TailAdmin, you get access to all the necessary dashboard UI components, elements, and pages required to build a feature-rich and complete dashboard or admin panel. Whether you're building dashboard or admin panel for a complex web application or a simple website, TailAdmin is the perfect solution to help you get up and running quickly.
+## Application Layout
 
-![TailAdmin React.js Dashboard Preview](./banner.png)
+The main application layout is defined in:
+- `/src/layout/AppLayout.tsx` - Main layout component that includes the header, sidebar, and outlet for page content
+- `/src/layout/AppHeader.tsx` - Application header component
+- `/src/layout/AppSidebar.tsx` - Sidebar navigation component
 
-## Overview
+## Route Structure
 
-TailAdmin provides essential UI components and layouts for building feature-rich, data-driven admin dashboards and control panels. It's built on:
+### Dashboard
+- **Route**: `/`
+- **Component**: `src/pages/Dashboard/Home.tsx`
+- **Description**: Application dashboard/home page
 
-- React 18 (create-react-app)
-- TypeScript
-- Tailwind CSS
+### Account Master
+- **Route**: `/account-master`
+- **Component**: `src/pages/account-master/AccountMaster.tsx`
+- **Description**: Account master creation form
 
-### Quick Links
+- **Route**: `/account-master/edit/:id`
+- **Component**: `src/pages/account-master/EditAccountMaster.tsx`
+- **Description**: Edit form for existing account master entries
 
-- [✨ Visit Website](https://tailadmin.com)
-- [📄 Documentation](https://tailadmin.com/docs)
-- [⬇️ Download](https://tailadmin.com/download)
-- [🖌️ Figma Design File (Community Edition)](https://www.figma.com/community/file/1214477970819985778)
-- [⚡ Get PRO Version](https://tailadmin.com/pricing)
+### Invoicing
+- **Route**: `/invoicing`
+- **Component**: `src/pages/invoicing/Invoicing.tsx`
+- **Description**: Invoice creation form
+- **Related Components**:
+  - `src/pages/invoicing/CollapsibleItemSection.tsx` - Collapsible section for item entries in the invoice
 
-### Demos
+- **Route**: `/invoicing/edit/:id`
+- **Component**: `src/pages/invoicing/EditInvoicing.tsx`
+- **Description**: Edit form for existing invoices
+- **Related Components**:
+  - `src/pages/invoicing/CollapsibleItemSection.tsx` - Reused from the main invoicing page
 
-- [Free Version](https://free-react-demo.tailadmin.com/)
-- [Pro Version](https://react-demo.tailadmin.com)
+### Godown Transfer
+- **Route**: `/godown-transfer`
+- **Component**: `src/pages/godown-transfer/GodownTransfer.tsx`
+- **Description**: Godown transfer creation form
+- **Related Components**:
+  - `src/pages/godown-transfer/CollapsibleItemSection.tsx` - Collapsible section for item entries in the godown transfer
 
-### Other Versions
+- **Route**: `/godown-transfer/edit/:id`
+- **Component**: `src/pages/godown-transfer/EditGodownTransfer.tsx`
+- **Description**: Edit form for existing godown transfers
+- **Related Components**:
+  - `src/pages/godown-transfer/CollapsibleItemSection.tsx` - Reused from the main godown transfer page
 
-- [HTML Version](https://github.com/TailAdmin/tailadmin-free-tailwind-dashboard-template)
-- [Next.js Version](https://github.com/TailAdmin/free-nextjs-admin-dashboard)
-- [Vue.js Version](https://github.com/TailAdmin/vue-tailwind-admin-dashboard)
+### Database Management
+- **Route**: `/db/account-master`
+- **Component**: `src/pages/database/AccountMaster.tsx`
+- **Description**: Database view/management for account masters
 
-## Installation
+- **Route**: `/db/invoicing`
+- **Component**: `src/pages/database/Invoicing.tsx`
+- **Description**: Database view/management for invoices
 
-### Prerequisites
+- **Route**: `/db/godown-transfer`
+- **Component**: `src/pages/database/GodownTransfer.tsx`
+- **Description**: Database view/management for godown transfers
 
-To get started with TailAdmin, ensure you have the following prerequisites installed and set up:
+- **Route**: `/db/account-master/edit/:id`
+- **Component**: `src/pages/account-master/EditAccountMaster.tsx`
+- **Description**: Reuses the edit component from account-master
 
-- Node.js 18.x or later (recommended to use Node.js 20.x or later)
+- **Route**: `/db/invoicing/edit/:id`
+- **Component**: `src/pages/invoicing/EditInvoicing.tsx`
+- **Description**: Reuses the edit component from invoicing
 
-### Cloning the Repository
+- **Route**: `/db/godown-transfer/edit/:id`
+- **Component**: `src/pages/godown-transfer/EditGodownTransfer.tsx`
+- **Description**: Reuses the edit component from godown-transfer
 
-Clone the repository using the following command:
+### Approval Management
+- **Route**: `/approved/account-master`
+- **Component**: `src/pages/approved/AccountMasterApproved.tsx`
+- **Description**: View and manage approved account masters
 
-```bash
-git clone https://github.com/TailAdmin/free-react-tailwind-admin-dashboard.git
-```
+- **Route**: `/approved/invoicing`
+- **Component**: `src/pages/approved/InvoicingApproved.tsx`
+- **Description**: View and manage approved invoices
 
-> Windows Users: place the repository near the root of your drive if you face issues while cloning.
+- **Route**: `/approved/godown-transfer`
+- **Component**: `src/pages/approved/GodownTransferApproved.tsx`
+- **Description**: View and manage approved godown transfers
 
-1. Install dependencies:
+### Print Views
+- **Route**: `/printInvoicing`
+- **Component**: `src/pages/print/PrintInvoicing.tsx`
+- **Description**: Printable invoice view (no header/sidebar)
 
-   ```bash
-   npm install
-   # or
-   yarn install
-   ```
+- **Route**: `/printAccount`
+- **Component**: `src/pages/print/PrintAccount.tsx`
+- **Description**: Printable account view (no header/sidebar)
 
-   > On `npm` some included packages can cause peer-deps issue with React 18 while installing.
-   >
-   > Use the `--legacy-peer-deps` flag, at the end of the installation command, as a workaround for that.
+- **Route**: `/printGodown`
+- **Component**: `src/pages/print/PrintGodown.tsx`
+- **Description**: Printable godown transfer view (no header/sidebar)
 
-2. Start the development server:
-   ```bash
-   npm run dev
-   # or
-   yarn dev
-   ```
+### Authentication
+- **Route**: `/signin`
+- **Component**: `src/pages/AuthPages/SignIn.tsx`
+- **Description**: Sign-in page
 
-## Components
+- **Route**: `/signup`
+- **Component**: `src/pages/AuthPages/SignUp.tsx`
+- **Description**: Sign-up page
 
-TailAdmin is a pre-designed starting point for building a web-based dashboard using React.js and Tailwind CSS. The template includes:
+- **Route**: `/login`
+- **Component**: `src/pages/AuthPages/Login.tsx`
+- **Description**: Login page
 
-- Sophisticated and accessible sidebar
-- Data visualization components
-- Prebuilt profile management and 404 page
-- Tables and Charts(Line and Bar)
-- Authentication forms and input elements
-- Alerts, Dropdowns, Modals, Buttons and more
-- Can't forget Dark Mode 🕶️
+### Error Pages
+- **Route**: `*` (any unmatched route)
+- **Component**: `src/pages/OtherPage/NotFound.tsx`
+- **Description**: 404 Not Found page
 
-All components are built with React and styled using Tailwind CSS for easy customization.
+## Component Structure
 
-## Feature Comparison
+### Form Components
+- `src/components/form/Form.tsx` - Base form component
+- `src/components/form/input/Input.tsx` - Input field component
+- `src/components/form/input/Autocomplete.tsx` - Autocomplete field component
 
-### Free Version
+### Common Components
+- `src/components/common/PageBreadCrumb.tsx` - Breadcrumb navigation
+- `src/components/common/PageMeta.tsx` - Page metadata
+- `src/components/common/ScrollToTop.tsx` - Scroll to top functionality
 
-- 1 Unique Dashboard
-- 30+ dashboard components
-- 50+ UI elements
-- Basic Figma design files
-- Community support
+### UI Components
+- `src/components/ui/toast/Toast.tsx` - Toast notification component
 
-### Pro Version
+## Contexts and Hooks
+- `src/contexts/InvoiceContext.tsx` - Context for invoice data
+- `src/hooks/useInvoiceData.tsx` - Hook for managing invoice data
+- `src/context/SidebarContext.tsx` - Context for sidebar state
+- `src/hooks/useAuth.tsx` - Hook for authentication
 
-- 5 Unique Dashboards: Analytics, Ecommerce, Marketing, CRM, Stocks (more coming soon)
-- 400+ dashboard components and UI elements
-- Complete Figma design file
-- Email support
-
-To learn more about pro version features and pricing, visit our [pricing page](https://tailadmin.com/pricing).
-
-## Changelog
-
-### Version 2.0.1 - [February 27, 2025]
-
-#### Update Overview
-
-- Upgraded to Tailwind CSS v4 for better performance and efficiency.
-- Updated class usage to match the latest syntax and features.
-- Replaced deprecated class and optimized styles.
-
-#### Next Steps
-
-- Run npm install or yarn install to update dependencies.
-- Check for any style changes or compatibility issues.
-- Refer to the Tailwind CSS v4 [Migration Guide](https://tailwindcss.com/docs/upgrade-guide) on this release. if needed.
-- This update keeps the project up to date with the latest Tailwind improvements. 🚀
-
-### Version 2.0.0 - [February 2025]
-
-A major update with comprehensive redesign and modern React patterns implementation.
-
-#### Major Improvements
-
-- Complete UI redesign with modern React patterns
-- New features: collapsible sidebar, chat, and calendar
-- Improved performance and accessibility
-- Updated data visualization using ApexCharts
-
-#### Key Features
-
-- Redesigned dashboards (Ecommerce, Analytics, Marketing, CRM)
-- Enhanced navigation with React Router integration
-- Advanced tables with sorting and filtering
-- Calendar with drag-and-drop support
-- New UI components and improved existing ones
-
-#### Breaking Changes
-
-- Updated sidebar component API
-- Migrated charts to ApexCharts
-- Revised authentication system
-
-[Read more](https://tailadmin.com/docs/update-logs/react) on this release.
-
-### Version 1.3.7 - [June 20, 2024]
-
-#### Enhancements
-
-1. Remove Repetition of DefaultLayout in every Pages
-2. Add ClickOutside Component for reduce repeated functionality in Header Message, Notification and User Dropdowns.
-
-### Version 1.3.6 - [Jan 31, 2024]
-
-#### Enhancements
-
-1. Integrate flatpickr in [Date Picker/Form Elements]
-2. Change color after select an option [Select Element/Form Elements].
-3. Make it functional [Multiselect Dropdown/Form Elements].
-4. Make best value editable [Pricing Table One/Pricing Table].
-5. Rearrange Folder structure.
-
-### Version 1.2.0 - [Apr 28, 2023]
-
-- Add Typescript in TailAdmin React.
-
-### Version 1.0.0 - Initial Release - [Mar 13, 2023]
-
-- Initial release of TailAdmin React.
-
-## License
-
-TailAdmin React.js Free Version is released under the MIT License.
-
-## Support
-
-If you find this project helpful, please consider giving it a star on GitHub. Your support helps us continue developing and maintaining this template.
+## Additional Information
+- The application uses React Router for navigation
+- Global toast notifications are implemented using react-toastify
+- The UI appears to follow a responsive design pattern
+- The application includes functionality for creating, editing, and approving account masters, invoices, and godown transfers
