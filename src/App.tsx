@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import SignIn from "./pages/AuthPages/SignIn";
@@ -31,71 +31,228 @@ import CashReceiptApproved from "./pages/approved/CashReceiptApproved";
 import CashPaymentApproved from "./pages/approved/CashPaymentApproved";
 import PrintCashReceipt from "./pages/print/PrintCashReceipt";
 import AddUser from "./pages/add-user/AddUser";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
+// Protected Route Component
+const ProtectedRoute = ({ children, requiredAccess }: { children: JSX.Element, requiredAccess?: string }) => {
+  const { isAuthenticated, hasAccess, loading } = useAuth();
+  
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    </div>;
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (requiredAccess && !hasAccess(requiredAccess)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  
+  return children;
+};
+
+// Unauthorized access page
+const Unauthorized = () => (
+  <div className="flex items-center justify-center h-screen bg-gray-100">
+    <div className="text-center p-8 bg-white rounded-lg shadow-md">
+      <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
+      <p className="text-gray-700 mb-6">You don't have permission to access this page.</p>
+      <button 
+        onClick={() => window.history.back()} 
+        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+      >
+        Go Back
+      </button>
+    </div>
+  </div>
+);
+
+const AppRoutes = () => (
+  <Routes>
+    {/* Auth Layout */}
+    <Route path="/signin" element={<SignIn />} />
+    <Route path="/signup" element={<SignUp />} />
+    <Route path="/login" element={<Login />} />
+    <Route path="/unauthorized" element={<Unauthorized />} />
+
+    {/* Dashboard Layout */}
+    <Route element={
+      <ProtectedRoute>
+        <AppLayout />
+      </ProtectedRoute>
+    }>
+      <Route index path="/" element={<Home />} />
+      
+      {/* Main routes */}
+      <Route path="/account-master" element={
+        <ProtectedRoute requiredAccess="Account Master">
+          <AccountMaster />
+        </ProtectedRoute>
+      } />
+      <Route path="/invoicing" element={
+        <ProtectedRoute requiredAccess="Invoicing">
+          <Invoicing />
+        </ProtectedRoute>
+      } />
+      <Route path="/godown-transfer" element={
+        <ProtectedRoute requiredAccess="Godown Transfer">
+          <GodownTransfer />
+        </ProtectedRoute>
+      } />
+      <Route path="/cash-receipt" element={
+        <ProtectedRoute requiredAccess="Cash Receipts">
+          <CashReceipt />
+        </ProtectedRoute>
+      } />
+      <Route path="/cash-payment" element={
+        <ProtectedRoute requiredAccess="Cash Payments">
+          <CashPayment />
+        </ProtectedRoute>
+      } />
+      <Route path="/add-user" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <AddUser />
+        </ProtectedRoute>
+      } />
+      
+      {/* Database Section */}
+      <Route path="/db/account-master" element={
+        <ProtectedRoute requiredAccess="Account Master">
+          <DatabaseAccountMaster />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/invoicing" element={
+        <ProtectedRoute requiredAccess="Invoicing">
+          <DatabaseInvoicing />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/godown-transfer" element={
+        <ProtectedRoute requiredAccess="Godown Transfer">
+          <DatabaseGodownTransfer />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/cash-receipts" element={
+        <ProtectedRoute requiredAccess="Cash Receipts">
+          <DatabaseCashReceipt />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/cash-payments" element={
+        <ProtectedRoute requiredAccess="Cash Payments">
+          <DatabaseCashPayment />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/users" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <AddUser />
+        </ProtectedRoute>
+      } />
+      
+      {/* Edit Pages */}
+      <Route path="/account-master/edit/:id" element={
+        <ProtectedRoute requiredAccess="Account Master">
+          <EditAccountMaster />
+        </ProtectedRoute>
+      } />
+      <Route path="/invoicing/edit/:id" element={
+        <ProtectedRoute requiredAccess="Invoicing">
+          <EditInvoicing />
+        </ProtectedRoute>
+      } />
+      <Route path="/godown-transfer/edit/:id" element={
+        <ProtectedRoute requiredAccess="Godown Transfer">
+          <EditGodownTransfer />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/account-master/edit/:id" element={
+        <ProtectedRoute requiredAccess="Account Master">
+          <EditAccountMaster />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/invoicing/edit/:id" element={
+        <ProtectedRoute requiredAccess="Invoicing">
+          <EditInvoicing />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/godown-transfer/edit/:id" element={
+        <ProtectedRoute requiredAccess="Godown Transfer">
+          <EditGodownTransfer />
+        </ProtectedRoute>
+      } />
+      
+      {/* Add missing edit routes for Cash Receipt and Payment */}
+      <Route path="/cash-receipts/edit/:id" element={
+        <ProtectedRoute requiredAccess="Cash Receipts">
+          <CashReceipt />
+        </ProtectedRoute>
+      } />
+      <Route path="/cash-payments/edit/:id" element={
+        <ProtectedRoute requiredAccess="Cash Payments">
+          <CashPayment />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/cash-receipts/edit/:id" element={
+        <ProtectedRoute requiredAccess="Cash Receipts">
+          <CashReceipt />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/cash-payments/edit/:id" element={
+        <ProtectedRoute requiredAccess="Cash Payments">
+          <CashPayment />
+        </ProtectedRoute>
+      } />
+      
+      {/* Approved Section */}
+      <Route path="/approved/account-master" element={
+        <ProtectedRoute requiredAccess="Account Master">
+          <AccountMasterApproved />
+        </ProtectedRoute>
+      } />
+      <Route path="/approved/invoicing" element={
+        <ProtectedRoute requiredAccess="Invoicing">
+          <InvoicingApproved />
+        </ProtectedRoute>
+      } />
+      <Route path="/approved/godown-transfer" element={
+        <ProtectedRoute requiredAccess="Godown Transfer">
+          <GodownTransferApproved />
+        </ProtectedRoute>
+      } />
+      <Route path="/approved/cash-receipts" element={
+        <ProtectedRoute requiredAccess="Cash Receipts">
+          <CashReceiptApproved />
+        </ProtectedRoute>
+      } />
+      <Route path="/approved/cash-payments" element={
+        <ProtectedRoute requiredAccess="Cash Payments">
+          <CashPaymentApproved />
+        </ProtectedRoute>
+      } />
+    </Route>
+
+    {/* Print Layout - No sidebar/header needed */}
+    <Route path="/printInvoicing" element={<PrintInvoicing />} />
+    <Route path="/printAccount" element={<PrintAccount />} />
+    <Route path="/printGodown" element={<PrintGodown />} />
+    <Route path="/print" element={<PrintCashReceipt />} />
+    <Route path="/printInvoice" element={<PrintInvoicing />} />
+
+    {/* Fallback Route */}
+    <Route path="*" element={<NotFound />} />
+  </Routes>
+);
 
 export default function App() {
   return (
     <>
       <ToastContainer position="bottom-right" autoClose={3000} />
       <Router>
-        <ScrollToTop />
-        <Routes>
-          {/* Dashboard Layout */}
-          <Route element={<AppLayout />}>
-            <Route index path="/" element={<Home />} />
-            <Route path="/account-master" element={<AccountMaster />} />
-            <Route path="/invoicing" element={<Invoicing />} />
-            <Route path="/godown-transfer" element={<GodownTransfer />} />
-            <Route path="/cash-receipt" element={<CashReceipt />} />
-            <Route path="/cash-payment" element={<CashPayment />} />
-            <Route path="/add-user" element={<AddUser />} />
-            
-            {/* Database Section */}
-            <Route path="/db/account-master" element={<DatabaseAccountMaster />} />
-            <Route path="/db/invoicing" element={<DatabaseInvoicing />} />
-            <Route path="/db/godown-transfer" element={<DatabaseGodownTransfer />} />
-            <Route path="/db/cash-receipts" element={<DatabaseCashReceipt />} />
-            <Route path="/db/cash-payments" element={<DatabaseCashPayment />} />
-            <Route path="/db/users" element={<AddUser />} />
-            
-            {/* Edit Pages */}
-            <Route path="/account-master/edit/:id" element={<EditAccountMaster />} />
-            <Route path="/invoicing/edit/:id" element={<EditInvoicing />} />
-            <Route path="/godown-transfer/edit/:id" element={<EditGodownTransfer />} />
-            <Route path="/db/account-master/edit/:id" element={<EditAccountMaster />} />
-            <Route path="/db/invoicing/edit/:id" element={<EditInvoicing />} />
-            <Route path="/db/godown-transfer/edit/:id" element={<EditGodownTransfer />} />
-            
-            {/* Add missing edit routes for Cash Receipt and Payment */}
-            <Route path="/cash-receipts/edit/:id" element={<CashReceipt />} />
-            <Route path="/cash-payments/edit/:id" element={<CashPayment />} />
-            <Route path="/db/cash-receipts/edit/:id" element={<CashReceipt />} />
-            <Route path="/db/cash-payments/edit/:id" element={<CashPayment />} />
-            
-            {/* Approved Section */}
-            <Route path="/approved/account-master" element={<AccountMasterApproved />} />
-            <Route path="/approved/invoicing" element={<InvoicingApproved />} />
-            <Route path="/approved/godown-transfer" element={<GodownTransferApproved />} />
-            <Route path="/approved/cash-receipts" element={<CashReceiptApproved />} />
-            <Route path="/approved/cash-payments" element={<CashPaymentApproved />} />
-            
-          </Route>
-
-          {/* Print Layout - No sidebar/header needed */}
-          <Route path="/printInvoicing" element={<PrintInvoicing />} />
-          <Route path="/printAccount" element={<PrintAccount />} />
-          <Route path="/printGodown" element={<PrintGodown />} />
-          <Route path="/print" element={<PrintCashReceipt />} />
-          <Route path="/printInvoice" element={<PrintInvoicing />} />
-
-          {/* Auth Layout */}
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
-          <Route path="/login" element={<Login />} />
-
-          {/* Fallback Route */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <ScrollToTop />
+          <AppRoutes />
+        </AuthProvider>
       </Router>
     </>
   );

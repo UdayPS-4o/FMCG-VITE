@@ -1,4 +1,3 @@
-
 const fs = require("fs").promises;
 const path = require("path");
 const {redirect, getDbfData, getCmplData, ensureDirectoryExistence, saveDataToJsonFile} = require("./utilities");
@@ -155,4 +154,22 @@ process.on("uncaughtException", (err) => {
     convertDbfToJson();
   }, 60 * 1000 );
   convertDbfToJson();
+  
+  async function checkFile(filePath) {
+    try {
+      await fs.access(filePath);
+      const stats = await fs.stat(filePath);
+      // Continue with your file processing
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        console.log(`Warning: File not found: ${filePath}`);
+        // Optionally create directories and/or empty file:
+        await ensureDirectoryExistence(path.dirname(filePath));
+        // For DBF files, you might need a proper DBF structure rather than an empty file
+        // await fs.writeFile(filePath, ''); 
+      } else {
+        console.error(`Error checking file: ${error}`);
+      }
+    }
+  }
   

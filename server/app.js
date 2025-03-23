@@ -5,7 +5,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const morgan = require('morgan');
 const app = express();
-const PORT = 8001;
+const PORT = 8000;
 const io = require('socket.io');
 const {
   redirect,
@@ -20,6 +20,7 @@ app.use(
   cors({
     origin: [
       'http://localhost:3000',
+      'http://localhost:3001',
       'http://localhost:5173',
       'http://localhost:5174',
       'http://localhost:5175',
@@ -28,16 +29,21 @@ app.use(
       'http://localhost:5178',
       'http://localhost:5179',
       'http://localhost:8080',
+      'http://localhost:8000',
+      'http://localhost:8001',
     ],
-    credentials: true,
-  }),
+
+    credentials: true
+  })
 );
+
+
+
+
 app.use(morgan('dev'));
 app.use(cookieParser());
 
-const spawn = require('child_process').spawn;
-app.use(express.static('./node_modules/html-template-02'));
-// app.use(express.static('./public'));
+const spawn = require('child_process').spawn;// app.use(express.static(80/public'));
 app.use(bodyParser.json()); // for parsing application/json
 app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 

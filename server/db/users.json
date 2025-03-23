@@ -87,5 +87,25 @@
     ],
     "subgroup": null,
     "token": "13zdi7"
+  },
+  {
+    "id": 9,
+    "name": "milan",
+    "username": "admin",
+    "number": "9898989898",
+    "password": "milan123",
+    "routeAccess": [
+      "Account Master",
+      "Invoicing"
+    ],
+    "powers": [
+      "Read",
+      "Write",
+      "Delete"
+    ],
+    "subgroup": {
+      "title": "ADEGAON"
+    },
+    "token": "oddb24"
   }
 ]

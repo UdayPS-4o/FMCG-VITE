@@ -13,6 +13,7 @@ const {
 const { cp } = require('fs');
 const { id } = require('date-fns/locale');
 
+
 app.get('/api/checkiskAuth', (req, res) => {
   const token = req.cookies.token;
   if (!token) {
@@ -23,17 +24,18 @@ app.get('/api/checkiskAuth', (req, res) => {
     .then((data) => {
       const users = JSON.parse(data);
       const user = users.find((u) => u.token === token);
-      console.log(user);
       if (user) {
-        // Return user details if authenticated
+        // Return user details in the expected format
         return res.status(200).json({
           authenticated: true,
-          name: user.name,
-          routeAccess: user.routeAccess,
-          id: user.id,
-          username: user.username,
-
-          subgroup: user.subgroup,
+          user: {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            routeAccess: user.routeAccess,
+            powers: user.powers,
+            subgroup: user.subgroup
+          }
         });
       } else {
         // Return unauthorized if user is not found
@@ -62,14 +64,24 @@ app.post('/api/login', async (req, res) => {
       // Save the updated users data with the new token
       await fs.writeFile(filePath, JSON.stringify(users, null, 2), 'utf8');
 
-      // Set token in the cookie and respond
+      // Set token in the cookie and respond with user data
       res
         .status(200)
         .header(
           'Set-Cookie',
           `token=${newToken}; Path=/; Domain=localhost; Max-Age=6800; HttpOnly;`,
         )
-        .send('Login successful.');
+        .json({ 
+          success: true, 
+          user: {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            routeAccess: user.routeAccess,
+            powers: user.powers,
+            subgroup: user.subgroup
+          }
+        });
     } else {
       res.status(404).send('Error: Invalid username or password.');
     }
@@ -206,6 +218,19 @@ async function calculateCurrentStock() {
 app.get('/api/stock', async (req, res) => {
   const stock = await calculateCurrentStock();
   res.send(stock);
+});
+
+// Add this POST route for /api/logout
+app.post('/api/logout', (req, res) => {
+  // Clear token cookie with same path and domain as when it was set
+  res.clearCookie('token', {
+    path: '/',
+    domain: 'localhost',
+    httpOnly: true
+  });
+  
+  // Send a success response that the client can handle
+  res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
 
 module.exports = app;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   BoxIcon,
   DatabaseIcon,
@@ -11,6 +11,7 @@ import {
   WarehouseIcon
 } from '../components/icons';
 import { useSidebar } from "../context/SidebarContext";
+import constants from '../constants';
 
 // Add missing icon components
 const ChevronDownIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -47,6 +48,24 @@ const HorizontaLDots: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+// Add LogoutIcon component
+const LogoutIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+    />
+  </svg>
+);
+
 interface SubNavItem {
   name: string;
   path: string;
@@ -59,6 +78,20 @@ interface NavItem {
   name: string;
   path?: string;
   subItems?: SubNavItem[];
+}
+
+interface User {
+  id: number;
+  name: string;
+  username: string;
+  password: string;
+  routeAccess: string[];
+  powers: string[];
+  token?: string;
+  subgroup?: {
+    title: string;
+    subgroupCode?: string;
+  } | null;
 }
 
 const fmcgItems: NavItem[] = [
@@ -123,6 +156,9 @@ const othersItems: NavItem[] = [];
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [filteredItems, setFilteredItems] = useState<NavItem[]>([]);
 
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others" | "fmcg";
@@ -133,7 +169,97 @@ const AppSidebar: React.FC = () => {
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // const isActive = (path: string) => location.pathname === path;
+  // Fetch user data when component mounts
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch(`${constants.baseURL}/api/checkiskAuth`, {
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.authenticated && data.user) {
+            setUser(data.user);
+          } else {
+            // Redirect to login if not authenticated
+            navigate('/login');
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        navigate('/login');
+      }
+    };
+
+    fetchUserData();
+  }, [navigate]);
+
+  // Filter menu items based on user access rights
+  useEffect(() => {
+    if (!user) {
+      setFilteredItems([]);
+      return;
+    }
+
+    // Debug: Print user access rights to console
+    console.log("User routeAccess:", user.routeAccess);
+    console.log("User powers:", user.powers);
+
+    // If user has Admin access, show all items
+    if (user.routeAccess.includes('Admin')) {
+      console.log("User has Admin access, showing all menu items");
+      setFilteredItems([...fmcgItems]);
+      return;
+    }
+
+    // Filter items based on user's routeAccess
+    const filtered = fmcgItems.filter(item => {
+      // Special case for "Add User" - only show for Admin
+      if (item.name === "Add User") {
+        return false;
+      }
+
+      // Check if user has access to main menu item
+      if (item.path) {
+        if (item.name === "Account Master" && !user.routeAccess.includes('Account Master')) return false;
+        if (item.name === "Invoicing" && !user.routeAccess.includes('Invoicing')) return false;
+        if (item.name === "Godown Transfer" && !user.routeAccess.includes('Godown Transfer')) return false;
+        if (item.name === "Cash Receipt" && !user.routeAccess.includes('Cash Receipts')) return false;
+        if (item.name === "Cash Payment" && !user.routeAccess.includes('Cash Payments')) return false;
+        return true;
+      }
+
+      // For items with subitems, filter the subitems too
+      if (item.subItems) {
+        const filteredSubItems = item.subItems.filter(subItem => {
+          if (subItem.name === "Account Master" && !user.routeAccess.includes('Account Master')) return false;
+          if (subItem.name === "Invoicing" && !user.routeAccess.includes('Invoicing')) return false;
+          if (subItem.name === "Godown Transfer" && !user.routeAccess.includes('Godown Transfer')) return false;
+          if (subItem.name === "Cash Receipts" && !user.routeAccess.includes('Cash Receipts')) return false;
+          if (subItem.name === "Cash Payments" && !user.routeAccess.includes('Cash Payments')) return false;
+          return true;
+        });
+
+        // If all subitems are filtered out, don't show the parent item
+        if (filteredSubItems.length === 0) {
+          return false;
+        }
+
+        // Return a new object with filtered subitems
+        return {
+          ...item,
+          subItems: filteredSubItems
+        };
+      }
+
+      return true;
+    });
+
+    console.log("Filtered menu items:", filtered.map(item => item.name));
+    setFilteredItems(filtered);
+  }, [user]);
+
   const isActive = useCallback(
     (path: string) => location.pathname === path,
     [location.pathname]
@@ -146,7 +272,7 @@ const AppSidebar: React.FC = () => {
         ? navItems 
         : menuType === "others" 
           ? othersItems 
-          : fmcgItems;
+          : filteredItems;
       items.forEach((nav, index) => {
         if (nav.subItems) {
           nav.subItems.forEach((subItem) => {
@@ -165,7 +291,7 @@ const AppSidebar: React.FC = () => {
     if (!submenuMatched) {
       setOpenSubmenu(null);
     }
-  }, [location, isActive]);
+  }, [location, isActive, filteredItems]);
 
   useEffect(() => {
     if (openSubmenu !== null) {
@@ -190,6 +316,32 @@ const AppSidebar: React.FC = () => {
       }
       return { type: menuType, index };
     });
+  };
+
+  // Fix the handleLogout function
+  const handleLogout = async () => {
+    try {
+      const response = await fetch(`${constants.baseURL}/api/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        // Clear any locally stored data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        
+        // Use window.location for a full page refresh to clear all React state
+        window.location.href = '/login';
+      } else {
+        console.error('Logout failed');
+        // Still redirect even if logout failed
+        window.location.href = '/login';
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      window.location.href = '/login';
+    }
   };
 
   const renderMenuItems = (items: NavItem[], menuType: "main" | "others" | "fmcg") => (
@@ -363,7 +515,7 @@ const AppSidebar: React.FC = () => {
           )}
         </Link>
       </div>
-      <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
+      <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar flex-grow">
         <nav className="mb-6">
           <div className="flex flex-col gap-4">
             <div>
@@ -380,10 +532,47 @@ const AppSidebar: React.FC = () => {
                   <HorizontaLDots className="size-6" />
                 )}
               </h2>
-              {renderMenuItems(fmcgItems, "fmcg")}
+              {/* Use filtered items instead of all fmcgItems */}
+              {renderMenuItems(filteredItems, "fmcg")}
             </div>
           </div>
         </nav>
+      </div>
+      
+      {/* User info display */}
+      {user && (isExpanded || isHovered || isMobileOpen) && (
+        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                {user.name}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {user.subgroup?.title || "No subgroup"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Add logout button at the bottom */}
+      <div className="mt-auto mb-8">
+        <button
+          onClick={handleLogout}
+          className="menu-item group menu-item-inactive w-full"
+        >
+          <span className="menu-item-icon-size menu-item-icon-inactive">
+            <LogoutIcon />
+          </span>
+          {(isExpanded || isHovered || isMobileOpen) && (
+            <span className="menu-item-text">Logout</span>
+          )}
+        </button>
       </div>
     </aside>
   );
