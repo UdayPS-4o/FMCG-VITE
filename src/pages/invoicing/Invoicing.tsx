@@ -364,7 +364,7 @@ const InvoicingContent: React.FC = () => {
           </div>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-6 max-h-[400px] overflow-y-auto pr-2 scrollbar-custom">
           {filteredItems().map((item, index) => (
             <CollapsibleItemSection
               key={index}

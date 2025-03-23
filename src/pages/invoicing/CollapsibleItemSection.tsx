@@ -254,17 +254,17 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
   };
 
   return (
-    <div className={`mb-4 border rounded-lg overflow-hidden ${expanded ? 'border-brand-500' : 'border-gray-200 dark:border-gray-700'}`}>
+    <div className={`mb-4 border rounded-lg ${expanded ? 'border-brand-500' : 'border-gray-200 dark:border-gray-700'}`}>
       <div 
         className={`p-4 cursor-pointer flex justify-between items-center ${expanded ? 'bg-brand-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-900'}`}
         onClick={(e) => handleAccordionChange(index)(e, !expanded)}
       >
-        <h3 className="text-lg font-medium dark:text-white">
+        <h3 className={`text-lg font-medium dark:text-white ${item.item ? 'text-brand-600 dark:text-brand-400' : ''} truncate flex-1 pr-4`} title={item.item ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}` : 'Select an item'}>
           {item.item
             ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}`
             : 'Select an item'}
         </h3>
-        <div className="flex items-center">
+        <div className="flex items-center shrink-0">
           <button 
             type="button" 
             className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
@@ -297,9 +297,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       </div>
       
       {expanded && (
-        <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 relative">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <div>
+            <div className="relative" style={{ zIndex: 100 }}>
               <Autocomplete
                 id={`item-${index}`}
                 label="Item Name"
@@ -323,7 +323,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 variant="outlined"
               />
             </div>
-            <div>
+            <div className="relative" style={{ zIndex: 90 }}>
               <Autocomplete
                 id={`godown-${index}`}
                 label="Godown"

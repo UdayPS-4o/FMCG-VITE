@@ -9,6 +9,8 @@ interface InvoiceProviderProps {
   removeItem: (index: number) => void;
   addItem: () => void;
   calculateTotal: () => string;
+  expandedIndex?: number;
+  setExpandedIndex?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
@@ -17,7 +19,9 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
   updateItem,
   removeItem,
   addItem,
-  calculateTotal
+  calculateTotal,
+  expandedIndex,
+  setExpandedIndex
 }) => {
   // Use the hook to get all the data
   const { 
@@ -42,7 +46,9 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
     addItem,
     calculateTotal,
     loading,
-    error
+    error,
+    expandedIndex,
+    setExpandedIndex
   };
 
   return (

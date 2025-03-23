@@ -252,8 +252,8 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     
     if (endpoint === 'cash-receipts') navigate(`/print?ReceiptNo=${id}`);
     if (endpoint === 'cash-payments') navigate(`/print?voucherNo=${id}`);
-    if (endpoint === 'godown') navigate(`/printGodownT?godownId=${id}`);
-    if (endpoint === 'invoicing') navigate(`/printInvoicing?id=${id}`);
+    if (endpoint === 'godown') navigate(`/printGodown?godownId=${id}`);
+    if (endpoint === 'invoicing') navigate(`/printInvoice?id=${id}`);
     if (endpoint === 'account-master') navigate(`/printAccount?achead=${id}`);
   };
 

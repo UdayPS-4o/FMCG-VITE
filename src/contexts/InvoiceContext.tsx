@@ -43,6 +43,8 @@ export interface InvoiceContextType {
   calculateTotal: () => string;
   loading: boolean;
   error: string | null;
+  expandedIndex?: number;
+  setExpandedIndex?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const InvoiceContext = createContext<InvoiceContextType>({
@@ -57,7 +59,9 @@ export const InvoiceContext = createContext<InvoiceContextType>({
   addItem: () => {},
   calculateTotal: () => '0.00',
   loading: false,
-  error: null
+  error: null,
+  expandedIndex: 0,
+  setExpandedIndex: () => {}
 });
 
 export const useInvoiceContext = () => useContext(InvoiceContext); 

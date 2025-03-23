@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface Option {
   value: string;
@@ -15,26 +16,51 @@ interface AutocompleteProps {
   autoComplete?: string;
 }
 
-// Add CSS styles as a separate string
 const customScrollbarStyles = `
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+  .dropdown-scrollbar::-webkit-scrollbar {
+    width: 8px;
   }
-  .custom-scrollbar::-webkit-scrollbar-track {
+  .dropdown-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
+  .dropdown-scrollbar::-webkit-scrollbar-thumb {
     background-color: rgba(156, 163, 175, 0.5);
     border-radius: 20px;
   }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  .dropdown-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: rgba(156, 163, 175, 0.7);
   }
-  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  .dark .dropdown-scrollbar::-webkit-scrollbar-thumb {
     background-color: rgba(75, 85, 99, 0.5);
   }
-  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  .dark .dropdown-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: rgba(75, 85, 99, 0.7);
+  }
+  
+  .autocomplete-dropdown {
+    position: absolute;
+    z-index: 99999;
+    max-height: 240px;
+    overflow-y: auto;
+    width: var(--dropdown-width);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--color-gray-200);
+    background-color: white;
+    margin-top: 4px;
+  }
+  
+  .dark .autocomplete-dropdown {
+    background-color: var(--color-gray-800);
+    border-color: var(--color-gray-700);
+  }
+  
+  .dropdown-container {
+    position: absolute;
+    z-index: 99999;
+    width: 100%;
+    left: 0;
+    top: 100%;
   }
 `;
 
@@ -52,8 +78,15 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   const isActive = isFocused || searchTerm;
+
+  // Filter options based on search term
+  const filteredOptions = options.filter(option =>
+    option && option.label && option.label.toLowerCase().includes((searchTerm || '').toLowerCase())
+  );
 
   // Set initial selected option based on defaultValue
   useEffect(() => {
@@ -69,7 +102,12 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   // Handle click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current && 
+        !dropdownRef.current.contains(event.target as Node) &&
+        inputContainerRef.current && 
+        !inputContainerRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
@@ -79,6 +117,43 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Calculate dropdown position
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+
+  // Detect dark mode
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  
+  // Check for dark mode on mount and when theme changes
+  useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
+    
+    // Initial check
+    checkDarkMode();
+    
+    // Create an observer to watch for theme changes
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, { 
+      attributes: true, 
+      attributeFilter: ['class'] 
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+
+  // Update dropdown position when input container changes or dropdown opens
+  useEffect(() => {
+    if (isOpen && inputContainerRef.current) {
+      const rect = inputContainerRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width
+      });
+    }
+  }, [isOpen, searchTerm]);
 
   // Add the custom scrollbar styles to the document
   useEffect(() => {
@@ -92,11 +167,6 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
       document.head.removeChild(styleElement);
     };
   }, []);
-
-  // Filter options based on search term
-  const filteredOptions = options.filter(option =>
-    option && option.label && option.label.toLowerCase().includes((searchTerm || '').toLowerCase())
-  );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -116,14 +186,29 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
     onChange(option.value);
   };
 
+  // Format option label - if it contains a pipe (|), make the first part bold
+  const formatOptionLabel = (label: string) => {
+    if (label.includes('|')) {
+      const parts = label.split('|');
+      return (
+        <div className="flex flex-col">
+          <span className="font-semibold text-brand-600 dark:text-brand-400">{parts[0].trim()}</span>
+          <span className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 line-clamp-1">{parts[1].trim()}</span>
+        </div>
+      );
+    }
+    return label;
+  };
+
   return (
     <div 
       className={`relative border ${isActive ? 'border-brand-500 dark:border-brand-400' : 'border-gray-300 dark:border-gray-700'} rounded-lg transition-all duration-200 ${className}`} 
-      ref={dropdownRef}
+      ref={inputContainerRef}
     >
       <div className="relative">
         <input
           id={id}
+          ref={inputRef}
           type="text"
           className="w-full px-4 py-2.5 text-sm bg-transparent text-gray-800 dark:text-white/90 focus:outline-none pr-16"
           placeholder=" "
@@ -202,23 +287,38 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
         {label}
       </label>
       
-      {/* Dropdown menu */}
-      {isOpen && (
-        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-md bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 custom-scrollbar"
-          style={{ top: '100%', left: 0 }}
+      {/* Render dropdown using portal to avoid clipping */}
+      {isOpen && createPortal(
+        <div 
+          ref={dropdownRef} 
+          className="autocomplete-dropdown dropdown-scrollbar"
+          style={{
+            position: 'absolute',
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`,
+            zIndex: 999999,
+            maxHeight: '240px',
+            overflowY: 'auto',
+            borderRadius: '8px',
+            boxShadow: isDarkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 4px 20px rgba(0, 0, 0, 0.2)',
+            border: isDarkMode ? '1px solid #374151' : '1px solid #E5E7EB',
+            backgroundColor: isDarkMode ? '#1F2937' : 'white',
+            marginTop: '4px'
+          }}
         >
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <div
                 key={option.value}
-                className={`px-4 py-2.5 text-sm cursor-pointer text-gray-700 dark:text-gray-200 transition-colors duration-150 hover:bg-brand-50 dark:hover:bg-brand-900/10 ${
+                className={`px-4 py-3 text-sm cursor-pointer text-gray-700 dark:text-gray-200 transition-colors duration-150 hover:bg-brand-50 dark:hover:bg-brand-900/10 ${
                   selectedOption?.value === option.value 
-                    ? 'bg-brand-100 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400' 
+                    ? 'bg-brand-100 dark:bg-brand-900/20' 
                     : ''
                 }`}
                 onClick={() => handleOptionSelect(option)}
               >
-                {option.label}
+                {formatOptionLabel(option.label)}
               </div>
             ))
           ) : (
@@ -226,7 +326,8 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
               No options found
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

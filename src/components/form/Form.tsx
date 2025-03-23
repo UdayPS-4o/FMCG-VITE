@@ -14,7 +14,7 @@ const Form: FC<FormProps> = ({ onSubmit, children, className, autoComplete }) =>
         event.preventDefault(); // Prevent default form submission
         onSubmit(event);
       }}
-      className={` ${className}`} // Default spacing between form fields
+      className={`w-full ${className}`} // Add width 100% by default to fill available space
       autoComplete={autoComplete}
     >
       {children}

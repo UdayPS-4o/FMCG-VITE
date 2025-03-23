@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -14,6 +14,7 @@ import InvoiceProvider from '../../contexts/InvoiceProvider';
 const EditInvoicingContent: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const dataLoadedRef = useRef(false);
   
   // Get shared invoice data from context
   const { 
@@ -26,10 +27,11 @@ const EditInvoicingContent: React.FC = () => {
     items,
     updateItem,
     removeItem,
-    addItem
+    addItem,
+    expandedIndex,
+    setExpandedIndex
   } = useInvoiceContext();
 
-  const [expandedIndex, setExpandedIndex] = useState<number>(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [searchItems, setSearchItems] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -60,6 +62,11 @@ const EditInvoicingContent: React.FC = () => {
       if (!id) {
         setError('No invoice ID provided');
         setLoading(false);
+        return;
+      }
+
+      // If we've already loaded the data, don't load it again
+      if (dataLoadedRef.current) {
         return;
       }
 
@@ -184,7 +191,7 @@ const EditInvoicingContent: React.FC = () => {
             };
           });
 
-          // Update items through context
+          // Update items through context - this part was causing the infinite loop
           processedItems.forEach((item: ItemData, index: number) => {
             if (index < items.length) {
               updateItem(index, item);
@@ -195,6 +202,7 @@ const EditInvoicingContent: React.FC = () => {
           });
         }
 
+        dataLoadedRef.current = true; // Mark that we've loaded the data
         setError(null);
       } catch (err) {
         console.error('Failed to load invoice:', err);
@@ -209,13 +217,13 @@ const EditInvoicingContent: React.FC = () => {
       }
     };
 
-    if (!dataLoading && !dataError) {
+    if (!dataLoading && !dataError && !dataLoadedRef.current) {
       loadInvoice();
     }
-  }, [id, dataLoading, dataError, partyOptions, smOptions, pmplData, stockList, items, updateItem, addItem]);
+  }, [id, dataLoading, dataError, partyOptions, smOptions, pmplData, stockList]); // Removed items, updateItem, addItem
 
   const handleAccordionChange = (panel: number) => (_: React.SyntheticEvent, isExpanded: boolean) => {
-    setExpandedIndex(isExpanded ? panel : -1);
+    setExpandedIndex?.(isExpanded ? panel : -1);
   };
 
   // Form handlers
@@ -390,7 +398,7 @@ const EditInvoicingContent: React.FC = () => {
         onClose={() => setToast({ ...toast, visible: false })}
       />
       
-      <FormComponent onSubmit={handleSubmit} autoComplete="off">
+      <FormComponent onSubmit={handleSubmit} autoComplete="off" className="flex flex-col w-full">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div>
@@ -505,7 +513,7 @@ const EditInvoicingContent: React.FC = () => {
           )}
         </div>
 
-        <div className="mb-4 mt-6">
+        <div className="flex-grow w-full mb-4 mt-6">
           <h2 className="text-xl font-semibold mb-2 dark:text-white">Items</h2>
           
           <div className="relative max-w-md mb-4">
@@ -521,7 +529,7 @@ const EditInvoicingContent: React.FC = () => {
           </div>
         </div>
 
-        <div className="mb-6">
+        <div className="w-full mb-6 pr-2">
           {filteredItems().map((item, index) => (
             <CollapsibleItemSection
               key={index}
@@ -538,9 +546,23 @@ const EditInvoicingContent: React.FC = () => {
         <div className="mb-6">
           <button
             type="button"
-            className="px-4 py-2 text-brand-500 border border-brand-500 rounded-md hover:bg-brand-50 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800"
+            className="px-5 py-3 text-brand-500 border-2 border-brand-500 font-medium rounded-md hover:bg-brand-50 hover:text-brand-600 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800 flex items-center gap-2 transition-all duration-200"
             onClick={addItem}
           >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="18" 
+              height="18" 
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
             Add Another Item
           </button>
         </div>
@@ -592,10 +614,11 @@ const EditInvoicing: React.FC = () => {
     selectedItem: null,
     stockLimit: 0,
   }]);
+  const [expandedIndex, setExpandedIndex] = useState<number>(0);
 
   // Item management functions
   const addItem = () => {
-    setItems([...items, {
+    const newItems = [...items, {
       item: '',
       godown: '',
       unit: '',
@@ -614,7 +637,10 @@ const EditInvoicing: React.FC = () => {
       netAmount: '',
       selectedItem: null,
       stockLimit: 0,
-    }]);
+    }];
+    setItems(newItems);
+    // Set the expandedIndex to the new item's index
+    setExpandedIndex(newItems.length - 1);
   };
 
   const removeItem = (index: number) => {
@@ -641,6 +667,8 @@ const EditInvoicing: React.FC = () => {
       removeItem={removeItem}
       addItem={addItem}
       calculateTotal={calculateTotal}
+      expandedIndex={expandedIndex}
+      setExpandedIndex={setExpandedIndex}
     >
       <EditInvoicingContent />
     </InvoiceProvider>

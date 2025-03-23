@@ -85,6 +85,8 @@ export default function App() {
           <Route path="/printInvoicing" element={<PrintInvoicing />} />
           <Route path="/printAccount" element={<PrintAccount />} />
           <Route path="/printGodown" element={<PrintGodown />} />
+          <Route path="/print" element={<PrintCashReceipt />} />
+          <Route path="/printInvoice" element={<PrintInvoicing />} />
 
           {/* Auth Layout */}
           <Route path="/signin" element={<SignIn />} />

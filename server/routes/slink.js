@@ -416,7 +416,7 @@ async function printInvoicing(req, res) {
     invoiceData = JSON.parse(invoiceData);
 
     // console.log(invoiceData)
-    const invoice = invoiceData.find((inv) => inv.id === Number(id));
+    const invoice = invoiceData.find((inv) => inv.id == (id));
     console.log('THe invoice we found is', invoice);
     const pmplData = await getPMPLData();
     let accountMasterData = await fs.readFile(

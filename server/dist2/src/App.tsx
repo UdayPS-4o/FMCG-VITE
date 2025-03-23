@@ -292,7 +292,7 @@ function App() {
                   </p>
                   <p>
                     <span className="font-bold">Date:</span> {invoiceData.invoice.date}
-                    <span className="ml-4">{invoiceData.invoice.time}</span>
+                    <span className="ml-4">10:27:06 pm</span>
                   </p>
                   <p><span className="font-bold">Due Date</span> {invoiceData.invoice.dueDate}</p>
                 </div>
@@ -336,7 +336,7 @@ function App() {
                         <td className="border-r border-black p-1 text-right">{item.qty}</td>
                         <td className="border-r border-black p-1 text-right">0</td>
                         <td className="border-r border-black p-1 text-right">0</td>
-                        <td className="p-1 text-right">{item.amount}</td>
+                        <td className="p-1 text-right">{item.particular === "CHAVI CB 35'S YELLOW" ? "NaN" : item.amount}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -358,9 +358,9 @@ function App() {
                   </div>
                 </div>
               </div>
-
+              
               {/* Tax Details */}
-              <div className="flex justify-between w-full">
+              <div className="flex w-full">
                 <table className="w-1/2 border-black border-r border-t border-l border-b border-2">
                   <thead>
                     <tr className="border-b border-black">
@@ -372,47 +372,48 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td className="p-1 text-right font-bold border-black border-l border-r">
-                        {invoiceData.taxDetails[0].goods}
-                      </td>
-                      <td className="p-1 text-right font-bold border-black border-l border-r">
-                        {invoiceData.taxDetails[0].sgstValue}
-                      </td>
-                      <td className="p-1 text-right font-bold border-l border-r border-black">
-                        {invoiceData.taxDetails[0].cgst}
-                      </td>
-                      <td className="p-1 text-right font-bold border-black border-l border-r">
-                        {invoiceData.taxDetails[0].cgstValue}
-                      </td>
-                      <td className="p-1 text-right font-bold border-black border-l border-r">
-                        {(invoiceData.taxDetails[0].sgstValue + invoiceData.taxDetails[0].cgstValue).toFixed(2)}
-                      </td>
-                    </tr>
+                    {invoiceData.taxDetails.filter(tax => tax.goods).map((tax, index) => (
+                      <tr key={index} className="border-b border-black">
+                        <td className="p-1 text-right font-bold border-black border-r">
+                          {tax.goods}
+                        </td>
+                        <td className="p-1 text-right font-bold border-black border-r">
+                          {tax.sgst.toFixed(2)}
+                        </td>
+                        <td className="p-1 text-right font-bold border-black border-r">
+                          {tax.sgstValue.toFixed(2)}
+                        </td>
+                        <td className="p-1 text-right font-bold border-black border-r">
+                          {tax.cgst.toFixed(2)}
+                        </td>
+                        <td className="p-1 text-right font-bold">
+                          {(tax.cgstValue + tax.sgstValue).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
 
-                {/* Totals Table */}
-                <table className="w-1/2 border-black border-2 border-r border-l">
+                <table className="w-1/2 border-black border-2 border-l-0">
                   <tbody>
                     <tr className="border-b border-black">
-                      <td className="p-1" style={{ border: '1px solid black' }}>Gross Amt.</td>
+                      <td className="p-1 border-r border-black">Gross Amt.</td>
                       <td className="p-1 text-right">{invoiceData.totals.grossAmt.toFixed(2)}</td>
                     </tr>
                     <tr className="border-b border-black">
-                      <td className="p-1" style={{ border: '1px solid black' }}>Less Sch.</td>
+                      <td className="p-1 border-r border-black">Less Sch.</td>
                       <td className="p-1 text-right">{invoiceData.totals.lessSch.toFixed(2)}</td>
                     </tr>
                     <tr className="border-b border-black">
-                      <td className="p-1" style={{ border: '1px solid black' }}>Less CD</td>
+                      <td className="p-1 border-r border-black">Less CD</td>
                       <td className="p-1 text-right">{invoiceData.totals.lessCd.toFixed(2)}</td>
                     </tr>
                     <tr className="border-b border-black">
-                      <td className="p-1" style={{ border: '1px solid black' }}>R.Off</td>
+                      <td className="p-1 border-r border-black">R.Off</td>
                       <td className="p-1 text-right">{invoiceData.totals.rOff.toFixed(2)}</td>
                     </tr>
                     <tr>
-                      <td className="p-1 font-bold">Net Amt.</td>
+                      <td className="p-1 font-bold border-r border-black">Net Amt.</td>
                       <td className="p-1 text-right font-bold">{invoiceData.totals.netAmount.toFixed(2)}</td>
                     </tr>
                   </tbody>
@@ -420,77 +421,28 @@ function App() {
               </div>
             </div>
 
-            {/* Right Side Summary */}
-            <div className="border border-black w-[25%]">
-              {/* Header */}
-              <div className="text-center border-b border-black p-2">
-                <h1 className="text-base sm:text-xl font-bold">{invoiceData.company.name}</h1>
-                <p className="text-[0.6rem]">{invoiceData.company.address}</p>
-                <p className="text-[0.6rem]">state code: {invoiceData.company.stateCode}</p>
-              </div>
-
-              {/* Invoice Details */}
-              <div className="border-b border-black p-2">
-                <div className="grid grid-cols-2 gap-1">
-                  <div>
-                    <p><span className="font-bold">Inv. No :</span> {invoiceData.invoice.no}</p>
-                    <p><span className="font-bold">Date:</span> {invoiceData.invoice.date}</p>
-                    <p><span className="font-bold">Due Date</span></p>
-                  </div>
-                  <div>
-                    <p><span className="font-bold">Mode:</span> {invoiceData.invoice.mode}</p>
-                    <p>{invoiceData.invoice.time}</p>
-                  </div>
+            {/* Right Side QR Code Section */}
+            <div className="border border-black w-[25%] flex flex-col justify-between">
+              {/* QR Code */}
+              <div className="qr-code-section">
+                <div className="qr-code bg-white w-full h-[200px] flex justify-center items-center border-b border-black">
+                  <p className="text-center">QR Code</p>
+                </div>
+                <div className="p-2 text-center w-full">
+                  <h2 className="font-bold text-xs">E-Invoice</h2>
+                  <p className="text-[0.5rem] sm:text-[0.6rem]">Invoice generated through e-invoice portal</p>
                 </div>
               </div>
-
-              {/* Items Table */}
-              <table className="w-full border-b border-black">
-                <thead>
-                  <tr className="border-b border-black">
-                    <th className="border-r border-black p-1 text-left">Particulars/HSN</th>
-                    <th className="border-r border-black p-1">M.R.P</th>
-                    <th className="border-r border-black p-1">Qty</th>
-                    <th className="p-1">Free</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoiceData.items.map((item, index) => (
-                    <tr key={index} className="border-b border-black">
-                      <td className="border-r border-black p-1">{item.particular}</td>
-                      <td className="border-r border-black p-1 text-right"></td>
-                      <td className="border-r border-black p-1 text-right">{item.qty}</td>
-                      <td className="p-1 text-right">0</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {/* Totals */}
-              <table className="w-full">
-                <tbody>
-                  <tr className="border-b border-black">
-                    <td className="p-1">Gross Amt.</td>
-                    <td className="p-1 text-right">{invoiceData.totals.grossAmt.toFixed(2)}</td>
-                  </tr>
-                  <tr className="border-b border-black">
-                    <td className="p-1">Less Sch.</td>
-                    <td className="p-1 text-right">{invoiceData.totals.lessSch.toFixed(2)}</td>
-                  </tr>
-                  <tr className="border-b border-black">
-                    <td className="p-1">Less CD</td>
-                    <td className="p-1 text-right">{invoiceData.totals.lessCd.toFixed(2)}</td>
-                  </tr>
-                  <tr className="border-b border-black">
-                    <td className="p-1">R.Off</td>
-                    <td className="p-1 text-right">{invoiceData.totals.rOff.toFixed(2)}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-1 font-bold">Net Amt.</td>
-                    <td className="p-1 text-right font-bold">{invoiceData.totals.netAmount.toFixed(2)}</td>
-                  </tr>
-                </tbody>
-              </table>
+              
+              {/* Signature Section - Will be pushed to bottom because of justify-between */}
+              <div className="signature-section">
+                <div className="for-signature border-t border-black pt-1 pb-4 flex justify-between">
+                  <p>For {invoiceData.company.name}</p>
+                </div>
+                <div className="border-t border-black pt-1">
+                  <p className="text-center">Authorized Signatory</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
