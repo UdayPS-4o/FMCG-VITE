@@ -210,7 +210,39 @@ const PrintInvoicing: React.FC = () => {
     }, { totalGoods: 0, totalSGST: 0, totalCGST: 0 });
   };
 
+  // Group tax details by tax rate
+  const groupTaxDetailsByRate = () => {
+    if (!data) return [];
+    
+    const groupedTaxes: { [key: string]: TaxDetail } = {};
+    
+    data.taxDetails.forEach(tax => {
+      // Use the tax rate as the key (SGST rate)
+      const taxRate = tax.sgst.toFixed(2);
+      const goodsValue = parseFloat(tax.goods || '0');
+      
+      if (!groupedTaxes[taxRate]) {
+        groupedTaxes[taxRate] = {
+          goods: '0',
+          sgst: tax.sgst,
+          sgstValue: 0,
+          cgst: tax.cgst,
+          cgstValue: 0
+        };
+      }
+      
+      // Add up the values
+      groupedTaxes[taxRate].goods = (parseFloat(groupedTaxes[taxRate].goods) + goodsValue).toFixed(2);
+      groupedTaxes[taxRate].sgstValue += tax.sgstValue;
+      groupedTaxes[taxRate].cgstValue += tax.cgstValue;
+    });
+    
+    // Convert back to array
+    return Object.values(groupedTaxes);
+  };
+
   const { totalGoods, totalSGST, totalCGST } = calculateTaxTotals();
+  const groupedTaxDetails = groupTaxDetailsByRate();
 
   return (
     <div className="p-4 mx-auto max-w-6xl">
@@ -400,7 +432,7 @@ const PrintInvoicing: React.FC = () => {
                               <td className="border-b border-r border-black p-1 font-bold text-blue-800">CGST%</td>
                               <td className="border-b border-black p-1 font-bold text-blue-800">Value</td>
                             </tr>
-                            {data.taxDetails.map((tax, index) => (
+                            {groupedTaxDetails.map((tax, index) => (
                               <tr key={index} className="text-xs">
                                 <td className="border-r border-black p-1">{tax.goods || '0.00'}</td>
                                 <td className="border-r border-black p-1">{tax.sgst?.toFixed(2)}%</td>
