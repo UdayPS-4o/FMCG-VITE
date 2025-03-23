@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs/promises');
 const puppeteer = require('puppeteer')
 const path = require('path');
+const { DbfORM } = require('./dbf-orm');
 
 const app = express();
 
@@ -12,71 +13,34 @@ const port = 4276;
 
 async function calculateStock(gdnCode) {
     let salesData, purchaseData, transferData;
-    [salesData, purchaseData, transferData] = await Promise.all([
-        new Promise((resolve, reject) => {
-            const { spawn } = require('child_process');
-            const pythonProcess = spawn('python', ["dbfJS.py", "./d01-2425/data/billdtl.dbf"]);
-            let output = '';
-            pythonProcess.stdout.on('data', (data) => {
-                output += data.toString();
-            });
-            pythonProcess.on('close', (code) => {
-                if (code !== 0) {
-                    reject(`dbfjs.py exited with code ${code}`);
-                }
-                try {
-                    resolve(JSON.parse(output));
-                } catch (e) {
-                    reject(`Error parsing JSON output from dbfjs.py: ${e}`);
-                }
-            });
-            pythonProcess.stderr.on('data', (data) => {
-                reject(`dbfjs.py stderr: ${data.toString()}`);
-            });
-        }),
-        new Promise((resolve, reject) => {
-            const { spawn } = require('child_process');
-            const pythonProcess = spawn('python', ["dbfJS.py", "./d01-2425/data/purdtl.dbf"]);
-            let output = '';
-            pythonProcess.stdout.on('data', (data) => {
-                output += data.toString();
-            });
-            pythonProcess.on('close', (code) => {
-                if (code !== 0) {
-                    reject(`dbfjs.py exited with code ${code}`);
-                }
-                try {
-                    resolve(JSON.parse(output));
-                } catch (e) {
-                    reject(`Error parsing JSON output from dbfjs.py: ${e}`);
-                }
-            });
-            pythonProcess.stderr.on('data', (data) => {
-                reject(`dbfjs.py stderr: ${data.toString()}`);
-            });
-        }),
-        new Promise((resolve, reject) => {
-            const { spawn } = require('child_process');
-            const pythonProcess = spawn('python', ["dbfJS.py", "./d01-2425/data/transfer.dbf"]);
-            let output = '';
-            pythonProcess.stdout.on('data', (data) => {
-                output += data.toString();
-            });
-            pythonProcess.on('close', (code) => {
-                if (code !== 0) {
-                    reject(`dbfjs.py exited with code ${code}`);
-                }
-                try {
-                    resolve(JSON.parse(output));
-                } catch (e) {
-                    reject(`Error parsing JSON output from dbfjs.py: ${e}`);
-                }
-            });
-            pythonProcess.stderr.on('data', (data) => {
-                reject(`dbfjs.py stderr: ${data.toString()}`);
-            });
-        })
-    ]);
+    try {
+        [salesData, purchaseData, transferData] = await Promise.all([
+            (async () => {
+                const salesOrm = new DbfORM("./d01-2425/data/billdtl.dbf");
+                await salesOrm.open();
+                const data = await salesOrm.findAll();
+                salesOrm.close();
+                return data;
+            })(),
+            (async () => {
+                const purchaseOrm = new DbfORM("./d01-2425/data/purdtl.dbf");
+                await purchaseOrm.open();
+                const data = await purchaseOrm.findAll();
+                purchaseOrm.close();
+                return data;
+            })(),
+            (async () => {
+                const transferOrm = new DbfORM("./d01-2425/data/transfer.dbf");
+                await transferOrm.open();
+                const data = await transferOrm.findAll();
+                transferOrm.close();
+                return data;
+            })()
+        ]);
+    } catch (error) {
+        console.error("Error reading DBF files:", error);
+        throw error;
+    }
 
     // if (gdnCode) {
     //     salesData = salesData.filter(sale => sale.GDN_CODE === gdnCode);
@@ -146,27 +110,10 @@ async function calculateStock(gdnCode) {
 async function updatedStock(stock, salesData, purchaseData, transferData, gdnCode) {
     let productData;
     try {
-        productData = await new Promise((resolve, reject) => {
-            const { spawn } = require('child_process');
-            const pythonProcess = spawn('python', ["dbfJS.py", "./d01-2425/data/pmpl.dbf"]);
-            let output = '';
-            pythonProcess.stdout.on('data', (data) => {
-                output += data.toString();
-            });
-            pythonProcess.on('close', (code) => {
-                if (code !== 0) {
-                    reject(`dbfjs.py exited with code ${code}`);
-                }
-                try {
-                    resolve(JSON.parse(output));
-                } catch (e) {
-                    reject(`Error parsing JSON output from dbfjs.py: ${e}`);
-                }
-            });
-            pythonProcess.stderr.on('data', (data) => {
-                reject(`dbfjs.py stderr: ${data.toString()}`);
-            });
-        });
+        const pmplOrm = new DbfORM("./d01-2425/data/pmpl.dbf");
+        await pmplOrm.open();
+        productData = await pmplOrm.findAll();
+        pmplOrm.close();
     } catch (error) {
         console.error("Error reading pmpl.dbf:", error);
         return {};
@@ -248,23 +195,14 @@ app.get('/generate-pdf', async (req, res) => {
 
         const formattedData = {
             date: date || new Date().toISOString().split('T')[0],
-            godown: godown || '',
-            items: stockData
+            godown: godown || 'All Godowns',
+            products: stockData
         };
-        await fs.writeFile('dist/data.json', JSON.stringify(formattedData, null, 2));
 
-        const browser = await puppeteer.launch();
-        const page = await browser.newPage();
-        await page.goto('http://localhost:4276', { waitUntil: 'networkidle0' });
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        await page.pdf({ path: 'dist/report.pdf', format: 'A4' });
-
-        await browser.close();
-
-        res.send(path.resolve(__dirname, 'report.pdf'));
+        // Generate PDF logic here...
     } catch (error) {
-        console.error('Error generating PDF:', error);
-        res.status(500).send('Error generating PDF');
+        console.error("Error generating PDF:", error);
+        res.status(500).send("Error generating PDF");
     }
 });
 
@@ -279,7 +217,7 @@ app.get('/data.json', async (req, res) => {
     }
 })
 
-
+// Start the server
 app.listen(port, () => {
-    console.log(`Server listening at http://localhost:${port}`);
+    console.log(`Stock server running at http://localhost:${port}`);
 });

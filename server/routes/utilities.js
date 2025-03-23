@@ -1,7 +1,6 @@
 const fs = require("fs").promises;
 const path = require("path");
-const { spawn } = require("child_process");
-
+const { DbfORM } = require("../dbf-orm");
 
 let redirect = (url, time) => {
     return `<script>
@@ -11,53 +10,48 @@ let redirect = (url, time) => {
       </script>`;
 };
 
-const getDbfData = (path) => {
-    return new Promise((resolve, reject) => {
-      const process = spawn("python", ["dbfJS.py", path]);
-      let data = "";
-      process.stdout.on("data", (chunk) => {
-        data += chunk;
-      });
-      process.on("close", (code) => {
-        if (code === 0) {
-          resolve(JSON.parse(data));
-        } else {
-          reject(`Process exited with code ${code}`);
-        }
-      });
-    });
-  };
+const getDbfData = async (filePath) => {
+  try {
+    const orm = new DbfORM(filePath);
+    await orm.open();
+    const records = await orm.findAll();
+    orm.close();
+    return records;
+  } catch (error) {
+    throw new Error(`Error reading DBF file: ${error.message}`);
+  }
+};
   
-  const getCmplData = async (req, res) => {
-    const dbfFilePath = path.join(__dirname, "..", "..", "d01-2324/data", "CMPL.dbf");
-    console.log(dbfFilePath);
-    try {
-      let jsonData = await getDbfData(dbfFilePath);
-      /*just keep these keys
-      "M_GROUP": "CT",
-      "M_NAME": "Sundry Creditors",
-      "PARTY_MAP": "",
-      "C_CODE": "OB001",
-      "C_NAME": "OPENING BALANCE",
-      */
-      jsonData = jsonData.map((entry) => {
-        const obj = {
-          M_GROUP: entry.M_GROUP,
-          M_NAME: entry.M_NAME,
-          C_CODE: entry.C_CODE,
-          C_NAME: entry.C_NAME,
-        };
-        if (entry.GSTNO) {
-          obj.GST = entry.GSTNO;
-        }
-        return obj;
-      });
-      if (req === "99") return jsonData;
-      else res.json(jsonData);
-    } catch (error) {
-      res.status(500).send(error);
-    }
-  };
+const getCmplData = async (req, res) => {
+  const dbfFilePath = path.join(__dirname, "..", "..", "d01-2324/data", "CMPL.dbf");
+  console.log(dbfFilePath);
+  try {
+    let jsonData = await getDbfData(dbfFilePath);
+    /*just keep these keys
+    "M_GROUP": "CT",
+    "M_NAME": "Sundry Creditors",
+    "PARTY_MAP": "",
+    "C_CODE": "OB001",
+    "C_NAME": "OPENING BALANCE",
+    */
+    jsonData = jsonData.map((entry) => {
+      const obj = {
+        M_GROUP: entry.M_GROUP,
+        M_NAME: entry.M_NAME,
+        C_CODE: entry.C_CODE,
+        C_NAME: entry.C_NAME,
+      };
+      if (entry.GSTNO) {
+        obj.GST = entry.GSTNO;
+      }
+      return obj;
+    });
+    if (req === "99") return jsonData;
+    else res.json(jsonData);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+};
 
 // Function to ensure directory exists
 const ensureDirectoryExistence = async (filePath) => {

@@ -5,6 +5,7 @@
     "cookie-parser": "^1.4.6",
     "date-fns": "^4.1.0",
     "dbf": "^0.2.0",
+    "dbf-orm": "github:UdayPS-4o/dbf-orm",
     "dbf-reader": "^1.0.3",
     "dbffile": "^1.9.3",
     "ejs": "^3.1.9",

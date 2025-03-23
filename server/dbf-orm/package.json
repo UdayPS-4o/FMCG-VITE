@@ -1,0 +1,19 @@
+{
+  "name": "dbf-orm",
+  "version": "1.0.0",
+  "description": "A fully-featured ORM for DBF files",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "dbf",
+    "dbase",
+    "orm",
+    "database",
+    "foxpro"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+} 
