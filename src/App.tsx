@@ -1,3 +1,4 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -34,7 +35,7 @@ import AddUser from "./pages/add-user/AddUser";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 // Protected Route Component
-const ProtectedRoute = ({ children, requiredAccess }: { children: JSX.Element, requiredAccess?: string }) => {
+const ProtectedRoute = ({ children, requiredAccess }: { children: React.ReactNode, requiredAccess?: string }) => {
   const { isAuthenticated, hasAccess, loading } = useAuth();
   
   if (loading) {
