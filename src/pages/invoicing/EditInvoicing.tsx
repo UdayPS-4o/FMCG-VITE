@@ -11,10 +11,14 @@ import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type Option, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 
-const EditInvoicingContent: React.FC = () => {
+const EditInvoicingContent: React.FC<{
+  invoiceItemsRef: React.RefObject<ItemData[]>;
+  setAllItems: React.Dispatch<React.SetStateAction<ItemData[]>>;
+}> = ({ invoiceItemsRef, setAllItems }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const dataLoadedRef = useRef(false);
+  const invoiceDataRef = useRef<any>(null);
   
   // Get shared invoice data from context
   const { 
@@ -46,6 +50,7 @@ const EditInvoicingContent: React.FC = () => {
   const [ref, setRef] = useState<string>('');
   const [dueDays, setDueDays] = useState<string>('7');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [formReady, setFormReady] = useState<boolean>(false);
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
@@ -56,9 +61,9 @@ const EditInvoicingContent: React.FC = () => {
     type: 'info',
   });
 
-  // Load invoice data
+  // Step 1: Fetch invoice data
   useEffect(() => {
-    const loadInvoice = async () => {
+    const fetchInvoiceData = async () => {
       if (!id) {
         setError('No invoice ID provided');
         setLoading(false);
@@ -71,138 +76,47 @@ const EditInvoicingContent: React.FC = () => {
       }
 
       try {
-        // Try both possible endpoints
+        // Try both possible endpoints with better error handling
         let invoiceData;
+        let response;
+        
         try {
-          const res = await fetch(`${constants.baseURL}/edit/invoicing/${id}`);
-          if (!res.ok) throw new Error('Primary endpoint failed');
-          invoiceData = await res.json();
-        } catch {
-          const res = await fetch(`${constants.baseURL}/invoicing/${id}`);
-          if (!res.ok) throw new Error('Invoice not found');
-          invoiceData = await res.json();
-        }
-
-        // Set form data
-        setCash(invoiceData.cash === 'true' || invoiceData.cash === true ? 'Y' : 'N');
-        setSeries(invoiceData.series || '');
-        setRef(invoiceData.ref || '');
-        setDueDays(invoiceData.dueDays || '7');
-
-        // Format and set date
-        if (invoiceData.date) {
+          console.log(`Fetching invoice data from ${constants.baseURL}/edit/invoicing/${id}`);
+          response = await fetch(`${constants.baseURL}/edit/invoicing/${id}`);
+          
+          if (!response.ok) {
+            console.error(`Primary endpoint failed with status: ${response.status}`);
+            throw new Error(`Primary endpoint failed: ${response.statusText}`);
+          }
+          
+          invoiceData = await response.json();
+          console.log('Fetched invoice data:', invoiceData);
+        } catch (primaryError) {
+          console.error('Error with primary endpoint:', primaryError);
+          
           try {
-            const dateParts = invoiceData.date.split(/[-/]/);
-            let formattedDate;
+            console.log(`Trying fallback endpoint ${constants.baseURL}/invoicing/${id}`);
+            response = await fetch(`${constants.baseURL}/invoicing/${id}`);
             
-            if (dateParts.length === 3) {
-              if (dateParts[0].length === 4) {
-                formattedDate = invoiceData.date;
-              } else if (dateParts[2].length === 4) {
-                formattedDate = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
-              } else {
-                formattedDate = new Date().toISOString().slice(0, 10);
-              }
-            } else {
-              const dateObj = new Date(invoiceData.date);
-              formattedDate = !isNaN(dateObj.getTime()) 
-                ? dateObj.toISOString().slice(0, 10)
-                : new Date().toISOString().slice(0, 10);
+            if (!response.ok) {
+              throw new Error(`Invoice not found: ${response.statusText}`);
             }
             
-            setDate(formattedDate);
-          } catch (err) {
-            console.error('Error formatting date:', err);
-            setDate(new Date().toISOString().slice(0, 10));
+            invoiceData = await response.json();
+            console.log('Fetched invoice data from fallback:', invoiceData);
+          } catch (fallbackError) {
+            console.error('Error with fallback endpoint:', fallbackError);
+            throw new Error('Failed to fetch invoice data from both endpoints');
           }
         }
 
-        // Set party and SM
-        if (invoiceData.party && partyOptions.length > 0) {
-          const partyOption = partyOptions.find(p => p.value === invoiceData.party);
-          if (partyOption) {
-            setParty(partyOption);
-          } else {
-            const placeholder = {
-              value: invoiceData.party,
-              label: invoiceData.partyName || invoiceData.party
-            };
-            setParty(placeholder);
-          }
+        if (!invoiceData) {
+          throw new Error('No invoice data received');
         }
 
-        if (invoiceData.sm && smOptions.length > 0) {
-          const smOption = smOptions.find(s => s.value === invoiceData.sm);
-          if (smOption) {
-            setSm(smOption);
-          } else {
-            const placeholder = {
-              value: invoiceData.sm,
-              label: invoiceData.smName || invoiceData.sm
-            };
-            setSm(placeholder);
-          }
-        }
-
-        // Process items
-        if (invoiceData.items) {
-          let itemsArray = typeof invoiceData.items === 'string' 
-            ? JSON.parse(invoiceData.items) 
-            : invoiceData.items;
-
-          const processedItems = itemsArray.map((item: any) => {
-            // Find the matching PMPL item
-            const pmplItem = pmplData.find(p => p.CODE === item.item);
-            
-            // Calculate stock
-            let totalStock = 0;
-            if (stockList[item.item]) {
-              Object.values(stockList[item.item]).forEach(stock => {
-                totalStock += parseInt(stock as string, 10);
-              });
-            }
-
-            // Calculate stock limit
-            const godownStock = stockList[item.item]?.[item.godown] || '0';
-            const stockValue = parseInt(godownStock, 10);
-            const stockLimit = item.unit === pmplItem?.UNIT_2
-              ? Math.floor(stockValue / parseInt(pmplItem.MULT_F, 10))
-              : stockValue;
-
-            return {
-              ...item,
-              stock: `${godownStock} (Total: ${totalStock})`,
-              stockLimit,
-              selectedItem: pmplItem || null,
-              // Ensure all required fields exist
-              unit: item.unit || pmplItem?.UNIT_1 || '',
-              pack: item.pack || pmplItem?.PACK || '',
-              gst: item.gst || pmplItem?.GST || '',
-              pcBx: item.pcBx || pmplItem?.MULT_F || '',
-              mrp: item.mrp || pmplItem?.MRP1 || '',
-              rate: item.rate || '',
-              qty: item.qty || '',
-              cess: item.cess || '',
-              schRs: item.schRs || '',
-              sch: item.sch || '',
-              cd: item.cd || '',
-              amount: item.amount || '',
-              netAmount: item.netAmount || ''
-            };
-          });
-
-          // Update items through context - this part was causing the infinite loop
-          processedItems.forEach((item: ItemData, index: number) => {
-            if (index < items.length) {
-              updateItem(index, item);
-            } else {
-              addItem();
-              updateItem(items.length, item);
-            }
-          });
-        }
-
-        dataLoadedRef.current = true; // Mark that we've loaded the data
+        // Store the loaded invoice data in a ref for later use
+        invoiceDataRef.current = invoiceData;
+        dataLoadedRef.current = true;
         setError(null);
       } catch (err) {
         console.error('Failed to load invoice:', err);
@@ -217,10 +131,171 @@ const EditInvoicingContent: React.FC = () => {
       }
     };
 
-    if (!dataLoading && !dataError && !dataLoadedRef.current) {
-      loadInvoice();
+    fetchInvoiceData();
+  }, [id]);
+
+  // Step 2: Once all data is loaded (invoice data, partyOptions, smOptions, pmplData, stockList),
+  // then populate the form
+  useEffect(() => {
+    // Check if all data is loaded
+    const allDataLoaded = 
+      dataLoadedRef.current && 
+      !dataLoading && 
+      !loading && 
+      partyOptions.length > 0 && 
+      smOptions.length > 0 && 
+      pmplData.length > 0 && 
+      Object.keys(stockList).length > 0;
+      
+    if (!allDataLoaded || formReady) {
+      return;
     }
-  }, [id, dataLoading, dataError, partyOptions, smOptions, pmplData, stockList]); // Removed items, updateItem, addItem
+    
+    console.log("All data loaded, populating form");
+    
+    // Get the stored invoice data
+    const invoiceData = invoiceDataRef.current;
+    if (!invoiceData) {
+      console.error("Invoice data not found");
+      return;
+    }
+    
+    // Populate basic form fields
+    setCash(invoiceData.cash === 'true' || invoiceData.cash === true ? 'Y' : 'N');
+    setSeries(invoiceData.series || '');
+    setRef(invoiceData.ref || '');
+    setDueDays(invoiceData.dueDays || '7');
+
+    // Format and set date
+    if (invoiceData.date) {
+      try {
+        const dateParts = invoiceData.date.split(/[-/]/);
+        let formattedDate;
+        
+        if (dateParts.length === 3) {
+          if (dateParts[0].length === 4) {
+            formattedDate = invoiceData.date;
+          } else if (dateParts[2].length === 4) {
+            formattedDate = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
+          } else {
+            formattedDate = new Date().toISOString().slice(0, 10);
+          }
+        } else {
+          const dateObj = new Date(invoiceData.date);
+          formattedDate = !isNaN(dateObj.getTime()) 
+            ? dateObj.toISOString().slice(0, 10)
+            : new Date().toISOString().slice(0, 10);
+        }
+        
+        setDate(formattedDate);
+      } catch (err) {
+        console.error('Error formatting date:', err);
+        setDate(new Date().toISOString().slice(0, 10));
+      }
+    }
+
+    // Set party when party options are available
+    if (invoiceData.party && partyOptions.length > 0) {
+      console.log('Setting party with options:', partyOptions.length);
+      const partyOption = partyOptions.find(p => p.value === invoiceData.party);
+      if (partyOption) {
+        console.log('Found matching party option:', partyOption);
+        setParty(partyOption);
+      } else {
+        console.log('Creating placeholder party option');
+        const placeholder = {
+          value: invoiceData.party,
+          label: invoiceData.partyName || invoiceData.party
+        };
+        setParty(placeholder);
+      }
+    }
+
+    // Set SM when SM options are available
+    if (invoiceData.sm && smOptions.length > 0) {
+      console.log('Setting SM with options:', smOptions.length);
+      const smOption = smOptions.find(s => s.value === invoiceData.sm);
+      if (smOption) {
+        console.log('Found matching SM option:', smOption);
+        setSm(smOption);
+      } else {
+        console.log('Creating placeholder SM option');
+        const placeholder = {
+          value: invoiceData.sm,
+          label: invoiceData.smName || invoiceData.sm
+        };
+        setSm(placeholder);
+      }
+    }
+
+    // Process items - completely rewrite this section in the second useEffect
+    if (invoiceData.items) {
+      console.log('Processing invoice items:', typeof invoiceData.items);
+      
+      let itemsArray;
+      try {
+        itemsArray = typeof invoiceData.items === 'string' 
+          ? JSON.parse(invoiceData.items) 
+          : invoiceData.items;
+          
+        console.log('Parsed items array length:', itemsArray.length);
+        
+        // Create all processed items at once
+        const processedItems = itemsArray.map((item: any) => {
+          // Find the matching PMPL item
+          const pmplItem = pmplData.find(p => p.CODE === item.item);
+          
+          // Calculate stock
+          let totalStock = 0;
+          if (stockList[item.item]) {
+            Object.values(stockList[item.item]).forEach(stock => {
+              totalStock += parseInt(stock as string, 10);
+            });
+          }
+
+          // Calculate stock limit
+          const godownStock = stockList[item.item]?.[item.godown] || '0';
+          const stockValue = parseInt(godownStock, 10);
+          const stockLimit = item.unit === pmplItem?.UNIT_2
+            ? Math.floor(stockValue / parseInt(pmplItem.MULT_F, 10))
+            : stockValue;
+
+          return {
+            ...item,
+            stock: `${godownStock} (Total: ${totalStock})`,
+            stockLimit,
+            selectedItem: pmplItem || null,
+            // Ensure all required fields exist
+            unit: item.unit || pmplItem?.UNIT_1 || '',
+            pack: item.pack || pmplItem?.PACK || '',
+            gst: item.gst || pmplItem?.GST || '',
+            pcBx: item.pcBx || pmplItem?.MULT_F || '',
+            mrp: item.mrp || pmplItem?.MRP1 || '',
+            rate: item.rate || '',
+            qty: item.qty || '',
+            cess: item.cess || '',
+            schRs: item.schRs || '',
+            sch: item.sch || '',
+            cd: item.cd || '',
+            amount: item.amount || '',
+            netAmount: item.netAmount || ''
+          };
+        });
+        
+        console.log('Created processed items array with length:', processedItems.length);
+        // Store all items directly in the parent component state
+        setAllItems(processedItems);
+        
+        // Also store in ref for safety
+        invoiceItemsRef.current = processedItems;
+      } catch (parseError) {
+        console.error('Error processing items:', parseError);
+      }
+    }
+
+    // Mark the form as ready to display
+    setFormReady(true);
+  }, [dataLoading, loading, partyOptions, smOptions, pmplData, stockList, items, updateItem, addItem, removeItem, formReady, setAllItems, invoiceItemsRef]);
 
   const handleAccordionChange = (panel: number) => (_: React.SyntheticEvent, isExpanded: boolean) => {
     setExpandedIndex?.(isExpanded ? panel : -1);
@@ -367,10 +442,11 @@ const EditInvoicingContent: React.FC = () => {
       .sort((a, b) => a.item.localeCompare(b.item));
   };
 
-  if (dataLoading || loading) {
+  if (dataLoading || loading || !formReady) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-lg text-gray-600 dark:text-gray-300">Loading...</div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+        <div className="text-lg text-gray-600 dark:text-gray-300">Loading invoice data...</div>
       </div>
     );
   }
@@ -615,6 +691,7 @@ const EditInvoicing: React.FC = () => {
     stockLimit: 0,
   }]);
   const [expandedIndex, setExpandedIndex] = useState<number>(0);
+  const invoiceItemsRef = useRef<ItemData[]>([]);
 
   // Item management functions
   const addItem = () => {
@@ -646,11 +723,62 @@ const EditInvoicing: React.FC = () => {
   const removeItem = (index: number) => {
     if (items.length > 1) {
       setItems(items.filter((_, i) => i !== index));
+    } else if (items.length === 1) {
+      // If there's only one item, clear its data instead of removing it
+      setItems([{
+        item: '',
+        godown: '',
+        unit: '',
+        stock: '',
+        pack: '',
+        gst: '',
+        pcBx: '',
+        mrp: '',
+        rate: '',
+        qty: '',
+        cess: '',
+        schRs: '',
+        sch: '',
+        cd: '',
+        amount: '',
+        netAmount: '',
+        selectedItem: null,
+        stockLimit: 0,
+      }]);
     }
   };
 
   const updateItem = (index: number, newData: ItemData) => {
-    const newItems = items.map((item, i) => i === index ? newData : item);
+    console.log('Updating item at index', index, 'with data:', newData.item);
+    const newItems = [...items];
+    // Make sure the index exists
+    if (index >= newItems.length) {
+      // Add empty items until we reach the target index
+      for (let i = newItems.length; i <= index; i++) {
+        newItems.push({
+          item: '',
+          godown: '',
+          unit: '',
+          stock: '',
+          pack: '',
+          gst: '',
+          pcBx: '',
+          mrp: '',
+          rate: '',
+          qty: '',
+          cess: '',
+          schRs: '',
+          sch: '',
+          cd: '',
+          amount: '',
+          netAmount: '',
+          selectedItem: null,
+          stockLimit: 0,
+        });
+      }
+    }
+    
+    newItems[index] = newData;
     setItems(newItems);
   };
 
@@ -670,7 +798,7 @@ const EditInvoicing: React.FC = () => {
       expandedIndex={expandedIndex}
       setExpandedIndex={setExpandedIndex}
     >
-      <EditInvoicingContent />
+      <EditInvoicingContent invoiceItemsRef={invoiceItemsRef} setAllItems={setItems} />
     </InvoiceProvider>
   );
 };
