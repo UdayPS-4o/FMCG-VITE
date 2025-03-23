@@ -38,6 +38,13 @@ const CancelIcon = () => (
   </svg>
 );
 
+// Interface for stock data from API
+interface StockData {
+  [itemCode: string]: {
+    [godownCode: string]: number;
+  }
+}
+
 interface Props {
   itemData: any;
   pmplData: any[];
@@ -47,6 +54,7 @@ interface Props {
   removeItem: (index: number) => void;
   expanded: number | false;
   handleChange: (panel: number) => (event: React.SyntheticEvent, isExpanded: boolean) => void;
+  stockData?: StockData;
 }
 
 interface StockItem {
@@ -63,6 +71,7 @@ const CollapsibleItemSection: React.FC<Props> = ({
   removeItem,
   expanded,
   handleChange,
+  stockData = {}
 }) => {
   const [error, setError] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -70,21 +79,43 @@ const CollapsibleItemSection: React.FC<Props> = ({
   useEffect(() => {
     // If item and godown are set, update the stock value
     if (itemData && itemData.item && itemData.godown) {
-      const product = pmpl.find((p) => p.CODE === itemData.item);
-      if (product && product.stock) {
-        const godownStock = product.stock.find(
-          (s: StockItem) => s.GDN_CODE === itemData.godown
-        );
-        
-        if (godownStock) {
-          updateItem(index, {
-            ...itemData,
-            stock: godownStock.STOCK.toString()
-          });
+      // Determine the new stock value
+      let newStockValue = "";
+      
+      // Use the stockData from props if available, otherwise fallback to legacy method
+      if (stockData && stockData[itemData.item] && stockData[itemData.item][itemData.godown] !== undefined) {
+        newStockValue = stockData[itemData.item][itemData.godown].toString();
+      } else {
+        // Legacy method (fallback)
+        const product = pmpl.find((p) => p.CODE === itemData.item);
+        if (product && product.stock) {
+          const godownStock = product.stock.find(
+            (s: StockItem) => s.GDN_CODE === itemData.godown
+          );
+          
+          if (godownStock) {
+            newStockValue = godownStock.STOCK.toString();
+          }
         }
       }
+      
+      // Only update if the stock value has changed to prevent infinite loops
+      if (newStockValue && newStockValue !== itemData.stock) {
+        updateItem(index, {
+          ...itemData,
+          stock: newStockValue
+        });
+      }
     }
-  }, [itemData.item, itemData.godown, pmpl, index, updateItem]);
+  }, [itemData.item, itemData.godown, pmpl, index, updateItem, stockData, itemData.stock]);
+
+  // Get stock for a specific item and godown
+  const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {
+    if (!stockData[itemCode] || stockData[itemCode][godownCode] === undefined) {
+      return 0;
+    }
+    return stockData[itemCode][godownCode];
+  };
 
   const handleItemChange = (value: string) => {
     const selectedPMPL = pmpl.find(
@@ -92,14 +123,21 @@ const CollapsibleItemSection: React.FC<Props> = ({
     );
 
     if (selectedPMPL) {
-      // Get stock for the selected godown if available
+      // Get stock for the selected godown using the new stockData API
       let stockValue = "";
-      if (itemData.godown && selectedPMPL.stock) {
-        const godownStock = selectedPMPL.stock.find(
-          (s: StockItem) => s.GDN_CODE === itemData.godown && s.STOCK > 0
-        );
-        if (godownStock) {
-          stockValue = godownStock.STOCK.toString();
+      if (itemData.godown) {
+        // Check if we have stock data from the API
+        if (stockData && stockData[value] && stockData[value][itemData.godown] !== undefined) {
+          stockValue = stockData[value][itemData.godown].toString();
+        } 
+        // Fallback to legacy method if needed
+        else if (selectedPMPL.stock) {
+          const godownStock = selectedPMPL.stock.find(
+            (s: StockItem) => s.GDN_CODE === itemData.godown && s.STOCK > 0
+          );
+          if (godownStock) {
+            stockValue = godownStock.STOCK.toString();
+          }
         }
       }
 
@@ -183,16 +221,25 @@ const CollapsibleItemSection: React.FC<Props> = ({
     // Create a filtered list of products that have stock in the selected godown
     return pmpl
       .filter(product => {
-        if (!product || !product.stock) return false;
+        if (!product) return false;
         
-        // Check if there's a stock entry for this godown with stock > 0
-        const hasNonZeroStock = product.stock.some(
-          (stockItem: StockItem) => 
-            stockItem.GDN_CODE === itemData.godown && 
-            stockItem.STOCK > 0
-        );
+        // Check if there's stock in the selected godown using stockData API
+        const stockAmount = stockData && stockData[product.CODE] ? 
+                         stockData[product.CODE][itemData.godown] || 0 : 0;
+                         
+        if (stockAmount > 0) return true;
         
-        return hasNonZeroStock;
+        // Fallback to legacy method if needed
+        if (product.stock) {
+          const hasNonZeroStock = product.stock.some(
+            (stockItem: StockItem) => 
+              stockItem.GDN_CODE === itemData.godown && 
+              stockItem.STOCK > 0
+          );
+          return hasNonZeroStock;
+        }
+        
+        return false;
       })
       .map(product => ({
         value: product.CODE,

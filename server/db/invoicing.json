@@ -405,35 +405,28 @@
     "date": "2025-03-23",
     "series": "T",
     "cash": "N",
-    "party": "OT069",
-    "partyName": "UDAY SHEETY | 0.00",
-    "sm": "SM001",
-    "smName": "SHYAM YADAV KOHKNA | 0.00",
+    "party": "AA001",
+    "partyName": "SHRI BALRAM SEVLANI",
+    "sm": "SM003",
+    "smName": "SHOP SALE",
     "ref": "",
-    "dueDays": "7",
+    "dueDays": "",
     "items": [
       {
         "item": "MK001",
         "godown": "02",
         "unit": "PCS",
         "rate": 675,
-        "qty": "200",
+        "qty": "20",
         "cess": "",
         "schRs": "",
         "sch": "",
         "cd": "",
-        "amount": "135000.00",
-        "netAmount": "135000.00",
-        "stock": "729 (Total: 810)",
-        "stockLimit": 729,
-        "pack": "4.21KG",
-        "gst": 5,
-        "pcBx": 4,
-        "mrp": 940
+        "amount": "13500.00",
+        "netAmount": "13500.00"
       }
     ],
     "id": "7",
-    "createdAt": "2025-03-23T20:20:57.709Z",
-    "lastUpdated": "2025-03-23T20:21:34.800Z"
+    "createdAt": "2025-03-23T20:46:40.387Z"
   }
 ]
