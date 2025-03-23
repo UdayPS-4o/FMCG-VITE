@@ -14,6 +14,7 @@ interface AutocompleteProps {
   className?: string;
   defaultValue?: string;
   autoComplete?: string;
+  disabled?: boolean;
 }
 
 const customScrollbarStyles = `
@@ -72,6 +73,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   className = "",
   defaultValue = "",
   autoComplete = "",
+  disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -169,6 +171,8 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    
     setSearchTerm(e.target.value);
     setIsOpen(true);
     
@@ -180,6 +184,8 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   };
 
   const handleOptionSelect = (option: Option) => {
+    if (disabled) return;
+    
     setSelectedOption(option);
     setSearchTerm(option.label);
     setIsOpen(false);
@@ -202,7 +208,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
 
   return (
     <div 
-      className={`relative border ${isActive ? 'border-brand-500 dark:border-brand-400' : 'border-gray-300 dark:border-gray-700'} rounded-lg transition-all duration-200 ${className}`} 
+      className={`relative border ${isActive ? 'border-brand-500 dark:border-brand-400' : 'border-gray-300 dark:border-gray-700'} rounded-lg transition-all duration-200 ${className} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`} 
       ref={inputContainerRef}
     >
       <div className="relative">
@@ -210,20 +216,22 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
           id={id}
           ref={inputRef}
           type="text"
-          className="w-full px-4 py-2.5 text-sm bg-transparent text-gray-800 dark:text-white/90 focus:outline-none pr-16"
+          className={`w-full px-4 py-2.5 text-sm bg-transparent text-gray-800 dark:text-white/90 focus:outline-none pr-16 ${disabled ? 'cursor-not-allowed' : ''}`}
           placeholder=" "
           value={searchTerm}
           onChange={handleInputChange}
           onFocus={() => {
+            if (disabled) return;
             setIsFocused(true);
             setIsOpen(true);
           }}
           onBlur={() => setIsFocused(false)}
           autoComplete={autoComplete}
+          disabled={disabled}
         />
         
         {/* Clear button */}
-        {searchTerm && (
+        {searchTerm && !disabled && (
           <button
             type="button"
             onClick={() => {
