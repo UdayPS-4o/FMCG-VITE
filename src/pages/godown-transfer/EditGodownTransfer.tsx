@@ -28,12 +28,20 @@ interface ItemData {
   godown?: string;
 }
 
+// Interface for stock data from API
+interface StockData {
+  [itemCode: string]: {
+    [godownCode: string]: number;
+  }
+}
+
 const EditGodownTransfer: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [partyOptions, setPartyOptions] = useState<any[]>([]);
   const [fromGodown, setFromGodown] = useState<any>(null);
   const [toGodown, setToGodown] = useState<any>(null);
   const [pmplData, setPmplData] = useState<any[]>([]); // Hold product data from pmpl.json
+  const [stockData, setStockData] = useState<StockData>({});
   const [searchItems, setSearchItems] = useState('');
   const [clicked, setClicked] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -76,9 +84,28 @@ const EditGodownTransfer: React.FC = () => {
       }
     };
 
+    const fetchStockData = async () => {
+      try {
+        const stockRes = await fetch('http://localhost:8000/api/stock');
+        const stockDatas = await stockRes.json();
+        setStockData(stockDatas);
+      } catch (error) {
+        console.error('Error fetching stock data:', error);
+      }
+    };
+
     fetchOptions();
     fetchPmplData();
+    fetchStockData();
   }, [baseURL]);
+
+  // Get stock for a specific item and godown
+  const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {
+    if (!stockData[itemCode] || stockData[itemCode][godownCode] === undefined) {
+      return 0;
+    }
+    return stockData[itemCode][godownCode];
+  };
 
   // Fetch transfer data for editing
   useEffect(() => {
@@ -97,9 +124,11 @@ const EditGodownTransfer: React.FC = () => {
               toGodown: data.toGodown || '',
               items: data.items.map((item: any) => {
                 const product = pmplData.find(p => p.CODE === item.code);
+                const stockValue = getStockForItemAndGodown(item.code, data.fromGodown).toString();
+                
                 return {
                   item: item.code,
-                  stock: product?.STK || '',
+                  stock: stockValue || product?.STK || '',
                   pack: product?.PACK || '',
                   gst: product?.GST || '',
                   unit: item.unit || product?.UNIT_1 || '',
@@ -112,7 +141,7 @@ const EditGodownTransfer: React.FC = () => {
                   sch: '0',
                   amount: '',
                   netAmount: '',
-                  godown: item.godown || '',
+                  godown: data.fromGodown || '',
                 };
               }),
             });
@@ -139,7 +168,7 @@ const EditGodownTransfer: React.FC = () => {
     };
 
     fetchTransferData();
-  }, [id, partyOptions, pmplData, baseURL]);
+  }, [id, partyOptions, pmplData, baseURL, stockData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -151,11 +180,16 @@ const EditGodownTransfer: React.FC = () => {
     setFromGodown(selectedGodown);
     
     // Update all items' godown field with the new fromGodown value
-    const updatedItems = formValues.items.map(item => ({
-      ...item,
-      godown: value,
-      stock: '' // Reset stock since godown changed
-    }));
+    const updatedItems = formValues.items.map(item => {
+      // Get stock for this item in the selected godown
+      const stockValue = item.item ? getStockForItemAndGodown(item.item, value).toString() : '';
+      
+      return {
+        ...item,
+        godown: value,
+        stock: stockValue
+      };
+    });
     
     setFormValues({ 
       ...formValues, 
@@ -185,7 +219,17 @@ const EditGodownTransfer: React.FC = () => {
 
   const getAvailableItems = () => {
     const selectedCodes = new Set(formValues.items.map((item) => item.item));
-    return pmplData.filter((pmpl) => !selectedCodes.has(pmpl.CODE));
+    
+    if (!formValues.fromGodown) return [];
+    
+    // Filter products that have stock in the selected "From Godown"
+    return pmplData.filter((pmpl) => {
+      if (selectedCodes.has(pmpl.CODE)) return false;
+      
+      // Check if this product has stock in the selected godown
+      const stockAmount = getStockForItemAndGodown(pmpl.CODE, formValues.fromGodown);
+      return stockAmount > 0;
+    });
   };
 
   const addItem = () => {
@@ -446,6 +490,7 @@ const EditGodownTransfer: React.FC = () => {
               removeItem={removeItem}
               pmplData={getAvailableItems()}
               pmpl={pmplData}
+              stockData={stockData}
             />
           ))}
         </div>
