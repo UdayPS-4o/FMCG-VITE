@@ -7,7 +7,7 @@ import Autocomplete from "../../components/form/input/Autocomplete";
 import MultiSelect from "../../components/form/MultiSelect";
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
-import { useAuth } from "../../hooks/useAuth";
+import useAuth from "../../hooks/useAuth";
 import UserTable from './UserTable';
 
 interface User {
@@ -56,14 +56,7 @@ const AddUser: React.FC = () => {
   const [userId, setUserId] = useState<number | null>(null);
   
   const navigate = useNavigate();
-  const { user, hasAccess, hasPower } = useAuth();
-
-  // Check if user has access to this page
-  useEffect(() => {
-    if (!hasAccess('Add User') && !hasAccess('Admin')) {
-      navigate('/unauthorized');
-    }
-  }, [hasAccess, navigate]);
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -72,9 +65,7 @@ const AddUser: React.FC = () => {
       
       try {
         const url = `${constants.baseURL}/slink/json/users`;
-        const response = await fetch(url, {
-          credentials: 'include', // Include cookies for authentication
-        });
+        const response = await fetch(url);
         
         if (!response.ok) {
           throw new Error('Failed to fetch user data');
@@ -115,19 +106,14 @@ const AddUser: React.FC = () => {
       }
     };
     
-    // Only fetch user data if user has proper access
-    if (hasAccess('Add User') || hasAccess('Admin')) {
-      fetchUserData();
-    }
-  }, [hasAccess]);
+    fetchUserData();
+  }, []);
   
   useEffect(() => {
     const fetchSubgroupData = async () => {
       try {
         const url = `${constants.baseURL}/slink/subgrp`;
-        const response = await fetch(url, {
-          credentials: 'include', // Include cookies for authentication
-        });
+        const response = await fetch(url);
         
         if (!response.ok) {
           throw new Error('Failed to fetch subgroup data');
@@ -141,21 +127,11 @@ const AddUser: React.FC = () => {
       }
     };
     
-    // Only fetch subgroup data if user has proper access
-    if (hasAccess('Add User') || hasAccess('Admin')) {
-      fetchSubgroupData();
-    }
-  }, [hasAccess]);
+    fetchSubgroupData();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
-    // Check if user has write permission
-    if (!hasPower('Write')) {
-      setError("You don't have permission to create or modify users");
-      return;
-    }
-    
     setIsLoading(true);
     setError(null);
     
@@ -166,7 +142,7 @@ const AddUser: React.FC = () => {
         password,
         routeAccess,
         powers,
-        username: user?.username || 'admin', // Use current user's username if available
+        username: 'admin',
         subgroup: subgroup ? { title: subgroup.title } : null,
       };
       
@@ -181,7 +157,6 @@ const AddUser: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        credentials: 'include', // Include cookies for authentication
       });
       
       if (!response.ok) {
@@ -224,7 +199,6 @@ const AddUser: React.FC = () => {
     setUserData(userData.filter(user => user.id !== deletedId));
   };
 
-  // If user doesn't have access, this will be handled by the useEffect
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <PageMeta
@@ -260,7 +234,6 @@ const AddUser: React.FC = () => {
                     variant="outlined"
                     autoComplete="off"
                     required
-                    disabled={!hasPower('Write')}
                   />
                 </div>
                 <div>
@@ -272,7 +245,6 @@ const AddUser: React.FC = () => {
                     variant="outlined"
                     autoComplete="off"
                     required
-                    disabled={!hasPower('Write')}
                   />
                 </div>
                 <div>
@@ -285,7 +257,6 @@ const AddUser: React.FC = () => {
                     variant="outlined"
                     autoComplete="off"
                     required
-                    disabled={!hasPower('Write')}
                   />
                 </div>
                 <div className="relative">
@@ -302,7 +273,6 @@ const AddUser: React.FC = () => {
                     }}
                     defaultValue={subgroup?.subgroupCode ?? ''}
                     autoComplete="off"
-                    disabled={!hasPower('Write')}
                   />
                 </div>
                 <div className="relative">
@@ -316,7 +286,6 @@ const AddUser: React.FC = () => {
                     onChange={(values) => {
                       setRouteAccess(values);
                     }}
-                    disabled={!hasPower('Write')}
                   />
                 </div>
                 <div className="relative">
@@ -330,7 +299,6 @@ const AddUser: React.FC = () => {
                     onChange={(values) => {
                       setPowers(values);
                     }}
-                    disabled={!hasPower('Write')}
                   />
                 </div>
               </div>
@@ -338,12 +306,8 @@ const AddUser: React.FC = () => {
               <div className="mt-6 flex justify-end space-x-4">
                 <button
                   type="submit"
-                  className={`px-4 py-2 ${
-                    hasPower('Write') 
-                      ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
-                  } rounded-md`}
-                  disabled={isLoading || !hasPower('Write')}
+                  className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
+                  disabled={isLoading}
                 >
                   {isLoading ? 'Saving...' : isEdit ? 'Update User' : 'Add User'}
                 </button>
@@ -364,13 +328,7 @@ const AddUser: React.FC = () => {
         {userData.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full">
             <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">User List</h2>
-            <UserTable 
-              data={userData} 
-              onUserDeleted={handleUserDeleted} 
-              baseURL={constants.baseURL} 
-              canEdit={hasPower('Write')}
-              canDelete={hasPower('Delete')}
-            />
+            <UserTable data={userData} onUserDeleted={handleUserDeleted} baseURL={constants.baseURL} />
           </div>
         )}
       </div>

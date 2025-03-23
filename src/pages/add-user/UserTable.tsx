@@ -14,11 +14,9 @@ interface UserTableProps {
   data: User[];
   onUserDeleted: (id: number) => void;
   baseURL: string;
-  canEdit: boolean;
-  canDelete: boolean;
 }
 
-const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL, canEdit, canDelete }) => {
+const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) => {
   const [rows, setRows] = useState<User[]>([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
@@ -73,14 +71,13 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL, can
   );
   
   const handleDelete = async (id: number) => {
-    if (!id || !canDelete) return;
+    if (!id) return;
     
     setIsLoading(true);
     try {
       const response = await fetch(`${baseURL}/slink/deleteUser/?id=${id}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Include cookies for authentication
       });
       
       if (!response.ok) {
@@ -100,7 +97,7 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL, can
   };
   
   const handleEdit = (id: number) => {
-    if (!id || !canEdit) return;
+    if (!id) return;
     window.location.href = `/add-user?id=${id}`;
   };
   
@@ -155,11 +152,9 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL, can
                   {header.label}
                 </th>
               ))}
-              {(canEdit || canDelete) && (
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              )}
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -177,41 +172,35 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL, can
                       {formatCellValue(row, header)}
                     </td>
                   ))}
-                  {(canEdit || canDelete) && (
-                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                      <div className="flex items-center space-x-3">
-                        {canEdit && (
-                          <button
-                            onClick={() => row.id && handleEdit(row.id)}
-                            className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                            disabled={isLoading}
-                          >
-                            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
-                              <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
-                            </svg>
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={() => row.id && handleDelete(row.id)}
-                            className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                            disabled={isLoading}
-                          >
-                            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
+                  <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => row.id && handleEdit(row.id)}
+                        className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        disabled={isLoading}
+                      >
+                        <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                          <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => row.id && handleDelete(row.id)}
+                        className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        disabled={isLoading}
+                      >
+                        <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
                 <td 
-                  colSpan={headers.length + (canEdit || canDelete ? 1 : 0)} 
+                  colSpan={headers.length + 1} 
                   className="px-4 py-3 text-center text-sm text-gray-500 dark:text-gray-400"
                 >
                   No users found
