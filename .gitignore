@@ -14,7 +14,6 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -28,3 +27,7 @@ d01-2324
 server/node_modules
 
 test.html
+
+server/db/
+server/db/*
+config.bat

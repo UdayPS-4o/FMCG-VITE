@@ -86,7 +86,7 @@ const EditGodownTransfer: React.FC = () => {
 
     const fetchStockData = async () => {
       try {
-        const stockRes = await fetch('http://localhost:8000/api/stock');
+        const stockRes = await fetch(`${baseURL}/api/stock`);
         const stockDatas = await stockRes.json();
         setStockData(stockDatas);
       } catch (error) {
@@ -107,15 +107,76 @@ const EditGodownTransfer: React.FC = () => {
     return stockData[itemCode][godownCode];
   };
 
+  // Modify stock data to include current items for edit mode
+  const adjustStockDataForEditing = (data: any) => {
+    // Create a deep copy of the stock data
+    const adjustedStockData = JSON.parse(JSON.stringify(stockData));
+    
+    // Add back the quantities of currently edited items to their source godown
+    if (data && data.items && data.fromGodown) {
+      data.items.forEach((item: any) => {
+        const itemCode = item.code;
+        const qty = parseInt(item.qty, 10) || 0;
+        
+        if (!adjustedStockData[itemCode]) {
+          adjustedStockData[itemCode] = {};
+        }
+        
+        if (!adjustedStockData[itemCode][data.fromGodown]) {
+          adjustedStockData[itemCode][data.fromGodown] = qty;
+        } else {
+          adjustedStockData[itemCode][data.fromGodown] += qty;
+        }
+      });
+    }
+    
+    return adjustedStockData;
+  };
+
   // Fetch transfer data for editing
   useEffect(() => {
     const fetchTransferData = async () => {
       if (id && partyOptions.length > 0 && pmplData.length > 0) {
         try {
-          const response = await fetch(`${baseURL}/api/godown/${id}`);
-          const data = await response.json();
+          // Try both possible endpoints with better error handling
+          let data;
+          let response;
+          
+          try {
+            console.log(`Fetching godown transfer data from ${baseURL}/edit/godown/${id}`);
+            response = await fetch(`${baseURL}/edit/godown/${id}`);
+            
+            if (!response.ok) {
+              console.error(`Primary endpoint failed with status: ${response.status}`);
+              throw new Error(`Primary endpoint failed: ${response.statusText}`);
+            }
+            
+            data = await response.json();
+            console.log('Fetched godown transfer data:', data);
+          } catch (primaryError) {
+            console.error('Error with primary endpoint:', primaryError);
+            
+            try {
+              console.log(`Trying fallback endpoint ${baseURL}/godown/${id}`);
+              response = await fetch(`${baseURL}/godown/${id}`);
+              
+              if (!response.ok) {
+                throw new Error(`Godown transfer not found: ${response.statusText}`);
+              }
+              
+              data = await response.json();
+              console.log('Fetched godown transfer data from fallback:', data);
+            } catch (fallbackError) {
+              console.error('Error with fallback endpoint:', fallbackError);
+              throw new Error('Failed to fetch godown transfer data from both endpoints');
+            }
+          }
           
           if (data) {
+            // Adjust stock data to include the current items being edited
+            const adjustedStockData = adjustStockDataForEditing(data);
+            setStockData(adjustedStockData);
+            
             // Set form values
             setFormValues({
               date: data.date || new Date().toISOString().split('T')[0],
@@ -124,7 +185,10 @@ const EditGodownTransfer: React.FC = () => {
               toGodown: data.toGodown || '',
               items: data.items.map((item: any) => {
                 const product = pmplData.find(p => p.CODE === item.code);
-                const stockValue = getStockForItemAndGodown(item.code, data.fromGodown).toString();
+                // Use the adjusted stock data for the stock value
+                const stockValue = item.code && data.fromGodown ? 
+                  (adjustedStockData[item.code]?.[data.fromGodown] || 0).toString() : 
+                  '';
                 
                 return {
                   item: item.code,
@@ -168,7 +232,7 @@ const EditGodownTransfer: React.FC = () => {
     };
 
     fetchTransferData();
-  }, [id, partyOptions, pmplData, baseURL, stockData]);
+  }, [id, partyOptions, pmplData, baseURL]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -222,9 +286,14 @@ const EditGodownTransfer: React.FC = () => {
     
     if (!formValues.fromGodown) return [];
     
-    // Filter products that have stock in the selected "From Godown"
+    // Filter products for dropdown
     return pmplData.filter((pmpl) => {
+      // Allow already selected items to appear in other dropdowns
       if (selectedCodes.has(pmpl.CODE)) return false;
+      
+      // For edit mode, always include items that are already in our transfer
+      const isCurrentlyInTransfer = formValues.items.some(item => item.item === pmpl.CODE);
+      if (isCurrentlyInTransfer) return true;
       
       // Check if this product has stock in the selected godown
       const stockAmount = getStockForItemAndGodown(pmpl.CODE, formValues.fromGodown);
@@ -327,7 +396,7 @@ const EditGodownTransfer: React.FC = () => {
     };
 
     try {
-      const res = await fetch(`${baseURL}/api/godown/${id}`, {
+      const res = await fetch(`${baseURL}/godown/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

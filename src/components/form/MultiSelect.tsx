@@ -63,6 +63,11 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
     (value) => options.find((option) => option.value === value)?.text || ""
   );
 
+  // Filter options to remove already selected ones
+  const filteredOptions = options.filter(
+    option => !selectedOptions.includes(option.value)
+  );
+
   return (
     <div className="w-full">
       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
@@ -110,9 +115,9 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                 ) : (
                   <input
                     placeholder="Select option"
-                    className="w-full h-full p-1 pr-2 text-sm bg-transparent border-0 outline-hidden appearance-none placeholder:text-gray-500 focus:border-0 focus:outline-hidden focus:ring-0 dark:placeholder:text-gray-400"
+                    className="w-full h-full p-1 pr-2 text-sm bg-transparent border-0 outline-hidden appearance-none placeholder:text-gray-500 focus:border-0 focus:outline-hidden focus:ring-0 dark:text-gray-300 dark:placeholder:text-gray-500"
                     readOnly
-                    value="Select option"
+                    value=""
                   />
                 )}
               </div>
@@ -149,27 +154,29 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex flex-col w-full">
-                {options.map((option, index) => (
-                  <div
-                    key={index}
-                    className={`w-full cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-900/10 ${
-                      index < options.length - 1 ? "border-b border-gray-200 dark:border-gray-700" : ""
-                    }`}
-                    onClick={() => handleSelect(option.value)}
-                  >
+                {filteredOptions.length > 0 ? (
+                  filteredOptions.map((option, index) => (
                     <div
-                      className={`relative flex w-full items-center p-2 pl-2 ${
-                        selectedOptions.includes(option.value)
-                          ? "bg-brand-100 dark:bg-brand-900/20"
-                          : ""
+                      key={index}
+                      className={`w-full cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-900/10 ${
+                        index < filteredOptions.length - 1 ? "border-b border-gray-200 dark:border-gray-700" : ""
                       }`}
+                      onClick={() => handleSelect(option.value)}
                     >
-                      <div className="mx-2 leading-6 text-gray-800 dark:text-white/90">
-                        {option.text}
+                      <div
+                        className="relative flex w-full items-center p-2 pl-2"
+                      >
+                        <div className="mx-2 leading-6 text-gray-800 dark:text-white/90">
+                          {option.text}
+                        </div>
                       </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="p-3 text-center text-gray-500 dark:text-gray-400">
+                    All options selected
                   </div>
-                ))}
+                )}
               </div>
             </div>
           )}
