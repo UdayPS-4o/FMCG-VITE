@@ -428,5 +428,33 @@
     ],
     "id": "7",
     "createdAt": "2025-03-23T20:46:40.387Z"
+  },
+  {
+    "date": "2025-03-23",
+    "series": "T",
+    "cash": "N",
+    "party": "CT009",
+    "partyName": "MAHATMA SSK LTD",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
+    "ref": "",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "MK001",
+        "godown": "02",
+        "unit": "PCS",
+        "rate": 675,
+        "qty": "9",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "6075.00",
+        "netAmount": "6075.00"
+      }
+    ],
+    "id": "8",
+    "createdAt": "2025-03-23T23:47:23.139Z"
   }
 ]

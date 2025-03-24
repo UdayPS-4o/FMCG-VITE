@@ -290,6 +290,9 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     } else if (endpoint === 'invoicing') {
       // Change from hard redirect to React Router navigation
       navigate(`/invoicing/edit/${id}${isApproved ? '?approved=true' : ''}`);
+    } else if (endpoint === 'godown') {
+      // Special case for godown transfers
+      navigate(`/godown-transfer/edit/${id}${isApproved ? '?approved=true' : ''}`);
     } else {
       navigate(`/${endpoint}/edit/${id}${isApproved ? '?approved=true' : ''}`);
     }

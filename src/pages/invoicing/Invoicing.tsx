@@ -19,9 +19,9 @@ interface Option {
 
 const InvoicingContent: React.FC = () => {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState<number | false>(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [searchItems, setSearchItems] = useState<string>('');
+  const [showValidationErrors, setShowValidationErrors] = useState<boolean>(false);
   
   // Get shared invoice data from context
   const { 
@@ -33,7 +33,9 @@ const InvoicingContent: React.FC = () => {
     updateItem,
     removeItem,
     addItem,
-    calculateTotal
+    calculateTotal,
+    expandedIndex,
+    setExpandedIndex
   } = useInvoiceContext();
   
   // Form state
@@ -56,7 +58,7 @@ const InvoicingContent: React.FC = () => {
   });
 
   const handleAccordionChange = (panel: number) => (_: React.SyntheticEvent, isExpanded: boolean) => {
-    setExpanded(isExpanded ? panel : false);
+    setExpandedIndex?.(isExpanded ? panel : -1);
   };
 
   // Form handlers
@@ -348,7 +350,7 @@ const InvoicingContent: React.FC = () => {
           )}
         </div>
 
-        <div className="mb-4 mt-6">
+        <div className="mb-6">
           <h2 className="text-xl font-semibold mb-2 dark:text-white">Items</h2>
           
           <div className="relative max-w-md mb-4">
@@ -358,22 +360,22 @@ const InvoicingContent: React.FC = () => {
               value={searchItems}
               onChange={handleSearchItemsChange}
               variant="outlined"
-              className="pl-10"
               autoComplete="off"
             />
           </div>
         </div>
 
-        <div className="mb-6 max-h-[400px] overflow-y-auto pr-2 scrollbar-custom">
+        <div className="mb-6">
           {filteredItems().map((item, index) => (
             <CollapsibleItemSection
               key={index}
               index={index}
               item={item}
               handleAccordionChange={handleAccordionChange}
-              expanded={expanded === index}
+              expanded={expandedIndex === index}
               updateItem={updateItem}
               removeItem={removeItem}
+              showValidationErrors={showValidationErrors}
             />
           ))}
         </div>
@@ -382,7 +384,22 @@ const InvoicingContent: React.FC = () => {
           <button
             type="button"
             className="px-4 py-2 text-brand-500 border border-brand-500 rounded-md hover:bg-brand-50 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800"
-            onClick={addItem}
+            onClick={() => {
+              // Check if there are any incomplete items
+              const hasIncompleteItems = items.some(item => item.item && (!item.godown || !item.qty));
+              if (hasIncompleteItems) {
+                setShowValidationErrors(true);
+                setToast({
+                  visible: true,
+                  message: 'Please complete all item details before adding another item',
+                  type: 'error'
+                });
+              } else {
+                setShowValidationErrors(false);
+              }
+              // Always add a new item regardless of validation state
+              addItem();
+            }}
           >
             Add Another Item
           </button>
@@ -420,14 +437,18 @@ const Invoicing: React.FC = () => {
     pcBx: '', mrp: '', rate: '', qty: '', cess: '', schRs: '', sch: '', 
     cd: '', amount: '', netAmount: '', selectedItem: null, stockLimit: 0 
   }]);
+  const [expandedIndex, setExpandedIndex] = useState<number>(0);
 
   // Item management functions
   const addItem = () => {
-    setItems([...items, { 
+    const newItems = [...items, { 
       item: '', godown: '', unit: '', stock: '', pack: '', gst: '', 
       pcBx: '', mrp: '', rate: '', qty: '', cess: '', schRs: '', sch: '', 
       cd: '', amount: '', netAmount: '', selectedItem: null, stockLimit: 0 
-    }]);
+    }];
+    setItems(newItems);
+    // Set the expanded index to the new item
+    setExpandedIndex(newItems.length - 1);
   };
 
   const removeItem = (index: number) => {
@@ -455,6 +476,8 @@ const Invoicing: React.FC = () => {
       removeItem={removeItem}
       addItem={addItem}
       calculateTotal={calculateTotal}
+      expandedIndex={expandedIndex}
+      setExpandedIndex={setExpandedIndex}
     >
       <InvoicingContent />
     </InvoiceProvider>
