@@ -223,6 +223,9 @@ const CollapsibleItemSection: React.FC<Props> = ({
       .filter(product => {
         if (!product) return false;
         
+        // Always include the currently selected item
+        if (itemData.item && product.CODE === itemData.item) return true;
+        
         // Check if there's stock in the selected godown using stockData API
         const stockAmount = stockData && stockData[product.CODE] ? 
                          stockData[product.CODE][itemData.godown] || 0 : 0;
