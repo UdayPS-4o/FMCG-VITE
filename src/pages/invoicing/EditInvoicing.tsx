@@ -40,6 +40,7 @@ const EditInvoicingContent: React.FC<{
   const [searchItems, setSearchItems] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showValidationErrors, setShowValidationErrors] = useState<boolean>(false);
   
   // Form state
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -615,6 +616,7 @@ const EditInvoicingContent: React.FC<{
               expanded={expandedIndex === index}
               updateItem={updateItem}
               removeItem={removeItem}
+              showValidationErrors={showValidationErrors}
             />
           ))}
         </div>
@@ -623,7 +625,22 @@ const EditInvoicingContent: React.FC<{
           <button
             type="button"
             className="px-5 py-3 text-brand-500 border-2 border-brand-500 font-medium rounded-md hover:bg-brand-50 hover:text-brand-600 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800 flex items-center gap-2 transition-all duration-200"
-            onClick={addItem}
+            onClick={() => {
+              // Check if there are any incomplete items
+              const hasIncompleteItems = items.some(item => item.item && (!item.godown || !item.qty));
+              if (hasIncompleteItems) {
+                setShowValidationErrors(true);
+                setToast({
+                  visible: true,
+                  message: 'Please complete all item details before adding another item',
+                  type: 'error'
+                });
+              } else {
+                setShowValidationErrors(false);
+              }
+              // Always add a new item regardless of validation state
+              addItem();
+            }}
           >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
@@ -775,6 +792,17 @@ const EditInvoicing: React.FC = () => {
           selectedItem: null,
           stockLimit: 0,
         });
+      }
+    }
+    
+    // Check if we're trying to set a duplicate item
+    if (newData.item && newData.item !== newItems[index].item) {
+      for (let i = 0; i < newItems.length; i++) {
+        if (i !== index && newItems[i].item === newData.item) {
+          // Don't update with duplicate item
+          console.log('Duplicate item detected, not updating');
+          return;
+        }
       }
     }
     

@@ -187,4 +187,4 @@ const TransferGodownData: React.FC<{ transferData: GodownData }> = ({ transferDa
       </div>
     </div>
   );
-}; 
+};

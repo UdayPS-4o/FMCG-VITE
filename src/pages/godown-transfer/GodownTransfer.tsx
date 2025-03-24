@@ -87,7 +87,7 @@ const GodownTransfer: React.FC = () => {
 
     const fetchStockData = async () => {
       try {
-        const stockRes = await fetch('http://localhost:8000/api/stock');
+        const stockRes = await fetch(`${baseURL}/api/stock`);
         const stockDatas = await stockRes.json();
         setStockData(stockDatas);
       } catch (error) {
@@ -116,12 +116,8 @@ const GodownTransfer: React.FC = () => {
   const handleFromGodownChange = (value: string) => {
     const selectedGodown = partyOptions.find(option => option.GDN_CODE === value);
     setFromGodown(selectedGodown);
-    
-    // Update all items' godown field with the new fromGodown value
     const updatedItems = formValues.items.map(item => {
-      // Get stock for this item in the selected godown
       const stockValue = item.item ? getStockForItemAndGodown(item.item, value).toString() : '';
-      
       return {
         ...item,
         godown: value,

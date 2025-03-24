@@ -28,3 +28,6 @@ d01-2324
 server/node_modules
 
 test.html
+
+server/db/
+server/db/*
