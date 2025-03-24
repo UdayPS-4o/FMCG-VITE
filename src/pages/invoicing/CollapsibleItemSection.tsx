@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Autocomplete from '../../components/form/input/Autocomplete';
 import Input from '../../components/form/input/Input';
 import { useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
+import Toast from '../../components/ui/toast/Toast';
 
 interface CollapsibleItemSectionProps {
   index: number;
@@ -10,6 +11,7 @@ interface CollapsibleItemSectionProps {
   handleAccordionChange: (panel: number) => (event: React.SyntheticEvent, isExpanded: boolean) => void;
   updateItem: (index: number, data: ItemData) => void;
   removeItem: (index: number) => void;
+  showValidationErrors?: boolean;
 }
 
 const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
@@ -19,12 +21,46 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
   handleAccordionChange,
   updateItem,
   removeItem,
+  showValidationErrors = false,
 }) => {
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
-  const [isFocused, setIsFocused] = useState(false);
+  const [initialInteraction, setInitialInteraction] = useState<boolean>(true);
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    visible: false,
+    message: '',
+    type: 'info',
+  });
   
   // Get shared data from context
-  const { pmplData, stockList, godownOptions } = useInvoiceContext();
+  const { pmplData, stockList, godownOptions, items } = useInvoiceContext();
+
+  // Check if an item is incomplete (missing godown or qty)
+  const isIncomplete = item.item && (!item.godown || !item.qty);
+  
+  // Only show validation errors if explicitly requested AND not the first interaction with this item
+  const shouldShowValidation = showValidationErrors && isIncomplete && expanded && !initialInteraction;
+  
+  // Also mark collapsed incomplete items if validation errors are being shown and it's not the initial interaction
+  const showRedOutline = showValidationErrors && isIncomplete && !initialInteraction;
+
+  // Reset initialInteraction when index changes (new item) or when expanded status changes
+  useEffect(() => {
+    if (expanded) {
+      // Reset initialInteraction to true when a section is newly expanded
+      setInitialInteraction(true);
+    }
+  }, [expanded]);
+
+  // Mark as not initial interaction when user collapses or navigates away
+  useEffect(() => {
+    if (!expanded && item.item && initialInteraction) {
+      setInitialInteraction(false);
+    }
+  }, [expanded, item.item, initialInteraction]);
 
   useEffect(() => {
     // Initialize unitOptions when item or selectedItem changes
@@ -34,10 +70,87 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     }
   }, [item.selectedItem]);
 
+  const checkForDuplicateItem = (itemCode: string): { isDuplicate: boolean, existingItem?: ItemData, itemIndex?: number } => {
+    // Skip check for empty items or self
+    if (!itemCode) return { isDuplicate: false };
+    
+    for (let i = 0; i < items.length; i++) {
+      if (i !== index && items[i].item === itemCode) {
+        return { 
+          isDuplicate: true, 
+          existingItem: items[i],
+          itemIndex: i
+        };
+      }
+    }
+    
+    return { isDuplicate: false };
+  };
+
   const handleItemChange = (newValue: any) => {
-    if (!newValue) return;
+    if (!newValue) {
+      // Reset all fields when item is cleared via the cross button in autocomplete
+      const resetData = {
+        item: '',
+        godown: '',
+        unit: '',
+        stock: '',
+        pack: '',
+        gst: '',
+        pcBx: '',
+        mrp: '',
+        rate: '',
+        qty: '',
+        cess: '',
+        schRs: '',
+        sch: '',
+        cd: '',
+        amount: '',
+        netAmount: '',
+        selectedItem: null,
+        stockLimit: 0,
+      };
+      updateItem(index, resetData);
+      return;
+    }
 
     const selectedItem = newValue;
+    
+    // Check if this item is already added in another section
+    const { isDuplicate, existingItem, itemIndex } = checkForDuplicateItem(selectedItem.CODE);
+    
+    if (isDuplicate && existingItem) {
+      // Show toast notification
+      setToast({
+        visible: true,
+        message: `Item ${selectedItem.CODE} is already added with unit ${existingItem.unit} and qty ${existingItem.qty || 'not set'}`,
+        type: 'warning',
+      });
+      
+      // Clear the item selection
+      const resetData = {
+        item: '',
+        godown: '',
+        unit: '',
+        stock: '',
+        pack: '',
+        gst: '',
+        pcBx: '',
+        mrp: '',
+        rate: '',
+        qty: '',
+        cess: '',
+        schRs: '',
+        sch: '',
+        cd: '',
+        amount: '',
+        netAmount: '',
+        selectedItem: null,
+        stockLimit: 0,
+      };
+      updateItem(index, resetData);
+      return;
+    }
 
     // Set the unit options
     const units = [selectedItem.UNIT_1, selectedItem.UNIT_2].filter(Boolean);
@@ -72,6 +185,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       selectedItem: selectedItem, // Store the selected item
     };
 
+    // This is no longer an initial interaction once user has selected an item
+    setInitialInteraction(false);
+    
     setUnitOptions(units);
     updateItem(index, updatedData);
   };
@@ -122,12 +238,16 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     updateItem(index, updatedData);
   };
 
-  const handleUnitChange = (newValue: string | null) => {
-    if (!newValue) return;
+  const handleSwapUnit = () => {
+    if (unitOptions.length < 2 || !item.unit) return;
+    
+    // Find the other unit option that's not currently selected
+    const otherUnit = unitOptions.find(unit => unit !== item.unit);
+    if (!otherUnit) return;
     
     const updatedData = {
       ...item,
-      unit: newValue,
+      unit: otherUnit,
     };
 
     // Recalculate stockLimit based on the new unit
@@ -137,7 +257,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       const godownStock = stockList[item.selectedItem.CODE]?.[item.godown] || '0';
       const stockValue = parseInt(godownStock, 10);
       
-      if (newValue === item.selectedItem?.UNIT_2) {
+      if (otherUnit === item.selectedItem?.UNIT_2) {
         // Unit is BOX
         stockLimit = Math.floor(stockValue / parseInt(item.pcBx, 10));
       } else {
@@ -254,12 +374,19 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
   };
 
   return (
-    <div className={`mb-4 border rounded-lg ${expanded ? 'border-brand-500' : 'border-gray-200 dark:border-gray-700'}`}>
+    <div className={`mb-4 border rounded-lg ${showRedOutline ? 'border-red-500' : expanded ? 'border-brand-500' : 'border-gray-200 dark:border-gray-700'}`}>
+      <Toast         
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.visible}
+        onClose={() => setToast({ ...toast, visible: false })}
+      />
+      
       <div 
-        className={`p-4 cursor-pointer flex justify-between items-center ${expanded ? 'bg-brand-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-900'}`}
+        className={`p-4 cursor-pointer flex justify-between items-center ${expanded ? 'bg-brand-50 dark:bg-gray-800' : showRedOutline ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-900'}`}
         onClick={(e) => handleAccordionChange(index)(e, !expanded)}
       >
-        <h3 className={`text-lg font-medium dark:text-white ${item.item ? 'text-brand-600 dark:text-brand-400' : ''} truncate flex-1 pr-4`} title={item.item ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}` : 'Select an item'}>
+        <h3 className={`text-lg font-medium dark:text-white ${item.item ? 'text-brand-600 dark:text-brand-400' : ''} ${showRedOutline ? 'text-red-600 dark:text-red-400' : ''} truncate flex-1 pr-4`} title={item.item ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}` : 'Select an item'}>
           {item.item
             ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}`
             : 'Select an item'}
@@ -310,6 +437,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 onChange={(value) => {
                   const selectedItem = pmplData.find(item => item.CODE === value);
                   if (selectedItem) handleItemChange(selectedItem);
+                  else handleItemChange(null); // This handles the case when the clear button (x) is clicked
                 }}
                 defaultValue={item.item}
               />
@@ -327,6 +455,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
               <Autocomplete
                 id={`godown-${index}`}
                 label="Godown"
+                className={shouldShowValidation && item.item && !item.godown ? "border-red-500" : ""}
                 options={Object.entries(stockList[item.item] || {})
                   .filter(([gdnCode, stock]) => gdnCode && parseInt(stock as string, 10) > 0)
                   .map(([gdnCode, stock]) => {
@@ -339,6 +468,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 onChange={handleGodownChange}
                 defaultValue={item.godown}
               />
+              {shouldShowValidation && item.item && !item.godown && (
+                <p className="text-xs text-red-500 mt-1">Godown is required</p>
+              )}
             </div>
             <div>
               <Input
@@ -362,48 +494,31 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
               />
             </div>
             <div className="relative">
-              <div className={`relative border ${isFocused || item.unit ? 'border-brand-500 dark:border-brand-400' : 'border-gray-300 dark:border-gray-700'} rounded-lg transition-all duration-200`}>
-                <select
+              <div className="relative border border-gray-300 dark:border-gray-700 rounded-lg transition-all duration-200 bg-white dark:bg-gray-800">
+                <Input
                   id={`unit-${index}`}
-                  className="w-full px-4 py-2.5 text-sm bg-transparent text-gray-800 dark:text-white appearance-none focus:outline-none"
+                  label="Unit"
                   value={item.unit}
-                  onChange={(e) => handleUnitChange(e.target.value)}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
-                >
-                  {unitOptions.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
-                <label 
-                  htmlFor={`unit-${index}`} 
-                  className={`absolute transition-all duration-200 pointer-events-none ${
-                    isFocused || item.unit 
-                      ? 'text-xs -top-2 left-2 px-1 text-brand-500 dark:text-brand-400 bg-white dark:bg-gray-900' 
-                      : 'text-gray-500 dark:text-gray-400 top-1/2 -translate-y-1/2 left-4'
-                  }`}
-                >
-                  Unit
-                </label>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 dark:text-gray-400">
-                  <svg 
-                    width="16" 
-                    height="16" 
-                    viewBox="0 0 16 16" 
-                    fill="none" 
-                    xmlns="http://www.w3.org/2000/svg"
+                  disabled
+                  variant="outlined"
+                  className="pr-10"
+                />
+                {unitOptions.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleSwapUnit();
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-500 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 p-1"
+                    title="Swap Unit"
                   >
-                    <path 
-                      d="M4 6L8 10L12 6" 
-                      stroke="currentColor" 
-                      strokeWidth="1.5" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M7 16V4M7 4L3 8M7 4L11 8" />
+                      <path d="M17 8v12m0-12l4-4m-4 4l-4-4" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
             <div>
@@ -440,7 +555,11 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 value={item.qty}
                 onChange={(e) => handleFieldChange('qty', e.target.value)}
                 variant="outlined"
+                className={shouldShowValidation && item.item && !item.qty ? "border-red-500" : ""}
               />
+              {shouldShowValidation && item.item && !item.qty && (
+                <p className="text-xs text-red-500 mt-1">Quantity is required</p>
+              )}
             </div>
           </div>
 
