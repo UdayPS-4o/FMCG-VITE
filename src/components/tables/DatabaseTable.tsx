@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef } from 'react';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
 import constants from "../../constants";
 import { toast } from 'react-toastify';
 import './scrollbar.css'; // Import the scrollbar styles
 import DeleteConfirmation from '../ui/DeleteConfirmation';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Add formatItemsDisplay helper function
 const formatItemsDisplay = (items: any): string => {
@@ -23,13 +24,19 @@ const formatItemsDisplay = (items: any): string => {
 interface DatabaseTableProps {
   endpoint?: string;
   tableId?: string; // Add a unique identifier for the table
+  onSelectionChange?: (selectedRows: any[]) => void; // Add callback for selection changes
+  hideButtons?: string[]; // Add prop to hide specific buttons
+  hideApproveButton?: boolean; // Add prop to hide the approve button
+  ref?: React.Ref<{ refreshData: () => Promise<void> }>; // Add a ref to access the refreshData method
 }
 
-const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, tableId }) => {
+// Convert to forwardRef to expose refreshData method
+const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseTableProps>(
+  ({ endpoint: propEndpoint, tableId, onSelectionChange, hideButtons = [], hideApproveButton = false }, ref) => {
   const [endpoint, setEndpoint] = useState<string>('');
   const [rows, setRows] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
-  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [orderBy, setOrderBy] = useState<string>('');
   const [page, setPage] = useState<number>(0);
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
@@ -105,6 +112,11 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     return `table_${pathKey}_hiddenColumns`;
   };
 
+  // Add useAuth hook
+  const { user, hasPower } = useAuth();
+
+  const navigate = useNavigate();
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -117,6 +129,27 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
         }
         
         setEndpoint(point);
+        
+        // Check if user has permission to view this database section
+        const endpointAccessMap: Record<string, string> = {
+          'account-master': 'Account Master',
+          'invoicing': 'Invoicing',
+          'godown-transfer': 'Godown Transfer',
+          'godown': 'Godown Transfer',
+          'cash-receipts': 'Cash Receipts',
+          'cash-payments': 'Cash Payments'
+        };
+        
+        // For users other than admins, check if they have access to this endpoint
+        if (user && !user.routeAccess.includes('Admin')) {
+          const requiredAccess = endpointAccessMap[point];
+          if (requiredAccess && !user.routeAccess.includes(requiredAccess)) {
+            toast.error(`You don't have permission to access this database section`);
+            // Redirect to first accessible route
+            navigate('/');
+            return;
+          }
+        }
         
         const data = await fetchProducts(point);
         setRows(data);
@@ -135,7 +168,7 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     };
     
     fetchData();
-  }, [propEndpoint, tableId]);
+  }, [propEndpoint, tableId, user, navigate]);
 
   // Save hidden columns to localStorage when they change
   useEffect(() => {
@@ -178,6 +211,26 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
   }, [endpoint, tableId]);
 
   const fetchProducts = async (endpoint: string) => {
+    // Check if user has access to the endpoint
+    if (!user) return [];
+    
+    const endpointAccessMap: Record<string, string> = {
+      'account-master': 'Account Master',
+      'invoicing': 'Invoicing',
+      'godown': 'Godown Transfer',
+      'cash-receipts': 'Cash Receipts',
+      'cash-payments': 'Cash Payments'
+    };
+    
+    // For users other than admins, check if they have access to this endpoint
+    if (!user.routeAccess.includes('Admin')) {
+      const requiredAccess = endpointAccessMap[endpoint];
+      if (requiredAccess && !user.routeAccess.includes(requiredAccess)) {
+        toast.error(`You don't have access to the ${endpoint} database`);
+        return [];
+      }
+    }
+    
     // Check if this is an approved table by checking the tableId
     if (tableId && tableId.includes('approved')) {
       const response = await fetch(`${constants.baseURL}/approved/json/${endpoint}`, {
@@ -246,8 +299,6 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
   // Get visible headers (excluding hidden columns)
   const visibleHeaders = headers.filter(header => !hiddenColumns.includes(header));
 
-  const navigate = useNavigate();
-
   const handlePrint = (id: string) => {
     if (!endpoint) {
       toast.error('Endpoint is required');
@@ -264,45 +315,45 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
 
-  const handleEdit = (id: string) => {
+  const handleEdit = (row: Record<string, any>) => {
     if (!endpoint) {
       toast.error('Endpoint is required');
       return;
     }
     
-    // Check if we're on an approved page
-    const isApproved = tableId?.includes('approved');
-    
-    // For account-master, we need to find the relevant row to get the subgroup field
-    if (endpoint === 'account-master') {
-      // Find the row data for the given ID
-      const rowData = rows.find(row => {
-        // The ID could be in the _id field or the row's direct properties
-        return row._id === id || row.AC_CODE === id || row.accode === id;
-      });
-      
-      if (rowData) {
-        // Get the subgroup code, which could be in different fields depending on data structure
-        const subgroup = rowData.subgroup || rowData.SUBGROUP || '';
-        console.log('Editing account with ID:', id, 'Subgroup:', subgroup);
-        // Pass the ID first, then include subgroup as a query parameter
-        navigate(`/account-master/edit/${id}?subgroup=${encodeURIComponent(subgroup)}${isApproved ? '&approved=true' : ''}`);
-      } else {
-        console.error('Could not find row data for ID:', id);
-        toast.error('Could not find account data');
-      }
-    } else if (endpoint === 'invoicing') {
-      // Change from hard redirect to React Router navigation
-      navigate(`/invoicing/edit/${id}${isApproved ? '?approved=true' : ''}`);
-    } else if (endpoint === 'godown') {
-      // Special case for godown transfers
-      navigate(`/godown-transfer/edit/${id}${isApproved ? '?approved=true' : ''}`);
-    } else {
-      navigate(`/${endpoint}/edit/${id}${isApproved ? '?approved=true' : ''}`);
+    // Only check for Write power if user is not Admin
+    if (!hasPower('Write')) {
+      toast.error('You do not have permission to edit items');
+      return;
     }
+    
+    // Add more debugging for all row data
+    console.log('Full row data being edited:', row);
+    
+    const editUrl = generateEditUrl(endpoint, row);
+    console.log('Navigating to edit URL:', editUrl);
+    
+    // Check if we have a valid ID in the URL 
+    if (endpoint === 'cash-receipts' && editUrl.endsWith('edit/')) {
+      toast.error('Cannot edit: Receipt ID not found');
+      return;
+    }
+    
+    if (endpoint === 'cash-payments' && editUrl.endsWith('edit/')) {
+      toast.error('Cannot edit: Voucher ID not found');
+      return;
+    }
+    
+    navigate(editUrl);
   };
 
   const handleDelete = (id: string, event?: React.MouseEvent) => {
+    // Only check for Delete power if user is not Admin
+    if (!hasPower('Delete')) {
+      toast.error('You do not have permission to delete items');
+      return;
+    }
+    
     // Check if Alt+Shift is pressed
     if (event?.altKey && event?.shiftKey) {
       // Bypass confirmation and delete directly
@@ -383,14 +434,16 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
   };
 
   const handleSelectItem = (id: string) => {
-    // Debugging log to check the ID value
-    console.log('Selecting item with ID:', id);
-    
-    setSelectedItems(prev => 
-      prev.includes(id) 
-        ? prev.filter(item => item !== id) 
-        : [...prev, id]
-    );
+    const selectedIndex = selectedItems.indexOf(id);
+    let newSelected: string[] = [];
+
+    if (selectedIndex === -1) {
+      newSelected = [...selectedItems, id];
+    } else {
+      newSelected = selectedItems.filter((itemId) => itemId !== id);
+    }
+
+    setSelectedItems(newSelected);
   };
 
   // Fix the select all function to properly work with the current page items
@@ -398,9 +451,6 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     if (event.target.checked) {
       // Get all IDs from current page items
       const currentPageIds = paginatedRows.map(row => getRowId(row));
-      
-      // Debug log
-      console.log('Select all IDs:', currentPageIds);
       
       setSelectedItems(currentPageIds);
     } else {
@@ -424,6 +474,13 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
   const handleApprove = async () => {
     if (selectedItems.length === 0) {
       toast.error('No items selected');
+      return;
+    }
+
+    // Check if user is Admin
+    const isAdmin = user?.routeAccess.includes('Admin');
+    if (!isAdmin) {
+      toast.error('Only administrators can approve items');
       return;
     }
 
@@ -498,13 +555,9 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     setTooltipContent(null);
   };
 
-  // Get the row ID with better fallback options
-  const getRowId = (row: any): string => {
-    // Handle undefined or null rows
-    if (!row) {
-      console.warn('getRowId called with undefined/null row');
-      return 'unknown';
-    }
+  // Memoize the getRowId function
+  const getRowId = React.useCallback((row: any): string => {
+    if (!row) return 'unknown';
     
     // For specific endpoints, use known ID fields
     if (endpoint === 'cash-receipts' && row.receiptNo) return String(row.receiptNo);
@@ -542,7 +595,116 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
     
     // If all else fails, use a hash of the row
     return JSON.stringify(row).slice(0, 50);
+  }, [endpoint]); // Only recreate if endpoint changes
+
+  // Memoize the selected rows calculation to prevent recalculation on every render
+  const selectedRowsData = React.useMemo(() => {
+    if (selectedItems.length === 0) return [];
+    
+    return rows.filter(row => {
+      const rowId = getRowId(row);
+      return selectedItems.includes(rowId);
+    });
+  }, [selectedItems, rows, getRowId]);
+
+  // Update selected rows when selection changes - with improved dependency control
+  useEffect(() => {
+    // Only call onSelectionChange if it exists and if selectedRowsData has changed
+    if (onSelectionChange) {
+      onSelectionChange(selectedRowsData);
+    }
+    // Intentionally NOT including onSelectionChange in dependencies
+    // This prevents the loop from happening when parent component updates
+  }, [selectedRowsData]);
+
+  // Fix the edit button URL for account-master
+  const generateEditUrl = (endpoint: string, selectedRow: Record<string, any>) => {
+    // Add debugging to understand what's happening
+    console.log('Generating edit URL for endpoint:', endpoint);
+    console.log('Selected row:', selectedRow);
+
+    // Log all available row data for debugging
+    console.log(`Full row data for ${endpoint}:`, JSON.stringify(selectedRow, null, 2));
+
+    // Handle endpoints with path parameters instead of query parameters
+    switch (endpoint) {
+      case 'account-master':
+        const subgroup = selectedRow.subgroup || selectedRow.Subgroup || '';
+        console.log('Using subgroup for account-master:', subgroup);
+        return `/account-master/edit/${subgroup}`;
+        
+      case 'invoicing':
+        const id = selectedRow.id || selectedRow._id || '';
+        console.log('Using id for invoicing:', id);
+        return `/invoicing/edit/${id}`;
+        
+      case 'cash-receipts':
+        // Add more fields to try for cash-receipts
+        const receiptId = selectedRow.receiptNo || selectedRow.receipt_no || selectedRow.ReceiptNo || 
+                       selectedRow.receipt || selectedRow.id || selectedRow._id || '';
+        console.log('Using receipt id for cash-receipts:', receiptId);
+        return `/cash-receipts/edit/${receiptId}`;
+        
+      case 'cash-payments':
+        // Add more fields to try for cash-payments
+        const paymentId = selectedRow.voucherNo || selectedRow.voucher_no || selectedRow.VoucherNo || 
+                       selectedRow.voucher || selectedRow.id || selectedRow._id || '';
+        console.log('Using payment id for cash-payments:', paymentId);
+        return `/cash-payments/edit/${paymentId}`;
+        
+      case 'godown-transfer':
+      case 'godown':
+        return `/godown-transfer/edit/${selectedRow.id || selectedRow._id || ''}`;
+        
+      case 'products':
+        return `/create-product/edit/${selectedRow.CODE || ''}`;
+        
+      case 'groups':
+        return `/create-group/edit/${selectedRow.groupCode || ''}`;
+        
+      case 'ledger':
+        return `/ledger/edit/${selectedRow.CODE || ''}`;
+        
+      case 'schedule':
+        return `/schedule/edit/${selectedRow.CODE || ''}`;
+        
+      case 'branch':
+        return `/branch/edit/${selectedRow.BR_CODE || ''}`;
+        
+      case 'scdno':
+        return `/scdno/edit/${selectedRow.SCDNO || ''}`;
+        
+      case 'hsn':
+        return `/hsn/edit/${selectedRow.CODE || ''}`;
+        
+      case 'sub-groups':
+        return `/create-sub-group/edit/${selectedRow.subgroupCode || ''}`;
+        
+      case 'employee':
+        return `/create-employee/edit/${selectedRow.CODE || ''}`;
+        
+      default:
+        const defaultId = selectedRow.id || selectedRow._id || '';
+        return `/${endpoint}/edit/${defaultId}`;
+    }
   };
+
+  // Add a method to refresh data
+  const refreshData = async () => {
+    try {
+      const data = await fetchProducts(endpoint);
+      setRows(data);
+      setSelectedItems([]);
+    } catch (error) {
+      console.error('Failed to refresh data:', error);
+      toast.error('Failed to refresh data');
+    }
+  };
+
+  // Expose the refreshData method via ref
+  React.useImperativeHandle(ref, () => ({
+    refreshData
+  }));
 
   return (
     <>
@@ -622,17 +784,20 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
               )}
             </div>
             
-            <button
-              onClick={handleApprove}
-              disabled={selectedItems.length === 0}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                selectedItems.length === 0
-                  ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed'
-                  : 'bg-green-500 text-white hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700'
-              }`}
-            >
-              Approve Selected
-            </button>
+            {/* Only show Approve button to Admin users and if not hidden */}
+            {user?.routeAccess.includes('Admin') && !hideApproveButton && (
+              <button
+                onClick={handleApprove}
+                disabled={selectedItems.length === 0}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  selectedItems.length === 0
+                    ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed'
+                    : 'bg-green-500 text-white hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700'
+                }`}
+              >
+                Approve Selected
+              </button>
+            )}
           </div>
         </div>
 
@@ -691,7 +856,7 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
                     </TableCell>
                   ))}
                   
-                  <TableCell className="px-4 py-3 text-right">Actions</TableCell>
+                  <TableCell className="px-4 py-3 text-right font-medium text-sm text-gray-900 dark:text-gray-100">Actions</TableCell>
                 </TableRow>
               </TableHeader>
               
@@ -743,8 +908,8 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
                         
                         <TableCell className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
-                            {/* Only show print button if endpoint is not account-master */}
-                            {endpoint !== 'account-master' && (
+                            {/* Only show print button if endpoint is not account-master and not hidden */}
+                            {endpoint !== 'account-master' && hasPower('Read') && !hideButtons.includes('print') && (
                               <button
                                 onClick={() => handlePrint(getRowId(row))}
                                 className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -758,29 +923,35 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
                               </button>
                             )}
                             
-                            <button
-                              onClick={() => handleEdit(getRowId(row))}
-                              className="p-1 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                              title="Edit"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                              </svg>
-                            </button>
+                            {/* Only show edit button if not hidden */}
+                            {hasPower('Write') && !hideButtons.includes('edit') && (
+                              <button
+                                onClick={() => handleEdit(row)}
+                                className="p-1 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                                title="Edit"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                              </button>
+                            )}
                             
-                            <button
-                              onClick={(e) => handleDelete(getRowId(row), e)}
-                              className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                              title="Delete (Hold Alt+Shift to delete without confirmation)"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M3 6h18"></path>
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                <line x1="10" y1="11" x2="10" y2="17"></line>
-                                <line x1="14" y1="11" x2="14" y2="17"></line>
-                              </svg>
-                            </button>
+                            {/* Only show delete button if not hidden */}
+                            {hasPower('Delete') && !hideButtons.includes('delete') && (
+                              <button
+                                onClick={(e) => handleDelete(getRowId(row), e)}
+                                className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                                title="Delete (Hold Alt+Shift to delete without confirmation)"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M3 6h18"></path>
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                                </svg>
+                              </button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -810,7 +981,7 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
               className="border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 dark:focus:ring-brand-400"
             >
               {[5, 10, 25, 50].map((option) => (
-                <option key={option} value={option}>
+                <option key={option} value={option} className="bg-white dark:bg-gray-700">
                   {option}
                 </option>
               ))}
@@ -854,6 +1025,6 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
       </div>
     </>
   );
-};
+});
 
 export default DatabaseTable; 

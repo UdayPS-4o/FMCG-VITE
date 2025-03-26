@@ -69,7 +69,7 @@ app.post('/api/login', async (req, res) => {
         .status(200)
         .header(
           'Set-Cookie',
-          `token=${newToken}; Path=/; Domain=localhost; Max-Age=6800; HttpOnly;`,
+          `token=${newToken}; Path=/; Domain=localhost; Max-Age=${10 * 365 * 24 * 60 * 60}; HttpOnly;`,
         )
         .json({ 
           success: true, 

@@ -32,6 +32,8 @@ interface AuthContextType {
   logout: () => void;
   hasAccess: (route: string) => boolean;
   hasPower: (power: 'Read' | 'Write' | 'Delete') => boolean;
+  getFirstAccessibleRoute: () => string;
+  refreshUser: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -138,7 +140,56 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Check if user has a specific power (Read, Write, Delete)
   const hasPower = (power: 'Read' | 'Write' | 'Delete'): boolean => {
     if (!user) return false;
+    
+    // Admin has all powers regardless of what's in the powers array
+    if (user.routeAccess.includes('Admin')) return true;
+    
     return user.powers.includes(power);
+  };
+
+  // Get the first route the user has access to
+  const getFirstAccessibleRoute = (): string => {
+    if (!user) return '/login';
+    
+    // Define route mappings from routeAccess to actual routes
+    const routeMappings = {
+      'Admin': '/add-user',
+      'Account Master': '/account-master',
+      'Invoicing': '/invoicing',
+      'Godown Transfer': '/godown-transfer',
+      'Cash Receipts': '/cash-receipt',
+      'Cash Payments': '/cash-payment'
+    };
+    
+    // Find the first route the user has access to
+    for (const access of user.routeAccess) {
+      const route = routeMappings[access as keyof typeof routeMappings];
+      if (route) return route;
+    }
+    
+    return '/login'; // Fallback to login if no access
+  };
+
+  // Add a function to refresh user data without logging out
+  const refreshUser = async (): Promise<boolean> => {
+    try {
+      const response = await fetch(constants.baseURL + '/api/checkIsAuth', {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to refresh user data:', error);
+      return false;
+    }
   };
 
   return (
@@ -150,7 +201,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         logout,
         hasAccess,
-        hasPower
+        hasPower,
+        getFirstAccessibleRoute,
+        refreshUser
       }}
     >
       {children}

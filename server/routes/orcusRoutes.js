@@ -2,7 +2,7 @@ const express = require('express');
 const app = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
-const baseURL = 'http://localhost:8001';
+const baseURL = 'http://localhost:8000';
 function convertAmountToWords(amount) {
   const oneToTwenty = [
     '',
@@ -268,6 +268,176 @@ app.post('/toDBF', async (req, res) => {
   } catch (error) {
     console.log(error);
     res.send(error);
+  }
+});
+
+// Add a route to revert approved records back to the database
+app.post('/revert-approved', async (req, res) => {
+  try {
+    const { endpoint, records } = req.body;
+    
+    if (!endpoint || !records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid request. Endpoint and records are required.' 
+      });
+    }
+
+    // Read data from the approved section
+    let approvedData;
+    try {
+      const data = await fs.readFile(
+        path.resolve(__dirname, `../db/approved/${endpoint}.json`),
+        { encoding: 'utf8' }
+      );
+      approvedData = JSON.parse(data);
+    } catch (err) {
+      console.error('Error reading approved data:', err);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to read approved data'
+      });
+    }
+
+    // Identify the ID field based on the endpoint
+    const idField = 
+      endpoint === 'account-master' ? 'subgroup' :
+      endpoint === 'cash-receipts' ? 'receiptNo' :
+      endpoint === 'godown' ? 'id' :
+      endpoint === 'cash-payments' ? 'voucherNo' :
+      endpoint === 'invoicing' ? 'id' : 'id';
+    
+    // Find the records to revert
+    const recordsToRevert = approvedData.filter(item => {
+      const itemIdValue = String(item[idField]).toLowerCase();
+      return records.some(record => {
+        const recordIdValue = String(record[idField]).toLowerCase();
+        return itemIdValue === recordIdValue;
+      });
+    });
+    
+    if (recordsToRevert.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No matching records found to revert'
+      });
+    }
+    
+    // Remove the reverted records from approved section
+    const remainingApproved = approvedData.filter(item => {
+      const itemIdValue = String(item[idField]).toLowerCase();
+      return !records.some(record => {
+        const recordIdValue = String(record[idField]).toLowerCase();
+        return itemIdValue === recordIdValue;
+      });
+    });
+    
+    // Save the remaining approved records
+    await fs.writeFile(
+      path.resolve(__dirname, `../db/approved/${endpoint}.json`),
+      JSON.stringify(remainingApproved, null, 2)
+    );
+    
+    // Read existing database data
+    let databaseData;
+    try {
+      const data = await fs.readFile(
+        path.resolve(__dirname, `../db/${endpoint}.json`),
+        { encoding: 'utf8' }
+      );
+      databaseData = JSON.parse(data);
+    } catch (err) {
+      // If file doesn't exist, create an empty array
+      databaseData = [];
+    }
+    
+    // Combine database data with reverted records
+    const updatedDatabaseData = [...databaseData, ...recordsToRevert];
+    
+    // Save the updated database data
+    await fs.writeFile(
+      path.resolve(__dirname, `../db/${endpoint}.json`),
+      JSON.stringify(updatedDatabaseData, null, 2)
+    );
+    
+    return res.json({
+      success: true,
+      message: `Successfully reverted ${recordsToRevert.length} records`,
+      revertedCount: recordsToRevert.length
+    });
+  } catch (error) {
+    console.error('Error reverting approved records:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to revert records',
+      error: error.message
+    });
+  }
+});
+
+// Add a route to delete approved records (used after successful DBF sync)
+app.post('/delete-approved-records', async (req, res) => {
+  try {
+    const { endpoint, records } = req.body;
+    
+    if (!endpoint || !records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid request. Endpoint and records are required.' 
+      });
+    }
+
+    // Read data from the approved section
+    let approvedData;
+    try {
+      const data = await fs.readFile(
+        path.resolve(__dirname, `../db/approved/${endpoint}.json`),
+        { encoding: 'utf8' }
+      );
+      approvedData = JSON.parse(data);
+    } catch (err) {
+      console.error('Error reading approved data:', err);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to read approved data'
+      });
+    }
+
+    // Identify the ID field based on the endpoint
+    const idField = 
+      endpoint === 'account-master' ? 'subgroup' :
+      endpoint === 'cash-receipts' ? 'receiptNo' :
+      endpoint === 'godown' ? 'id' :
+      endpoint === 'cash-payments' ? 'voucherNo' :
+      endpoint === 'invoicing' ? 'id' : 'id';
+    
+    // Remove the specified records from approved section
+    const remainingApproved = approvedData.filter(item => {
+      const itemIdValue = String(item[idField]).toLowerCase();
+      return !records.some(record => {
+        const recordIdValue = String(record[idField]).toLowerCase();
+        return itemIdValue === recordIdValue;
+      });
+    });
+    
+    // Save the remaining approved records
+    await fs.writeFile(
+      path.resolve(__dirname, `../db/approved/${endpoint}.json`),
+      JSON.stringify(remainingApproved, null, 2)
+    );
+    
+    return res.json({
+      success: true,
+      message: `Successfully removed ${records.length} records from approved section`,
+      deletedCount: records.length
+    });
+  } catch (error) {
+    console.error('Error deleting approved records:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete records',
+      error: error.message
+    });
   }
 });
 

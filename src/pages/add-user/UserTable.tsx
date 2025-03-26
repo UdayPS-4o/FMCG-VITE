@@ -22,9 +22,18 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<number | null>(null);
   
   useEffect(() => {
-    setRows(data);
+    // Sort data by ID in descending order
+    const sortedData = [...data].sort((a, b) => {
+      // Handle case where id is undefined
+      const idA = a.id || 0;
+      const idB = b.id || 0;
+      return idB - idA; // Descending order (latest first)
+    });
+    setRows(sortedData);
   }, [data]);
   
   const headers = [
@@ -71,11 +80,16 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
   );
   
   const handleDelete = async (id: number) => {
-    if (!id) return;
+    setUserToDelete(id);
+    setDeleteConfirmOpen(true);
+  };
+  
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
     
     setIsLoading(true);
     try {
-      const response = await fetch(`${baseURL}/slink/deleteUser/?id=${id}`, {
+      const response = await fetch(`${baseURL}/slink/deleteUser/?id=${userToDelete}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -85,15 +99,23 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
       }
       
       // Notify parent component of deletion
-      onUserDeleted(id);
+      onUserDeleted(userToDelete);
       
-      // Success toast would be displayed in parent component
+      // Close the dialog
+      setDeleteConfirmOpen(false);
+      setUserToDelete(null);
+      
     } catch (error) {
       console.error('Error deleting user:', error);
       // Error toast would be displayed in parent component
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const cancelDelete = () => {
+    setDeleteConfirmOpen(false);
+    setUserToDelete(null);
   };
   
   const handleEdit = (id: number) => {
@@ -121,6 +143,36 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
   
   return (
     <div>
+      {/* Delete confirmation dialog */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+              Confirm Delete
+            </h3>
+            <p className="text-gray-700 dark:text-gray-300 mb-6">
+              Are you sure you want to delete this user? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={cancelDelete}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Search */}
       <div className="mb-4 relative">
         <div className="relative">
@@ -224,7 +276,7 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
             onChange={handleChangeRowsPerPage}
           >
             {[5, 10, 25].map((option) => (
-              <option key={option} value={option}>
+              <option key={option} value={option} className="bg-white dark:bg-gray-700">
                 {option}
               </option>
             ))}

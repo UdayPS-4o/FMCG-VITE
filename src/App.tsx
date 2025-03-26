@@ -8,7 +8,6 @@ import Login from "./pages/AuthPages/Login";
 import NotFound from "./pages/OtherPage/NotFound";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
-import Home from "./pages/Dashboard/Home";
 import AccountMaster from "./pages/account-master/AccountMaster";
 import Invoicing from "./pages/invoicing/Invoicing";
 import DatabaseAccountMaster from "./pages/database/AccountMaster";
@@ -34,14 +33,27 @@ import PrintCashReceipt from "./pages/print/PrintCashReceipt";
 import AddUser from "./pages/add-user/AddUser";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
+// Root redirect component
+const RootRedirect = () => {
+  const { getFirstAccessibleRoute, isAuthenticated } = useAuth();
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <Navigate to={getFirstAccessibleRoute()} replace />;
+};
+
 // Protected Route Component
 const ProtectedRoute = ({ children, requiredAccess }: { children: React.ReactNode, requiredAccess?: string }) => {
-  const { isAuthenticated, hasAccess, loading } = useAuth();
+  const { isAuthenticated, hasAccess, loading, getFirstAccessibleRoute } = useAuth();
   
   if (loading) {
-    return <div className="flex items-center justify-center h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-    </div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
   
   if (!isAuthenticated) {
@@ -49,44 +61,31 @@ const ProtectedRoute = ({ children, requiredAccess }: { children: React.ReactNod
   }
   
   if (requiredAccess && !hasAccess(requiredAccess)) {
-    return <Navigate to="/unauthorized" replace />;
+    // If no access to required route, redirect to the first accessible route
+    return <Navigate to={getFirstAccessibleRoute()} replace />;
   }
   
-  return children;
+  return <>{children}</>;
 };
-
-// Unauthorized access page
-const Unauthorized = () => (
-  <div className="flex items-center justify-center h-screen bg-gray-100">
-    <div className="text-center p-8 bg-white rounded-lg shadow-md">
-      <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
-      <p className="text-gray-700 mb-6">You don't have permission to access this page.</p>
-      <button 
-        onClick={() => window.history.back()} 
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        Go Back
-      </button>
-    </div>
-  </div>
-);
 
 const AppRoutes = () => (
   <Routes>
+    {/* Root route - redirects to first accessible route */}
+    <Route path="/" element={<RootRedirect />} />
+    
     {/* Auth Layout */}
     <Route path="/signin" element={<SignIn />} />
     <Route path="/signup" element={<SignUp />} />
     <Route path="/login" element={<Login />} />
-    <Route path="/unauthorized" element={<Unauthorized />} />
-
+    
     {/* Dashboard Layout */}
-    <Route element={
-      <ProtectedRoute>
-        <AppLayout />
-      </ProtectedRoute>
-    }>
-      <Route index path="/" element={<Navigate to="/account-master" replace />} />
-      
+    <Route 
+      element={
+        <ProtectedRoute>
+          <AppLayout />
+        </ProtectedRoute>
+      }
+    >
       {/* Main routes */}
       <Route path="/account-master" element={
         <ProtectedRoute requiredAccess="Account Master">
@@ -207,27 +206,27 @@ const AppRoutes = () => (
       
       {/* Approved Section */}
       <Route path="/approved/account-master" element={
-        <ProtectedRoute requiredAccess="Account Master">
+        <ProtectedRoute requiredAccess="Admin">
           <AccountMasterApproved />
         </ProtectedRoute>
       } />
       <Route path="/approved/invoicing" element={
-        <ProtectedRoute requiredAccess="Invoicing">
+        <ProtectedRoute requiredAccess="Admin">
           <InvoicingApproved />
         </ProtectedRoute>
       } />
       <Route path="/approved/godown-transfer" element={
-        <ProtectedRoute requiredAccess="Godown Transfer">
+        <ProtectedRoute requiredAccess="Admin">
           <GodownTransferApproved />
         </ProtectedRoute>
       } />
       <Route path="/approved/cash-receipts" element={
-        <ProtectedRoute requiredAccess="Cash Receipts">
+        <ProtectedRoute requiredAccess="Admin">
           <CashReceiptApproved />
         </ProtectedRoute>
       } />
       <Route path="/approved/cash-payments" element={
-        <ProtectedRoute requiredAccess="Cash Payments">
+        <ProtectedRoute requiredAccess="Admin">
           <CashPaymentApproved />
         </ProtectedRoute>
       } />

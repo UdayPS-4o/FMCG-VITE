@@ -46,6 +46,9 @@ const getCmplData = async (req, res) => {
       }
       return obj;
     });
+
+    jsonData = jsonData.filter(entry => !entry.C_NAME.includes('OPENING'));
+
     if (req === "99") return jsonData;
     else res.json(jsonData);
   } catch (error) {

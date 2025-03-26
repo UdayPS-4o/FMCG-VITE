@@ -13,6 +13,7 @@ interface AutocompleteProps {
   onChange: (value: string) => void;
   className?: string;
   defaultValue?: string;
+  value?: string;
   autoComplete?: string;
 }
 
@@ -71,6 +72,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   onChange,
   className = "",
   defaultValue = "",
+  value,
   autoComplete = "",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -88,16 +90,25 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
     option && option.label && option.label.toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
-  // Set initial selected option based on defaultValue
+  // Set initial selected option based on defaultValue or value
   useEffect(() => {
-    if (defaultValue) {
+    if (value !== undefined) {
+      const option = options.find(opt => opt.value === value);
+      if (option) {
+        setSelectedOption(option);
+        setSearchTerm(option.label);
+      } else {
+        setSelectedOption(null);
+        setSearchTerm("");
+      }
+    } else if (defaultValue) {
       const option = options.find(opt => opt.value === defaultValue);
       if (option) {
         setSelectedOption(option);
         setSearchTerm(option.label);
       }
     }
-  }, [defaultValue, options]);
+  }, [defaultValue, value, options]);
 
   // Handle click outside to close dropdown
   useEffect(() => {
