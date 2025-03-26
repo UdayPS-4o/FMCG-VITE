@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import DatabaseTable from "../../components/tables/DatabaseTable";
-import axios from 'axios';
 import { toast } from 'react-toastify';
 import constants from '../../constants';
 const baseUrl = constants.baseURL;
@@ -26,20 +25,34 @@ const AccountMasterApproved: React.FC = () => {
 
     try {
       setIsSyncing(true);
-      const response = await axios.post(`${baseUrl}/api/merge/account-master/sync`, {
-        records: selectedRecords
+      const response = await fetch(`${baseUrl}/api/merge/account-master/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          records: selectedRecords
+        })
       });
+      
+      const data = await response.json();
 
-      if (response.data.success) {
+      if (data.success) {
         // Handle successful records that were synced
-        if (response.data.syncedRecords && response.data.syncedRecords.length > 0) {
-          toast.success(`Successfully synced ${response.data.syncedRecords.length} records`);
+        if (data.syncedRecords && data.syncedRecords.length > 0) {
+          toast.success(`Successfully synced ${data.syncedRecords.length} records`);
           
           // Remove synced records from approved section
           try {
-            await axios.post(`${baseUrl}/delete-approved-records`, {
-              endpoint: 'account-master',
-              records: response.data.syncedRecords
+            const deleteResponse = await fetch(`${baseUrl}/delete-approved-records`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                endpoint: 'account-master',
+                records: data.syncedRecords
+              })
             });
             
             // Soft reload - refresh the data instead of reloading the page
@@ -53,11 +66,11 @@ const AccountMasterApproved: React.FC = () => {
         }
         
         // Handle records that failed due to duplicate C_CODE
-        if (response.data.duplicateRecords && response.data.duplicateRecords.length > 0) {
-          toast.error(`${response.data.duplicateRecords.length} records have duplicate C_CODE and were not synced`);
+        if (data.duplicateRecords && data.duplicateRecords.length > 0) {
+          toast.error(`${data.duplicateRecords.length} records have duplicate C_CODE and were not synced`);
         }
       } else {
-        toast.error(response.data.message || 'Failed to sync records');
+        toast.error(data.message || 'Failed to sync records');
       }
     } catch (error) {
       console.error('Error syncing to DBF:', error);
@@ -75,19 +88,27 @@ const AccountMasterApproved: React.FC = () => {
 
     try {
       setIsReverting(true);
-      const response = await axios.post(`${baseUrl}/revert-approved`, {
-        endpoint: 'account-master',
-        records: selectedRecords
+      const response = await fetch(`${baseUrl}/revert-approved`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          endpoint: 'account-master',
+          records: selectedRecords
+        })
       });
+      
+      const data = await response.json();
 
-      if (response.data.success) {
+      if (data.success) {
         toast.success(`Successfully reverted ${selectedRecords.length} records to database`);
         // Soft reload - refresh the data instead of reloading the page
         if (tableRef.current) {
           await tableRef.current.refreshData();
         }
       } else {
-        toast.error(response.data.message || 'Failed to revert records');
+        toast.error(data.message || 'Failed to revert records');
       }
     } catch (error) {
       console.error('Error reverting records:', error);
