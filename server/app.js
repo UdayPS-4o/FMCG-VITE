@@ -58,7 +58,6 @@ app.use('/api/merge/account-master', accountMasterMergeRoutes);
 // set middleware to check if user is logged in
 const middleware = require('./routes/middleware');
 app.use(middleware);
-app.set('view engine', 'ejs');
 
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);
@@ -122,6 +121,11 @@ app.use(formRoutes);
 
 const postRoutes = require('./routes/post');
 app.use(postRoutes);
+
+// Add this route to handle favicon requests
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end(); // Send "No Content" response for favicon requests
+});
 
 // Initialize server
 const initServer = () => {

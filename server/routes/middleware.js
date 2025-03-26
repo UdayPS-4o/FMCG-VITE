@@ -7,8 +7,8 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 const middleware = (req, res, next) => {
 
-  // next();
-  // return;
+  next();
+  return;
 
   // Check if request is an API request
   const isApiRequest = req.path.startsWith('/api/') || 
