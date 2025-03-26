@@ -126,7 +126,9 @@ const PrintInvoicing: React.FC = () => {
       }
 
       try {
-        const response = await fetch(`${constants.baseURL}/slink/printInvoice?id=${invoiceId}`);
+        const response = await fetch(`${constants.baseURL}/slink/printInvoice?id=${invoiceId}`, {
+          credentials: 'include'
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch invoice data');
         }
@@ -249,29 +251,73 @@ const PrintInvoicing: React.FC = () => {
   const chunkItems = (items: InvoiceItem[]): InvoiceItem[][] => {
     const chunks: InvoiceItem[][] = [];
     const totalItems = items.length;
-    const itemsPerPage = 9; // Regular pages have 10 items
+    const itemsPerNormalPage = 11; // Regular pages have 11 items
+    const itemsPerEndPage = 7; // End page can have 7 items
     
-    // If we have enough items for multiple pages
-    if (totalItems > itemsPerPage) {
-      // Calculate how many full pages of 10 items we need
-      const fullPages = Math.floor((totalItems - 5) / itemsPerPage);
+    // If we have more than 7 items, we need at least one normal page + one end page
+    if (totalItems > itemsPerEndPage) {
+      // Calculate how many full normal pages we need
+      const normalPagesNeeded = Math.ceil((totalItems - itemsPerEndPage) / itemsPerNormalPage);
       let processedItems = 0;
       
-      // Add the full pages with 10 items each
-      for (let i = 0; i < fullPages; i++) {
-        chunks.push(items.slice(processedItems, processedItems + itemsPerPage));
-        processedItems += itemsPerPage;
+      // Add normal pages
+      for (let i = 0; i < normalPagesNeeded; i++) {
+        chunks.push(items.slice(processedItems, processedItems + itemsPerNormalPage));
+        processedItems += itemsPerNormalPage;
       }
       
-      // Add the last page with remaining items (max 6)
+      // Add the end page with remaining items (max 7)
       const remainingItems = items.slice(processedItems);
       chunks.push(remainingItems);
     } else {
-      // If we have 10 or fewer items, just put them all on one page
+      // If we have 7 or fewer items, just put them all on one end page
       chunks.push(items);
     }
     
     return chunks;
+  };
+
+  // Function to add blank rows to fill space on end page
+  const addBlankRowsToEndPage = (chunk: InvoiceItem[], chunkIndex: number, chunksArray: InvoiceItem[][]): InvoiceItem[] => {
+    // Only apply to the last chunk (end page)
+    if (chunkIndex === chunksArray.length - 1) {
+      const itemsPerEndPage = 8;
+      const currentItems = chunk.length;
+      
+      // If the end page has fewer than 7 items, add blank rows
+      if (currentItems < itemsPerEndPage) {
+        const blankRowsNeeded = itemsPerEndPage - currentItems;
+        const blankRows: InvoiceItem[] = Array(blankRowsNeeded).fill({
+          item: '',
+          godown: '',
+          unit: '',
+          rate: 0,
+          qty: '',
+          cess: '',
+          schRs: '',
+          sch: '',
+          cd: '',
+          amount: '',
+          netAmount: '',
+          particular: '',
+          pack: '',
+          gst: 0
+        });
+        
+        return [...chunk, ...blankRows];
+      }
+    }
+    
+    return chunk;
+  };
+
+  // Function to handle text wrapping in particulars column
+  const handleTextWrapping = (text: string): { text: string, needsSmallerFont: boolean } => {
+    const maxChars = 27;
+    if (text && text.length > maxChars) {
+      return { text, needsSmallerFont: true };
+    }
+    return { text, needsSmallerFont: false };
   };
 
   return (
@@ -297,268 +343,295 @@ const PrintInvoicing: React.FC = () => {
       {/* Invoice Content */}
       {data && (
         <div ref={printRef} className="bg-white shadow-md print:shadow-none">
-          {chunkItems(data.items).map((chunk, chunkIndex, chunksArray) => (
-            <table
-              key={chunkIndex}
-              className="w-full border border-black text-xs mt-4 first:mt-0"
-            >
-              <thead>
-                {/* Header Row */}
-                <tr>
-                  <td colSpan={11} className="border border-black p-2">
-                    <div className="flex">
-                      <div className="w-1/3">
-                        <p className="font-bold">GSTN: {data.company.gstin}</p>
-                        <p className="font-bold">{data.company.subject}</p>
-                        <p className="font-bold">FSSAI NO: {data.company.fssaiNo}</p>
-                        <p className="font-bold">D.L. No.: {data.dlNo}</p>
-                      </div>
-                      <div className="w-1/3 text-center">
-                        <p className="font-bold">Tax Invoice</p>
-                        <p className="text-xl font-bold">{data.company.name}</p>
-                        <p className="font-bold">{data.company.address}</p>
-                      </div>
-                      <div className="w-1/3 text-right">
-                        <p className="font-bold">{data.company.phone}</p>
-                        <p>Office No: {data.company.officeNo}</p>
-                        <p className="font-bold">State Code: {data.company.stateCode}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td colSpan={3} className="border border-black p-2 align-middle">
-                    <div className="text-center">
-                      <p className="text-xl font-bold">{data.company.name}</p>
-                      <p>BILL MADE BY: SHUBHAM</p>
-                    </div>
-                  </td>
-                </tr>
-                
-                {/* Customer Info Row */}
-                <tr>
-                  <td colSpan={11} className="border border-black p-2">
-                    <div className="flex">
-                      <div className="w-2/3 border-r border-black pr-2">
-                        <p><span className="font-bold text-blue-800">Party</span> {data.party.name}</p>
-                        <p><span className="font-bold text-blue-800">Address</span> {data.party.address}</p>
-                        <p>
-                          <span className="font-bold text-blue-800">GSTIN</span> {data.party.gstin || 'N/A'}
-                          <span className="ml-4 font-bold text-blue-800">State Code :</span> {data.party.stateCode}
-                        </p>
-                        <p>
-                          <span className="font-bold text-blue-800">Mobile No.</span> {data.party.mobileNo}
-                          <span className="ml-4 font-bold text-blue-800">Balance</span> {data.party.balanceBf ? `Bal: ${data.party.balanceBf.toFixed(2)} Dr` : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="w-1/3 pl-2">
-                        <div className="flex justify-between">
-                          <p><span className="font-bold text-blue-800">Inv. No :</span> {data.invoice.no}</p>
+          {chunkItems(data.items).map((chunk, chunkIndex, chunksArray) => {
+            // Add blank rows to end page if needed
+            const finalChunk = addBlankRowsToEndPage(chunk, chunkIndex, chunksArray);
+            
+            return (
+              <div key={chunkIndex} className={`page-container ${chunkIndex !== 0 ? 'page-break-before' : ''}`}>
+                <table
+                  className="w-full border border-black text-xs"
+                >
+                  <thead>
+                    {/* Header Row */}
+                    <tr>
+                      <td colSpan={11} className="border border-black p-2">
+                        <div className="flex">
+                          <div className="w-1/3">
+                            <p className="font-bold">GSTN: {data.company.gstin}</p>
+                            <p className="font-bold">{data.company.subject}</p>
+                            <p className="font-bold">FSSAI NO: {data.company.fssaiNo}</p>
+                            <p className="font-bold">D.L. No.: {data.dlNo}</p>
+                          </div>
+                          <div className="w-1/3 text-center">
+                            <p className="font-bold">Tax Invoice</p>
+                            <p className="text-xl font-bold">{data.company.name}</p>
+                            <p className="font-bold">{data.company.address}</p>
+                          </div>
+                          <div className="w-1/3 text-right">
+                            <p className="font-bold">{data.company.phone}</p>
+                            <p>Office No: {data.company.officeNo}</p>
+                            <p className="font-bold">State Code: {data.company.stateCode}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td colSpan={3} className="border border-black p-2 align-middle">
+                        <div className="text-center">
+                          <p className="text-xl font-bold">{data.company.name}</p>
+                          <p>BILL MADE BY: SHUBHAM</p>
+                        </div>
+                      </td>
+                    </tr>
+                    
+                    {/* Customer Info Row */}
+                    <tr>
+                      <td colSpan={11} className="border border-black p-2">
+                        <div className="flex">
+                          <div className="w-2/3 border-r border-black pr-2">
+                            <p><span className="font-bold text-blue-800">Party</span> {data.party.name}</p>
+                            <p><span className="font-bold text-blue-800">Address</span> {data.party.address}</p>
+                            <p>
+                              <span className="font-bold text-blue-800">GSTIN</span> {data.party.gstin || 'N/A'}
+                              <span className="ml-4 font-bold text-blue-800">State Code :</span> {data.party.stateCode}
+                            </p>
+                            <p>
+                              <span className="font-bold text-blue-800">Mobile No.</span> {data.party.mobileNo}
+                              <span className="ml-4 font-bold text-blue-800">Balance</span> {data.party.balanceBf ? `Bal: ${data.party.balanceBf.toFixed(2)} Dr` : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="w-1/3 pl-2">
+                            <div className="flex justify-between">
+                              <p><span className="font-bold text-blue-800">Inv. No :</span> {data.invoice.no}</p>
+                              <p><span className="font-bold text-blue-800">Mode:</span> {data.invoice.mode}</p>
+                            </div>
+                            <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.date} {data.invoice.time}</p>
+                            {data.invoice.dueDate && (
+                              <p><span className="font-bold text-blue-800">Due Date</span> {data.invoice.dueDate}</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td colSpan={3} className="border border-black p-2">
+                        <div>
+                          <p><span className="font-bold text-blue-800">Invoice No :</span> {data.invoice.no}</p>
+                          <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.date}</p>
+                          <p><span className="font-bold text-blue-800">Party</span> {data.party.name}</p>
                           <p><span className="font-bold text-blue-800">Mode:</span> {data.invoice.mode}</p>
                         </div>
-                        <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.date} {data.invoice.time}</p>
-                        {data.invoice.dueDate && (
-                          <p><span className="font-bold text-blue-800">Due Date</span> {data.invoice.dueDate}</p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td colSpan={3} className="border border-black p-2">
-                    <div>
-                      <p><span className="font-bold text-blue-800">Invoice No :</span> {data.invoice.no}</p>
-                      <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.date}</p>
-                      <p><span className="font-bold text-blue-800">Party</span> {data.party.name}</p>
-                      <p><span className="font-bold text-blue-800">Mode:</span> {data.invoice.mode}</p>
-                    </div>
-                  </td>
-                </tr>
-                
-                {/* IRN Row */}
-                <tr>
-                  <td colSpan={11} className="border border-black p-2">
-                    <div className="flex justify-between">
-                      <p><span className="font-bold text-blue-800">Ack. No:</span> {data.ack.no}</p>
-                      <p><span className="font-bold text-blue-800">Ack. Date:</span> {data.ack.date}</p>
-                      <p><span className="font-bold text-blue-800">IRN No:</span> {data.irn}</p>
-                    </div>
-                  </td>
-                  <td colSpan={3} className="border border-black"></td>
-                </tr>
-                
-                {/* Table Headers */}
-                <tr className="bg-white">
-                  <th className="border border-black p-1 font-bold text-blue-800 w-[200px]">Particulars/HSN</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">Pack</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">M.R.P</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">GST%</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">
-                    Rate<br />
-                    <span className="text-xs">(incl of Tax)</span>
-                  </th>
-                  <th className="border border-black p-1 font-bold text-blue-800">Unit</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">Qty</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">Free</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">Sch Rs</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">
-                    Co. Sch%<br />
-                    Cash Disc%
-                  </th>
-                  <th className="border border-black p-1 font-bold text-blue-800">Net Amt.</th>
-                  <th className="border border-black p-1 font-bold text-blue-800 w-[200px]">
-                    Particulars<br />
-                    <div className="flex justify-between">
-                      <span>Unit</span>
-                      <span>M.R.P.</span>
-                    </div>
-                  </th>
-                  <th className="border border-black p-1 font-bold text-blue-800">Free</th>
-                  <th className="border border-black p-1 font-bold text-blue-800">Qty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* Product Rows */}
-                {chunk.map((item, index) => (
-                  <tr key={index}>
-                    <td className="border border-black p-1 text-left text-blue-800">{item.particular}</td>
-                    <td className="border border-black p-1 text-center">{item.pack}</td>
-                    <td className="border border-black p-1 text-center">{item.rate?.toFixed(2)}</td>
-                    <td className="border border-black p-1 text-center text-orange-600">{item.gst?.toFixed(2)}</td>
-                    <td className="border border-black p-1 text-center">{item.rate?.toFixed(2)}</td>
-                    <td className="border border-black p-1 text-center">{item.unit}</td>
-                    <td className="border border-black p-1 text-center">{item.qty}</td>
-                    <td className="border border-black p-1 text-center">{item.cess}</td>
-                    <td className="border border-black p-1 text-center">{item.schRs}</td>
-                    <td className="border border-black p-1 text-center">{item.sch}</td>
-                    <td className="border border-black p-1 text-center text-blue-800">{item.netAmount}</td>
-                    <td className="border border-black p-1 text-left">
-                      <span className="text-blue-800">{item.particular}</span>
-                      <div className="flex justify-between">
-                        <span>{item.unit}</span>
-                        <span>{item.rate?.toFixed(2)}</span>
-                      </div>
-                    </td>
-                    <td className="border border-black p-1 text-center">{item.cess}</td>
-                    <td className="border border-black p-1 text-center">{item.qty}</td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                    
+                    {/* IRN Row */}
+                    <tr>
+                      <td colSpan={11} className="border border-black p-2">
+                        <div className="flex justify-between">
+                          <p><span className="font-bold text-blue-800">Ack. No:</span> {data.ack.no}</p>
+                          <p><span className="font-bold text-blue-800">Ack. Date:</span> {data.ack.date}</p>
+                          <p><span className="font-bold text-blue-800">IRN No:</span> {data.irn}</p>
+                        </div>
+                      </td>
+                      <td colSpan={3} className="border border-black"></td>
+                    </tr>
+                    
+                    {/* Table Headers */}
+                    <tr className="bg-white">
+                      <th className="border border-black p-1 font-bold text-blue-800 w-[200px]">Particulars/HSN</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">Pack</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">M.R.P</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">GST%</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">
+                        Rate<br />
+                        <span className="text-xs">(incl of Tax)</span>
+                      </th>
+                      <th className="border border-black p-1 font-bold text-blue-800">Unit</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">Qty</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">Free</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">Sch Rs</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">
+                        Co. Sch%<br />
+                        Cash Disc%
+                      </th>
+                      <th className="border border-black p-1 font-bold text-blue-800">Net Amt.</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 w-[200px]">
+                        Particulars<br />
+                        <div className="flex justify-between">
+                          <span>Unit</span>
+                          <span>M.R.P.</span>
+                        </div>
+                      </th>
+                      <th className="border border-black p-1 font-bold text-blue-800">Free</th>
+                      <th className="border border-black p-1 font-bold text-blue-800">Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Product Rows */}
+                    {finalChunk.map((item, index) => {
+                      const { text: particular, needsSmallerFont } = handleTextWrapping(item.particular);
+                      const isBlankRow = !item.particular && !item.rate && !item.qty;
+                      
+                      return (
+                        <tr key={index} className={isBlankRow ? "blank-row h-10" : ""}>
+                          <td className={`border border-black p-1 text-left text-blue-800 ${needsSmallerFont ? 'text-[smaller]' : ''}`}>
+                            {particular}
+                            {isBlankRow && <span className="invisible">Placeholder for consistent spacing</span>}
+                          </td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.pack : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow && item.rate ? item.rate.toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center text-orange-600">{!isBlankRow && item.gst ? item.gst.toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow && item.rate ? item.rate.toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.unit : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.qty : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.cess : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.schRs : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.sch : ""}</td>
+                          <td className="border border-black p-1 text-center text-blue-800">{!isBlankRow ? item.netAmount : ""}</td>
+                          <td className={`border border-black p-1 text-left ${needsSmallerFont ? 'text-[smaller]' : ''}`}>
+                            {!isBlankRow ? (
+                              <>
+                                <span className="text-blue-800">{particular}</span>
+                                <div className="flex justify-between">
+                                  <span>{item.unit}</span>
+                                  <span>{item.rate?.toFixed(2)}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <span className="invisible">BLANK PRODUCT LINE </span>
+                                <div className="flex justify-between">
+                                  <span className="invisible">PCS</span>
+                                  <span className="invisible">999.99</span>
+                                </div>
+                              </>
+                            )}
+                          </td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.cess : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.qty : ""}</td>
+                        </tr>
+                      );
+                    })}
 
-                {/* Summary aur Footer - sirf last table mein */}
-                {chunkIndex === chunksArray.length - 1 && (
-                  <>
-                    <tr>
-                      <td colSpan={11} className="border border-black p-0">
-                        <table className="w-full text-xs border-collapse">
-                          <tr>
-                            <td className="align-top border border-black p-1 text-[11px]" style={{ width: '10%' }}>
-                              <p className="font-bold text-blue-800">Items in Bill: {data.summary.itemsInBill}</p>
-                              <p className="font-bold text-blue-800">Cases in Bill: {data.summary.casesInBill}</p>
-                              <p className="font-bold text-blue-800">Loose items in Bill: {data.summary.looseItemsInBill}</p>
-                            </td>
-                            
-                            <td className="align-top border border-black p-1" style={{ width: '25%' }}>
-                              <p className="font-bold text-blue-800">Terms & Conditions:</p>
-                              <p className="text-[10px]">1. We hereby certify that articles of food mentioned in the invoice are warranted to be of the nature and quality which they purport to be as per the Food Safety and Standards Act and Rules.</p>
-                              <p className="text-[10px] mt-1">2. Goods once sold will not be taken back. E & OE.</p>
-                            </td>
-                            
-                            <td className="align-top border border-black p-1" style={{ width: '20%' }}>
-                              <table className="w-full text-xs border-collapse">
-                                <tr className="text-xs">
-                                  <td className="border-b border-r border-black p-1 font-bold text-blue-800">Goods</td>
-                                  <td className="border-b border-r border-black p-1 font-bold text-blue-800">SGST%</td>
-                                  <td className="border-b border-r border-black p-1 font-bold text-blue-800">Value</td>
-                                  <td className="border-b border-r border-black p-1 font-bold text-blue-800">CGST%</td>
-                                  <td className="border-b border-black p-1 font-bold text-blue-800">Value</td>
-                                </tr>
-                                {groupedTaxDetails.map((tax, index) => (
-                                  <tr key={index} className="text-xs">
-                                    <td className="border-r border-black p-1">{tax.goods || '0.00'}</td>
-                                    <td className="border-r border-black p-1">{tax.sgst?.toFixed(2)}%</td>
-                                    <td className="border-r border-black p-1">{tax.sgstValue?.toFixed(2)}</td>
-                                    <td className="border-r border-black p-1">{tax.cgst?.toFixed(2)}%</td>
-                                    <td className="p-1">{tax.cgstValue?.toFixed(2)}</td>
-                                  </tr>
-                                ))}
-                                <tr className="text-xs">
-                                  <td className="border-t border-r border-black p-1 font-bold">{totalGoods.toFixed(2)}</td>
-                                  <td className="border-t border-r border-black p-1 font-bold"></td>
-                                  <td className="border-t border-r border-black p-1 font-bold">{totalSGST.toFixed(2)}</td>
-                                  <td className="border-t border-r border-black p-1 font-bold"></td>
-                                  <td className="border-t border-black p-1 font-bold">{totalCGST.toFixed(2)}</td>
-                                </tr>
-                              </table>
-                            </td>
-                            
-                            <td className="align-top border border-black p-0" style={{ width: '25%' }}>
-                              <table className="w-full text-xs border-collapse">
-                                <tr>
-                                  <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Gross Amt.</td>
-                                  <td className="border-b border-black p-1 text-right">{data.totals.grossAmt?.toFixed(2)}</td>
-                                </tr>
-                                <tr>
-                                  <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Less Sch.</td>
-                                  <td className="border-b border-black p-1 text-right">{data.totals.lessSch?.toFixed(2)}</td>
-                                </tr>
-                                <tr>
-                                  <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Less CD</td>
-                                  <td className="border-b border-black p-1 text-right">{data.totals.lessCd?.toFixed(2)}</td>
-                                </tr>
-                                <tr>
-                                  <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">R.Off</td>
-                                  <td className="border-b border-black p-1 text-right">{data.totals.rOff?.toFixed(2)}</td>
-                                </tr>
-                                <tr>
-                                  <td className="border-r border-black p-1 font-bold text-blue-800 text-left">Net Amt.</td>
-                                  <td className="p-1 font-bold text-right">{data.totals.netAmount?.toFixed(2)}</td>
-                                </tr>
-                              </table>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                      <td colSpan={3} className="border border-black p-0">
-                        <table className="w-full text-xs border-collapse">
-                          <tr>
-                            <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Gross Amt.</td>
-                            <td className="border-b border-black p-1 text-right">{data.totals.grossAmt?.toFixed(2)}</td>
-                          </tr>
-                          <tr>
-                            <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Less Sch.</td>
-                            <td className="border-b border-black p-1 text-right">{data.totals.lessSch?.toFixed(2)}</td>
-                          </tr>
-                          <tr>
-                            <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Less CD</td>
-                            <td className="border-b border-black p-1 text-right">{data.totals.lessCd?.toFixed(2)}</td>
-                          </tr>
-                          <tr>
-                            <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">R.Off</td>
-                            <td className="border-b border-black p-1 text-right">{data.totals.rOff?.toFixed(2)}</td>
-                          </tr>
-                          <tr>
-                            <td className="border-r border-black p-1 font-bold text-blue-800 text-left">Net Amt.</td>
-                            <td className="p-1 font-bold text-right">{data.totals.netAmount?.toFixed(2)}</td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={14} className="border border-black p-1 text-center text-xs">
-                        This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
-                        <div className="text-right font-bold">Page {chunkIndex + 1}/{chunksArray.length}</div>
-                      </td>
-                    </tr>
-                  </>
-                )}
-                
-                {/* Page number for non-last pages */}
-                {chunkIndex !== chunksArray.length - 1 && (
-                  <tr>
-                    <td colSpan={14} className="border border-black p-1 text-right text-xs font-bold">
-                      Page {chunkIndex + 1}/{chunksArray.length}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          ))}
+                    {/* Summary aur Footer - sirf last table mein */}
+                    {chunkIndex === chunksArray.length - 1 && (
+                      <>
+                        <tr>
+                          <td colSpan={11} className="border border-black p-0">
+                            <table className="w-full text-xs border-collapse">
+                              <tr>
+                                <td className="align-top border border-black p-1 text-[11px]" style={{ width: '10%' }}>
+                                  <p className="font-bold text-blue-800">Items in Bill: {data.summary.itemsInBill}</p>
+                                  <p className="font-bold text-blue-800">Cases in Bill: {data.summary.casesInBill}</p>
+                                  <p className="font-bold text-blue-800">Loose items in Bill: {data.summary.looseItemsInBill}</p>
+                                </td>
+                                
+                                <td className="align-top border border-black p-1" style={{ width: '25%' }}>
+                                  <p className="font-bold text-blue-800">Terms & Conditions:</p>
+                                  <p className="text-[10px]">1. We hereby certify that articles of food mentioned in the invoice are warranted to be of the nature and quality which they purport to be as per the Food Safety and Standards Act and Rules.</p>
+                                  <p className="text-[10px]">2. Goods once sold will not be taken back. E & OE.</p>
+                                </td>
+                                
+                                <td className="align-top border border-black p-1" style={{ width: '20%' }}>
+                                  <table className="w-full text-xs border-collapse">
+                                    <tr className="text-xs">
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800">Goods</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800">SGST%</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800">Value</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800">CGST%</td>
+                                      <td className="border-b border-black p-1 font-bold text-blue-800">Value</td>
+                                    </tr>
+                                    {groupedTaxDetails.map((tax, index) => (
+                                      <tr key={index} className="text-xs">
+                                        <td className="border-r border-black p-1">{tax.goods || '0.00'}</td>
+                                        <td className="border-r border-black p-1">{tax.sgst?.toFixed(2)}%</td>
+                                        <td className="border-r border-black p-1">{tax.sgstValue?.toFixed(2)}</td>
+                                        <td className="border-r border-black p-1">{tax.cgst?.toFixed(2)}%</td>
+                                        <td className="p-1">{tax.cgstValue?.toFixed(2)}</td>
+                                      </tr>
+                                    ))}
+                                    <tr className="text-xs">
+                                      <td className="border-t border-r border-black p-1 font-bold">{totalGoods.toFixed(2)}</td>
+                                      <td className="border-t border-r border-black p-1 font-bold"></td>
+                                      <td className="border-t border-r border-black p-1 font-bold">{totalSGST.toFixed(2)}</td>
+                                      <td className="border-t border-r border-black p-1 font-bold"></td>
+                                      <td className="border-t border-black p-1 font-bold">{totalCGST.toFixed(2)}</td>
+                                    </tr>
+                                  </table>
+                                </td>
+                                
+                                <td className="align-top border border-black p-0" style={{ width: '25%' }}>
+                                  <table className="w-full text-xs border-collapse">
+                                    <tr>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Gross Amt.</td>
+                                      <td className="border-b border-black p-1 text-right">{data.totals.grossAmt?.toFixed(2)}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 text-left">Less Sch.</td>
+                                      <td className="border-b border-black border-b-dashed p-1 text-right">{data.totals.lessSch?.toFixed(2)}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 text-left">Less CD</td>
+                                      <td className="border-b border-black border-b-dashed p-1 text-right">{data.totals.lessCd?.toFixed(2)}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">R.Off</td>
+                                      <td className="border-b border-black p-1 text-right">{data.totals.rOff?.toFixed(2)}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="border-r border-black p-1 font-bold text-blue-800 text-left">Net Amt.</td>
+                                      <td className="p-1 font-bold text-right">{data.totals.netAmount?.toFixed(2)}</td>
+                                    </tr>
+                                  </table>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                          <td colSpan={3} className="border border-black p-0">
+                            <table className="w-full text-xs border-collapse">
+                              <tr>
+                                <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Gross Amt.</td>
+                                <td className="border-b border-black p-1 text-right">{data.totals.grossAmt?.toFixed(2)}</td>
+                              </tr>
+                              <tr>
+                                <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 text-left">Less Sch.</td>
+                                <td className="border-b border-black border-b-dashed p-1 text-right">{data.totals.lessSch?.toFixed(2)}</td>
+                              </tr>
+                              <tr>
+                                <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 text-left">Less CD</td>
+                                <td className="border-b border-black border-b-dashed p-1 text-right">{data.totals.lessCd?.toFixed(2)}</td>
+                              </tr>
+                              <tr>
+                                <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">R.Off</td>
+                                <td className="border-b border-black p-1 text-right">{data.totals.rOff?.toFixed(2)}</td>
+                              </tr>
+                              <tr>
+                                <td className="border-r border-black p-1 font-bold text-blue-800 text-left">Net Amt.</td>
+                                <td className="p-1 font-bold text-right">{data.totals.netAmount?.toFixed(2)}</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={14} className="border border-black p-1 text-center text-xs">
+                            This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
+                            <div className={`float-right w-fit text-right font-bold ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                          </td>
+                        </tr>
+                      </>
+                    )}
+                    
+                    {/* Page number for non-last pages */}
+                    {chunkIndex !== chunksArray.length - 1 && (
+                      <tr>
+                        <td colSpan={14} className="border border-black p-1 text-center text-xs">
+                            This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
+                            <div className={`float-right w-fit text-right font-bold ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                          </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
         </div>
       )}
       
@@ -597,16 +670,45 @@ const PrintInvoicing: React.FC = () => {
             border-color: black !important;
           }
           
-          /* Har naye table ko new page par start karna */
-          table + table {
-            page-break-before: always;
+          .page-container {
+            margin-top: 0;
+            position: relative;
           }
           
-          /* Page ko landscape mode mein set karna */
+          .page-container:first-child {
+            margin-top: 0;
+          }
+          
+          .page-break-before {
+            page-break-before: always;
+            margin-top: 10px !important;
+            padding-top: 0 !important;
+          }
+          
+          table {
+            margin: 0;
+          }
+          
+          .border-b-dashed {
+            border-bottom-style: dashed !important;
+          }
+          
+          .blank-row {
+            height: 2.5rem !important;
+          }
+          
           @page {
             size: A4 landscape;
             margin: 10mm;
           }
+        }
+        
+        .blank-row {
+          height: 2.5rem;
+        }
+        
+        .page-container:not(:first-child) {
+          margin-top: 15px;
         }
       `}</style>
     </div>

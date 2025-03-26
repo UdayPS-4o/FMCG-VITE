@@ -141,13 +141,24 @@ const CollapsibleItemSection: React.FC<Props> = ({
         }
       }
 
+      // Ensure we're using the actual unit text value, not a code
+      let unitValue = selectedPMPL.UNIT_1 || "";
+      
+      // If the selected item has a unit value that's a code (like "01" or "02"),
+      // map it to the actual text representation
+      if (unitValue === "01" && selectedPMPL.UNIT_1) {
+        unitValue = selectedPMPL.UNIT_1;
+      } else if (unitValue === "02" && selectedPMPL.UNIT_2) {
+        unitValue = selectedPMPL.UNIT_2;
+      }
+
       updateItem(index, {
         ...itemData,
         item: value,
         stock: stockValue,
         pack: selectedPMPL.PACK || "",
         gst: selectedPMPL.GST || "",
-        unit: selectedPMPL.UNIT_1 || "",
+        unit: unitValue,
         pcBx: selectedPMPL.MULT_F || "",
         mrp: selectedPMPL.MRP1 || "",
         rate: selectedPMPL.RATE1 || "",
@@ -202,8 +213,24 @@ const CollapsibleItemSection: React.FC<Props> = ({
     if (!product) return [];
     
     const options = [];
-    if (product.UNIT_1) options.push({ value: product.UNIT_1, label: product.UNIT_1 });
-    if (product.UNIT_2 && product.UNIT_2 !== product.UNIT_1) options.push({ value: product.UNIT_2, label: product.UNIT_2 });
+    
+    // Map unit codes to text values if needed
+    let unit1 = product.UNIT_1;
+    let unit2 = product.UNIT_2;
+    
+    // Check for numeric unit codes and transform them
+    if (unit1 === "01" && product.UNIT_1_DESC) unit1 = product.UNIT_1_DESC;
+    if (unit2 === "02" && product.UNIT_2_DESC) unit2 = product.UNIT_2_DESC;
+    
+    // Add units to options
+    if (unit1) options.push({ value: unit1, label: unit1 });
+    if (unit2 && unit2 !== unit1) options.push({ value: unit2, label: unit2 });
+    
+    // If no valid options were found, check if the current itemData.unit is valid
+    if (options.length === 0 && itemData.unit) {
+      options.push({ value: itemData.unit, label: itemData.unit });
+    }
+    
     return options;
   };
 

@@ -39,7 +39,10 @@ export const useInvoiceData = () => {
           (async () => {
             try {
               // Try primary endpoint
-              const accRes = await fetch(`${constants.baseURL}/api/dbf/acm.json`, { signal });
+              const accRes = await fetch(`${constants.baseURL}/api/dbf/acm.json`, { 
+                signal,
+                credentials: 'include' 
+              });
               if (!accRes.ok) throw new Error('Primary endpoint failed');
               return await accRes.json();
             } catch (error) {
@@ -47,19 +50,34 @@ export const useInvoiceData = () => {
                 throw error;
               }
               // Try fallback endpoint
-              const cmplRes = await fetch(`${constants.baseURL}/cmpl`, { signal });
+              const cmplRes = await fetch(`${constants.baseURL}/cmpl`, { 
+                signal,
+                credentials: 'include'
+              });
               if (!cmplRes.ok) throw new Error('Fallback endpoint failed');
               return await cmplRes.json();
             }
           })(),
           // Fetch PMPL data
-          fetch(`${constants.baseURL}/api/dbf/pmpl.json`, { signal }).then(res => res.json()),
+          fetch(`${constants.baseURL}/api/dbf/pmpl.json`, { 
+            signal, 
+            credentials: 'include' 
+          }).then(res => res.json()),
           // Fetch stock data
-          fetch(`${constants.baseURL}/api/stock`, { signal }).then(res => res.json()),
+          fetch(`${constants.baseURL}/api/stock`, { 
+            signal, 
+            credentials: 'include' 
+          }).then(res => res.json()),
           // Fetch godown data
-          fetch(`${constants.baseURL}/api/dbf/godown.json`, { signal }).then(res => res.json()),
+          fetch(`${constants.baseURL}/api/dbf/godown.json`, { 
+            signal, 
+            credentials: 'include' 
+          }).then(res => res.json()),
           // Fetch balance data
-          fetch(`${constants.baseURL}/json/balance`, { signal }).then(res => res.json())
+          fetch(`${constants.baseURL}/json/balance`, { 
+            signal, 
+            credentials: 'include' 
+          }).then(res => res.json())
         ]);
 
         // Helper function to get balance for a party code

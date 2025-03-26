@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch(constants.baseURL + '/api/checkiskAuth', {
+        const response = await fetch(constants.baseURL + '/api/checkIsAuth', {
           method: 'GET',
           credentials: 'include',
         });

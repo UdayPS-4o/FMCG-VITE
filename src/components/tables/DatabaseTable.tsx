@@ -180,11 +180,15 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
   const fetchProducts = async (endpoint: string) => {
     // Check if this is an approved table by checking the tableId
     if (tableId && tableId.includes('approved')) {
-      const response = await fetch(`${constants.baseURL}/approved/json/${endpoint}`);
+      const response = await fetch(`${constants.baseURL}/approved/json/${endpoint}`, {
+        credentials: 'include'
+      });
       const data = await response.json();
       return data;
     } else {
-      const response = await fetch(`${constants.baseURL}/json/${endpoint}`);
+      const response = await fetch(`${constants.baseURL}/json/${endpoint}`, {
+        credentials: 'include'
+      });
       const data = await response.json();
       return data;
     }
@@ -328,7 +332,9 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
       console.log(`Attempting to delete ${isApproved ? 'approved' : ''} ${endpoint} record with ID: ${idToDelete}`);
       console.log(`Using endpoint: ${deleteEndpoint}`);
       
-      const response = await fetch(`${constants.baseURL}${deleteEndpoint}`);
+      const response = await fetch(`${constants.baseURL}${deleteEndpoint}`, {
+        credentials: 'include'
+      });
       const data = await response.json();
 
       if (response.ok) {
@@ -432,6 +438,7 @@ const DatabaseTable: React.FC<DatabaseTableProps> = ({ endpoint: propEndpoint, t
           endpoint,
           approved: selectedItems
         }),
+        credentials: 'include'
       });
 
       if (response.ok) {

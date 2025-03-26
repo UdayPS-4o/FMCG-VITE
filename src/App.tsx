@@ -85,7 +85,7 @@ const AppRoutes = () => (
         <AppLayout />
       </ProtectedRoute>
     }>
-      <Route index path="/" element={<Home />} />
+      <Route index path="/" element={<Navigate to="/account-master" replace />} />
       
       {/* Main routes */}
       <Route path="/account-master" element={

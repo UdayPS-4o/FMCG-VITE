@@ -68,7 +68,9 @@ const AccountMaster: React.FC = () => {
           setIsEDIT(true);
           const subgroup = currentUrl.split('?sub=').pop() || '';
 
-          const response = await fetch(`${constants.baseURL}/json/account-master`);
+          const response = await fetch(`${constants.baseURL}/json/account-master`, {
+            credentials: 'include'
+          });
           if (!response.ok) {
             throw new Error('Failed to fetch account data');
           }
@@ -99,7 +101,9 @@ const AccountMaster: React.FC = () => {
           }
         } else {
           setIsEDIT(false);
-          const response = await fetch(`${constants.baseURL}/slink/subgrp`);
+          const response = await fetch(`${constants.baseURL}/slink/subgrp`, {
+            credentials: 'include'
+          });
           if (!response.ok) {
             throw new Error('Failed to fetch subgroup data');
           }
@@ -113,7 +117,9 @@ const AccountMaster: React.FC = () => {
         }
 
         // Fetch state data in both cases
-        const stateResponse = await fetch(`${constants.baseURL}/api/dbf/state.json`);
+        const stateResponse = await fetch(`${constants.baseURL}/api/dbf/state.json`, {
+          credentials: 'include'
+        });
         if (!stateResponse.ok) {
           throw new Error('Failed to fetch state data');
         }
@@ -196,6 +202,7 @@ const AccountMaster: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include'
       });
 
       let data;

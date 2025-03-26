@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import constants from '../../constants';
 import PageMeta from "../../components/common/PageMeta";
 
-const itemsPerPage = 12;
+const itemsPerPage = 30;
 
 interface GodownItem {
   code: string;
@@ -29,6 +29,7 @@ export default function PrintGodown() {
   const godownId = searchParams.get('godownId');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!godownId) {
@@ -38,7 +39,9 @@ export default function PrintGodown() {
     }
 
     setIsLoading(true);
-    fetch(`${constants.baseURL}/slink/printGodown?retreat=${godownId}`)
+    fetch(`${constants.baseURL}/slink/printGodown?retreat=${godownId}`, {
+      credentials: 'include'
+    })
       .then((res) => {
         if (!res.ok) {
           throw new Error(`Failed to fetch data: ${res.status}`);
@@ -59,6 +62,10 @@ export default function PrintGodown() {
   const handlePrint = () => {
     if (!printRef.current) return;
     window.print();
+  };
+
+  const handleBack = () => {
+    navigate('/db/godown-transfer');
   };
 
   if (isLoading) {
@@ -99,7 +106,15 @@ export default function PrintGodown() {
       />
       
       <div className="mb-6 flex justify-between items-center print:hidden">
-        <h1 className="text-2xl font-semibold dark:text-white">Print Godown Transfer</h1>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={handleBack}
+            className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-700"
+          >
+            Back
+          </button>
+          <h1 className="text-2xl font-semibold dark:text-white">Print Godown Transfer</h1>
+        </div>
         <button 
           onClick={handlePrint}
           className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
@@ -112,17 +127,79 @@ export default function PrintGodown() {
         {pages.map((pageItems, index) => (
           <div key={index} className="page-break flex justify-center print:break-after-page">
             <div className="flex justify-center w-full">
-              <TransferGodownData transferData={{ ...godownData, items: pageItems }} />
-              <TransferGodownData transferData={{ ...godownData, items: pageItems }} />
+              <TransferGodownData 
+                transferData={{ ...godownData, items: pageItems }} 
+                totalItems={godownData.items.length}
+                totalQuantity={godownData.items.reduce((acc, item) => acc + parseInt(item.qty || '0'), 0)}
+                currentPage={index + 1}
+                totalPages={pages.length}
+              />
+              <TransferGodownData 
+                transferData={{ ...godownData, items: pageItems }}
+                totalItems={godownData.items.length}
+                totalQuantity={godownData.items.reduce((acc, item) => acc + parseInt(item.qty || '0'), 0)}
+                currentPage={index + 1}
+                totalPages={pages.length}
+              />
             </div>
           </div>
         ))}
       </div>
+
+      <style>{`
+        @media print {
+          body {
+            background-color: white;
+            color: black;
+            margin: 0;
+            padding: 0;
+          }
+          
+          .print\\:hidden {
+            display: none !important;
+          }
+          
+          .print\\:shadow-none {
+            box-shadow: none !important;
+          }
+          
+          .print\\:text-black {
+            color: black !important;
+          }
+          
+          .print\\:border-black {
+            border-color: black !important;
+          }
+          
+          table + table {
+            page-break-before: always;
+          }
+          
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+        }
+      `}</style>
+
+
     </div>
   );
 }
 
-const TransferGodownData: React.FC<{ transferData: GodownData }> = ({ transferData }) => {
+const TransferGodownData: React.FC<{ 
+  transferData: GodownData,
+  totalItems?: number,
+  totalQuantity?: number,
+  currentPage?: number,
+  totalPages?: number
+}> = ({ 
+  transferData, 
+  totalItems, 
+  totalQuantity,
+  currentPage = 1,
+  totalPages = 1
+}) => {
   const { date, fromGodown, toGodown, id, items } = transferData;
 
   return (
@@ -158,7 +235,6 @@ const TransferGodownData: React.FC<{ transferData: GodownData }> = ({ transferDa
             <th className="w-[15%] border border-black px-1 py-0.5 text-left">Code</th>
             <th className="w-[35%] border border-black px-1 py-0.5 text-left">Particular</th>
             <th className="w-[15%] border border-black px-1 py-0.5 text-center">Pack</th>
-            <th className="w-[10%] border border-black px-1 py-0.5 text-center">GST %</th>
             <th className="w-[10%] border border-black px-1 py-0.5 text-center">Unit</th>
             <th className="w-[15%] border border-black px-1 py-0.5 text-center">Qty</th>
           </tr>
@@ -169,7 +245,6 @@ const TransferGodownData: React.FC<{ transferData: GodownData }> = ({ transferDa
               <td className="border-r border-black px-1 py-0.5">{item.code}</td>
               <td className="border-r border-black px-1 py-0.5 text-[9px]">{item.particular}</td>
               <td className="border-r border-black px-1 py-0.5 text-center">{item.pack}</td>
-              <td className="border-r border-black px-1 py-0.5 text-center">{item.gst}</td>
               <td className="border-r border-black px-1 py-0.5 text-center">{item.unit}</td>
               <td className="px-1 py-0.5 text-center">{item.qty}</td>
             </tr>
@@ -179,10 +254,26 @@ const TransferGodownData: React.FC<{ transferData: GodownData }> = ({ transferDa
 
       <div className="flex justify-between border-t border-black px-2 py-1 text-[10px]">
         <div>
-          Total Items: <strong>{items.length}</strong>
+          Total Items: <strong>
+            {totalItems === items.length ? 
+              items.length : 
+              `${items.length} / ${totalItems || items.length}`
+            }
+          </strong>
         </div>
-        <div>
-          Total Quantity: <strong>{items.reduce((acc, item) => acc + parseInt(item.qty || '0'), 0)}</strong>
+        <div className="flex justify-between gap-4">
+          <div>
+            Total Quantity: <strong>
+              {(() => {
+                const pageQty = items.reduce((acc, item) => acc + parseInt(item.qty || '0'), 0);
+                const totalQty = totalQuantity || pageQty;
+                return pageQty === totalQty ? 
+                  pageQty : 
+                  `${pageQty} / ${totalQty}`;
+              })()}
+            </strong>
+          </div>
+          {totalPages > 1 && <div>Page: <strong>{currentPage}/{totalPages}</strong></div>}
         </div>
       </div>
     </div>

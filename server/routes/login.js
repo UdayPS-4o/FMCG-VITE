@@ -14,7 +14,7 @@ const { cp } = require('fs');
 const { id } = require('date-fns/locale');
 
 
-app.get('/api/checkiskAuth', (req, res) => {
+app.get('/api/checkIsAuth', (req, res) => {
   const token = req.cookies.token;
   if (!token) {
     return res.status(401).json({ authenticated: false });
@@ -89,11 +89,6 @@ app.post('/api/login', async (req, res) => {
     console.error(err);
     res.status(500).send('Failed to login: ' + err.message);
   }
-});
-
-app.get('/login', async (req, res) => {
-  let firms = await getDbfData(path.join(__dirname, '..', '..', 'FIRM', 'FIRM.DBF'));
-  res.render('pages/login/login', { firm: firms });
 });
 
 app.get('/logout', (req, res) => {

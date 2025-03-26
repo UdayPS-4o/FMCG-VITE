@@ -45,7 +45,9 @@ const CashReceipt: React.FC = () => {
   useEffect(() => {
     const fetchEditData = async () => {
       try {
-        const res = await fetch(constants.baseURL + '/json/cash-receipts');
+        const res = await fetch(constants.baseURL + '/json/cash-receipts', {
+          credentials: 'include'
+        });
         const data = await res.json();
         console.log('data', data);
 
@@ -70,9 +72,13 @@ const CashReceipt: React.FC = () => {
           receiptNo: receiptToEdit.receiptNo,
         });
 
-        const resParty = await fetch(constants.baseURL + '/cmpl');
+        const resParty = await fetch(constants.baseURL + '/cmpl', {
+          credentials: 'include'
+        });
         const partyData = await resParty.json();
-        const balanceRes = await fetch(constants.baseURL + '/json/balance');
+        const balanceRes = await fetch(constants.baseURL + '/json/balance', {
+          credentials: 'include'
+        });
         const balanceData = await balanceRes.json();
 
         const getBalance = (C_CODE: string) =>
@@ -95,13 +101,19 @@ const CashReceipt: React.FC = () => {
 
     const fetchNewData = async () => {
       try {
-        const resReceipt = await fetch(constants.baseURL + '/slink/cash-receipts');
+        const resReceipt = await fetch(constants.baseURL + '/slink/cash-receipts', {
+          credentials: 'include'
+        });
         const dataReceipt = await resReceipt.json();
         setReceiptNo(dataReceipt.nextReceiptNo);
 
-        const resParty = await fetch(constants.baseURL + '/cmpl');
+        const resParty = await fetch(constants.baseURL + '/cmpl', {
+          credentials: 'include'
+        });
         const dataParty = await resParty.json();
-        const balanceRes = await fetch(constants.baseURL + '/json/balance');
+        const balanceRes = await fetch(constants.baseURL + '/json/balance', {
+          credentials: 'include'
+        });
         const balanceData = await balanceRes.json();
 
         const getBalance = (C_CODE: string) =>
@@ -164,6 +176,7 @@ const CashReceipt: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -189,11 +202,11 @@ const CashReceipt: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="bg-gray-50 dark:bg-gray-900">
       <PageMeta title="Cash Receipts" description="Cash Receipts Form" />
       <PageBreadcrumb pageTitle="Cash Receipts" />
       
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto px-4 py-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">Cash Receipt Form</h2>
           

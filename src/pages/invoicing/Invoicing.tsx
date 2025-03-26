@@ -130,7 +130,7 @@ const InvoicingContent: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      const invoiceData = {
+      const apiData = {
         date,
         series,
         cash,
@@ -158,9 +158,10 @@ const InvoicingContent: React.FC = () => {
       const response = await fetch(`${constants.baseURL}/invoicing`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(invoiceData)
+        body: JSON.stringify(apiData),
+        credentials: 'include'
       });
       
       if (!response.ok) {

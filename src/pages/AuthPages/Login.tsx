@@ -14,7 +14,7 @@ const Login: React.FC = () => {
     // If token is present in cookies, redirect to /account-master
     const checkAuthentication = async () => {
       try {
-        const response = await fetch(constants.baseURL + '/api/checkiskAuth', {
+        const response = await fetch(constants.baseURL + '/api/checkIsAuth', {
           method: 'GET',
           credentials: 'include', // Ensure cookies are sent with the request
         });
