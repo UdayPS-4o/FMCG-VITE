@@ -3,13 +3,36 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeToggleButton } from "../components/common/ThemeToggleButton";
-import NotificationDropdown from "../components/header/NotificationDropdown";
 import UserDropdown from "../components/header/UserDropdown";
+import constants from "../constants";
 
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
+
+  // Fetch user data when component mounts
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch(`${constants.baseURL}/api/checkIsAuth`, {
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.authenticated && data.user) {
+            setUser(data.user);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   const handleToggle = () => {
     if (window.innerWidth >= 991) {
@@ -39,6 +62,16 @@ const AppHeader: React.FC = () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  // Generate a random avatar color
+  const getRandomColor = () => {
+    const colors = ['bg-blue-100 text-blue-700', 'bg-green-100 text-green-700', 
+                    'bg-purple-100 text-purple-700', 'bg-yellow-100 text-yellow-700', 
+                    'bg-red-100 text-red-700', 'bg-indigo-100 text-indigo-700'];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+  
+  const avatarColor = getRandomColor();
 
   return (
     <header className="sticky top-0 flex w-full bg-white border-gray-200 z-99999 dark:border-gray-800 dark:bg-gray-900 lg:border-b">
@@ -159,12 +192,29 @@ const AppHeader: React.FC = () => {
           <div className="flex items-center gap-2 2xsm:gap-3">
             {/* <!-- Dark Mode Toggler --> */}
             <ThemeToggleButton />
-            {/* <!-- Dark Mode Toggler --> */}
-            <NotificationDropdown />
-            {/* <!-- Notification Menu Area --> */}
+            {/* Notification dropdown removed */}
           </div>
-          {/* <!-- User Area --> */}
-          <UserDropdown />
+          
+          {/* User Area - replaced with custom user details */}
+          {user ? (
+            <div className="flex items-center space-x-4">
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  {user.name}
+                </span>
+                {user.routeAccess && !user.routeAccess.includes('Admin') && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {user.subgroup?.title || "No subgroup"}
+                  </span>
+                )}
+              </div>
+              <div className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center`}>
+                {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+              </div>
+            </div>
+          ) : (
+            <UserDropdown />
+          )}
         </div>
       </div>
     </header>

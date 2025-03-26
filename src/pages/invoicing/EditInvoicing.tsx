@@ -83,7 +83,9 @@ const EditInvoicingContent: React.FC<{
         
         try {
           console.log(`Fetching invoice data from ${constants.baseURL}/edit/invoicing/${id}`);
-          response = await fetch(`${constants.baseURL}/edit/invoicing/${id}`);
+          response = await fetch(`${constants.baseURL}/edit/invoicing/${id}`, {
+            credentials: 'include'
+          });
           
           if (!response.ok) {
             console.error(`Primary endpoint failed with status: ${response.status}`);
@@ -97,7 +99,9 @@ const EditInvoicingContent: React.FC<{
           
           try {
             console.log(`Trying fallback endpoint ${constants.baseURL}/invoicing/${id}`);
-            response = await fetch(`${constants.baseURL}/invoicing/${id}`);
+            response = await fetch(`${constants.baseURL}/invoicing/${id}`, {
+              credentials: 'include'
+            });
             
             if (!response.ok) {
               throw new Error(`Invoice not found: ${response.statusText}`);
@@ -401,6 +405,7 @@ const EditInvoicingContent: React.FC<{
           dueDays,
           items: formattedItems
         }),
+        credentials: 'include'
       });
       
       if (!response.ok) {

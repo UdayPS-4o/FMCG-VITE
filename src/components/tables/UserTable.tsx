@@ -72,14 +72,15 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
   
   const handleDelete = async (id: number) => {
     if (!id) return;
-    
+
     setIsLoading(true);
     try {
       const response = await fetch(`${baseURL}/slink/deleteUser/?id=${id}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to delete user');
       }

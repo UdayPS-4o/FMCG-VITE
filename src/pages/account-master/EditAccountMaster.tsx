@@ -83,7 +83,9 @@ const EditAccountMaster: React.FC = () => {
           
         console.log(`Using ${isApproved ? 'approved' : 'regular'} endpoint: ${editEndpoint}`);
         
-        const response = await fetch(editEndpoint);
+        const response = await fetch(editEndpoint, {
+          credentials: 'include'
+        });
         
         if (!response.ok) {
           throw new Error(`Failed to fetch account data: ${response.status}`);
@@ -163,7 +165,9 @@ const EditAccountMaster: React.FC = () => {
     const fetchOptions = async () => {
       try {
         // Fetch subgroup options
-        const subgroupResponse = await fetch(`${constants.baseURL}/options/subgroup`);
+        const subgroupResponse = await fetch(`${constants.baseURL}/options/subgroup`, {
+          credentials: 'include'
+        });
         if (subgroupResponse.ok) {
           const data = await subgroupResponse.json();
           console.log('Raw subgroup data from API:', data);
@@ -207,7 +211,9 @@ const EditAccountMaster: React.FC = () => {
         }
         
         // Fetch state options
-        const stateResponse = await fetch(`${constants.baseURL}/options/state`);
+        const stateResponse = await fetch(`${constants.baseURL}/options/state`, {
+          credentials: 'include'
+        });
         if (stateResponse.ok) {
           const data = await stateResponse.json();
           const options = data.map((item: any) => {
@@ -412,6 +418,7 @@ const EditAccountMaster: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(apiData),
+        credentials: 'include'
       });
       
       if (!response.ok) {

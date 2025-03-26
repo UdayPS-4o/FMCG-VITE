@@ -19,7 +19,9 @@ const PrintAccount: React.FC = () => {
       }
 
       try {
-        const response = await fetch(`${constants.baseURL}/edit/account-master/${achead}`);
+        const response = await fetch(`${constants.baseURL}/edit/account-master/${achead}`, {
+          credentials: 'include'
+        });
         
         if (!response.ok) {
           throw new Error(`Failed to fetch account data: ${response.status}`);

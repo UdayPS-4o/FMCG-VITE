@@ -45,7 +45,9 @@ const CashPayment: React.FC = () => {
   useEffect(() => {
     const fetchEditData = async () => {
       try {
-        const res = await fetch(constants.baseURL + '/json/cash-payments');
+        const res = await fetch(constants.baseURL + '/json/cash-payments', {
+          credentials: 'include'
+        });
         const data = await res.json();
         console.log('data', data);
 
@@ -70,9 +72,13 @@ const CashPayment: React.FC = () => {
           voucherNo: paymentToEdit.voucherNo,
         });
 
-        const resParty = await fetch(constants.baseURL + '/cmpl');
+        const resParty = await fetch(constants.baseURL + '/cmpl', {
+          credentials: 'include'
+        });
         const partyData = await resParty.json();
-        const balanceRes = await fetch(constants.baseURL + '/json/balance');
+        const balanceRes = await fetch(constants.baseURL + '/json/balance', {
+          credentials: 'include'
+        });
         const balanceData = await balanceRes.json();
 
         const getBalance = (C_CODE: string) =>
@@ -95,13 +101,19 @@ const CashPayment: React.FC = () => {
 
     const fetchNewData = async () => {
       try {
-        const resVoucher = await fetch(constants.baseURL + '/slink/cash-payments');
+        const resVoucher = await fetch(constants.baseURL + '/slink/cash-payments', {
+          credentials: 'include'
+        });
         const dataVoucher = await resVoucher.json();
         setVoucherNo(dataVoucher.nextVoucherNo);
 
-        const resParty = await fetch(constants.baseURL + '/cmpl');
+        const resParty = await fetch(constants.baseURL + '/cmpl', {
+          credentials: 'include'
+        });
         const dataParty = await resParty.json();
-        const balanceRes = await fetch(constants.baseURL + '/json/balance');
+        const balanceRes = await fetch(constants.baseURL + '/json/balance', {
+          credentials: 'include'
+        });
         const balanceData = await balanceRes.json();
 
         const getBalance = (C_CODE: string) =>
@@ -160,10 +172,11 @@ const CashPayment: React.FC = () => {
       const route = isEditMode ? `/slink/editCashPayment` : `/cash-payments`;
       const response = await fetch(constants.baseURL + route, {
         method: 'POST',
-        body: JSON.stringify(formValues),
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify(formValues),
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -189,11 +202,11 @@ const CashPayment: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="bg-gray-50 dark:bg-gray-900">
       <PageMeta title="Cash Payments" description="Cash Payments Form" />
       <PageBreadcrumb pageTitle="Cash Payments" />
       
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto px-4 py-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">Cash Payment Form</h2>
           

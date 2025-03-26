@@ -62,7 +62,9 @@ const EditGodownTransfer: React.FC = () => {
     const fetchOptions = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(`${baseURL}/api/dbf/godown.json`);
+        const res = await fetch(`${baseURL}/api/dbf/godown.json`, {
+          credentials: 'include'
+        });
         const data = await res.json();
         if (Array.isArray(data)) {
           setPartyOptions(data);
@@ -76,7 +78,9 @@ const EditGodownTransfer: React.FC = () => {
 
     const fetchPmplData = async () => {
       try {
-        const pmplRes = await fetch(`${baseURL}/api/dbf/pmpl.json`);
+        const pmplRes = await fetch(`${baseURL}/api/dbf/pmpl.json`, {
+          credentials: 'include'
+        });
         const pmplDatas = await pmplRes.json();
         setPmplData(pmplDatas);
       } catch (error) {
@@ -86,7 +90,9 @@ const EditGodownTransfer: React.FC = () => {
 
     const fetchStockData = async () => {
       try {
-        const stockRes = await fetch(`${baseURL}/api/stock`);
+        const stockRes = await fetch(`${baseURL}/api/stock`, {
+          credentials: 'include'
+        });
         const stockDatas = await stockRes.json();
         setStockData(stockDatas);
       } catch (error) {
@@ -144,7 +150,9 @@ const EditGodownTransfer: React.FC = () => {
           
           try {
             console.log(`Fetching godown transfer data from ${baseURL}/edit/godown/${id}`);
-            response = await fetch(`${baseURL}/edit/godown/${id}`);
+            response = await fetch(`${baseURL}/edit/godown/${id}`, {
+              credentials: 'include'
+            });
             
             if (!response.ok) {
               console.error(`Primary endpoint failed with status: ${response.status}`);
@@ -158,7 +166,9 @@ const EditGodownTransfer: React.FC = () => {
             
             try {
               console.log(`Trying fallback endpoint ${baseURL}/godown/${id}`);
-              response = await fetch(`${baseURL}/godown/${id}`);
+              response = await fetch(`${baseURL}/godown/${id}`, {
+                credentials: 'include'
+              });
               
               if (!response.ok) {
                 throw new Error(`Godown transfer not found: ${response.statusText}`);
@@ -171,6 +181,23 @@ const EditGodownTransfer: React.FC = () => {
               throw new Error('Failed to fetch godown transfer data from both endpoints');
             }
           }
+          
+          // Helper function to map unit codes to actual unit values
+          const getUnitValue = (unitCode: string, product: any) => {
+            if (!product) return unitCode;
+            
+            // If the unit code matches UNIT_1, return UNIT_1
+            if (unitCode === '01' && product.UNIT_1) return product.UNIT_1;
+            
+            // If the unit code matches UNIT_2, return UNIT_2
+            if (unitCode === '02' && product.UNIT_2) return product.UNIT_2;
+            
+            // If unitCode is already a valid unit name (not a code), return it as is
+            if (unitCode === product.UNIT_1 || unitCode === product.UNIT_2) return unitCode;
+            
+            // Default to UNIT_1 if we can't match
+            return product.UNIT_1 || unitCode;
+          };
           
           if (data) {
             // Adjust stock data to include the current items being edited
@@ -190,12 +217,15 @@ const EditGodownTransfer: React.FC = () => {
                   (adjustedStockData[item.code]?.[data.fromGodown] || 0).toString() : 
                   '';
                 
+                // Map the unit code to actual unit text value
+                const unitValue = getUnitValue(item.unit, product);
+                
                 return {
                   item: item.code,
                   stock: stockValue || product?.STK || '',
                   pack: product?.PACK || '',
                   gst: product?.GST || '',
-                  unit: item.unit || product?.UNIT_1 || '',
+                  unit: unitValue,
                   pcBx: product?.MULT_F || '',
                   mrp: product?.MRP1 || '',
                   rate: product?.RATE1 || '',
@@ -381,6 +411,24 @@ const EditGodownTransfer: React.FC = () => {
       setClicked(false);
       return;
     }
+    
+    // Helper function to map unit text back to code if needed
+    const mapUnitToCode = (unit: string, itemCode: string) => {
+      const product = pmplData.find(p => p.CODE === itemCode);
+      if (!product) return unit;
+      
+      // If the unit matches UNIT_1, return '01'
+      if (unit === product.UNIT_1) return '01';
+      
+      // If the unit matches UNIT_2, return '02'
+      if (unit === product.UNIT_2) return '02';
+      
+      // If it's already a code, return as is
+      if (unit === '01' || unit === '02') return unit;
+      
+      // Default to the original unit
+      return unit;
+    };
 
     const payload = {
       date: formValues.date,
@@ -391,17 +439,18 @@ const EditGodownTransfer: React.FC = () => {
       items: items.map((el) => ({
         code: el.item,
         qty: el.qty,
-        unit: el.unit
+        unit: mapUnitToCode(el.unit, el.item)
       })),
     };
 
     try {
-      const res = await fetch(`${baseURL}/godown/${id}`, {
-        method: 'PUT',
+      const res = await fetch(`${baseURL}/edit/godown`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+        credentials: 'include'
       });
       const json = await res.json();
       showToast(json.message || 'Godown transfer updated successfully', 'success');

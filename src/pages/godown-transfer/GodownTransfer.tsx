@@ -59,11 +59,15 @@ const GodownTransfer: React.FC = () => {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const idRes = await fetch(`${baseURL}/slink/godownId`);
+        const idRes = await fetch(`${baseURL}/slink/godownId`, {
+          credentials: 'include'
+        });
         const idData = await idRes.json();
         setId(idData.nextGodownId);
 
-        const res = await fetch(`${baseURL}/api/dbf/godown.json`);
+        const res = await fetch(`${baseURL}/api/dbf/godown.json`, {
+          credentials: 'include'
+        });
         const data = await res.json();
         if (Array.isArray(data)) {
           setPartyOptions(data);
@@ -77,7 +81,9 @@ const GodownTransfer: React.FC = () => {
 
     const fetchPmplData = async () => {
       try {
-        const pmplRes = await fetch(`${baseURL}/api/dbf/pmpl.json`);
+        const pmplRes = await fetch(`${baseURL}/api/dbf/pmpl.json`, {
+          credentials: 'include'
+        });
         const pmplDatas = await pmplRes.json();
         setPmplData(pmplDatas);
       } catch (error) {
@@ -87,7 +93,9 @@ const GodownTransfer: React.FC = () => {
 
     const fetchStockData = async () => {
       try {
-        const stockRes = await fetch(`${baseURL}/api/stock`);
+        const stockRes = await fetch(`${baseURL}/api/stock`, {
+          credentials: 'include'
+        });
         const stockDatas = await stockRes.json();
         setStockData(stockDatas);
       } catch (error) {
@@ -265,6 +273,7 @@ const GodownTransfer: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+        credentials: 'include'
       });
       const json = await res.json();
       showToast(json.message || 'Godown transfer created successfully', 'success');

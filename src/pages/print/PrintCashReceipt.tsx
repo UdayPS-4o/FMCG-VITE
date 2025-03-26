@@ -70,7 +70,9 @@ const PrintCashReceipt: React.FC = () => {
 
       try {
         // Make the API call using the exact same pattern as the React version
-        const response = await fetch(`${constants.baseURL}/print?${queryKey}=${value}`);
+        const response = await fetch(`${constants.baseURL}/print?${queryKey}=${value}`, {
+          credentials: 'include'
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch data');
         }

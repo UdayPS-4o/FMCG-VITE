@@ -65,7 +65,9 @@ const AddUser: React.FC = () => {
       
       try {
         const url = `${constants.baseURL}/slink/json/users`;
-        const response = await fetch(url);
+        const response = await fetch(url, {
+          credentials: 'include'
+        });
         
         if (!response.ok) {
           throw new Error('Failed to fetch user data');
@@ -113,7 +115,9 @@ const AddUser: React.FC = () => {
     const fetchSubgroupData = async () => {
       try {
         const url = `${constants.baseURL}/slink/subgrp`;
-        const response = await fetch(url);
+        const response = await fetch(url, {
+          credentials: 'include'
+        });
         
         if (!response.ok) {
           throw new Error('Failed to fetch subgroup data');
@@ -150,13 +154,19 @@ const AddUser: React.FC = () => {
         payload.id = userId;
       }
       
-      const endpoint = isEdit ? '/slink/editUser' : '/slink/addUser';
-      const url = `${constants.baseURL}${endpoint}`;
+      const url = isEdit 
+        ? `${constants.baseURL}/api/users/${userId}` 
+        : `${constants.baseURL}/api/users`;
+      
+      const method = isEdit ? 'PUT' : 'POST';
       
       const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
+        credentials: 'include'
       });
       
       if (!response.ok) {

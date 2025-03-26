@@ -39,7 +39,7 @@ const customScrollbarStyles = `
   
   .autocomplete-dropdown {
     position: absolute;
-    z-index: 99999;
+    z-index: 9000;
     max-height: 240px;
     overflow-y: auto;
     width: var(--dropdown-width);
@@ -57,7 +57,7 @@ const customScrollbarStyles = `
   
   .dropdown-container {
     position: absolute;
-    z-index: 99999;
+    z-index: 9000;
     width: 100%;
     left: 0;
     top: 100%;
@@ -297,7 +297,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
             width: `${dropdownPosition.width}px`,
-            zIndex: 999999,
+            zIndex: 9000,
             maxHeight: '240px',
             overflowY: 'auto',
             borderRadius: '8px',
