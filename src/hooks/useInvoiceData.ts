@@ -128,9 +128,12 @@ export const useInvoiceData = () => {
           : [];
 
         // Filter salesmen (codes that start with 'SM')
-        const sms = parties.filter(p => 
-          p.value.toString().startsWith('SM')
-        );
+        const sms = parties.filter(p => {
+          // Skip any item with undefined or null value
+          if (p.value === undefined || p.value === null) return false;
+          // Only include items where value starts with 'SM'
+          return p.value.toString().startsWith('SM');
+        });
 
         // Set all state
         setPartyOptions(parties);

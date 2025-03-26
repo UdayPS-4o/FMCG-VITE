@@ -2,6 +2,7 @@ const express = require('express');
 const app = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
+const { getCmplData } = require('./utilities');
 const baseURL = 'http://localhost:8000';
 function convertAmountToWords(amount) {
   const oneToTwenty = [
@@ -51,7 +52,7 @@ function convertAmountToWords(amount) {
       words = tens[number % 10] + ' ' + words;
       number = Math.floor(number / 10);
     }
-    if (number === 0) return words;
+    if (number == 0) return words;
     return oneToTwenty[number] + ' Hundred ' + words;
   }
 
@@ -75,35 +76,38 @@ app.get('/print', async (req, res) => {
     if (!ReceiptNo && !voucherNo && !godownId)
       throw new Error('ReceiptNo or VoucherNo is required');
     if (ReceiptNo) {
-      const data = await fetch(baseURL + '/json/cash-receipts');
-      const json = await data.json();
-      const receipt = json.find((receipt) => receipt.receiptNo === ReceiptNo);
+      const data = await fs.readFile(path.resolve(__dirname, '../db/cash-receipts.json'), 'utf8');
+      const json = JSON.parse(data);
+      const receipt = json.find((receipt) => receipt.receiptNo == ReceiptNo);
       console.log('receipt', receipt);
-      const cmpl = await fetch(baseURL + '/cmpl');
-      const cmplJson = await cmpl.json();
-      const cmplData = cmplJson.find((cmpl) => cmpl.C_CODE === receipt.party);
+      
+      const cmplJson = await getCmplData();
+      const cmplInfo = cmplJson.find((cmpl) => cmpl.C_CODE == receipt.party);
+      
       const AmountInWords = convertAmountToWords(receipt.amount);
-      res.send({ ...receipt, ...cmplData, AmountInWords });
+      res.send({ ...receipt, ...cmplInfo, AmountInWords });
     }
     if (voucherNo) {
-      const data = await fetch(baseURL + '/json/cash-payments');
-      const json = await data.json();
-      const receipt = json.find((receipt) => receipt.voucherNo === voucherNo);
-      const cmpl = await fetch(baseURL + '/cmpl');
-      const cmplJson = await cmpl.json();
-      const cmplData = cmplJson.find((cmpl) => cmpl.C_CODE === receipt.party);
+      const data = await fs.readFile(path.resolve(__dirname, '../db/cash-payments.json'), 'utf8');
+      const json = JSON.parse(data);
+      const receipt = json.find((receipt) => receipt.voucherNo == voucherNo);
+      
+      const cmplJson = await getCmplData();
+      const cmplInfo = cmplJson.find((cmpl) => cmpl.C_CODE == receipt.party);
+      
       const AmountInWords = convertAmountToWords(receipt.amount);
-      res.send({ ...receipt, ...cmplData, AmountInWords });
+      res.send({ ...receipt, ...cmplInfo, AmountInWords });
     }
     if (godownId) {
-      const data = await fetch(baseURL + '/json/godown');
-      const json = await data.json();
-      const receipt = json.find((receipt) => receipt.id === godownId);
-      const cmpl = await fetch(baseURL + '/cmpl');
-      const cmplJson = await cmpl.json();
-      const cmplData = cmplJson.find((cmpl) => cmpl.C_CODE === receipt.party);
+      const data = await fs.readFile(path.resolve(__dirname, '../db/godown.json'), 'utf8');
+      const json = JSON.parse(data);
+      const receipt = json.find((receipt) => receipt.id == godownId);
+      
+      const cmplJson = await getCmplData();
+      const cmplInfo = cmplJson.find((cmpl) => cmpl.C_CODE == receipt.party);
+      
       const AmountInWords = convertAmountToWords(receipt.amount);
-      res.send({ ...receipt, ...cmplData, AmountInWords });
+      res.send({ ...receipt, ...cmplInfo, AmountInWords });
     }
   } catch (error) {
     console.log(error);
@@ -113,9 +117,10 @@ app.get('/print', async (req, res) => {
 app.get('/account-master', async (req, res) => {
   try {
     const { code } = req.query;
-    const data = await fetch(baseURL + '/json/account-master');
-    const json = await data.json();
-    const user = json.find((user) => user.C_CODE === req.query.code);
+    const data = await fs.readFile(path.resolve(__dirname, '../db/account-master.json'));
+    const json = JSON.parse(data);
+    const user = json.find((user) => user.C_CODE == req.query.code);
+    res.send(user);
   } catch (error) {
     console.log(error);
     res.send(error);
@@ -127,7 +132,7 @@ app.post('/signin', async (req, res) => {
     const { username, password } = req.body;
     const data = await fs.readFile(path.resolve(__dirname, '../db/users.json'));
     const users = JSON.parse(data);
-    const user = users.find((user) => user.username === username && user.password === password);
+    const user = users.find((user) => user.username == username && user.password == password);
     console.log('user', user);
     if (!user) throw new Error('Invalid username or password');
     res.send(user);
@@ -144,15 +149,15 @@ app.post('/approve', async (req, res) => {
     const data = await fs.readFile(path.resolve(__dirname, `../db/${endpoint}.json`));
     const json = JSON.parse(data);
     const id =
-      endpoint === 'account-master'
+      endpoint == 'account-master'
         ? 'subgroup'
-        : endpoint === 'cash-receipts'
+        : endpoint == 'cash-receipts'
         ? 'receiptNo'
-        : endpoint === 'godown'
+        : endpoint == 'godown'
         ? 'id'
-        : endpoint === 'cash-payments'
+        : endpoint == 'cash-payments'
         ? 'voucherNo'
-        : endpoint === 'invoicing'
+        : endpoint == 'invoicing'
         ? 'id'
         : null;
 
@@ -212,13 +217,13 @@ app.post('/toDBF', async (req, res) => {
     const data = await fs.readFile(path.resolve(__dirname, `../db/${endpoint}.json`));
     const json = JSON.parse(data);
     const id =
-      endpoint === 'account-master'
+      endpoint == 'account-master'
         ? 'subgroup'
-        : endpoint === 'cash-receipts'
+        : endpoint == 'cash-receipts'
         ? 'receiptNo'
-        : endpoint === 'godown'
+        : endpoint == 'godown'
         ? 'id'
-        : endpoint === 'cash-payments'
+        : endpoint == 'cash-payments'
         ? 'voucherNo'
         : null;
 
@@ -276,7 +281,7 @@ app.post('/revert-approved', async (req, res) => {
   try {
     const { endpoint, records } = req.body;
     
-    if (!endpoint || !records || !Array.isArray(records) || records.length === 0) {
+    if (!endpoint || !records || !Array.isArray(records) || records.length == 0) {
       return res.status(400).json({ 
         success: false, 
         message: 'Invalid request. Endpoint and records are required.' 
@@ -301,22 +306,22 @@ app.post('/revert-approved', async (req, res) => {
 
     // Identify the ID field based on the endpoint
     const idField = 
-      endpoint === 'account-master' ? 'subgroup' :
-      endpoint === 'cash-receipts' ? 'receiptNo' :
-      endpoint === 'godown' ? 'id' :
-      endpoint === 'cash-payments' ? 'voucherNo' :
-      endpoint === 'invoicing' ? 'id' : 'id';
+      endpoint == 'account-master' ? 'subgroup' :
+      endpoint == 'cash-receipts' ? 'receiptNo' :
+      endpoint == 'godown' ? 'id' :
+      endpoint == 'cash-payments' ? 'voucherNo' :
+      endpoint == 'invoicing' ? 'id' : 'id';
     
     // Find the records to revert
     const recordsToRevert = approvedData.filter(item => {
       const itemIdValue = String(item[idField]).toLowerCase();
       return records.some(record => {
         const recordIdValue = String(record[idField]).toLowerCase();
-        return itemIdValue === recordIdValue;
+        return itemIdValue == recordIdValue;
       });
     });
     
-    if (recordsToRevert.length === 0) {
+    if (recordsToRevert.length == 0) {
       return res.status(404).json({
         success: false,
         message: 'No matching records found to revert'
@@ -328,7 +333,7 @@ app.post('/revert-approved', async (req, res) => {
       const itemIdValue = String(item[idField]).toLowerCase();
       return !records.some(record => {
         const recordIdValue = String(record[idField]).toLowerCase();
-        return itemIdValue === recordIdValue;
+        return itemIdValue == recordIdValue;
       });
     });
     
@@ -380,7 +385,7 @@ app.post('/delete-approved-records', async (req, res) => {
   try {
     const { endpoint, records } = req.body;
     
-    if (!endpoint || !records || !Array.isArray(records) || records.length === 0) {
+    if (!endpoint || !records || !Array.isArray(records) || records.length == 0) {
       return res.status(400).json({ 
         success: false, 
         message: 'Invalid request. Endpoint and records are required.' 
@@ -405,18 +410,18 @@ app.post('/delete-approved-records', async (req, res) => {
 
     // Identify the ID field based on the endpoint
     const idField = 
-      endpoint === 'account-master' ? 'subgroup' :
-      endpoint === 'cash-receipts' ? 'receiptNo' :
-      endpoint === 'godown' ? 'id' :
-      endpoint === 'cash-payments' ? 'voucherNo' :
-      endpoint === 'invoicing' ? 'id' : 'id';
+      endpoint == 'account-master' ? 'subgroup' :
+      endpoint == 'cash-receipts' ? 'receiptNo' :
+      endpoint == 'godown' ? 'id' :
+      endpoint == 'cash-payments' ? 'voucherNo' :
+      endpoint == 'invoicing' ? 'id' : 'id';
     
     // Remove the specified records from approved section
     const remainingApproved = approvedData.filter(item => {
       const itemIdValue = String(item[idField]).toLowerCase();
       return !records.some(record => {
         const recordIdValue = String(record[idField]).toLowerCase();
-        return itemIdValue === recordIdValue;
+        return itemIdValue == recordIdValue;
       });
     });
     

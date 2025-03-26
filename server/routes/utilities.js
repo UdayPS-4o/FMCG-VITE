@@ -26,7 +26,13 @@ const getCmplData = async (req, res) => {
   const dbfFilePath = path.join(__dirname, "..", "..", "d01-2324/data", "CMPL.dbf");
   console.log(dbfFilePath);
   try {
-    let jsonData = await getDbfData(dbfFilePath);
+    console.log("-----------------------------------------------------")
+    let jsonData = await fs.readFile(path.resolve(__dirname,  "..", "..", "d01-2324/data/json", "CMPL.json"), 'utf8');
+    console.log(path.resolve(__dirname,  "..", "..", "d01-2324/data/json", "CMPL.json"));
+    
+    // Parse the JSON string into an array
+    jsonData = JSON.parse(jsonData);
+    
     /*just keep these keys
     "M_GROUP": "CT",
     "M_NAME": "Sundry Creditors",
@@ -49,10 +55,22 @@ const getCmplData = async (req, res) => {
 
     jsonData = jsonData.filter(entry => !entry.C_NAME.includes('OPENING'));
 
-    if (req === "99") return jsonData;
-    else res.json(jsonData);
+    // Fix the conditional logic
+    if (req === "99") {
+      return jsonData; // Just return the data when req is "99"
+    } else if (res && typeof res.json === 'function') {
+      res.json(jsonData); // Only call res.json if res exists and has json method
+    } else {
+      console.error("Response object is missing or invalid");
+      return jsonData; // Return the data as fallback
+    }
   } catch (error) {
-    res.status(500).send(error);
+    console.error("Error in getCmplData:", error);
+    if (res && typeof res.status === 'function') {
+      res.status(500).send(error.message || String(error));
+    } else {
+      throw error; // Re-throw the error if we can't send a response
+    }
   }
 };
 
