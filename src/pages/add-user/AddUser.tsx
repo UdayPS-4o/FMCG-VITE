@@ -56,7 +56,7 @@ const AddUser: React.FC = () => {
   const [userId, setUserId] = useState<number | null>(null);
   
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -95,7 +95,23 @@ const AddUser: React.FC = () => {
             setPowers(Array.isArray(userToEdit.powers) 
               ? userToEdit.powers 
               : [userToEdit.powers]);
-            setSubgroup(userToEdit.subgroup);
+            
+            // Make sure to set the subgroup correctly
+            if (userToEdit.subgroup) {
+              // Wait for subgroupOptions to be loaded
+              if (subgroupOptions.length > 0) {
+                const matchedSubgroup = subgroupOptions.find(
+                  sg => sg.title === userToEdit.subgroup.title || 
+                       sg.subgroupCode === userToEdit.subgroup.subgroupCode
+                );
+                setSubgroup(matchedSubgroup || userToEdit.subgroup);
+              } else {
+                // Store the subgroup to be matched when subgroupOptions loads
+                setSubgroup(userToEdit.subgroup);
+              }
+            } else {
+              setSubgroup(null);
+            }
           } else {
             setError('User not found');
           }
@@ -134,6 +150,20 @@ const AddUser: React.FC = () => {
     fetchSubgroupData();
   }, []);
 
+  // Update subgroup when subgroupOptions changes and we're in edit mode
+  useEffect(() => {
+    if (isEdit && subgroup && subgroupOptions.length > 0) {
+      // Try to find a matching subgroup in the loaded options
+      const matchedSubgroup = subgroupOptions.find(
+        sg => sg.title === subgroup.title || sg.subgroupCode === subgroup.subgroupCode
+      );
+      
+      if (matchedSubgroup) {
+        setSubgroup(matchedSubgroup);
+      }
+    }
+  }, [subgroupOptions, isEdit, subgroup]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -147,7 +177,7 @@ const AddUser: React.FC = () => {
         routeAccess,
         powers,
         username: 'admin',
-        subgroup: subgroup ? { title: subgroup.title } : null,
+        subgroup: subgroup ? subgroup : null,
       };
       
       if (isEdit && userId) {
@@ -155,10 +185,10 @@ const AddUser: React.FC = () => {
       }
       
       const url = isEdit 
-        ? `${constants.baseURL}/api/users/${userId}` 
-        : `${constants.baseURL}/api/users`;
+        ? `${constants.baseURL}/slink/editUser` 
+        : `${constants.baseURL}/slink/addUser`;
       
-      const method = isEdit ? 'PUT' : 'POST';
+      const method = 'POST';
       
       const response = await fetch(url, {
         method,
@@ -183,16 +213,17 @@ const AddUser: React.FC = () => {
       
       setUserData(updatedUsers);
       
-      // Reset form if not editing
-      if (!isEdit) {
-        setName('');
-        setNumber('');
-        setPassword('');
-        setRouteAccess([]);
-        setPowers([]);
-        setSubgroup(null);
-      } else {
-        // Redirect to add-user page after successful update
+      // If the currently logged in user is being edited, refresh their data
+      if (isEdit && user && user.id === userId) {
+        // Refresh the user data to reflect new permissions immediately
+        await refreshUser();
+      }
+      
+      // Reset form after save
+      handleClearForm();
+      
+      // Redirect to add-user page after successful update if in edit mode
+      if (isEdit) {
         navigate('/add-user');
       }
       
@@ -207,6 +238,18 @@ const AddUser: React.FC = () => {
   const handleUserDeleted = (deletedId: number) => {
     // Update user data after a user is deleted
     setUserData(userData.filter(user => user.id !== deletedId));
+  };
+
+  // Function to clear the form
+  const handleClearForm = () => {
+    setName('');
+    setNumber('');
+    setPassword('');
+    setRouteAccess([]);
+    setPowers([]);
+    setSubgroup(null);
+    setIsEdit(false);
+    setUserId(null);
   };
 
   return (
@@ -282,6 +325,7 @@ const AddUser: React.FC = () => {
                       setSubgroup(selected || null);
                     }}
                     defaultValue={subgroup?.subgroupCode ?? ''}
+                    value={subgroup?.subgroupCode ?? ''}
                     autoComplete="off"
                   />
                 </div>
@@ -324,7 +368,7 @@ const AddUser: React.FC = () => {
                 <button
                   type="button"
                   className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-                  onClick={() => navigate('/db/users')}
+                  onClick={handleClearForm}
                   disabled={isLoading}
                 >
                   Cancel

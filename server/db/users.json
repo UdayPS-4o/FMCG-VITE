@@ -63,12 +63,14 @@
     ],
     "powers": [
       "Write",
-      "Read"
+      "Read",
+      "Delete"
     ],
     "subgroup": {
-      "title": "ADEGAON"
+      "title": "ADEGAON",
+      "subgroupCode": "AD002"
     },
-    "token": "vuhkoq"
+    "token": "n15pum"
   },
   {
     "id": 8,
@@ -85,27 +87,31 @@
     "powers": [
       "Write"
     ],
-    "subgroup": null,
+    "subgroup": {
+      "title": "BANDOL-CHAPARA",
+      "subgroupCode": "BC004"
+    },
     "token": "13zdi7"
   },
   {
-    "id": 9,
-    "name": "milan",
+    "id": 10,
+    "name": "udayps",
     "username": "admin",
-    "number": "9898989898",
-    "password": "milan123",
+    "number": "udayps",
+    "password": "udayps",
     "routeAccess": [
-      "Account Master",
-      "Invoicing"
+      "Godown Transfer",
+      "Cash Receipts"
     ],
     "powers": [
       "Read",
-      "Write",
-      "Delete"
+      "Delete",
+      "Write"
     ],
     "subgroup": {
-      "title": "ADEGAON"
+      "title": "HUL SHAKTI",
+      "subgroupCode": "SK001"
     },
-    "token": "oddb24"
+    "token": "h884jk"
   }
 ]

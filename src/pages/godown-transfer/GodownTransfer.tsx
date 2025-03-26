@@ -54,6 +54,7 @@ const GodownTransfer: React.FC = () => {
     items: [] as ItemData[],
   });
   const [expanded, setExpanded] = useState<number | false>(0);
+  const [stockDataLoaded, setStockDataLoaded] = useState<boolean>(false);
   const baseURL = constants.baseURL;
 
   useEffect(() => {
@@ -98,8 +99,10 @@ const GodownTransfer: React.FC = () => {
         });
         const stockDatas = await stockRes.json();
         setStockData(stockDatas);
+        setStockDataLoaded(true);
       } catch (error) {
         console.error('Error fetching stock data:', error);
+        setStockDataLoaded(false);
       }
     };
 
@@ -146,8 +149,8 @@ const GodownTransfer: React.FC = () => {
     const selectedGodown = partyOptions.find(option => option.GDN_CODE === value);
     setToGodown(selectedGodown);
     
-    // If this is the first time both godowns are selected, add the first item
-    if (value && formValues.fromGodown && formValues.items.length === 0) {
+    // If this is the first time both godowns are selected and stock data is loaded, add the first item
+    if (value && formValues.fromGodown && formValues.items.length === 0 && stockDataLoaded) {
       addItem(value);
     } else {
       setFormValues({ ...formValues, toGodown: value });
@@ -157,7 +160,7 @@ const GodownTransfer: React.FC = () => {
   const getAvailableItems = () => {
     const selectedCodes = new Set(formValues.items.map((item) => item.item));
     
-    if (!formValues.fromGodown) return [];
+    if (!formValues.fromGodown || !stockDataLoaded) return [];
     
     // Filter products that have stock in the selected "From Godown"
     return pmplData.filter((pmpl) => {
@@ -267,7 +270,7 @@ const GodownTransfer: React.FC = () => {
     };
 
     try {
-      const res = await fetch(`${baseURL}/api/godown`, {
+      const res = await fetch(`${baseURL}/godown`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -275,8 +278,14 @@ const GodownTransfer: React.FC = () => {
         body: JSON.stringify(payload),
         credentials: 'include'
       });
+      
+      if (!res.ok) {
+        throw new Error(`Error ${res.status}: ${await res.text()}`);
+      }
+      
       const json = await res.json();
       showToast(json.message || 'Godown transfer created successfully', 'success');
+      
       // Reset form or redirect
       setTimeout(() => {
         window.location.href = '/db/godown-transfer';
@@ -434,8 +443,9 @@ const GodownTransfer: React.FC = () => {
               type="button"
               className="px-4 py-2 text-brand-500 border border-brand-500 rounded-md hover:bg-brand-50 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800"
               onClick={() => addItem()}
+              disabled={!stockDataLoaded}
             >
-              Add Another Item
+              {!stockDataLoaded ? 'Loading Stock Data...' : 'Add Another Item'}
             </button>
           </div>
         )}

@@ -220,7 +220,7 @@ const AppSidebar: React.FC = () => {
         return false;
       }
 
-      // Check if user has access to main menu item
+      // Filter main menu items with direct paths
       if (item.path) {
         if (item.name === "Account Master" && !user.routeAccess.includes('Account Master')) return false;
         if (item.name === "Invoicing" && !user.routeAccess.includes('Invoicing')) return false;
@@ -230,30 +230,55 @@ const AppSidebar: React.FC = () => {
         return true;
       }
 
-      // For items with subitems, filter the subitems too
+      // For items with subitems, handle properly
       if (item.subItems) {
-        const filteredSubItems = item.subItems.filter(subItem => {
-          if (subItem.name === "Account Master" && !user.routeAccess.includes('Account Master')) return false;
-          if (subItem.name === "Invoicing" && !user.routeAccess.includes('Invoicing')) return false;
-          if (subItem.name === "Godown Transfer" && !user.routeAccess.includes('Godown Transfer')) return false;
-          if (subItem.name === "Cash Receipts" && !user.routeAccess.includes('Cash Receipts')) return false;
-          if (subItem.name === "Cash Payments" && !user.routeAccess.includes('Cash Payments')) return false;
-          return true;
-        });
+        // Special case for "Approved" section - only show to Admin
+        if (item.name === "Approved") {
+          return false;
+        }
 
+        // For Database section, filter subitems based on user access
+        if (item.name === "Database") {
+          const accessibleSubItems = item.subItems.filter(subItem => {
+            if (subItem.name === "Account Master") return user.routeAccess.includes('Account Master');
+            if (subItem.name === "Invoicing") return user.routeAccess.includes('Invoicing');
+            if (subItem.name === "Godown Transfer") return user.routeAccess.includes('Godown Transfer');
+            if (subItem.name === "Cash Receipts") return user.routeAccess.includes('Cash Receipts');
+            if (subItem.name === "Cash Payments") return user.routeAccess.includes('Cash Payments');
+            return false;
+          });
+          
+          // Only show Database section if it has accessible subitems
+          if (accessibleSubItems.length === 0) {
+            return false;
+          }
+          
+          // Create a new item with only the accessible subitems
+          item.subItems = accessibleSubItems;
+          return true;
+        }
+        
+        // Filter subitems for other sections
+        const filteredSubItems = item.subItems.filter(subItem => {
+          if (subItem.name === "Account Master") return user.routeAccess.includes('Account Master');
+          if (subItem.name === "Invoicing") return user.routeAccess.includes('Invoicing');
+          if (subItem.name === "Godown Transfer") return user.routeAccess.includes('Godown Transfer');
+          if (subItem.name === "Cash Receipts") return user.routeAccess.includes('Cash Receipts');
+          if (subItem.name === "Cash Payments") return user.routeAccess.includes('Cash Payments');
+          return false;
+        });
+        
         // If all subitems are filtered out, don't show the parent item
         if (filteredSubItems.length === 0) {
           return false;
         }
-
-        // Return a new object with filtered subitems
-        return {
-          ...item,
-          subItems: filteredSubItems
-        };
+        
+        // Update the item with filtered subitems
+        item.subItems = filteredSubItems;
+        return true;
       }
 
-      return true;
+      return false;
     });
 
     console.log("Filtered menu items:", filtered.map(item => item.name));

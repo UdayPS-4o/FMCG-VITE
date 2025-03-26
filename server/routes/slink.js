@@ -30,10 +30,6 @@ const getCmplData = async () => {
 };
 
 const completeCmplData = async (C_CODE) => {
-  // 'd01-2324',
-  //           'data',
-  //           'json',
-  // cmpl.json
   const dbfFilePath = path.join(__dirname, '..', '..', 'd01-2324/data/json', 'CMPL.json');
   const cmplData = await fs.readFile(dbfFilePath, 'utf8');
   let jsonData = JSON.parse(cmplData);
@@ -65,28 +61,19 @@ const getPMPLData = async () => {
 function newData(json, accountMasterData) {
   json = json.filter((item) => item.M_GROUP === 'DT');
 
-  let usersList = json.map((user) => ({
-    name: user.C_NAME,
-    title: user.C_NAME,
-    email: user.C_CODE,
-    value: user.C_CODE.substring(0, 2),
+  let filteredList = json.filter((item) => item.C_CODE.endsWith('000'));
+  filteredList.sort((a, b) => a.C_CODE.localeCompare(b.C_CODE));
+
+  return filteredList.map((item) => ({
+    title: `${item.C_NAME} | ${getNextSubgroupCode(accountMasterData, json, item.C_CODE.substring(0, 2)).slice(2)}`,
+    subgroupCode: getNextSubgroupCode(accountMasterData, json, item.C_CODE.substring(0, 2))
   }));
-
-  usersList = usersList.filter((user) => user.email.endsWith('000'));
-  usersList = usersList.filter((user) => user.name && user.email);
-  usersList.sort((a, b) => a.email.localeCompare(b.email));
-
-  let newUserList = usersList.map((user) => ({
-    title: user.name,
-    subgroupCode: getNextSubgroupCode(accountMasterData, user.value),
-  }));
-
-  return newUserList;
 }
 
-function getNextSubgroupCode(accountMasterData, subGroup) {
-  let maxCode = 0;
-
+function getNextSubgroupCode(accountMasterData, cmplData, subGroup) {
+  let maxLocalCode = 0;
+  let maxDbfCode = 0;
+  
   // Filter entries in accountMasterData that match the current subGroup prefix
   const filterData = accountMasterData.filter((entry) => entry.subgroup.startsWith(subGroup));
 
@@ -94,16 +81,33 @@ function getNextSubgroupCode(accountMasterData, subGroup) {
     // Iterate through filtered data to find the highest subgroup number
     filterData.forEach((entry) => {
       const entryNumber = parseInt(entry.subgroup.slice(2), 10); // Get the numeric part of the subgroup code
-      if (maxCode < entryNumber) {
-        maxCode = entryNumber;
+      if (maxLocalCode < entryNumber) {
+        maxLocalCode = entryNumber;
       }
     });
-    // Increment the max code for the new subgroup
-    return subGroup + (maxCode + 1).toString().padStart(3, '0');
   }
 
-  // If no matching subgroup exists, return the initial code
-  return `${subGroup}001`;
+  // Now check CMPL data for the same prefix
+  const cmplFilterData = cmplData.filter((entry) => entry.C_CODE.startsWith(subGroup));
+  
+  if (cmplFilterData.length > 0) {
+    // Iterate through filtered CMPL data to find the highest code number
+    cmplFilterData.forEach((entry) => {
+      // Skip entries ending with 000 as they are parent entries
+      if (!entry.C_CODE.endsWith('000')) {
+        const entryNumber = parseInt(entry.C_CODE.slice(2), 10); // Get the numeric part of the code
+        if (maxDbfCode < entryNumber) {
+          maxDbfCode = entryNumber;
+        }
+      }
+    });
+  }
+
+  // Take the greater of the two maximums
+  const maxCode = Math.max(maxLocalCode, maxDbfCode);
+  
+  // Increment the max code for the new subgroup
+  return `${subGroup}${(maxCode + 1).toString().padStart(3, '0')}`;
 }
 
 app.get('/cash-receipts', async (req, res) => {
@@ -265,7 +269,7 @@ async function getNextGodownId(req, res) {
         if (error.code !== 'ENOENT') throw error; // Ignore file not found errors
       },
     );
-    const GodownId = data[data.length - 1].id;
+    const GodownId = data[data.length - 1]?.id || 0;
     const nextGodownId = Number(GodownId) + 1;
     res.send({ nextGodownId });
   } catch (error) {

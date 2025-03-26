@@ -4,8 +4,10 @@ var cookieParser = require('cookie-parser');
 const fs = require('fs').promises;
 const path = require('path');
 const morgan = require('morgan');
+// Load environment variables from .env file
+require('dotenv').config();
 const app = express();
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
 const io = require('socket.io');
 const {
   redirect,
@@ -18,21 +20,13 @@ const {
 const cors = require('cors');
 app.use(
   cors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:5175',
-      'http://localhost:5176',
-      'http://localhost:5177',
-      'http://localhost:5178',
-      'http://localhost:5179',
-      'http://localhost:8080',
-      'http://localhost:8000',
-      'http://localhost:8001',
-    ],
-
+    origin: process.env.FRONTEND_URLS ? 
+      process.env.FRONTEND_URLS.split(',') : 
+      [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:5173',
+      ],
     credentials: true
   })
 );
@@ -56,6 +50,10 @@ const orcusRoutes = require('./routes/orcusRoutes');
 app.use(express.static(path.join(__dirname, '.', 'dist')));
 app.use('/slink', slinkRoutes);
 app.use('/', orcusRoutes);
+
+// Register merge routes for DBF syncing
+const accountMasterMergeRoutes = require('./routes/merge/account-master');
+app.use('/api/merge/account-master', accountMasterMergeRoutes);
 
 // set middleware to check if user is logged in
 const middleware = require('./routes/middleware');

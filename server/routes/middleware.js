@@ -2,7 +2,14 @@ const fs = require("fs").promises;
 const path = require("path");
 const {redirect} = require("./utilities");
 
+// Get the frontend URL from environment variables or use a default value
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
 const middleware = (req, res, next) => {
+
+  // next();
+  // return;
+
   // Check if request is an API request
   const isApiRequest = req.path.startsWith('/api/') || 
                        req.xhr || 
@@ -18,7 +25,7 @@ const middleware = (req, res, next) => {
       });
     } else {
       // For regular page requests, redirect to login
-      return res.redirect("http://localhost:3000/login");
+      return res.redirect(`${FRONTEND_URL}/login`);
     }
   }
 
@@ -43,8 +50,8 @@ const middleware = (req, res, next) => {
           // For regular page requests, redirect to login
           res.status(401)
             .clearCookie("token")
-            .redirect("http://localhost:3000/login")
-            .send("Unauthorized access" + redirect("http://localhost:3000/login", 1500));
+            .redirect(`${FRONTEND_URL}/login`)
+            .send("Unauthorized access" + redirect(`${FRONTEND_URL}/login`, 1500));
         }
       }
     })

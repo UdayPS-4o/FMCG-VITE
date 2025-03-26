@@ -198,6 +198,9 @@ const AppHeader: React.FC = () => {
           {/* User Area - replaced with custom user details */}
           {user ? (
             <div className="flex items-center space-x-4">
+              <div className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center`}>
+                {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+              </div>
               <div className="flex flex-col items-end">
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   {user.name}
@@ -208,9 +211,7 @@ const AppHeader: React.FC = () => {
                   </span>
                 )}
               </div>
-              <div className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center`}>
-                {user.name ? user.name.charAt(0).toUpperCase() : "U"}
-              </div>
+              
             </div>
           ) : (
             <UserDropdown />

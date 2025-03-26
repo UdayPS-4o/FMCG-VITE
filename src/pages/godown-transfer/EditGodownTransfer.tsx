@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Input from "../../components/form/input/Input";
@@ -26,6 +26,7 @@ interface ItemData {
   amount: string;
   netAmount: string;
   godown?: string;
+  originalQty?: string; // To track the original quantity for validation
 }
 
 // Interface for stock data from API
@@ -35,7 +36,23 @@ interface StockData {
   }
 }
 
+// Interface for godown transfer API response
+interface GodownTransferData {
+  date: string;
+  series: string;
+  fromGodown: string;
+  toGodown: string;
+  id: string;
+  items: Array<{
+    code: string;
+    qty: string;
+    unit: string;
+  }>;
+  createdAt: string;
+}
+
 const EditGodownTransfer: React.FC = () => {
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [partyOptions, setPartyOptions] = useState<any[]>([]);
   const [fromGodown, setFromGodown] = useState<any>(null);
@@ -47,6 +64,20 @@ const EditGodownTransfer: React.FC = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // State to track the loading status of different data sources
+  const [dataLoadStatus, setDataLoadStatus] = useState({
+    godownTransfer: false,
+    partyOptions: false,
+    pmplData: false,
+    stockData: false
+  });
+  
+  // Store the original godown transfer data
+  const [originalData, setOriginalData] = useState<GodownTransferData | null>(null);
+  
   const [formValues, setFormValues] = useState({
     date: new Date().toISOString().split('T')[0],
     series: 'T',
@@ -54,14 +85,46 @@ const EditGodownTransfer: React.FC = () => {
     toGodown: '',
     items: [] as ItemData[],
   });
+  
   const [expanded, setExpanded] = useState<number | false>(0);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const baseURL = constants.baseURL;
+  const formPrefilled = useRef(false);
 
+  // First effect: Fetch all required data
   useEffect(() => {
+    const fetchGodownTransferData = async () => {
+      if (!id) {
+        setError('No godown transfer ID provided');
+        setLoading(false);
+        setDataLoadStatus(prev => ({ ...prev, godownTransfer: true }));
+        return;
+      }
+
+      try {
+        const godownRes = await fetch(`${baseURL}/edit/godown/${id}`, {
+          credentials: 'include'
+        });
+
+        if (!godownRes.ok) {
+          throw new Error(`Failed to fetch godown transfer data: ${godownRes.statusText}`);
+        }
+
+        const godownData = await godownRes.json();
+        console.log('Fetched godown transfer data:', godownData);
+        
+        // Store the original data
+        setOriginalData(godownData);
+        setDataLoadStatus(prev => ({ ...prev, godownTransfer: true }));
+      } catch (err) {
+        console.error('Failed to load godown transfer:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load godown transfer');
+        showToast('Failed to load godown transfer', 'error');
+        setDataLoadStatus(prev => ({ ...prev, godownTransfer: true }));
+      }
+    };
+
     const fetchOptions = async () => {
       try {
-        setIsLoading(true);
         const res = await fetch(`${baseURL}/api/dbf/godown.json`, {
           credentials: 'include'
         });
@@ -71,8 +134,10 @@ const EditGodownTransfer: React.FC = () => {
         } else {
           console.error('Data fetched is not an array:', data);
         }
+        setDataLoadStatus(prev => ({ ...prev, partyOptions: true }));
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching godown data:', error);
+        setDataLoadStatus(prev => ({ ...prev, partyOptions: true }));
       }
     };
 
@@ -83,8 +148,10 @@ const EditGodownTransfer: React.FC = () => {
         });
         const pmplDatas = await pmplRes.json();
         setPmplData(pmplDatas);
+        setDataLoadStatus(prev => ({ ...prev, pmplData: true }));
       } catch (error) {
         console.error('Error fetching PMPL data:', error);
+        setDataLoadStatus(prev => ({ ...prev, pmplData: true }));
       }
     };
 
@@ -95,174 +162,88 @@ const EditGodownTransfer: React.FC = () => {
         });
         const stockDatas = await stockRes.json();
         setStockData(stockDatas);
+        setDataLoadStatus(prev => ({ ...prev, stockData: true }));
       } catch (error) {
         console.error('Error fetching stock data:', error);
+        setDataLoadStatus(prev => ({ ...prev, stockData: true }));
       }
     };
 
+    // Fetch all data in parallel
+    fetchGodownTransferData();
     fetchOptions();
     fetchPmplData();
     fetchStockData();
-  }, [baseURL]);
+  }, [id, baseURL]);
+
+  // Second effect: Wait for all data to be loaded, then prefill the form
+  useEffect(() => {
+    const allDataLoaded = Object.values(dataLoadStatus).every(status => status === true);
+    
+    if (allDataLoaded && !formPrefilled.current && originalData) {
+      console.log("All data loaded, prefilling form");
+      
+      // Set form values from original data
+      setFormValues({
+        date: originalData.date || new Date().toISOString().split('T')[0],
+        series: originalData.series || 'T',
+        fromGodown: originalData.fromGodown || '',
+        toGodown: originalData.toGodown || '',
+        items: originalData.items ? originalData.items.map((item) => {
+          // Find the matching product in pmplData
+          const product = pmplData.find(p => p.CODE === item.code);
+          
+          // Get stock for this item
+          let stockValue = '0';
+          if (stockData[item.code] && stockData[item.code][originalData.fromGodown]) {
+            stockValue = stockData[item.code][originalData.fromGodown].toString();
+          }
+          
+          return {
+            item: item.code || '',
+            qty: item.qty || '',
+            unit: item.unit || '',
+            stock: stockValue,
+            pack: product?.PACK || '',
+            gst: product?.GST || '',
+            pcBx: product?.MULT_F || '',
+            mrp: product?.MRP1 || '',
+            rate: product?.RATE1 || '',
+            cess: '0',
+            cd: '0',
+            sch: '0',
+            amount: '',
+            netAmount: '',
+            godown: originalData.fromGodown || '',
+            originalQty: item.qty || '0' // Store original quantity for validation
+          };
+        }) : [],
+      });
+      
+      // Update Godown selections
+      if (originalData.fromGodown && partyOptions.length > 0) {
+        const selectedFromGodown = partyOptions.find(option => option.GDN_CODE === originalData.fromGodown);
+        setFromGodown(selectedFromGodown);
+      }
+
+      if (originalData.toGodown && partyOptions.length > 0) {
+        const selectedToGodown = partyOptions.find(option => option.GDN_CODE === originalData.toGodown);
+        setToGodown(selectedToGodown);
+      }
+      
+      // Mark form as prefilled
+      formPrefilled.current = true;
+      setLoading(false);
+    }
+  }, [dataLoadStatus, originalData, pmplData, stockData, partyOptions]);
 
   // Get stock for a specific item and godown
   const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {
-    if (!stockData[itemCode] || stockData[itemCode][godownCode] === undefined) {
+    if (!stockData[itemCode] || !stockData[itemCode][godownCode]) {
       return 0;
     }
     return stockData[itemCode][godownCode];
   };
-
-  // Modify stock data to include current items for edit mode
-  const adjustStockDataForEditing = (data: any) => {
-    // Create a deep copy of the stock data
-    const adjustedStockData = JSON.parse(JSON.stringify(stockData));
-    
-    // Add back the quantities of currently edited items to their source godown
-    if (data && data.items && data.fromGodown) {
-      data.items.forEach((item: any) => {
-        const itemCode = item.code;
-        const qty = parseInt(item.qty, 10) || 0;
-        
-        if (!adjustedStockData[itemCode]) {
-          adjustedStockData[itemCode] = {};
-        }
-        
-        if (!adjustedStockData[itemCode][data.fromGodown]) {
-          adjustedStockData[itemCode][data.fromGodown] = qty;
-        } else {
-          adjustedStockData[itemCode][data.fromGodown] += qty;
-        }
-      });
-    }
-    
-    return adjustedStockData;
-  };
-
-  // Fetch transfer data for editing
-  useEffect(() => {
-    const fetchTransferData = async () => {
-      if (id && partyOptions.length > 0 && pmplData.length > 0) {
-        try {
-          // Try both possible endpoints with better error handling
-          let data;
-          let response;
-          
-          try {
-            console.log(`Fetching godown transfer data from ${baseURL}/edit/godown/${id}`);
-            response = await fetch(`${baseURL}/edit/godown/${id}`, {
-              credentials: 'include'
-            });
-            
-            if (!response.ok) {
-              console.error(`Primary endpoint failed with status: ${response.status}`);
-              throw new Error(`Primary endpoint failed: ${response.statusText}`);
-            }
-            
-            data = await response.json();
-            console.log('Fetched godown transfer data:', data);
-          } catch (primaryError) {
-            console.error('Error with primary endpoint:', primaryError);
-            
-            try {
-              console.log(`Trying fallback endpoint ${baseURL}/godown/${id}`);
-              response = await fetch(`${baseURL}/godown/${id}`, {
-                credentials: 'include'
-              });
-              
-              if (!response.ok) {
-                throw new Error(`Godown transfer not found: ${response.statusText}`);
-              }
-              
-              data = await response.json();
-              console.log('Fetched godown transfer data from fallback:', data);
-            } catch (fallbackError) {
-              console.error('Error with fallback endpoint:', fallbackError);
-              throw new Error('Failed to fetch godown transfer data from both endpoints');
-            }
-          }
-          
-          // Helper function to map unit codes to actual unit values
-          const getUnitValue = (unitCode: string, product: any) => {
-            if (!product) return unitCode;
-            
-            // If the unit code matches UNIT_1, return UNIT_1
-            if (unitCode === '01' && product.UNIT_1) return product.UNIT_1;
-            
-            // If the unit code matches UNIT_2, return UNIT_2
-            if (unitCode === '02' && product.UNIT_2) return product.UNIT_2;
-            
-            // If unitCode is already a valid unit name (not a code), return it as is
-            if (unitCode === product.UNIT_1 || unitCode === product.UNIT_2) return unitCode;
-            
-            // Default to UNIT_1 if we can't match
-            return product.UNIT_1 || unitCode;
-          };
-          
-          if (data) {
-            // Adjust stock data to include the current items being edited
-            const adjustedStockData = adjustStockDataForEditing(data);
-            setStockData(adjustedStockData);
-            
-            // Set form values
-            setFormValues({
-              date: data.date || new Date().toISOString().split('T')[0],
-              series: data.series || 'T',
-              fromGodown: data.fromGodown || '',
-              toGodown: data.toGodown || '',
-              items: data.items.map((item: any) => {
-                const product = pmplData.find(p => p.CODE === item.code);
-                // Use the adjusted stock data for the stock value
-                const stockValue = item.code && data.fromGodown ? 
-                  (adjustedStockData[item.code]?.[data.fromGodown] || 0).toString() : 
-                  '';
-                
-                // Map the unit code to actual unit text value
-                const unitValue = getUnitValue(item.unit, product);
-                
-                return {
-                  item: item.code,
-                  stock: stockValue || product?.STK || '',
-                  pack: product?.PACK || '',
-                  gst: product?.GST || '',
-                  unit: unitValue,
-                  pcBx: product?.MULT_F || '',
-                  mrp: product?.MRP1 || '',
-                  rate: product?.RATE1 || '',
-                  qty: item.qty || '',
-                  cess: '0',
-                  cd: '0',
-                  sch: '0',
-                  amount: '',
-                  netAmount: '',
-                  godown: data.fromGodown || '',
-                };
-              }),
-            });
-
-            // Set godown options
-            const fromGodownObj = partyOptions.find(option => option.GDN_CODE === data.fromGodown);
-            const toGodownObj = partyOptions.find(option => option.GDN_CODE === data.toGodown);
-            
-            if (fromGodownObj) {
-              setFromGodown(fromGodownObj);
-            }
-
-            if (toGodownObj) {
-              setToGodown(toGodownObj);
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching transfer data:', error);
-          showToast('Failed to load transfer data for editing', 'error');
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchTransferData();
-  }, [id, partyOptions, pmplData, baseURL]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -272,12 +253,8 @@ const EditGodownTransfer: React.FC = () => {
   const handleFromGodownChange = (value: string) => {
     const selectedGodown = partyOptions.find(option => option.GDN_CODE === value);
     setFromGodown(selectedGodown);
-    
-    // Update all items' godown field with the new fromGodown value
     const updatedItems = formValues.items.map(item => {
-      // Get stock for this item in the selected godown
       const stockValue = item.item ? getStockForItemAndGodown(item.item, value).toString() : '';
-      
       return {
         ...item,
         godown: value,
@@ -291,12 +268,8 @@ const EditGodownTransfer: React.FC = () => {
       items: updatedItems
     });
     
+    // Don't reset toGodown when editing an existing transfer
     if (value === formValues.toGodown) {
-      setToGodown(null);
-      setFormValues(prev => ({ 
-        ...prev, 
-        toGodown: '',
-      }));
       showToast('From and To Godowns cannot be the same', 'error');
     }
   };
@@ -304,11 +277,13 @@ const EditGodownTransfer: React.FC = () => {
   const handleToGodownChange = (value: string) => {
     const selectedGodown = partyOptions.find(option => option.GDN_CODE === value);
     setToGodown(selectedGodown);
-    setFormValues({ ...formValues, toGodown: value });
     
     if (value === formValues.fromGodown) {
       showToast('From and To Godowns cannot be the same', 'error');
+      return;
     }
+    
+    setFormValues({ ...formValues, toGodown: value });
   };
 
   const getAvailableItems = () => {
@@ -316,24 +291,31 @@ const EditGodownTransfer: React.FC = () => {
     
     if (!formValues.fromGodown) return [];
     
-    // Filter products for dropdown
+    // Filter products that have stock in the selected "From Godown" OR are in the current transfer
     return pmplData.filter((pmpl) => {
-      // Allow already selected items to appear in other dropdowns
+      // Skip already selected items
       if (selectedCodes.has(pmpl.CODE)) return false;
       
-      // For edit mode, always include items that are already in our transfer
-      const isCurrentlyInTransfer = formValues.items.some(item => item.item === pmpl.CODE);
-      if (isCurrentlyInTransfer) return true;
-      
-      // Check if this product has stock in the selected godown
+      // Include items that have stock in the selected godown
       const stockAmount = getStockForItemAndGodown(pmpl.CODE, formValues.fromGodown);
-      return stockAmount > 0;
+      if (stockAmount > 0) return true;
+      
+      // Also include items that were in the original transfer 
+      // (regardless of current stock)
+      if (originalData && originalData.items) {
+        return originalData.items.some(item => item.code === pmpl.CODE);
+      }
+      
+      return false;
     });
   };
 
-  const addItem = () => {
+  const addItem = (newToGodown?: string) => {
+    const toGodownValue = newToGodown || formValues.toGodown;
+    
     setFormValues(prevState => ({
       ...prevState,
+      toGodown: toGodownValue,
       items: [
         ...prevState.items,
         {
@@ -351,7 +333,8 @@ const EditGodownTransfer: React.FC = () => {
           sch: '0',
           amount: '',
           netAmount: '',
-          godown: prevState.fromGodown,
+          godown: prevState.fromGodown, // Set the godown to the form's fromGodown
+          originalQty: '0'
         },
       ],
     }));
@@ -411,35 +394,17 @@ const EditGodownTransfer: React.FC = () => {
       setClicked(false);
       return;
     }
-    
-    // Helper function to map unit text back to code if needed
-    const mapUnitToCode = (unit: string, itemCode: string) => {
-      const product = pmplData.find(p => p.CODE === itemCode);
-      if (!product) return unit;
-      
-      // If the unit matches UNIT_1, return '01'
-      if (unit === product.UNIT_1) return '01';
-      
-      // If the unit matches UNIT_2, return '02'
-      if (unit === product.UNIT_2) return '02';
-      
-      // If it's already a code, return as is
-      if (unit === '01' || unit === '02') return unit;
-      
-      // Default to the original unit
-      return unit;
-    };
 
     const payload = {
+      id,
       date: formValues.date,
       series: formValues.series,
       fromGodown: formValues.fromGodown,
       toGodown: formValues.toGodown,
-      id,
       items: items.map((el) => ({
         code: el.item,
         qty: el.qty,
-        unit: mapUnitToCode(el.unit, el.item)
+        unit: el.unit
       })),
     };
 
@@ -452,11 +417,17 @@ const EditGodownTransfer: React.FC = () => {
         body: JSON.stringify(payload),
         credentials: 'include'
       });
+      
+      if (!res.ok) {
+        throw new Error(`Error ${res.status}: ${await res.text()}`);
+      }
+      
       const json = await res.json();
       showToast(json.message || 'Godown transfer updated successfully', 'success');
+      
       // Reset form or redirect
       setTimeout(() => {
-        window.location.href = '/db/godown-transfer';
+        navigate('/db/godown-transfer');
       }, 2000);
     } catch (error: any) {
       showToast('Error updating form: ' + (error.message || 'Unknown error'), 'error');
@@ -478,6 +449,19 @@ const EditGodownTransfer: React.FC = () => {
     };
   };
 
+  // Check if an item was in the original transfer
+  const isOriginalItem = (itemCode: string): boolean => {
+    if (!originalData || !originalData.items) return false;
+    return originalData.items.some(item => item.code === itemCode);
+  };
+
+  // Get the original quantity for an item
+  const getOriginalQuantity = (itemCode: string): string => {
+    if (!originalData || !originalData.items) return '0';
+    const item = originalData.items.find(item => item.code === itemCode);
+    return item ? item.qty : '0';
+  };
+
   // Calculate the total items that have been properly filled out
   const calculateValidItemsCount = () => {
     return formValues.items.filter(item => 
@@ -488,10 +472,19 @@ const EditGodownTransfer: React.FC = () => {
     ).length;
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-500"></div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+        <div className="text-lg text-gray-600 dark:text-gray-300">Loading godown transfer data...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-lg text-red-600 dark:text-red-400">{error}</div>
       </div>
     );
   }
@@ -541,7 +534,7 @@ const EditGodownTransfer: React.FC = () => {
             </div>
             <div>
               <Input
-                id="transfer-id"
+                id="id"
                 label="ID"
                 value={id || ''}
                 variant="outlined"
@@ -609,6 +602,8 @@ const EditGodownTransfer: React.FC = () => {
               pmplData={getAvailableItems()}
               pmpl={pmplData}
               stockData={stockData}
+              isOriginalItem={isOriginalItem(item.item)}
+              originalQty={getOriginalQuantity(item.item)}
             />
           ))}
         </div>
@@ -618,7 +613,7 @@ const EditGodownTransfer: React.FC = () => {
             <button
               type="button"
               className="px-4 py-2 text-brand-500 border border-brand-500 rounded-md hover:bg-brand-50 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800"
-              onClick={addItem}
+              onClick={() => addItem()}
             >
               Add Another Item
             </button>
@@ -640,7 +635,7 @@ const EditGodownTransfer: React.FC = () => {
             <button
               type="button"
               className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-              onClick={() => window.location.href = '/db/godown-transfer'}
+              onClick={() => navigate('/db/godown-transfer')}
             >
               Cancel
             </button>

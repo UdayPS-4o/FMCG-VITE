@@ -718,5 +718,89 @@
     ],
     "id": "8",
     "createdAt": "2025-03-23T23:47:23.139Z"
+  },
+  {
+    "date": "2025-03-26",
+    "series": "T",
+    "cash": "N",
+    "party": "CT005",
+    "partyName": "MANIKGARH CEMENT NGP",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
+    "ref": "sdf",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "MK001",
+        "godown": "03",
+        "unit": "PCS",
+        "rate": 675,
+        "qty": "20",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "13500.00",
+        "netAmount": "13500.00"
+      }
+    ],
+    "id": "9",
+    "createdAt": "2025-03-26T10:32:38.087Z"
+  },
+  {
+    "date": "2025-03-26",
+    "series": "T",
+    "cash": "N",
+    "party": "CT014",
+    "partyName": "PUJEETA AGENCIES",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
+    "ref": "",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "MK001",
+        "godown": "02",
+        "unit": "PCS",
+        "rate": 675,
+        "qty": "29",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "19575.00",
+        "netAmount": "19575.00"
+      }
+    ],
+    "id": "10",
+    "createdAt": "2025-03-26T11:17:12.910Z"
+  },
+  {
+    "date": "2025-03-26",
+    "series": "T",
+    "cash": "Y",
+    "party": "CT008",
+    "partyName": "KOTAK KHATOD & CO",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
+    "ref": "",
+    "dueDays": "",
+    "items": [
+      {
+        "item": "MK018",
+        "godown": "02",
+        "unit": "PCS",
+        "rate": 123,
+        "qty": "67",
+        "cess": "",
+        "schRs": "",
+        "sch": "",
+        "cd": "",
+        "amount": "8241.00",
+        "netAmount": "8241.00"
+      }
+    ],
+    "id": "11",
+    "createdAt": "2025-03-26T21:18:31.749Z"
   }
 ]
