@@ -37,8 +37,15 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
       try {
         setLoading(true);
         
-        // Fetch PMPL data with caching - updated endpoint
-        const pmplResponse = await apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`);
+        // Fetch all data sources in parallel with Promise.all
+        const [pmplResponse, stockResponse, godownResponse, partyResponse] = await Promise.all([
+          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
+          apiCache.fetchWithCache<any>(`${constants.baseURL}/api/stock`),
+          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/godown.json`),
+          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`)
+        ]);
+        
+        // Process PMPL data
         if (Array.isArray(pmplResponse)) {
           setPmplData(pmplResponse);
         } else {
@@ -46,57 +53,43 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           setPmplData([]);
         }
 
-        // Fetch stock data with caching
-        const stockResponse = await apiCache.fetchWithCache<any>(`${constants.baseURL}/api/stock`);
+        // Process stock data
         setStockList(stockResponse || {});
 
-        // Fetch godown options with caching
-        try {
-          const godownResponse = await apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/godown.json`);
-          if (Array.isArray(godownResponse)) {
-            const gdnOptions = godownResponse.map(gdn => ({
-              value: gdn.GDN_CODE,
-              label: gdn.GDN_NAME,
-            }));
-            setGodownOptions(gdnOptions);
-          } else {
-            console.warn('Godown response is not an array:', godownResponse);
-            setGodownOptions([]);
-          }
-        } catch (godownError) {
-          console.error('Error fetching godown data:', godownError);
+        // Process godown data
+        if (Array.isArray(godownResponse)) {
+          const gdnOptions = godownResponse.map(gdn => ({
+            value: gdn.GDN_CODE,
+            label: gdn.GDN_NAME,
+          }));
+          setGodownOptions(gdnOptions);
+        } else {
+          console.warn('Godown response is not an array:', godownResponse);
           setGodownOptions([]);
         }
 
-        // Fetch party options with caching - updated endpoint
-        try {
-          const partyResponse = await apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`);
-          if (Array.isArray(partyResponse)) {
-            // Filter for parties (DT group)
-            const dtParties = partyResponse.filter(party => party.M_GROUP === 'DT');
-            
-            const partyOpts = dtParties.map(party => ({
-              value: party.C_CODE,
-              label: `${party.C_NAME} | ${party.C_CODE}`,
-              gst: party.GST_NO || party.GST || '',
-            }));
-            setPartyOptions(partyOpts);
-            
-            // Fetch SM options from the same CMPL data
-            const smList = partyResponse.filter(sm => sm.M_GROUP === 'SM');
-            
-            const smOpts = smList.map(sm => ({
-              value: sm.C_CODE,
-              label: `${sm.C_NAME} | ${sm.C_CODE}`,
-            }));
-            setSmOptions(smOpts);
-          } else {
-            console.warn('Party response is not an array:', partyResponse);
-            setPartyOptions([]);
-            setSmOptions([]);
-          }
-        } catch (partyError) {
-          console.error('Error fetching party data:', partyError);
+        // Process party and SM data
+        if (Array.isArray(partyResponse)) {
+          // Filter for parties (DT group)
+          const dtParties = partyResponse.filter(party => party.M_GROUP === 'DT');
+          
+          const partyOpts = dtParties.map(party => ({
+            value: party.C_CODE,
+            label: `${party.C_NAME} | ${party.C_CODE}`,
+            gst: party.GST_NO || party.GST || '',
+          }));
+          setPartyOptions(partyOpts);
+          
+          // Process SM options from the same CMPL data
+          const smList = partyResponse.filter(sm => sm.M_GROUP === 'SM');
+          
+          const smOpts = smList.map(sm => ({
+            value: sm.C_CODE,
+            label: `${sm.C_NAME} | ${sm.C_CODE}`,
+          }));
+          setSmOptions(smOpts);
+        } else {
+          console.warn('Party response is not an array:', partyResponse);
           setPartyOptions([]);
           setSmOptions([]);
         }
