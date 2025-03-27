@@ -16,18 +16,18 @@
     "lastUpdated": "2025-03-26T11:26:40.178Z"
   },
   {
-    "date": "2025-03-26",
+    "date": "2025-03-27",
     "series": "T",
-    "fromGodown": "02",
-    "toGodown": "01",
-    "id": "2",
+    "fromGodown": "03",
+    "toGodown": "04",
+    "id": "3",
     "items": [
       {
         "code": "MK001",
-        "qty": "29",
+        "qty": "4",
         "unit": "PCS"
       }
     ],
-    "createdAt": "2025-03-26T17:08:53.707Z"
+    "createdAt": "2025-03-27T20:18:58.334Z"
   }
 ]

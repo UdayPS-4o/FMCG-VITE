@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import constants from '../constants';
+import apiCache from '../utils/apiCache';
 
 export interface Option {
   value: string;
@@ -38,46 +39,30 @@ export const useInvoiceData = () => {
           // Fetch account data with fallback
           (async () => {
             try {
-              // Try primary endpoint
-              const accRes = await fetch(`${constants.baseURL}/api/dbf/acm.json`, { 
-                signal,
-                credentials: 'include' 
-              });
-              if (!accRes.ok) throw new Error('Primary endpoint failed');
-              return await accRes.json();
+              // Try primary endpoint with caching
+              return await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
             } catch (error) {
               if ((error as Error).name === 'AbortError') {
                 throw error;
               }
-              // Try fallback endpoint
-              const cmplRes = await fetch(`${constants.baseURL}/cmpl`, { 
+              console.error('Failed to fetch from /cmpl', error);
+              // Try original endpoint as fallback if needed
+              const accRes = await fetch(`${constants.baseURL}/api/dbf/acm.json`, { 
                 signal,
-                credentials: 'include'
+                credentials: 'include' 
               });
-              if (!cmplRes.ok) throw new Error('Fallback endpoint failed');
-              return await cmplRes.json();
+              if (!accRes.ok) throw new Error('Primary and fallback endpoints failed');
+              return await accRes.json();
             }
           })(),
           // Fetch PMPL data
-          fetch(`${constants.baseURL}/api/dbf/pmpl.json`, { 
-            signal, 
-            credentials: 'include' 
-          }).then(res => res.json()),
+          apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/pmpl.json`),
           // Fetch stock data
-          fetch(`${constants.baseURL}/api/stock`, { 
-            signal, 
-            credentials: 'include' 
-          }).then(res => res.json()),
+          apiCache.fetchWithCache(`${constants.baseURL}/api/stock`),
           // Fetch godown data
-          fetch(`${constants.baseURL}/api/dbf/godown.json`, { 
-            signal, 
-            credentials: 'include' 
-          }).then(res => res.json()),
+          apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/godown.json`),
           // Fetch balance data
-          fetch(`${constants.baseURL}/json/balance`, { 
-            signal, 
-            credentials: 'include' 
-          }).then(res => res.json())
+          apiCache.fetchWithCache(`${constants.baseURL}/json/balance`)
         ]);
 
         // Helper function to get balance for a party code
@@ -144,6 +129,9 @@ export const useInvoiceData = () => {
           value: gdn.GDN_CODE, 
           label: gdn.GDN_NAME 
         })));
+
+        // Clear expired cache items
+        apiCache.clearExpiredCache();
 
         // Mark that we've successfully fetched the data
         dataFetchedRef.current = true;

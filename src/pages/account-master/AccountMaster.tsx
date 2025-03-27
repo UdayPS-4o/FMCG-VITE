@@ -7,6 +7,7 @@ import Autocomplete from "../../components/form/input/Autocomplete";
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import useAuth from "../../hooks/useAuth";
+import apiCache from '../../utils/apiCache';
 
 interface Option {
   label: string;
@@ -69,13 +70,8 @@ const AccountMaster: React.FC = () => {
           const subgroup = currentUrl.split('?sub=').pop() || '';
           console.log('Fetching account data for subgroup:', subgroup);
 
-          const response = await fetch(`${constants.baseURL}/json/account-master`, {
-            credentials: 'include'
-          });
-          if (!response.ok) {
-            throw new Error(`Failed to fetch account data: ${response.status} ${response.statusText}`);
-          }
-          const data = await response.json();
+          // Use apiCache for account-master data
+          const data = await apiCache.fetchWithCache(`${constants.baseURL}/json/account-master`);
           console.log('Account data:', data);
 
           const account = data.find((account: any) => account.subgroup === subgroup);
@@ -121,20 +117,17 @@ const AccountMaster: React.FC = () => {
           );
         }
 
-        // Fetch state data in both cases
-        const stateResponse = await fetch(`${constants.baseURL}/api/dbf/state.json`, {
-          credentials: 'include'
-        });
-        if (!stateResponse.ok) {
-          throw new Error('Failed to fetch state data');
-        }
-        const stateData = await stateResponse.json();
+        // Fetch state data with caching
+        const stateData = await apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/state.json`);
+        
         const stateList = stateData.map((state: any) => ({
           value: state.ST_CODE,
           label: state.ST_NAME,
         }));
         setCity(stateList);
 
+        // Clear expired cache entries
+        apiCache.clearExpiredCache();
       } catch (error) {
         console.error('Error:', error);
         setError(error instanceof Error ? error.message : 'An error occurred');

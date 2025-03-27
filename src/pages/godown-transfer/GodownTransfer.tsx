@@ -7,6 +7,7 @@ import FormComponent from "../../components/form/Form";
 import Toast from '../../components/ui/toast/Toast';
 import constants from "../../constants";
 import CollapsibleItemSection from './CollapsibleItemSection';
+import apiCache from '../../utils/apiCache';
 
 // Update the item interface to include godown field
 interface ItemData {
@@ -55,60 +56,57 @@ const GodownTransfer: React.FC = () => {
   });
   const [expanded, setExpanded] = useState<number | false>(0);
   const [stockDataLoaded, setStockDataLoaded] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const baseURL = constants.baseURL;
 
   useEffect(() => {
-    const fetchOptions = async () => {
+    const fetchData = async () => {
       try {
+        setLoading(true);
+        
+        // Fetch ID
         const idRes = await fetch(`${baseURL}/slink/godownId`, {
           credentials: 'include'
         });
         const idData = await idRes.json();
         setId(idData.nextGodownId);
 
-        const res = await fetch(`${baseURL}/api/dbf/godown.json`, {
-          credentials: 'include'
-        });
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setPartyOptions(data);
+        // Fetch godown data with caching
+        const godownData = await apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`);
+        if (Array.isArray(godownData)) {
+          setPartyOptions(godownData);
         } else {
-          console.error('Data fetched is not an array:', data);
+          console.error('Godown data is not an array:', godownData);
         }
+
+        // Fetch PMPL data with caching
+        const pmplResponse = await apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`);
+        if (Array.isArray(pmplResponse)) {
+          setPmplData(pmplResponse);
+        } else {
+          console.error('PMPL data is not an array:', pmplResponse);
+        }
+
+        // Fetch stock data with caching
+        const stockResponse = await apiCache.fetchWithCache(`${baseURL}/api/stock`);
+        setStockData(stockResponse || {});
+        setStockDataLoaded(true);
+        
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching data:', error);
+        setLoading(false);
       }
     };
 
-    const fetchPmplData = async () => {
-      try {
-        const pmplRes = await fetch(`${baseURL}/api/dbf/pmpl.json`, {
-          credentials: 'include'
-        });
-        const pmplDatas = await pmplRes.json();
-        setPmplData(pmplDatas);
-      } catch (error) {
-        console.error('Error fetching PMPL data:', error);
-      }
-    };
-
-    const fetchStockData = async () => {
-      try {
-        const stockRes = await fetch(`${baseURL}/api/stock`, {
-          credentials: 'include'
-        });
-        const stockDatas = await stockRes.json();
-        setStockData(stockDatas);
-        setStockDataLoaded(true);
-      } catch (error) {
-        console.error('Error fetching stock data:', error);
-        setStockDataLoaded(false);
-      }
-    };
-
-    fetchOptions();
-    fetchPmplData();
-    fetchStockData();
+    fetchData();
+    
+    // Clean up expired cache items
+    try {
+      apiCache.clearExpiredCache();
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+    }
   }, []); // Empty dependency array prevents infinite re-renders
 
   // Get stock for a specific item and godown

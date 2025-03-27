@@ -1,6 +1,7 @@
 const fs = require("fs").promises;
 const path = require("path");
 const { DbfORM } = require("../dbf-orm");
+const crypto = require('crypto');
 
 let redirect = (url, time) => {
     return `<script>
@@ -20,6 +21,11 @@ const getDbfData = async (filePath) => {
   } catch (error) {
     throw new Error(`Error reading DBF file: ${error.message}`);
   }
+};
+
+// Generate hash for data (for ETag)
+const generateHash = (data) => {
+  return crypto.createHash('md5').update(JSON.stringify(data)).digest('hex');
 };
   
 const getCmplData = async (req, res) => {
@@ -59,7 +65,27 @@ const getCmplData = async (req, res) => {
     if (req === "99") {
       return jsonData; // Just return the data when req is "99"
     } else if (res && typeof res.json === 'function') {
-      res.json(jsonData); // Only call res.json if res exists and has json method
+      // Generate ETag for the data
+      const hash = generateHash(jsonData);
+      const clientHash = req.headers['if-none-match'];
+      
+      // Set up headers for cache control
+      res.setHeader('Cache-Control', 'private, no-cache');
+      res.setHeader('ETag', `"${hash}"`);
+      // Allow clients to access the ETag header
+      res.setHeader('Access-Control-Expose-Headers', 'ETag');
+      
+      console.log(`Generated Hash: ${hash}, Client Hash: ${clientHash}`);
+      console.log('Response Headers:', res._headers || 'Headers not available');
+      
+      // If client has valid hash, send 304 Not Modified
+      if (clientHash && (clientHash === hash || clientHash === `"${hash}"` || clientHash === hash.replace(/^"|"$/g, ''))) {
+        console.log(`Using cached data for CMPL.json with hash: ${hash}`);
+        return res.status(304).end();
+      }
+      
+      // Otherwise send the full data
+      res.json(jsonData);
     } else {
       console.error("Response object is missing or invalid");
       return jsonData; // Return the data as fallback
@@ -106,4 +132,4 @@ const saveDataToJsonFile = async (filePath, data) => {
   await fs.writeFile(filePath, JSON.stringify(existingData, null, 4));
 };
 
-module.exports = {redirect, getDbfData, getCmplData, ensureDirectoryExistence, saveDataToJsonFile};
+module.exports = {redirect, getDbfData, getCmplData, ensureDirectoryExistence, saveDataToJsonFile, generateHash};

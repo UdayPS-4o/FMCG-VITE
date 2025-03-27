@@ -7,6 +7,7 @@ import Input from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
+import apiCache from '../../utils/apiCache';
 
 interface Option {
   label: string;
@@ -82,16 +83,8 @@ const EditAccountMaster: React.FC = () => {
         
         console.log('Fetching account data for subgroup:', subgroupParam);
 
-        // Fetch account data
-        const response = await fetch(`${constants.baseURL}/json/account-master`, {
-          credentials: 'include'
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch account data: ${response.status}`);
-        }
-        
-        const data = await response.json();
+        // Fetch account data with caching
+        const data = await apiCache.fetchWithCache(`${constants.baseURL}/json/account-master`);
         console.log('Account data:', data);
 
         // Find the account with matching subgroup
@@ -122,22 +115,18 @@ const EditAccountMaster: React.FC = () => {
           throw new Error(`Subgroup "${subgroupParam}" not found in account data`);
         }
 
-        // Fetch state data
-        const stateResponse = await fetch(`${constants.baseURL}/api/dbf/state.json`, {
-          credentials: 'include'
-        });
+        // Fetch state data with caching
+        const stateData = await apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/state.json`);
         
-        if (!stateResponse.ok) {
-          throw new Error('Failed to fetch state data');
-        }
-        
-        const stateData = await stateResponse.json();
         const stateList = stateData.map((state: any) => ({
           value: state.ST_CODE,
           label: state.ST_NAME,
         }));
         
         setCity(stateList);
+        
+        // Clear expired cache entries
+        apiCache.clearExpiredCache();
       } catch (error) {
         console.error('Error:', error);
         setError(error instanceof Error ? error.message : 'An error occurred');

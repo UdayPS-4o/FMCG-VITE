@@ -128,6 +128,50 @@ async function getSTOCKFILE(vvv) {
     .then((data) => JSON.parse(data));
 }
 
+// Replace the cache variables
+let cachedStock = null;
+let cachedStockHash = null;
+let lastFileModTimes = {}; // Store last modification times of files
+
+async function getFileModificationTimes() {
+  const DIR = 'd01-2324';
+  const files = [
+    path.join(__dirname, '..', '..', DIR, 'data', 'json', 'billdtl.json'),
+    path.join(__dirname, '..', '..', DIR, 'data', 'json', 'purdtl.json'),
+    path.join(__dirname, '..', '..', DIR, 'data', 'json', 'transfer.json'),
+    path.join(__dirname, '..', '..', DIR, 'data', 'json', 'pmpl.json'),
+    path.join(__dirname, '..', 'db', 'godown.json')
+  ];
+  
+  const modTimes = {};
+  for (const file of files) {
+    try {
+      const stats = await fs.stat(file);
+      modTimes[file] = stats.mtime.getTime();
+    } catch (error) {
+      console.error(`Error getting modification time for ${file}:`, error);
+      // If we can't get the mod time, use current time to force recalculation
+      modTimes[file] = Date.now();
+    }
+  }
+  
+  return modTimes;
+}
+
+async function haveFilesChanged(newModTimes) {
+  // If we don't have last mod times, assume files have changed
+  if (Object.keys(lastFileModTimes).length === 0) return true;
+  
+  // Check if any file has a different modification time
+  for (const file in newModTimes) {
+    if (!lastFileModTimes[file] || lastFileModTimes[file] !== newModTimes[file]) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 async function calculateCurrentStock() {
   const salesData = await getSTOCKFILE('billdtl.json');
   const purchaseData = await getSTOCKFILE('purdtl.json');
@@ -224,8 +268,73 @@ async function calculateCurrentStock() {
 }
 
 app.get('/api/stock', async (req, res) => {
-  const stock = await calculateCurrentStock();
-  res.send(stock);
+  try {
+    const clientHash = req.headers['if-none-match'] || req.query.hash;
+    
+    // Get current file modification times
+    const currentFileModTimes = await getFileModificationTimes();
+    const filesHaveChanged = await haveFilesChanged(currentFileModTimes);
+    
+    // If we have cached data and no file has changed
+    if (cachedStock && cachedStockHash && !filesHaveChanged) {
+      console.log('Source files unchanged, using cached stock data');
+      
+      // If client hash matches cached hash, return 304
+      if (clientHash && (clientHash === cachedStockHash || clientHash === `"${cachedStockHash}"`)) {
+        console.log('Stock data cache hit with 304');
+        return res.status(304).set({
+          'ETag': `"${cachedStockHash}"`,
+          'Cache-Control': 'private, max-age=0',
+          'Access-Control-Expose-Headers': 'ETag'
+        }).send('Not Modified');
+      }
+      
+      // Otherwise return cached data
+      res.set({
+        'ETag': `"${cachedStockHash}"`,
+        'Cache-Control': 'private, max-age=0',
+        'Access-Control-Expose-Headers': 'ETag'
+      });
+      return res.json(cachedStock);
+    }
+    
+    // If we get here, files have changed or cache doesn't exist
+    console.log('Files changed or no cache, recalculating stock data');
+    const stock = await calculateCurrentStock();
+    
+    // Generate a hash for the stock data
+    const currentHash = require('crypto')
+      .createHash('md5')
+      .update(JSON.stringify(stock))
+      .digest('hex');
+    
+    // Update cache and file mod times
+    cachedStock = stock;
+    cachedStockHash = currentHash;
+    lastFileModTimes = currentFileModTimes;
+    
+    // Set ETag header with proper quotes
+    const etagValue = `"${currentHash}"`;
+    res.set({
+      'ETag': etagValue,
+      'Cache-Control': 'private, max-age=0',
+      'Access-Control-Expose-Headers': 'ETag'
+    });
+    
+    console.log(`Stock API: Generated hash: ${currentHash}, client hash: ${clientHash || 'none'}`);
+    
+    // Compare again after calculation in case hashes match
+    if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
+      console.log('Stock data matches after recalculation');
+      return res.status(304).send('Not Modified');
+    }
+    
+    console.log('Sending full stock data');
+    res.json(stock);
+  } catch (error) {
+    console.error('Error generating stock data:', error);
+    res.status(500).send('Server error');
+  }
 });
 
 // Add this POST route for /api/logout

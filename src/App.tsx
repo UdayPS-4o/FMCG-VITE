@@ -8,6 +8,7 @@ import Login from "./pages/AuthPages/Login";
 import NotFound from "./pages/OtherPage/NotFound";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
+import MetaController from "./components/common/MetaController";
 import AccountMaster from "./pages/account-master/AccountMaster";
 import Invoicing from "./pages/invoicing/Invoicing";
 import DatabaseAccountMaster from "./pages/database/AccountMaster";
@@ -32,6 +33,7 @@ import CashPaymentApproved from "./pages/approved/CashPaymentApproved";
 import PrintCashReceipt from "./pages/print/PrintCashReceipt";
 import AddUser from "./pages/add-user/AddUser";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+// import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
 const RootRedirect = () => {
@@ -251,6 +253,7 @@ export default function App() {
       <Router>
         <AuthProvider>
           <ScrollToTop />
+          <MetaController />
           <AppRoutes />
         </AuthProvider>
       </Router>
