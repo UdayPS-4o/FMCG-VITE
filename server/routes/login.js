@@ -65,12 +65,25 @@ app.post('/api/login', async (req, res) => {
       await fs.writeFile(filePath, JSON.stringify(users, null, 2), 'utf8');
 
       // Set token in the cookie and respond with user data
+      const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
+                    req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
+      
+      const cookieOptions = {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'none',
+        secure: true,
+        maxAge: 10 * 365 * 24 * 60 * 60 * 1000 // 10 years in milliseconds
+      };
+      
+      // Add domain only if it's set
+      if (domain) {
+        cookieOptions.domain = domain;
+      }
+      
       res
         .status(200)
-        .header(
-          'Set-Cookie',
-          `token=${newToken}; Path=/; Domain=localhost; Max-Age=${10 * 365 * 24 * 60 * 60}; HttpOnly;`,
-        )
+        .cookie('token', newToken, cookieOptions)
         .json({ 
           success: true, 
           user: {
@@ -220,7 +233,7 @@ app.post('/api/logout', (req, res) => {
   // Clear token cookie with same path and domain as when it was set
   res.clearCookie('token', {
     path: '/',
-    domain: 'localhost',
+    sameSite: 'lax',
     httpOnly: true
   });
   
