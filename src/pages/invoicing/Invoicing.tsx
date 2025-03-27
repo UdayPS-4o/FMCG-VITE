@@ -10,6 +10,7 @@ import CollapsibleItemSection from './CollapsibleItemSection';
 import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
+import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
 
 interface Option {
   value: string;
@@ -209,8 +210,13 @@ const InvoicingContent: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-lg text-gray-600 dark:text-gray-300">Loading...</div>
+      <div>
+        <PageMeta
+          title="Invoicing | FMCG Vite Admin Template"
+          description="Create Invoice in FMCG Vite Admin Template"
+        />
+        <PageBreadcrumb pageTitle="Invoicing" />
+        <InvoicingSkeletonLoader />
       </div>
     );
   }

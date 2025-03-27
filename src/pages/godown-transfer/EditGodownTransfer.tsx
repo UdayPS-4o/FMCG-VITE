@@ -9,6 +9,7 @@ import Toast from '../../components/ui/toast/Toast';
 import constants from "../../constants";
 import CollapsibleItemSection from './CollapsibleItemSection';
 import apiCache from '../../utils/apiCache';
+import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
 
 // Update the item interface to include godown field
 interface ItemData {
@@ -470,11 +471,16 @@ const EditGodownTransfer: React.FC = () => {
     ).length;
   };
 
+  // Add condition to check loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-        <div className="text-lg text-gray-600 dark:text-gray-300">Loading godown transfer data...</div>
+      <div>
+        <PageMeta
+          title="Edit Godown Transfer | FMCG Vite Admin Template"
+          description="Edit Godown Transfer in FMCG Vite Admin Template"
+        />
+        <PageBreadcrumb pageTitle="Edit Godown Transfer" />
+        <FormSkeletonLoader />
       </div>
     );
   }

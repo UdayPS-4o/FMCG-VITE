@@ -8,6 +8,8 @@ import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import useAuth from "../../hooks/useAuth";
 import apiCache from '../../utils/apiCache';
+import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
+import Toast from '../../components/ui/toast/Toast';
 
 interface Option {
   label: string;
@@ -57,6 +59,15 @@ const AccountMaster: React.FC = () => {
   });
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [toast, setToast] = useState<{ 
+    visible: boolean, 
+    message: string, 
+    type: 'success' | 'error' | 'info' 
+  }>({ 
+    visible: false, 
+    message: '', 
+    type: 'info' 
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -258,6 +269,19 @@ const AccountMaster: React.FC = () => {
     return null;
   };
 
+  if (isLoading) {
+    return (
+      <div>
+        <PageMeta
+          title="Account Master | FMCG Vite Admin Template"
+          description="Create Account in FMCG Vite Admin Template"
+        />
+        <PageBreadcrumb pageTitle="Account Master" />
+        <FormSkeletonLoader />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageMeta
@@ -266,185 +290,177 @@ const AccountMaster: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Account Master" />
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
-          </div>
-        ) : (
-          <>
-            {error && (
-              <div className="text-red-500 text-center p-4 mb-4">{error}</div>
-            )}
-            <FormComponent onSubmit={handleSubmit}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <Autocomplete
-                    id="subgroup"
-                    label="Sub Group"
-                    options={group}
-                    onChange={handlePartyChange}
-                    defaultValue={getSubgroupValue()?.value ?? ''}
-                    autoComplete="off"
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="achead" 
-                    label="A/C Head" 
-                    value={formValues.achead}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                    required
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="addressline1" 
-                    label="Address Line 1" 
-                    value={formValues.addressline1}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                    required
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="addressline2" 
-                    label="Address Line 2" 
-                    value={formValues.addressline2}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="place" 
-                    label="Place" 
-                    value={formValues.place}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                    required
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="pincode" 
-                    label="Pin Code" 
-                    value={formValues.pincode}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                    required
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="mobile" 
-                    label="Mobile" 
-                    value={formValues.mobile}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                    required
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="pan" 
-                    label="PAN" 
-                    value={formValues.pan}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                    required
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="aadhar" 
-                    label="AADHAR" 
-                    value={formValues.aadhar}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="gst" 
-                    label="GSTIN" 
-                    value={formValues.gst}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="dlno" 
-                    label="DL NO." 
-                    value={formValues.dlno}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="fssaino" 
-                    label="FSSAI NO." 
-                    value={formValues.fssaino}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                  />
-                </div>
-                <div>
-                  <Input 
-                    id="email" 
-                    label="Email ID" 
-                    type="email"
-                    value={formValues.email}
-                    onChange={handleInputChange}
-                    variant="outlined"
-                    autoComplete="off"
-                  />
-                </div>
-                <div>
-                  <Autocomplete
-                    id="statecode"
-                    label="State Code"
-                    options={city}
-                    onChange={handleStateChange}
-                    defaultValue={formValues.statecode}
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end space-x-4">
-                <button 
-                  type="submit" 
-                  className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Saving...' : 'Save Changes'}
-                </button>
-                <button 
-                  type="button" 
-                  className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-                  onClick={() => navigate('/db/account-master')}
-                  disabled={isLoading}
-                >
-                  Cancel
-                </button>
-              </div>
-            </FormComponent>
-          </>
+        {error && (
+          <div className="text-red-500 text-center p-4 mb-4">{error}</div>
         )}
+        <FormComponent onSubmit={handleSubmit}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <Autocomplete
+                id="subgroup"
+                label="Sub Group"
+                options={group}
+                onChange={handlePartyChange}
+                defaultValue={getSubgroupValue()?.value ?? ''}
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Input 
+                id="achead" 
+                label="A/C Head" 
+                value={formValues.achead}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div>
+              <Input 
+                id="addressline1" 
+                label="Address Line 1" 
+                value={formValues.addressline1}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div>
+              <Input 
+                id="addressline2" 
+                label="Address Line 2" 
+                value={formValues.addressline2}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Input 
+                id="place" 
+                label="Place" 
+                value={formValues.place}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div>
+              <Input 
+                id="pincode" 
+                label="Pin Code" 
+                value={formValues.pincode}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div>
+              <Input 
+                id="mobile" 
+                label="Mobile" 
+                value={formValues.mobile}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div>
+              <Input 
+                id="pan" 
+                label="PAN" 
+                value={formValues.pan}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div>
+              <Input 
+                id="aadhar" 
+                label="AADHAR" 
+                value={formValues.aadhar}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Input 
+                id="gst" 
+                label="GSTIN" 
+                value={formValues.gst}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Input 
+                id="dlno" 
+                label="DL NO." 
+                value={formValues.dlno}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Input 
+                id="fssaino" 
+                label="FSSAI NO." 
+                value={formValues.fssaino}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Input 
+                id="email" 
+                label="Email ID" 
+                type="email"
+                value={formValues.email}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Autocomplete
+                id="statecode"
+                label="State Code"
+                options={city}
+                onChange={handleStateChange}
+                defaultValue={formValues.statecode}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end space-x-4">
+            <button 
+              type="submit" 
+              className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </button>
+            <button 
+              type="button" 
+              className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+              onClick={() => navigate('/db/account-master')}
+              disabled={isLoading}
+            >
+              Cancel
+            </button>
+          </div>
+        </FormComponent>
       </div>
     </div>
   );

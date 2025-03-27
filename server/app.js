@@ -20,16 +20,11 @@ const {
 const cors = require('cors');
 app.use(
   cors({
-    origin: process.env.FRONTEND_URLS ? 
-      process.env.FRONTEND_URLS.split(',') : 
-      [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:5173',
-      ],
+    origin: true, // Allow all origins
     credentials: true
   })
 );
+
 
 
 
@@ -129,7 +124,7 @@ app.get('/favicon.ico', (req, res) => {
 
 // Initialize server
 const initServer = () => {
-  app.listen(PORT, 'localhost', () => {
+  app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 };

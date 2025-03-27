@@ -10,6 +10,7 @@ import CollapsibleItemSection from './CollapsibleItemSection';
 import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type Option, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
+import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
 
 const EditInvoicingContent: React.FC<{
   invoiceItemsRef: React.RefObject<ItemData[]>;
@@ -450,9 +451,13 @@ const EditInvoicingContent: React.FC<{
 
   if (dataLoading || loading || !formReady) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-        <div className="text-lg text-gray-600 dark:text-gray-300">Loading invoice data...</div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+        <PageMeta
+          title="Edit Invoice | FMCG Vite Admin Template"
+          description="Edit Invoice page in FMCG Vite Admin Template"
+        />
+        <PageBreadcrumb pageTitle="Edit Invoice" />
+        <InvoicingSkeletonLoader />
       </div>
     );
   }

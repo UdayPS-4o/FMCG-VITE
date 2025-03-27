@@ -9,6 +9,7 @@ import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import useAuth from "../../hooks/useAuth";
 import UserTable from './UserTable';
+import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
 
 interface User {
   id?: number;
@@ -252,6 +253,20 @@ const AddUser: React.FC = () => {
     setUserId(null);
   };
 
+  // Add loading state check to render the skeleton loader
+  if (isLoading) {
+    return (
+      <div>
+        <PageMeta
+          title="Add User | FMCG Vite Admin Template"
+          description="Add or Edit Users in FMCG Vite Admin Template"
+        />
+        <PageBreadcrumb pageTitle={isEdit ? "Edit User" : "Add User"} />
+        <FormSkeletonLoader />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <PageMeta
@@ -267,11 +282,7 @@ const AddUser: React.FC = () => {
             {isEdit ? 'Edit User' : 'Create New User'}
           </h2>
           
-          {isLoading && !error ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
-            </div>
-          ) : error ? (
+          {error ? (
             <div className="text-red-500 p-4 mb-4 bg-red-50 dark:bg-red-900/20 rounded">
               {error}
             </div>

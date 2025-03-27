@@ -8,6 +8,7 @@ import Toast from '../../components/ui/toast/Toast';
 import constants from "../../constants";
 import CollapsibleItemSection from './CollapsibleItemSection';
 import apiCache from '../../utils/apiCache';
+import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
 
 // Update the item interface to include godown field
 interface ItemData {
@@ -64,31 +65,34 @@ const GodownTransfer: React.FC = () => {
       try {
         setLoading(true);
         
-        // Fetch ID
-        const idRes = await fetch(`${baseURL}/slink/godownId`, {
-          credentials: 'include'
-        });
-        const idData = await idRes.json();
-        setId(idData.nextGodownId);
+        // Fetch all data in parallel using Promise.all
+        const [idRes, godownData, pmplResponse, stockResponse] = await Promise.all([
+          fetch(`${baseURL}/slink/godownId`, {
+            credentials: 'include'
+          }).then(res => res.json()),
+          apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`),
+          apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`),
+          apiCache.fetchWithCache(`${baseURL}/api/stock`)
+        ]);
+        
+        // Process ID data
+        setId(idRes.nextGodownId);
 
-        // Fetch godown data with caching
-        const godownData = await apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`);
+        // Process godown data
         if (Array.isArray(godownData)) {
           setPartyOptions(godownData);
         } else {
           console.error('Godown data is not an array:', godownData);
         }
 
-        // Fetch PMPL data with caching
-        const pmplResponse = await apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`);
+        // Process PMPL data
         if (Array.isArray(pmplResponse)) {
           setPmplData(pmplResponse);
         } else {
           console.error('PMPL data is not an array:', pmplResponse);
         }
 
-        // Fetch stock data with caching
-        const stockResponse = await apiCache.fetchWithCache(`${baseURL}/api/stock`);
+        // Process stock data
         setStockData(stockResponse || {});
         setStockDataLoaded(true);
         
@@ -317,6 +321,20 @@ const GodownTransfer: React.FC = () => {
       parseFloat(item.qty) > 0
     ).length;
   };
+
+  // Add loading state check to render the skeleton loader
+  if (loading) {
+    return (
+      <div>
+        <PageMeta
+          title="Godown Transfer | FMCG Vite Admin Template"
+          description="Create Godown Transfer in FMCG Vite Admin Template"
+        />
+        <PageBreadcrumb pageTitle="Godown Transfer" />
+        <FormSkeletonLoader />
+      </div>
+    );
+  }
 
   return (
     <div>
