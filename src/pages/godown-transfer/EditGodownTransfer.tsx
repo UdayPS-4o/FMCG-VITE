@@ -8,6 +8,7 @@ import FormComponent from "../../components/form/Form";
 import Toast from '../../components/ui/toast/Toast';
 import constants from "../../constants";
 import CollapsibleItemSection from './CollapsibleItemSection';
+import apiCache from '../../utils/apiCache';
 
 // Update the item interface to include godown field
 interface ItemData {
@@ -101,6 +102,7 @@ const EditGodownTransfer: React.FC = () => {
       }
 
       try {
+        // This is a specific edit endpoint, so we don't cache it
         const godownRes = await fetch(`${baseURL}/edit/godown/${id}`, {
           credentials: 'include'
         });
@@ -123,57 +125,53 @@ const EditGodownTransfer: React.FC = () => {
       }
     };
 
-    const fetchOptions = async () => {
+    const fetchAllData = async () => {
       try {
-        const res = await fetch(`${baseURL}/api/dbf/godown.json`, {
-          credentials: 'include'
-        });
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setPartyOptions(data);
+        // Fetch all data with caching in parallel
+        const [godownData, pmplDatas, stockDatas] = await Promise.all([
+          apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`),
+          apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`),
+          apiCache.fetchWithCache(`${baseURL}/api/stock`)
+        ]);
+        
+        if (Array.isArray(godownData)) {
+          setPartyOptions(godownData);
         } else {
-          console.error('Data fetched is not an array:', data);
+          console.error('Data fetched is not an array:', godownData);
         }
-        setDataLoadStatus(prev => ({ ...prev, partyOptions: true }));
+        
+        if (Array.isArray(pmplDatas)) {
+          setPmplData(pmplDatas);
+        } else {
+          console.error('PMPL data is not an array:', pmplDatas);
+        }
+        
+        setStockData(stockDatas || {});
+        
+        setDataLoadStatus(prev => ({
+          ...prev,
+          partyOptions: true,
+          pmplData: true,
+          stockData: true
+        }));
+        
+        // Clear expired cache items
+        apiCache.clearExpiredCache();
       } catch (error) {
-        console.error('Error fetching godown data:', error);
-        setDataLoadStatus(prev => ({ ...prev, partyOptions: true }));
+        console.error('Error fetching data:', error);
+        // Mark all data as loaded even if there was an error to allow the form to be displayed
+        setDataLoadStatus(prev => ({
+          ...prev,
+          partyOptions: true,
+          pmplData: true,
+          stockData: true
+        }));
       }
     };
 
-    const fetchPmplData = async () => {
-      try {
-        const pmplRes = await fetch(`${baseURL}/api/dbf/pmpl.json`, {
-          credentials: 'include'
-        });
-        const pmplDatas = await pmplRes.json();
-        setPmplData(pmplDatas);
-        setDataLoadStatus(prev => ({ ...prev, pmplData: true }));
-      } catch (error) {
-        console.error('Error fetching PMPL data:', error);
-        setDataLoadStatus(prev => ({ ...prev, pmplData: true }));
-      }
-    };
-
-    const fetchStockData = async () => {
-      try {
-        const stockRes = await fetch(`${baseURL}/api/stock`, {
-          credentials: 'include'
-        });
-        const stockDatas = await stockRes.json();
-        setStockData(stockDatas);
-        setDataLoadStatus(prev => ({ ...prev, stockData: true }));
-      } catch (error) {
-        console.error('Error fetching stock data:', error);
-        setDataLoadStatus(prev => ({ ...prev, stockData: true }));
-      }
-    };
-
-    // Fetch all data in parallel
+    // Fetch godown transfer data and other data in parallel
     fetchGodownTransferData();
-    fetchOptions();
-    fetchPmplData();
-    fetchStockData();
+    fetchAllData();
   }, [id, baseURL]);
 
   // Second effect: Wait for all data to be loaded, then prefill the form

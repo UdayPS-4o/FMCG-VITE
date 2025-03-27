@@ -7,6 +7,7 @@ import Autocomplete from "../../components/form/input/Autocomplete";
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
+import apiCache from '../../utils/apiCache';
 
 interface PartyOption {
   value: string;
@@ -72,14 +73,11 @@ const CashPayment: React.FC = () => {
           voucherNo: paymentToEdit.voucherNo,
         });
 
-        const resParty = await fetch(constants.baseURL + '/cmpl', {
-          credentials: 'include'
-        });
-        const partyData = await resParty.json();
-        const balanceRes = await fetch(constants.baseURL + '/json/balance', {
-          credentials: 'include'
-        });
-        const balanceData = await balanceRes.json();
+        // Use apiCache for CMPL data
+        const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
+        
+        // Use apiCache for balance data
+        const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
 
         const getBalance = (C_CODE: string) =>
           balanceData.data.find((user: any) => user.partycode === C_CODE)?.result || 0;
@@ -107,14 +105,11 @@ const CashPayment: React.FC = () => {
         const dataVoucher = await resVoucher.json();
         setVoucherNo(dataVoucher.nextVoucherNo);
 
-        const resParty = await fetch(constants.baseURL + '/cmpl', {
-          credentials: 'include'
-        });
-        const dataParty = await resParty.json();
-        const balanceRes = await fetch(constants.baseURL + '/json/balance', {
-          credentials: 'include'
-        });
-        const balanceData = await balanceRes.json();
+        // Use apiCache for CMPL data
+        const dataParty = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
+        
+        // Use apiCache for balance data
+        const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
 
         const getBalance = (C_CODE: string) =>
           balanceData.data.find((user: any) => user.partycode === C_CODE)?.result || 0;
@@ -125,6 +120,9 @@ const CashPayment: React.FC = () => {
         }));
 
         setPartyOptions(partyList);
+        
+        // Clear expired cache entries
+        apiCache.clearExpiredCache();
       } catch (error) {
         setToastMessage('Failed to fetch data for new entry');
         setToastType('error');
