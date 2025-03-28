@@ -329,13 +329,14 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     }
 
     const selectedItem = data.selectedItem;
+    const multF = selectedItem ? parseInt(selectedItem.MULT_F, 10) : 1;
 
     if (selectedItem) {
       if (data.unit === selectedItem.UNIT_2) {
-        // Unit is BOX
-        amount = rate * qty;
+        // Unit is BOX - multiply qty by MULT_F
+        amount = rate * (qty * multF);
       } else {
-        // Unit is PCS - direct multiplication without division
+        // Unit is PCS - direct multiplication
         amount = rate * qty;
       }
     } else {
