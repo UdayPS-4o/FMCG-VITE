@@ -162,19 +162,60 @@ const InvoicingContent: React.FC = () => {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!party) {
       newErrors.party = 'Party is required';
     }
-    
+
     if (!sm) {
       newErrors.sm = 'SM is required';
     }
     
+    // Create a more detailed validation for items
+    let hasInvalidItems = false;
+    let itemErrorMessage = '';
+    
+    // Check if there are any items
     if (items.length === 0 || !items.some(item => item.item)) {
       newErrors.items = 'At least one item is required';
+      hasInvalidItems = true;
+      itemErrorMessage = 'At least one item is required';
+    } else {
+      // Check each item that has an item code
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        
+        // Only validate items that have been selected (have an item code)
+        if (item.item) {
+          if (!item.godown) {
+            hasInvalidItems = true;
+            itemErrorMessage = `Item ${item.item} is missing a godown selection`;
+            setExpandedIndex?.(i); // Expand the problematic item
+            break;
+          }
+          
+          if (!item.qty || item.qty === '0') {
+            hasInvalidItems = true;
+            itemErrorMessage = `Item ${item.item} is missing a quantity`;
+            setExpandedIndex?.(i); // Expand the problematic item
+            break;
+          }
+          
+          // Validate that quantity doesn't exceed stock limit
+          if (parseInt(item.qty) > item.stockLimit) {
+            hasInvalidItems = true;
+            itemErrorMessage = `Item ${item.item} quantity (${item.qty}) exceeds available stock (${item.stockLimit})`;
+            setExpandedIndex?.(i); // Expand the problematic item
+            break;
+          }
+        }
+      }
     }
     
+    if (hasInvalidItems) {
+      newErrors.items = itemErrorMessage;
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -182,10 +223,24 @@ const InvoicingContent: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
+    // Set validation messages to be visible
+    setShowValidationErrors(true);
+    
     if (!validateForm()) {
+      // Show a more detailed error message based on the specific validation error
+      let errorMessage = 'Please fill in all required fields';
+      
+      if (errors.items) {
+        errorMessage = errors.items;
+      } else if (errors.party) {
+        errorMessage = errors.party;
+      } else if (errors.sm) {
+        errorMessage = errors.sm;
+      }
+      
       setToast({
         visible: true,
-        message: 'Please fill in all required fields',
+        message: errorMessage,
         type: 'error'
       });
       return;

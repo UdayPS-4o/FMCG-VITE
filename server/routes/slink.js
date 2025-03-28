@@ -584,8 +584,23 @@ async function printInvoicing(req, res) {
     // Calculate due date
     const calculateDueDate = (dateString, dueDays) => {
       if (!dueDays) return '';
-      const date = new Date(dateString);
-      date.setDate(date.getDate() + dueDays);
+      
+      // Parse the input date correctly
+      const parts = dateString.split('-');
+      // If date is already in DD-MM-YYYY format
+      let date;
+      if (parts.length === 3 && parts[0].length === 2) {
+        // Input is already DD-MM-YYYY
+        date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      } else {
+        // Assume ISO format or other standard format
+        date = new Date(dateString);
+      }
+      
+      // Add the due days
+      date.setDate(date.getDate() + parseInt(dueDays));
+      
+      // Return in DD-MM-YYYY format
       return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     

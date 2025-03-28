@@ -55,6 +55,7 @@ interface InvoiceItem {
   pack: string;
   gst: number;
   mrp: number;
+  pcBx?: string;
 }
 
 interface Summary {
@@ -255,7 +256,7 @@ const PrintInvoicing: React.FC = () => {
     const chunks: InvoiceItem[][] = [];
     const totalItems = items.length;
     const itemsPerNormalPage = 11; // Regular pages have 11 items
-    const itemsPerEndPage = 7; // End page can have 7 items
+    const itemsPerEndPage = 9; // End page can have 7 items
     
     // If we have more than 7 items, we need at least one normal page + one end page
     if (totalItems > itemsPerEndPage) {
@@ -284,7 +285,7 @@ const PrintInvoicing: React.FC = () => {
   const addBlankRowsToEndPage = (chunk: InvoiceItem[], chunkIndex: number, chunksArray: InvoiceItem[][]): InvoiceItem[] => {
     // Only apply to the last chunk (end page)
     if (chunkIndex === chunksArray.length - 1) {
-      const itemsPerEndPage = 8;
+      const itemsPerEndPage = 9;
       const currentItems = chunk.length;
       
       // If the end page has fewer than 7 items, add blank rows
@@ -363,7 +364,7 @@ const PrintInvoicing: React.FC = () => {
                         <div className="flex">
                           <div className="w-1/3">
                             <p className="font-bold">GSTN: {data.company.gstin}</p>
-                            <p className="font-bold">{data.company.subject}</p>
+                            {/* <p className="font-bold">{data.company.subject}</p> */}
                             <p className="font-bold">FSSAI NO: {data.company.fssaiNo}</p>
                             <p className="font-bold">D.L. No.: {data.dlNo}</p>
                           </div>
@@ -382,7 +383,7 @@ const PrintInvoicing: React.FC = () => {
                       <td colSpan={3} className="border border-black p-2 align-middle">
                         <div className="text-center">
                           <p className="text-xl font-bold">{data.company.name}</p>
-                          <p>BILL MADE BY: {data.billMadeBy || 'ADMIN'}</p>
+                          <p>BILL MADE BY: {data.billMadeBy || 'SHUBHAM'}</p>
                         </div>
                       </td>
                     </tr>
@@ -473,6 +474,11 @@ const PrintInvoicing: React.FC = () => {
                       const { text: particular, needsSmallerFont } = handleTextWrapping(item.particular);
                       const isBlankRow = !item.particular && !item.rate && !item.qty;
                       
+                      // Add this code to handle BOX rate calculation
+                      const isBox = item.unit?.toUpperCase() == "BOX";
+                      const displayRate = isBox && item.pcBx ? Number(item.rate) * Number(item.pcBx) : Number(item.rate);
+                      const unitDisplay = isBox && item.pcBx ? `${item.unit} - ${item.pcBx}` : item.unit;
+                      
                       return (
                         <tr key={index} className={isBlankRow ? "blank-row h-10" : ""}>
                           <td className={`border border-black p-1 text-left text-blue-800 ${needsSmallerFont ? 'text-[smaller]' : ''}`}>
@@ -482,20 +488,27 @@ const PrintInvoicing: React.FC = () => {
                           <td className="border border-black p-1 text-center">{!isBlankRow ? item.pack : ""}</td>
                           <td className="border border-black p-1 text-center">{!isBlankRow && item.mrp ? Number(item.mrp).toFixed(2) : ""}</td>
                           <td className="border border-black p-1 text-center text-orange-600">{!isBlankRow && item.gst ? item.gst.toFixed(2) : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow && item.rate ? Number(item.rate).toFixed(2) : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.unit : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow && item.rate ? displayRate.toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center text-[smaller]">{!isBlankRow ? unitDisplay : ""}</td>
                           <td className="border border-black p-1 text-center">{!isBlankRow ? item.qty : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.cess : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? "" : ""}</td>
                           <td className="border border-black p-1 text-center">{!isBlankRow ? item.schRs : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.sch : ""}</td>
-                          <td className="border border-black p-1 text-center text-blue-800">{!isBlankRow ? item.netAmount : ""}</td>
-                          <td className={`border border-black p-1 text-left ${needsSmallerFont ? 'text-[smaller]' : ''}`}>
+                          <td className="border border-black p-1 text-center">
                             {!isBlankRow ? (
                               <>
-                                <span className="text-blue-800">{particular}</span>
+                                <div>{item.sch}{item.sch? "%" : ""}</div>
+                                <div>{item.cd}{item.cd? "%" : ""}</div>
+                              </>
+                            ) : ""}
+                          </td>
+                          <td className="border border-black p-1 text-center text-blue-800">{!isBlankRow ? item.netAmount : ""}</td>
+                          <td className={`border border-black p-1 text-left`}>
+                            {!isBlankRow ? (
+                              <>
+                                <span className={`text-blue-800 ${needsSmallerFont ? 'text-[smaller]' : ''}`}>{particular}</span>
                                 <div className="flex justify-between">
-                                  <span>{item.unit}</span>
-                                  <span>{item.rate ? Number(item.rate).toFixed(2) : ""}</span>
+                                  <span className="text-[smaller]">{unitDisplay}</span>
+                                  <span>{item.mrp ? Number(item.mrp).toFixed(2) : ""}</span>
                                 </div>
                               </>
                             ) : (
@@ -508,7 +521,7 @@ const PrintInvoicing: React.FC = () => {
                               </>
                             )}
                           </td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.cess : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow ? "" : ""}</td>
                           <td className="border border-black p-1 text-center">{!isBlankRow ? item.qty : ""}</td>
                         </tr>
                       );
@@ -533,7 +546,7 @@ const PrintInvoicing: React.FC = () => {
                                   <p className="text-[10px]">2. Goods once sold will not be taken back. E & OE.</p>
                                 </td>
                                 
-                                <td className="align-top border border-black p-1" style={{ width: '20%' }}>
+                                <td className="align-top border border-black" style={{ width: '20%' }}>
                                   <table className="w-full text-xs border-collapse">
                                     <tr className="text-xs">
                                       <td className="border-b border-r border-black p-1 font-bold text-blue-800">Goods</td>
