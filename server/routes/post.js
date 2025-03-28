@@ -34,23 +34,82 @@ app.post('/:formType', async (req, res) => {
         console.log('No existing invoicing file, creating a new one.');
       }
       
-      // Extract series from form data
-      const series = formData.series || 'T';
+      // Extract series and billNo from form data
+      const series = formData.series ;
+      const billNo = formData.billNo ;
       
-      // Find the highest ID for this series
+      // First, get the expected next bill number from the invoiceId endpoint
+      let expectedNextBillNo;
+      try {
+        // Use server's host to construct the URL
+        const protocol = req.protocol || 'http';
+        const host = req.get('host') || 'localhost:8000';
+        const baseUrl = `${protocol}://${host}`;
+        
+        console.log(`Fetching next invoice ID from ${baseUrl}/slink/invoiceId`);
+        const invoiceIdResponse = await fetch(`${baseUrl}/slink/invoiceId`);
+        
+        if (!invoiceIdResponse.ok) {
+          throw new Error(`Failed to fetch invoice ID data: ${invoiceIdResponse.statusText}`);
+        }
+        
+        const invoiceIdData = await invoiceIdResponse.json();
+        expectedNextBillNo = invoiceIdData.nextSeries[series.toUpperCase()];
+        
+        console.log(`Expected next bill number for series ${series}: ${expectedNextBillNo}`);
+        
+        // If the bill number doesn't match the expected next bill number
+        if (expectedNextBillNo && parseInt(billNo) !== expectedNextBillNo) {
+          return res.status(409).json({
+            error: 'Incorrect bill number',
+            message: `Bill number ${billNo} for series ${series} doesn't match the expected next bill number.`,
+            suggestedBillNo: expectedNextBillNo.toString()
+          });
+        }
+      } catch (fetchError) {
+        console.error('Error fetching invoice ID data:', fetchError);
+        // Continue with regular processing if we can't fetch the expected bill number
+      }
+      
+      // Check if the series + billNo combination already exists
+      const duplicate = dbData.find(
+        invoice => invoice.series === series && invoice.billNo === billNo
+      );
+      
+      if (duplicate) {
+        // If duplicate found, find the highest bill number for this series
+        let maxBillNo = 0;
+        dbData.forEach(invoice => {
+          if (invoice.series === series && parseInt(invoice.billNo) > maxBillNo) {
+            maxBillNo = parseInt(invoice.billNo);
+          }
+        });
+        
+        // Use the expected next bill number if available, otherwise suggest max + 1
+        const suggestedBillNo = expectedNextBillNo || (maxBillNo + 1).toString();
+        
+        // Return a conflict error with suggested next bill number
+        return res.status(409).json({
+          error: 'Duplicate bill number',
+          message: `Bill number ${billNo} for series ${series} already exists.`,
+          suggestedBillNo: suggestedBillNo
+        });
+      }
+      
+      // Find the highest ID overall (regardless of series)
       let maxId = 0;
       dbData.forEach(invoice => {
-        if (invoice.series === series && parseInt(invoice.id) > maxId) {
+        if (parseInt(invoice.id) > maxId) {
           maxId = parseInt(invoice.id);
         }
       });
       
       // Assign the next ID
       formData.id = (maxId + 1).toString();
-      console.log(`Generated new ID ${formData.id} for series ${series}`);
+      console.log(`Generated new ID ${formData.id} for series ${series} and bill number ${billNo}`);
     } catch (err) {
-      console.error('Error generating invoice ID:', err);
-      return res.status(500).send('Failed to generate invoice ID.');
+      console.error('Error processing invoice:', err);
+      return res.status(500).send('Failed to process invoice: ' + err.message);
     }
   }
 
@@ -310,6 +369,82 @@ app.post('/edit/:formType', async (req, res) => {
         String(entry.id) === String(formData.id) && 
         entry.series === formData.series
       );
+      
+      // If updating an invoice and the bill number has changed, check for duplicate bill numbers
+      if (entryIndex > -1 && formData.billNo) {
+        const existingEntry = dbData[entryIndex];
+        const billNoChanged = existingEntry.billNo !== formData.billNo;
+        const seriesChanged = existingEntry.series !== formData.series;
+        
+        // If either the bill number or series changed, we need to validate
+        if (billNoChanged || seriesChanged) {
+          const series = formData.series;
+          const billNo = formData.billNo;
+          
+          // First, check if the new bill number matches the expected next bill number
+          // Only if this is a completely new bill number (not just editing an existing invoice)
+          if (billNoChanged || seriesChanged) {
+            try {
+              // Get expected next bill number from the invoiceId endpoint
+              const protocol = req.protocol || 'http';
+              const host = req.get('host') || 'localhost:8000';
+              const baseUrl = `${protocol}://${host}`;
+              
+              console.log(`Fetching next invoice ID from ${baseUrl}/slink/invoiceId`);
+              const invoiceIdResponse = await fetch(`${baseUrl}/slink/invoiceId`);
+              
+              if (!invoiceIdResponse.ok) {
+                throw new Error(`Failed to fetch invoice ID data: ${invoiceIdResponse.statusText}`);
+              }
+              
+              const invoiceIdData = await invoiceIdResponse.json();
+              const expectedNextBillNo = invoiceIdData.nextSeries[series.toUpperCase()];
+              
+              console.log(`Expected next bill number for series ${series}: ${expectedNextBillNo}`);
+              
+              // Check if the bill number is either the original one or the expected next one
+              // This allows keeping the original bill number or switching to the next available one
+              const isOriginalBillNo = !billNoChanged && series === existingEntry.series;
+              const isExpectedNextBillNo = parseInt(billNo) === expectedNextBillNo;
+              
+              if (!isOriginalBillNo && !isExpectedNextBillNo) {
+                return res.status(409).json({
+                  error: 'Incorrect bill number',
+                  message: `Bill number ${billNo} for series ${series} doesn't match the expected next bill number.`,
+                  suggestedBillNo: expectedNextBillNo.toString()
+                });
+              }
+            } catch (fetchError) {
+              console.error('Error fetching invoice ID data:', fetchError);
+              // Continue with regular processing if we can't fetch the expected bill number
+            }
+          }
+          
+          // Check if the new bill number already exists for this series (duplicate)
+          const duplicate = dbData.findIndex(invoice => 
+            invoice.series === formData.series && 
+            invoice.billNo === formData.billNo &&
+            String(invoice.id) !== String(formData.id) // Exclude the current invoice
+          );
+          
+          if (duplicate !== -1) {
+            // If duplicate found, find the highest bill number for this series
+            let maxBillNo = 0;
+            dbData.forEach(invoice => {
+              if (invoice.series === formData.series && parseInt(invoice.billNo) > maxBillNo) {
+                maxBillNo = parseInt(invoice.billNo);
+              }
+            });
+            
+            // Return a conflict error with suggested next bill number
+            return res.status(409).json({
+              error: 'Duplicate bill number',
+              message: `Bill number ${formData.billNo} for series ${formData.series} already exists.`,
+              suggestedBillNo: (maxBillNo + 1).toString()
+            });
+          }
+        }
+      }
     } else {
       // For other types, try standard identifiers
       if (formData.receiptNo) {
@@ -366,89 +501,6 @@ app.post('/edit/:formType', async (req, res) => {
   }
 });
 
-// Specific route for editing invoices
-// app.post('/edit/invoicing', async (req, res) => {
-//   console.log('Edit invoicing request received');
-//   const formData = req.body;
-  
-//   try {
-//     console.log('Processing edit request for invoicing');
-//     console.log('Request body keys:', Object.keys(formData));
-    
-//     // Parse items and party if they are strings
-//     if (formData.items && typeof formData.items === 'string') {
-//       try {
-//         formData.items = JSON.parse(formData.items);
-//         console.log('Parsed items:', formData.items.length);
-//       } catch (e) {
-//         console.error('Failed to parse items JSON string:', e);
-//       }
-//     }
-    
-//     if (formData.party && typeof formData.party === 'string') {
-//       try {
-//         formData.party = JSON.parse(formData.party);
-//         console.log('Parsed party:', formData.party);
-//       } catch (e) {
-//         console.error('Failed to parse party JSON string:', e);
-//       }
-//     }
-    
-//     // Check if the database file exists
-//     const filePath = path.join(__dirname, '..', 'db', 'invoicing.json');
-//     let dbData = [];
-    
-//     try {
-//       const data = await fs.promises.readFile(filePath, 'utf8');
-//       dbData = JSON.parse(data);
-//       console.log(`Retrieved ${dbData.length} records from database`);
-//     } catch (readError) {
-//       if (readError.code === 'ENOENT') {
-//         console.log('Database file does not exist, creating new file');
-//       } else {
-//         throw readError;
-//       }
-//     }
-    
-//     // Find the entry to update
-//     let entryIndex = -1;
-    
-//     if (formData.id) {
-//       entryIndex = dbData.findIndex((entry) => String(entry.id) === String(formData.id));
-//     }
-    
-//     if (entryIndex > -1) {
-//       console.log(`Found entry at index ${entryIndex}, updating...`);
-      
-//       // Create a new object by merging the existing data with the updated data
-//       dbData[entryIndex] = { 
-//         ...dbData[entryIndex], 
-//         ...formData,
-//         lastUpdated: new Date().toISOString()
-//       };
-      
-//       try {
-//         await fs.promises.writeFile(filePath, JSON.stringify(dbData, null, 2), 'utf8');
-//         console.log(`Successfully updated invoicing record with id ${formData.id}`);
-//         res.status(200).json({ 
-//           message: 'Entry updated successfully.',
-//           id: formData.id
-//         });
-//       } catch (writeError) {
-//         console.error('Error writing to database file:', writeError);
-//         res.status(500).send('Failed to write updated data: ' + writeError.message);
-//       }
-//     } else {
-//       console.log('Entry not found, request data:', formData);
-//       res.status(404).send(
-//         `Error: Entry not found in database. The record with ID ${formData.id} could not be found.`
-//       );
-//     }
-//   } catch (err) {
-//     console.error('Unexpected error:', err);
-//     res.status(500).send('Failed to edit data: ' + err.message);
-//   }
-// });
 
 app.get('/add/godown', async (req, res) => {
   let { data } = req.query;

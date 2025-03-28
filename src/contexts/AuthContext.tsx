@@ -18,6 +18,7 @@ export interface User {
   routeAccess: string[];
   powers: string[];
   token?: string;
+  smCode?: string;
   subgroup?: {
     title: string;
     subgroupCode?: string;

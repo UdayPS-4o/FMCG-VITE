@@ -8,6 +8,7 @@ interface User {
   routeAccess: string[];
   powers: string[];
   subgroup: any | null;
+  smCode?: string;
 }
 
 interface UserTableProps {
@@ -43,6 +44,7 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
     { key: 'routeAccess', label: 'Route Access' },
     { key: 'powers', label: 'Powers' },
     { key: 'subgroup', label: 'Subgroup' },
+    { key: 'smCode', label: 'S/M Code' },
   ];
   
   const handleChangePage = (newPage: number) => {

@@ -31,6 +31,7 @@ interface InvoiceInfo {
   date: string;
   time: string;
   dueDate: string;
+  displayNo: string;
 }
 
 interface AckInfo {
@@ -53,6 +54,7 @@ interface InvoiceItem {
   particular: string;
   pack: string;
   gst: number;
+  mrp: number;
 }
 
 interface Summary {
@@ -84,6 +86,7 @@ interface InvoiceData {
   invoice: InvoiceInfo;
   ack: AckInfo;
   irn: string;
+  billMadeBy: string;
   items: InvoiceItem[];
   summary: Summary;
   taxDetails: TaxDetail[];
@@ -301,7 +304,8 @@ const PrintInvoicing: React.FC = () => {
           netAmount: '',
           particular: '',
           pack: '',
-          gst: 0
+          gst: 0,
+          mrp: 0
         });
         
         return [...chunk, ...blankRows];
@@ -378,7 +382,7 @@ const PrintInvoicing: React.FC = () => {
                       <td colSpan={3} className="border border-black p-2 align-middle">
                         <div className="text-center">
                           <p className="text-xl font-bold">{data.company.name}</p>
-                          <p>BILL MADE BY: SHUBHAM</p>
+                          <p>BILL MADE BY: {data.billMadeBy || 'ADMIN'}</p>
                         </div>
                       </td>
                     </tr>
@@ -396,15 +400,15 @@ const PrintInvoicing: React.FC = () => {
                             </p>
                             <p>
                               <span className="font-bold text-blue-800">Mobile No.</span> {data.party.mobileNo}
-                              <span className="ml-4 font-bold text-blue-800">Balance</span> {data.party.balanceBf ? `Bal: ${data.party.balanceBf.toFixed(2)} Dr` : 'N/A'}
+                              <span className="ml-4 font-bold text-blue-800">Balance</span> {data.party.balanceBf ? `${data.party.balanceBf}` : 'N/A'}
                             </p>
                           </div>
                           <div className="w-1/3 pl-2">
                             <div className="flex justify-between">
-                              <p><span className="font-bold text-blue-800">Inv. No :</span> {data.invoice.no}</p>
+                              <p><span className="font-bold text-blue-800">Inv. No :</span> {data.invoice.displayNo || data.invoice.no}</p>
                               <p><span className="font-bold text-blue-800">Mode:</span> {data.invoice.mode}</p>
                             </div>
-                            <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.date} {data.invoice.time}</p>
+                            <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.time}</p>
                             {data.invoice.dueDate && (
                               <p><span className="font-bold text-blue-800">Due Date</span> {data.invoice.dueDate}</p>
                             )}
@@ -413,7 +417,7 @@ const PrintInvoicing: React.FC = () => {
                       </td>
                       <td colSpan={3} className="border border-black p-2">
                         <div>
-                          <p><span className="font-bold text-blue-800">Invoice No :</span> {data.invoice.no}</p>
+                          <p><span className="font-bold text-blue-800">Invoice No :</span> {data.invoice.displayNo || data.invoice.no}</p>
                           <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.date}</p>
                           <p><span className="font-bold text-blue-800">Party</span> {data.party.name}</p>
                           <p><span className="font-bold text-blue-800">Mode:</span> {data.invoice.mode}</p>
@@ -476,9 +480,9 @@ const PrintInvoicing: React.FC = () => {
                             {isBlankRow && <span className="invisible">Placeholder for consistent spacing</span>}
                           </td>
                           <td className="border border-black p-1 text-center">{!isBlankRow ? item.pack : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow && item.rate ? item.rate.toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow && item.mrp ? Number(item.mrp).toFixed(2) : ""}</td>
                           <td className="border border-black p-1 text-center text-orange-600">{!isBlankRow && item.gst ? item.gst.toFixed(2) : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow && item.rate ? item.rate.toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center">{!isBlankRow && item.rate ? Number(item.rate).toFixed(2) : ""}</td>
                           <td className="border border-black p-1 text-center">{!isBlankRow ? item.unit : ""}</td>
                           <td className="border border-black p-1 text-center">{!isBlankRow ? item.qty : ""}</td>
                           <td className="border border-black p-1 text-center">{!isBlankRow ? item.cess : ""}</td>
@@ -491,7 +495,7 @@ const PrintInvoicing: React.FC = () => {
                                 <span className="text-blue-800">{particular}</span>
                                 <div className="flex justify-between">
                                   <span>{item.unit}</span>
-                                  <span>{item.rate?.toFixed(2)}</span>
+                                  <span>{item.rate ? Number(item.rate).toFixed(2) : ""}</span>
                                 </div>
                               </>
                             ) : (
@@ -545,6 +549,15 @@ const PrintInvoicing: React.FC = () => {
                                         <td className="border-r border-black p-1">{tax.sgstValue?.toFixed(2)}</td>
                                         <td className="border-r border-black p-1">{tax.cgst?.toFixed(2)}%</td>
                                         <td className="p-1">{tax.cgstValue?.toFixed(2)}</td>
+                                      </tr>
+                                    ))}
+                                    {Array(3 - groupedTaxDetails.length).fill(0).map((_, i) => (
+                                      <tr key={i} className="text-xs">
+                                        <td className="border-r border-black p-1 invisible">0</td>
+                                        <td className="border-r border-black p-1 invisible">0</td>
+                                        <td className="border-r border-black p-1 invisible">0</td>
+                                        <td className="border-r border-black p-1 invisible">0</td>
+                                        <td className="p-1 invisible"></td>
                                       </tr>
                                     ))}
                                     <tr className="text-xs">

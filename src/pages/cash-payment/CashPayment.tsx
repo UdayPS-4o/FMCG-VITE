@@ -20,6 +20,7 @@ interface FormValues {
   amount: string;
   discount: string;
   voucherNo: string;
+  narration: string;
   party?: string;
 }
 
@@ -34,6 +35,7 @@ const CashPayment: React.FC = () => {
     amount: '',
     discount: '',
     voucherNo: '',
+    narration: '',
   });
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,6 +96,7 @@ const CashPayment: React.FC = () => {
           amount: paymentToEdit.amount,
           discount: paymentToEdit.discount,
           voucherNo: paymentToEdit.voucherNo,
+          narration: paymentToEdit.narration,
         });
 
         // Use apiCache for CMPL data
@@ -237,10 +240,19 @@ const CashPayment: React.FC = () => {
   // New handler for input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormValues(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    
+    // Auto-capitalize series input
+    if (name === 'series') {
+      setFormValues(prev => ({
+        ...prev,
+        [name]: value.toUpperCase()
+      }));
+    } else {
+      setFormValues(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -254,6 +266,7 @@ const CashPayment: React.FC = () => {
       amount: formData.get('amount') as string,
       discount: formData.get('discount') as string,
       voucherNo: formData.get('voucherNo') as string,
+      narration: formData.get('narration') as string,
       party: party?.value
     };
 
@@ -295,36 +308,13 @@ const CashPayment: React.FC = () => {
       <PageMeta title="Cash Payments" description="Cash Payments Form" />
       <PageBreadcrumb pageTitle="Cash Payments" />
       
-      <div className="container mx-auto px-4 py-4">
+      <div className="container mx-auto px-0 py-4 md:max-w-3xl">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">Cash Payment Form</h2>
           
           <FormComponent onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <Input
-                  id="date"
-                  name="date"
-                  type="date"
-                  label="Date"
-                  value={formValues.date}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              <div>
-                <Input
-                  id="voucherNo"
-                  name="voucherNo"
-                  label="Voucher No."
-                  type="text"
-                  value={voucherNo || formValues.voucherNo || ''}
-                  onChange={handleInputChange}
-                />
-              </div>
-              
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-1">
                 <Autocomplete
                   id="party-select"
                   label="Party"
@@ -332,40 +322,88 @@ const CashPayment: React.FC = () => {
                   onChange={handlePartyChange}
                   defaultValue={party?.value}
                 />
+                
+                <div className="mt-4">
+                  <Input
+                    id="date"
+                    name="date"
+                    type="date"
+                    label="Date"
+                    value={formValues.date}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full"
+                  />
+                </div>
               </div>
               
-              <div>
-                <Input 
-                  id="series"
-                  name="series" 
-                  label="Series" 
-                  value={formValues.series}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              <div>
-                <Input 
-                  id="amount"
-                  name="amount"
-                  type="number"
-                  label="Amount"
-                  value={formValues.amount}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              <div>
-                <Input 
-                  id="discount"
-                  name="discount"
-                  type="number"
-                  label="Discount"
-                  value={formValues.discount}
-                  onChange={handleInputChange}
-                />
+              <div className="col-span-1">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-1">
+                    <Input 
+                      id="series"
+                      name="series" 
+                      label="Series" 
+                      value={formValues.series}
+                      onChange={handleInputChange}
+                      required
+                      maxLength={1}
+                      className="w-full uppercase"
+                    />
+                  </div>
+                  
+                  <div className="col-span-1">
+                    <Input
+                      id="voucherNo"
+                      name="voucherNo"
+                      label="Voucher No."
+                      type="text"
+                      value={voucherNo || formValues.voucherNo || ''}
+                      onChange={handleInputChange}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div className="col-span-1">
+                    <Input 
+                      id="amount"
+                      name="amount"
+                      type="number"
+                      label="Amount"
+                      value={formValues.amount}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full"
+                    />
+                  </div>
+                  
+                  <div className="col-span-1">
+                    <Input 
+                      id="discount"
+                      name="discount"
+                      type="number"
+                      label="Discount"
+                      value={formValues.discount}
+                      onChange={handleInputChange}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+                
+                <div className="mt-4">
+                  <Input 
+                    id="narration"
+                    name="narration"
+                    type="text"
+                    label="Narration"
+                    maxLength={25}
+                    value={formValues.narration}
+                    onChange={handleInputChange}
+                    className="w-full"
+                  />
+                </div>
               </div>
             </div>
             

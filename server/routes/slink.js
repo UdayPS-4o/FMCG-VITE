@@ -48,7 +48,7 @@ const getPMPLData = async () => {
         CODE: entry.CODE,
         PRODUCT: entry.PRODUCT,
         PACK: entry.PACK,
-
+        MRP1: entry.MRP1,
         GST: entry.GST,
       };
     });
@@ -456,8 +456,8 @@ async function printGodown(req, res) {
 }
 
 const EditUser = async (req, res) => {
-  const { id, name, number, routeAccess, password, powers, subgroup } = req.body; // Include subgroup in the destructure
-  console.log('Editing user', id, name, number, routeAccess, powers, password, subgroup);
+  const { id, name, number, routeAccess, password, powers, subgroup, smCode } = req.body; // Include smCode in the destructure
+  console.log('Editing user', id, name, number, routeAccess, powers, password, subgroup, smCode);
 
   try {
     // Read users from users.json file
@@ -474,6 +474,7 @@ const EditUser = async (req, res) => {
       user.password = password;
       user.powers = powers;
       user.subgroup = subgroup; // Update the subgroup field
+      user.smCode = smCode; // Update the smCode field
 
       // Save the updated users list back to the JSON file
       await fs.writeFile(path.join(__dirname, '../db/users.json'), JSON.stringify(users, null, 2));
@@ -501,7 +502,7 @@ app.get('/json/users', async (req, res) => {
 });
 
 app.post('/addUser', async (req, res) => {
-  const { name, number, password, routeAccess, powers, username, subgroup } = req.body;
+  const { name, number, password, routeAccess, powers, username, subgroup, smCode } = req.body; // Include smCode in the destructure
 
   try {
     let users = await fs.readFile('./db/users.json');
@@ -526,6 +527,7 @@ app.post('/addUser', async (req, res) => {
       routeAccess: routeAccess,
       powers: powers,
       subgroup: subgroup,
+      smCode: smCode, // Include smCode in the new user object
     };
 
     // Add new user to users array
@@ -553,30 +555,67 @@ async function printInvoicing(req, res) {
     const invoice = invoiceData.find((inv) => inv.id == (id));
     console.log('THe invoice we found is', invoice);
     const pmplData = await getPMPLData();
-    let accountMasterData = await fs.readFile(
-      path.join(__dirname, '..', 'db', 'account-master.json'),
-      'utf8',
-    );
-
-    // filter by cmpl
-    // accountMasterData = JSON.parse(accountMasterData);
-
-    // accountMasterData = accountMasterData.filter((item) => item.subgroup === invoice.party);
-    // console.log('Account Master Data', accountMasterData);
-    // invoice.party = accountMasterData[0];
-
+    
+    // Read balance.json to get the party's balance
+    let balanceData = await fs.readFile(path.join(__dirname, '..', 'db', 'balance.json'), 'utf8');
+    balanceData = JSON.parse(balanceData);
+    
     let cmpl = await completeCmplData(invoice.party);
-    console.log('complete cmpl  data', cmpl);
-    // console.log('cmplData', cmplData);
-    console.log('invoice.party', invoice.party);
+    console.log('complete cmpl data', cmpl);
+    
+    // Find party balance from balance.json
+    const partyBalance = balanceData.data.find(item => item.partycode === invoice.party);
+    const balanceValue = partyBalance ? partyBalance.result : "0 CR";
+    
+    // Format date in DD-MM-YYYY format
+    const formatDate = (dateString) => {
+      const date = new Date(dateString);
+      return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+    };
+    
+    // Get current time in DD-MM-YYYY HH-MM-SS format
+    const getCurrentDateTime = () => {
+      const now = new Date();
+      const date = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+      const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      return `${date} ${time}`;
+    };
 
-    // console.log("before party",invoice.party)
-    console.log('party', invoice.party);
-    // console.log("After party",letinvoice.party)
+    // Calculate due date
+    const calculateDueDate = (dateString, dueDays) => {
+      if (!dueDays) return '';
+      const date = new Date(dateString);
+      date.setDate(date.getDate() + dueDays);
+      return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+    };
+    
+    // Count boxes (cases) vs loose items (PCS)
+    const countBoxesAndLooseItems = (items) => {
+      const boxes = items.reduce((acc, item) => {
+        // If unit is BOX or similar, count it as a box
+        if (item.unit && (item.unit.toUpperCase() === 'BOX' || item.unit.toUpperCase().includes('BOX'))) {
+          return acc + Number(item.qty);
+        }
+        return acc;
+      }, 0);
+      
+      const looseItems = items.reduce((acc, item) => {
+        // If unit is PCS or similar, count it as a loose item
+        if (item.unit && (item.unit.toUpperCase() === 'PCS' || item.unit.toUpperCase().includes('PCS'))) {
+          return acc + Number(item.qty);
+        }
+        return acc;
+      }, 0);
+      
+      return { boxes, looseItems };
+    };
+    
+    // Get counts of cases and loose items
+    const { boxes, looseItems } = countBoxesAndLooseItems(invoice.items);
 
     const ModifiedInv = {
       company: {
-        name: 'EKTA ENTERPRICE',
+        name: 'EKTA ENTERPRISES',
         gstin: '23AJBPS6285R1ZF',
         subject: 'Subject to SEONI Jurisdiction',
         fssaiNo: '11417230000027',
@@ -594,56 +633,55 @@ async function printInvoicing(req, res) {
         gstin: cmpl.C_GST,
         stateCode: cmpl.C_STATE,
         mobileNo: cmpl.C_MOBILE,
-        balanceBf: invoice.items.reduce((acc, item) => acc + item.netAmt, 0) || 0,
+        balanceBf: balanceValue,
       },
       invoice: {
-        no: invoice.id,
+        no: `${invoice.id} - ${invoice.series || ''} - ${invoice.billNo || ''}`,
         mode: 'CASH',
-        date: invoice.date,
-        time: new Date().toLocaleTimeString(),
-        dueDate: invoice.dueDays
-          ? new Date(invoice.date).setDate(new Date(invoice.date).getDate() + invoice.dueDays)
-          : '',
+        date: formatDate(invoice.date),
+        time: getCurrentDateTime(),
+        dueDate: calculateDueDate(invoice.date, invoice.dueDays),
+        displayNo: `${invoice.series || ''} - ${invoice.billNo || ''}`
       },
       ack: {
-        no: invoice.id,
-        date: invoice.date,
+        no: "",
+        date: "",
       },
-      irn: '0265cdbc86f02a327272925c34fd6014d5701a832b58d00f5b5b85cf452f30b8',
+      irn: '',
+      billMadeBy: req.user ? req.user.name : 'ADMIN',
       items: [
-        // { particulars: "CHAVI WAX 40'S HM 36050010", pack: "BDLS", mrp: 600.00, gst: 12.00, rate: 460.00, unit: "BOX", qty: 60, free: 0, schRs: "", netAmount: 27600.00 },
-
         ...invoice.items.map((item) => {
-          item.particular = pmplData.find((pmplItem) => pmplItem.CODE === item.item).PRODUCT;
-          item.pack = pmplData.find((pmplItem) => pmplItem.CODE === item.item).PACK;
-          item.gst = pmplData.find((pmplItem) => pmplItem.CODE === item.item).GST;
-          return item;
+        const pmplItem = pmplData.find((pmplItem) => pmplItem.CODE === item.item);
+          return {
+            ...item,
+            particular: pmplItem ? pmplItem.PRODUCT : '',
+            pack: pmplItem ? pmplItem.PACK : '',
+            gst: pmplItem ? pmplItem.GST : 0,
+            mrp: pmplItem ? pmplItem.MRP1 : "", 
+          };
         }),
       ],
       summary: {
         itemsInBill: invoice.items.length,
-        casesInBill: invoice.items.reduce((acc, item) => acc + Number(item.qty), 0),
-        looseItemsInBill: invoice.items.reduce((acc, item) => acc + item.free, 0) || 0,
+        casesInBill: boxes,
+        looseItemsInBill: looseItems,
       },
       taxDetails: [
-        // { goods: 3807.49, sgst: 2.50, sgstValue: 95.190, cgst: 2.50, cgstValue: 95.190 },
-
         ...invoice.items.map((item) => {
+        const gstRate = pmplData.find((pmplItem) => pmplItem.CODE === item.item)?.GST || 0;
+          // Calculate taxable value properly - NET_AMT / (100+GST%) * 100
+          const taxableValue = Number(item.netAmount) / (100 + gstRate) * 100;
+          
           return {
-            goods: item.netAmount,
-            sgst: item.gst / 2,
-            sgstValue: (item.netAmount * (item.gst / 2)) / 100 || 0,
-            cgst: item.gst / 2,
-            cgstValue: (item.netAmount * (item.gst / 2)) / 100 || 0,
+            goods: taxableValue.toFixed(2),
+            sgst: gstRate / 2,
+            sgstValue: (taxableValue * (gstRate / 2)) / 100 || 0,
+            cgst: gstRate / 2,
+            cgstValue: (taxableValue * (gstRate / 2)) / 100 || 0,
           };
         }),
       ],
       totals: {
-        // grossAmt: 31721.52,
-        // lessSch: 0.00,
-        // lessCd: 123.65,
-        // rOff: 0.00,
-        // netAmount: 31598.00
         grossAmt: invoice.items.reduce((acc, item) => acc + Number(item.netAmount), 0),
         lessSch: 0.0,
         lessCd: 0.0,
@@ -656,6 +694,7 @@ async function printInvoicing(req, res) {
     res.send(ModifiedInv);
   } catch (error) {
     console.error('Error fetching data:', error);
+    res.status(500).send('Server error');
   }
 }
 
