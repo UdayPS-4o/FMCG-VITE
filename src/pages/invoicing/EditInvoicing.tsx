@@ -34,7 +34,8 @@ const EditInvoicingContent: React.FC<{
     removeItem,
     addItem,
     expandedIndex,
-    setExpandedIndex
+    setExpandedIndex,
+    invoiceIdInfo
   } = useInvoiceContext();
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -46,6 +47,7 @@ const EditInvoicingContent: React.FC<{
   // Form state
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [series, setSeries] = useState<string>('');
+  const [billNo, setBillNo] = useState<string>('1');
   const [cash, setCash] = useState<string>('Y');
   const [party, setParty] = useState<Option | null>(null);
   const [sm, setSm] = useState<Option | null>(null);
@@ -62,6 +64,14 @@ const EditInvoicingContent: React.FC<{
     message: '',
     type: 'info',
   });
+
+  // Update bill number when series changes (unless editing an existing invoice)
+  useEffect(() => {
+    if (!id && series && invoiceIdInfo?.nextSeries) {
+      const nextNumber = invoiceIdInfo.nextSeries[series.toUpperCase()] || 1;
+      setBillNo(nextNumber.toString());
+    }
+  }, [series, invoiceIdInfo, id]);
 
   // Step 1: Fetch invoice data
   useEffect(() => {
@@ -169,6 +179,7 @@ const EditInvoicingContent: React.FC<{
     // Populate basic form fields
     setCash(invoiceData.cash === 'true' || invoiceData.cash === true ? 'Y' : 'N');
     setSeries(invoiceData.series || '');
+    setBillNo(invoiceData.billNo || '1');
     setRef(invoiceData.ref || '');
     setDueDays(invoiceData.dueDays || '7');
 
@@ -313,7 +324,14 @@ const EditInvoicingContent: React.FC<{
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSeries(e.target.value);
+    // Auto-capitalize and limit to single letter
+    const value = e.target.value.toUpperCase();
+    const singleLetter = value.length > 0 ? value.charAt(value.length - 1) : '';
+    setSeries(singleLetter);
+  };
+
+  const handleBillNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBillNo(e.target.value);
   };
 
   const toggleCash = () => {
@@ -499,16 +517,29 @@ const EditInvoicingContent: React.FC<{
                 autoComplete="off"
               />
             </div>
-            <div>
-              <Input
-                id="series"
-                label="Series"
-                placeholder="T"
-                value={series}
-                onChange={handleSeriesChange}
-                variant="outlined"
-                autoComplete="off"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Input
+                  id="series"
+                  label="Series"
+                  placeholder="T"
+                  value={series}
+                  onChange={handleSeriesChange}
+                  variant="outlined"
+                  autoComplete="off"
+                  maxLength={1}
+                />
+              </div>
+              <div>
+                <Input
+                  id="billNo"
+                  label="Bill No."
+                  value={billNo}
+                  onChange={handleBillNoChange}
+                  variant="outlined"
+                  autoComplete="off"
+                />
+              </div>
             </div>
             <div className="flex items-center">
               <div className="flex items-center space-x-2">

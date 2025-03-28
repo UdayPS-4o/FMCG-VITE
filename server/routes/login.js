@@ -9,6 +9,7 @@ const {
   getCmplData,
   ensureDirectoryExistence,
   saveDataToJsonFile,
+  getSTOCKFILE,
 } = require('./utilities');
 const { cp } = require('fs');
 const { id } = require('date-fns/locale');
@@ -110,23 +111,6 @@ app.get('/logout', (req, res) => {
 });
 
 const DIR = 'd01-2324';
-
-async function getSTOCKFILE(vvv) {
-  return await fs
-    .readFile(
-      path.join(
-        __dirname,
-        '..',
-        '..',
-        DIR,
-        'data',
-        'json',
-        vvv.replace('.dbf', '.json').replace('.DBF', '.json'),
-      ),
-      'utf8',
-    )
-    .then((data) => JSON.parse(data));
-}
 
 // Replace the cache variables
 let cachedStock = null;

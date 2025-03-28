@@ -45,6 +45,10 @@ export interface InvoiceContextType {
   error: string | null;
   expandedIndex?: number;
   setExpandedIndex?: React.Dispatch<React.SetStateAction<number>>;
+  invoiceIdInfo: {
+    nextInvoiceId: number;
+    nextSeries: Record<string, number>;
+  };
 }
 
 export const InvoiceContext = createContext<InvoiceContextType>({
@@ -61,7 +65,11 @@ export const InvoiceContext = createContext<InvoiceContextType>({
   loading: false,
   error: null,
   expandedIndex: 0,
-  setExpandedIndex: () => {}
+  setExpandedIndex: () => {},
+  invoiceIdInfo: {
+    nextInvoiceId: 1,
+    nextSeries: {},
+  }
 });
 
 export const useInvoiceContext = () => useContext(InvoiceContext); 

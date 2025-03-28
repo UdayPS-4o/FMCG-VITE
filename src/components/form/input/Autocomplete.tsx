@@ -15,6 +15,7 @@ interface AutocompleteProps {
   defaultValue?: string;
   value?: string;
   autoComplete?: string;
+  disabled?: boolean | object;
 }
 
 const customScrollbarStyles = `
@@ -74,6 +75,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   defaultValue = "",
   value,
   autoComplete = "",
+  disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -231,6 +233,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
           }}
           onBlur={() => setIsFocused(false)}
           autoComplete={autoComplete}
+          disabled={Boolean(disabled)}
         />
         
         {/* Clear button */}

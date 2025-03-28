@@ -132,4 +132,23 @@ const saveDataToJsonFile = async (filePath, data) => {
   await fs.writeFile(filePath, JSON.stringify(existingData, null, 4));
 };
 
-module.exports = {redirect, getDbfData, getCmplData, ensureDirectoryExistence, saveDataToJsonFile, generateHash};
+const DIR = 'd01-2324';
+
+async function getSTOCKFILE(vvv) {
+  return await fs
+    .readFile(
+      path.join(
+        __dirname,
+        '..',
+        '..',
+        DIR,
+        'data',
+        'json',
+        vvv.replace('.dbf', '.json').replace('.DBF', '.json'),
+      ),
+      'utf8',
+    )
+    .then((data) => JSON.parse(data));
+}
+
+module.exports = {redirect, getDbfData, getCmplData, ensureDirectoryExistence, saveDataToJsonFile, generateHash, getSTOCKFILE};

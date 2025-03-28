@@ -331,7 +331,7 @@ const AccountMaster: React.FC = () => {
                 options={isAdmin ? group : (user && user.subgroup ? [{ label: user.subgroup.title, value: user.subgroup.subgroupCode }] : [])}
                 onChange={handlePartyChange}
                 defaultValue={getSubgroupValue()?.value ?? ''}
-                disabled={!isAdmin && user && user.subgroup}
+                disabled={Boolean(!isAdmin && user && user.subgroup)}
                 autoComplete="off"
               />
               {!isAdmin && user && user.subgroup && (

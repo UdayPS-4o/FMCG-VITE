@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -36,12 +36,14 @@ const InvoicingContent: React.FC = () => {
     addItem,
     calculateTotal,
     expandedIndex,
-    setExpandedIndex
+    setExpandedIndex,
+    invoiceIdInfo
   } = useInvoiceContext();
   
   // Form state
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [series, setSeries] = useState<string>('T');
+  const [billNo, setBillNo] = useState<string>('1');
   const [cash, setCash] = useState<'Y' | 'N'>('N');
   const [party, setParty] = useState<Option | null>(null);
   const [sm, setSm] = useState<Option | null>(null);
@@ -58,6 +60,16 @@ const InvoicingContent: React.FC = () => {
     type: 'info' 
   });
 
+  // Update bill number whenever series changes
+  useEffect(() => {
+    if (series && invoiceIdInfo?.nextSeries) {
+      const nextNumber = invoiceIdInfo.nextSeries[series.toUpperCase()] || 1;
+      setBillNo(nextNumber.toString());
+    } else {
+      setBillNo('1');
+    }
+  }, [series, invoiceIdInfo]);
+
   const handleAccordionChange = (panel: number) => (_: React.SyntheticEvent, isExpanded: boolean) => {
     setExpandedIndex?.(isExpanded ? panel : -1);
   };
@@ -68,7 +80,14 @@ const InvoicingContent: React.FC = () => {
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSeries(e.target.value);
+    // Auto-capitalize and limit to single letter
+    const value = e.target.value.toUpperCase();
+    const singleLetter = value.length > 0 ? value.charAt(value.length - 1) : '';
+    setSeries(singleLetter);
+  };
+
+  const handleBillNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBillNo(e.target.value);
   };
 
   const toggleCash = () => {
@@ -258,16 +277,29 @@ const InvoicingContent: React.FC = () => {
                 autoComplete="off"
               />
             </div>
-            <div>
-              <Input
-                id="series"
-                label="Series"
-                placeholder="T"
-                value={series}
-                onChange={handleSeriesChange}
-                variant="outlined"
-                autoComplete="off"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Input
+                  id="series"
+                  label="Series"
+                  placeholder="T"
+                  value={series}
+                  onChange={handleSeriesChange}
+                  variant="outlined"
+                  autoComplete="off"
+                  maxLength={1}
+                />
+              </div>
+              <div>
+                <Input
+                  id="billNo"
+                  label="Bill No."
+                  value={billNo}
+                  onChange={handleBillNoChange}
+                  variant="outlined"
+                  autoComplete="off"
+                />
+              </div>
             </div>
             <div className="flex items-center">
               <div className="flex items-center space-x-2">
