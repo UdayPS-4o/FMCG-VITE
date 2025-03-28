@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
-import FormComponent from "../../components/form/Form";
 import Input from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
+import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
-import Toast from '../../components/ui/toast/Toast';
-import apiCache from '../../utils/apiCache';
 import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
+import Toast from '../../components/ui/toast/Toast';
+import useAuth from '../../hooks/useAuth';
+import apiCache from '../../utils/apiCache';
 
 interface Option {
   label: string;
@@ -59,6 +60,11 @@ const EditAccountMaster: React.FC = () => {
     subgroup: '',
   });
 
+  const { user } = useAuth();
+  
+  // Check if user is admin
+  const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
+
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
@@ -80,6 +86,16 @@ const EditAccountMaster: React.FC = () => {
         
         if (!subgroupParam) {
           throw new Error('No subgroup parameter provided');
+        }
+        
+        // If user is not admin and has a subgroup, check if they're allowed to edit this subgroup
+        if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
+          const userSubgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
+          const editSubgroupPrefix = subgroupParam.substring(0, 2).toUpperCase();
+          
+          if (userSubgroupPrefix !== editSubgroupPrefix) {
+            throw new Error('You do not have permission to edit accounts outside your subgroup');
+          }
         }
         
         console.log('Fetching account data for subgroup:', subgroupParam);
@@ -123,9 +139,8 @@ const EditAccountMaster: React.FC = () => {
           value: state.ST_CODE,
           label: state.ST_NAME,
         }));
-        
         setCity(stateList);
-        
+
         // Clear expired cache entries
         apiCache.clearExpiredCache();
       } catch (error) {
@@ -133,7 +148,7 @@ const EditAccountMaster: React.FC = () => {
         setError(error instanceof Error ? error.message : 'An error occurred');
         setToast({
           visible: true,
-          message: error instanceof Error ? error.message : 'Failed to load account data',
+          message: error instanceof Error ? error.message : 'Failed to load account details',
           type: 'error',
         });
       } finally {
@@ -142,16 +157,19 @@ const EditAccountMaster: React.FC = () => {
     };
 
     fetchData();
-  }, [id]);
+  }, [id, user, isAdmin]);
 
   const handlePartyChange = (value: string) => {
-    const selectedOption = group.find(option => option.value === value);
-    if (selectedOption) {
-      setSubgroup([selectedOption]);
-      setFormValues({
-        ...formValues,
-        subgroup: value,
-      });
+    // Only allow changes if user is admin
+    if (isAdmin) {
+      const selectedOption = group.find(option => option.value === value);
+      if (selectedOption) {
+        setSubgroup([selectedOption]);
+        setFormValues({
+          ...formValues,
+          subgroup: value,
+        });
+      }
     }
   };
 
@@ -247,10 +265,10 @@ const EditAccountMaster: React.FC = () => {
     return (
       <div>
         <PageMeta
-          title="Edit Account Master | FMCG Vite Admin Template"
-          description="Edit Account Master in FMCG Vite Admin Template"
+          title="Edit Account | FMCG Vite Admin Template"
+          description="Edit Account in FMCG Vite Admin Template"
         />
-        <PageBreadcrumb pageTitle="Edit Account Master" />
+        <PageBreadcrumb pageTitle="Edit Account" />
         <FormSkeletonLoader />
       </div>
     );
@@ -259,19 +277,10 @@ const EditAccountMaster: React.FC = () => {
   return (
     <div>
       <PageMeta
-        title="Edit Account Master | FMCG Vite Admin Template"
-        description="Edit Account Master page in FMCG Vite Admin Template"
+        title="Edit Account | FMCG Vite Admin Template"
+        description="Edit Account in FMCG Vite Admin Template"
       />
-      <PageBreadcrumb pageTitle="Edit Account Master" />
-      
-      {toast.visible && (
-        <Toast 
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(prev => ({ ...prev, visible: false }))}
-          isVisible={toast.visible}
-        />
-      )}
+      <PageBreadcrumb pageTitle="Edit Account" />
       
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
         {error && (
@@ -287,8 +296,11 @@ const EditAccountMaster: React.FC = () => {
                 onChange={handlePartyChange}
                 defaultValue={getSubgroupValue()?.value ?? ''}
                 autoComplete="off"
-                // disabled={true} // sDisable changing the subgroup
+                disabled={true} // Always disable subgroup in edit mode
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Subgroup cannot be changed when editing an account
+              </p>
             </div>
             <div>
               <Input 
@@ -363,7 +375,6 @@ const EditAccountMaster: React.FC = () => {
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
-                required
               />
             </div>
             <div>
@@ -379,7 +390,7 @@ const EditAccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="gst" 
-                label="GSTIN" 
+                label="GST" 
                 value={formValues.gst}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -389,7 +400,7 @@ const EditAccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="dlno" 
-                label="DL NO." 
+                label="DL No." 
                 value={formValues.dlno}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -399,7 +410,7 @@ const EditAccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="fssaino" 
-                label="FSSAI NO." 
+                label="FSSAI No." 
                 value={formValues.fssaino}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -409,8 +420,7 @@ const EditAccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="email" 
-                label="Email ID" 
-                type="email"
+                label="Email" 
                 value={formValues.email}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -420,7 +430,7 @@ const EditAccountMaster: React.FC = () => {
             <div>
               <Autocomplete
                 id="statecode"
-                label="State Code"
+                label="State"
                 options={city}
                 onChange={handleStateChange}
                 defaultValue={formValues.statecode}
@@ -428,25 +438,31 @@ const EditAccountMaster: React.FC = () => {
               />
             </div>
           </div>
-          <div className="mt-6 flex justify-end space-x-4">
-            <button 
-              type="submit" 
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/db/account-master')}
+              className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
               className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
               disabled={isLoading}
             >
-              {isLoading ? 'Saving...' : 'Save Changes'}
-            </button>
-            <button 
-              type="button" 
-              className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-              onClick={() => navigate('/db/account-master')}
-              disabled={isLoading}
-            >
-              Cancel
+              {isLoading ? 'Saving...' : 'Update'}
             </button>
           </div>
         </FormComponent>
       </div>
+      {toast.visible && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast({ ...toast, visible: false })}
+        />
+      )}
     </div>
   );
 };

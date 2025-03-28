@@ -69,6 +69,9 @@ const AccountMaster: React.FC = () => {
     type: 'info' 
   });
 
+  // Check if user is admin
+  const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -126,6 +129,19 @@ const AccountMaster: React.FC = () => {
               value: party.subgroupCode,
             }))
           );
+
+          // If user has a subgroup and is not admin, pre-select it
+          if (user && user.subgroup && user.subgroup.subgroupCode && !isAdmin) {
+            const userSubgroup = {
+              label: user.subgroup.title,
+              value: user.subgroup.subgroupCode
+            };
+            setSubgroup([userSubgroup]);
+            setFormValues(prev => ({
+              ...prev,
+              subgroup: user.subgroup.subgroupCode
+            }));
+          }
         }
 
         // Fetch state data with caching
@@ -148,7 +164,7 @@ const AccountMaster: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     const subg = localStorage.getItem('subgroup');
@@ -228,8 +244,16 @@ const AccountMaster: React.FC = () => {
 
       if (response.ok) {
         console.log('Form submitted successfully');
-        // Redirect to the correct URL
-        navigate('/db/account-master');
+        // Show success toast
+        setToast({
+          visible: true,
+          message: 'Account saved successfully!',
+          type: 'success'
+        });
+        // Redirect to the correct URL after a short delay
+        setTimeout(() => {
+          navigate('/db/account-master');
+        }, 1500);
       } else {
         console.error('API Error:', response.status, data);
         throw new Error(data?.message || `Error ${response.status}: ${response.statusText}`);
@@ -237,13 +261,18 @@ const AccountMaster: React.FC = () => {
     } catch (error) {
       console.error('Submission failed:', error);
       setError(error instanceof Error ? error.message : 'Failed to submit form');
+      setToast({
+        visible: true,
+        message: error instanceof Error ? error.message : 'Failed to submit form',
+        type: 'error'
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
   const getSubgroupValue = () => {
-    if (user && user.subgroup) {
+    if (user && user.subgroup && !isAdmin) {
       return { label: user.subgroup.title, value: user.subgroup.subgroupCode };
     }
     
@@ -299,11 +328,17 @@ const AccountMaster: React.FC = () => {
               <Autocomplete
                 id="subgroup"
                 label="Sub Group"
-                options={group}
+                options={isAdmin ? group : (user && user.subgroup ? [{ label: user.subgroup.title, value: user.subgroup.subgroupCode }] : [])}
                 onChange={handlePartyChange}
                 defaultValue={getSubgroupValue()?.value ?? ''}
+                disabled={!isAdmin && user && user.subgroup}
                 autoComplete="off"
               />
+              {!isAdmin && user && user.subgroup && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Subgroup is locked to your assigned subgroup
+                </p>
+              )}
             </div>
             <div>
               <Input 
@@ -394,7 +429,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="gst" 
-                label="GSTIN" 
+                label="GST" 
                 value={formValues.gst}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -404,7 +439,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="dlno" 
-                label="DL NO." 
+                label="DL No." 
                 value={formValues.dlno}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -414,7 +449,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="fssaino" 
-                label="FSSAI NO." 
+                label="FSSAI No." 
                 value={formValues.fssaino}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -424,8 +459,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="email" 
-                label="Email ID" 
-                type="email"
+                label="Email" 
                 value={formValues.email}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -435,7 +469,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Autocomplete
                 id="statecode"
-                label="State Code"
+                label="State"
                 options={city}
                 onChange={handleStateChange}
                 defaultValue={formValues.statecode}
@@ -443,25 +477,32 @@ const AccountMaster: React.FC = () => {
               />
             </div>
           </div>
-          <div className="mt-6 flex justify-end space-x-4">
-            <button 
-              type="submit" 
-              className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
-              disabled={isLoading}
-            >
-              {isLoading ? 'Saving...' : 'Save Changes'}
-            </button>
-            <button 
-              type="button" 
-              className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
               onClick={() => navigate('/db/account-master')}
+              className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
               disabled={isLoading}
             >
               Cancel
             </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Saving...' : 'Save'}
+            </button>
           </div>
         </FormComponent>
       </div>
+      {toast.visible && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(prev => ({ ...prev, visible: false }))}
+        />
+      )}
     </div>
   );
 };

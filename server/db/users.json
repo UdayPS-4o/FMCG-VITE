@@ -101,17 +101,18 @@
     "password": "udayps",
     "routeAccess": [
       "Godown Transfer",
-      "Cash Receipts"
+      "Cash Receipts",
+      "Account Master",
+      "Invoicing"
     ],
     "powers": [
       "Read",
-      "Delete",
       "Write"
     ],
     "subgroup": {
       "title": "HUL SHAKTI",
       "subgroupCode": "SK001"
     },
-    "token": "h884jk"
+    "token": "n5th6"
   }
 ]
