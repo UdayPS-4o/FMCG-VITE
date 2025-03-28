@@ -40,8 +40,31 @@ const CashPayment: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [user, setUser] = useState<any>(null);
 
   const navigate = useNavigate();
+
+  // Fetch user data first
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch(`${constants.baseURL}/api/checkIsAuth`, {
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.authenticated && data.user) {
+            setUser(data.user);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   useEffect(() => {
     const fetchEditData = async () => {
@@ -79,13 +102,46 @@ const CashPayment: React.FC = () => {
         // Use apiCache for balance data
         const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
 
-        const getBalance = (C_CODE: string) =>
-          balanceData.data.find((user: any) => user.partycode === C_CODE)?.result || 0;
+        // Create a balance lookup map
+        const balanceMap = new Map();
+        if (balanceData && Array.isArray(balanceData.data)) {
+          balanceData.data.forEach((item: any) => {
+            balanceMap.set(item.partycode, item.result);
+          });
+        }
 
-        const partyList = partyData.map((user: any) => ({
-          value: user.C_CODE,
-          label: `${user.C_NAME} | ${getBalance(user.C_CODE)}`,
-        }));
+        // Check if user is admin
+        const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
+
+        // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
+        let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
+        
+        if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
+          const subgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
+          console.log(`Filtering parties by subgroup prefix: ${subgroupPrefix}`);
+          
+          filteredPartyData = filteredPartyData.filter((party: any) => {
+            const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+            return partyPrefix === subgroupPrefix;
+          });
+        } else if (isAdmin) {
+          console.log('User is admin - showing all parties without filtering');
+        }
+
+        const partyList = filteredPartyData.map((party: any) => {
+          // Get balance for this party
+          const balance = balanceMap.get(party.C_CODE);
+          
+          // Check if balance is non-zero (either greater or in negative)
+          const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
+          
+          return {
+            value: party.C_CODE,
+            label: hasNonZeroBalance
+              ? `${party.C_NAME} | ${party.C_CODE} / ${balance}`
+              : `${party.C_NAME} | ${party.C_CODE}`,
+          };
+        });
 
         setPartyOptions(partyList);
         setParty(partyList.find((p: PartyOption) => p.value === paymentToEdit.party));
@@ -111,13 +167,46 @@ const CashPayment: React.FC = () => {
         // Use apiCache for balance data
         const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
 
-        const getBalance = (C_CODE: string) =>
-          balanceData.data.find((user: any) => user.partycode === C_CODE)?.result || 0;
+        // Create a balance lookup map
+        const balanceMap = new Map();
+        if (balanceData && Array.isArray(balanceData.data)) {
+          balanceData.data.forEach((item: any) => {
+            balanceMap.set(item.partycode, item.result);
+          });
+        }
 
-        const partyList = dataParty.map((user: any) => ({
-          value: user.C_CODE,
-          label: `${user.C_NAME} | ${getBalance(user.C_CODE)}`,
-        }));
+        // Check if user is admin
+        const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
+
+        // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
+        let filteredPartyData = dataParty.filter((party: any) => !party.C_CODE.endsWith('000'));
+        
+        if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
+          const subgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
+          console.log(`Filtering parties by subgroup prefix: ${subgroupPrefix}`);
+          
+          filteredPartyData = filteredPartyData.filter((party: any) => {
+            const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+            return partyPrefix === subgroupPrefix;
+          });
+        } else if (isAdmin) {
+          console.log('User is admin - showing all parties without filtering');
+        }
+
+        const partyList = filteredPartyData.map((party: any) => {
+          // Get balance for this party
+          const balance = balanceMap.get(party.C_CODE);
+          
+          // Check if balance is non-zero (either greater or in negative)
+          const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
+          
+          return {
+            value: party.C_CODE,
+            label: hasNonZeroBalance
+              ? `${party.C_NAME} | ${party.C_CODE} / ${balance}`
+              : `${party.C_NAME} | ${party.C_CODE}`,
+          };
+        });
 
         setPartyOptions(partyList);
         
@@ -130,13 +219,15 @@ const CashPayment: React.FC = () => {
       }
     };
 
-    if (id) {
-      setIsEditMode(true);
-      fetchEditData();
-    } else {
-      fetchNewData();
+    if (user) { // Only fetch data once we have user info
+      if (id) {
+        setIsEditMode(true);
+        fetchEditData();
+      } else {
+        fetchNewData();
+      }
     }
-  }, [id]);
+  }, [id, user]); // Add user as dependency
 
   const handlePartyChange = (value: string) => {
     const selectedParty = partyOptions.find(p => p.value === value);
@@ -170,10 +261,10 @@ const CashPayment: React.FC = () => {
       const route = isEditMode ? `/slink/editCashPayment` : `/cash-payments`;
       const response = await fetch(constants.baseURL + route, {
         method: 'POST',
+        body: JSON.stringify(formValues),
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formValues),
         credentials: 'include'
       });
 
@@ -257,9 +348,9 @@ const CashPayment: React.FC = () => {
               <div>
                 <Input 
                   id="amount"
-                  name="amount" 
+                  name="amount"
                   type="number"
-                  label="Amount" 
+                  label="Amount"
                   value={formValues.amount}
                   onChange={handleInputChange}
                   required
@@ -267,32 +358,32 @@ const CashPayment: React.FC = () => {
               </div>
               
               <div>
-                <Input
+                <Input 
                   id="discount"
                   name="discount"
                   type="number"
                   label="Discount"
                   value={formValues.discount}
                   onChange={handleInputChange}
-                  required
                 />
               </div>
             </div>
             
-            <div className="flex justify-end mt-8 space-x-4">
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => navigate('/db/cash-payments')}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
+                className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
+                className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
                 disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-800"
               >
-                {isSubmitting ? 'Saving...' : isEditMode ? 'Update Payment' : 'Save Payment'}
+                {isSubmitting ? 'Saving...' : 'Save'}
               </button>
             </div>
           </FormComponent>
@@ -300,11 +391,10 @@ const CashPayment: React.FC = () => {
       </div>
       
       {showToast && (
-        <Toast 
-          message={toastMessage} 
-          type={toastType} 
-          onClose={() => setShowToast(false)} 
-          isVisible={showToast}
+        <Toast
+          message={toastMessage}
+          type={toastType}
+          onClose={() => setShowToast(false)}
         />
       )}
     </div>
