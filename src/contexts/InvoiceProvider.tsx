@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { InvoiceContext, ItemData } from './InvoiceContext';
 import constants from '../constants';
 import apiCache from '../utils/apiCache';
@@ -32,6 +32,15 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const userRef = useRef<any>(null);
+  const [invoiceIdInfo, setInvoiceIdInfo] = useState<{
+    nextInvoiceId: number;
+    nextSeries: Record<string, number>;
+  }>({
+    nextInvoiceId: 1,
+    nextSeries: {},
+  });
+  const dataFetched = useRef<boolean>(false);
 
   // First fetch the current user data
   useEffect(() => {
@@ -45,6 +54,7 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           const data = await response.json();
           if (data.authenticated && data.user) {
             setUser(data.user);
+            userRef.current = data.user;
           }
         }
       } catch (error) {
@@ -56,18 +66,32 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
   }, []);
 
   useEffect(() => {
+    // Avoid refetching data if we've already done it or if user is still loading
+    if (dataFetched.current) {
+      return;
+    }
+    
     const fetchData = async () => {
       try {
         setLoading(true);
         
         // Fetch all data sources in parallel with Promise.all
-        const [pmplResponse, stockResponse, godownResponse, partyResponse, balanceResponse] = await Promise.all([
+        const [pmplResponse, stockResponse, godownResponse, partyResponse, balanceResponse, invoiceIdResponse] = await Promise.all([
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
           apiCache.fetchWithCache<any>(`${constants.baseURL}/api/stock`),
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/godown.json`),
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
-          apiCache.fetchWithCache<any>(`${constants.baseURL}/json/balance`)
+          apiCache.fetchWithCache<any>(`${constants.baseURL}/json/balance`),
+          apiCache.fetchWithCache<any>(`${constants.baseURL}/slink/invoiceID`, { credentials: 'include' })
         ]);
+        
+        // Mark data as fetched to avoid repeating expensive operations
+        dataFetched.current = true;
+        
+        // Store the invoice ID information
+        if (invoiceIdResponse && invoiceIdResponse.nextSeries) {
+          setInvoiceIdInfo(invoiceIdResponse);
+        }
         
         // Process PMPL data
         if (Array.isArray(pmplResponse)) {
@@ -101,11 +125,12 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           );
           
           // Check if user is an admin
-          const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
+          const currentUser = userRef.current;
+          const isAdmin = currentUser && currentUser.routeAccess && currentUser.routeAccess.includes('Admin');
           
           // Only filter parties if user is not an admin and has a subgroup
-          if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
-            const subgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
+          if (!isAdmin && currentUser && currentUser.subgroup && currentUser.subgroup.subgroupCode) {
+            const subgroupPrefix = currentUser.subgroup.subgroupCode.substring(0, 2).toUpperCase();
             console.log(`Filtering parties by subgroup prefix: ${subgroupPrefix}`);
             
             // Filter parties where C_CODE starts with the same prefix as the user's subgroupCode
@@ -175,7 +200,7 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
     } catch (error) {
       console.error('Error clearing cache:', error);
     }
-  }, [user]); // Re-run when user changes
+  }, [user]); // Depend on user but with dataFetched ref to prevent duplicate fetches
 
   return (
     <InvoiceContext.Provider
@@ -193,7 +218,8 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
         addItem,
         calculateTotal,
         expandedIndex,
-        setExpandedIndex
+        setExpandedIndex,
+        invoiceIdInfo
       }}
     >
       {children}

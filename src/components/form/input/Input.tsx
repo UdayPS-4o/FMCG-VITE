@@ -16,6 +16,7 @@ interface InputProps {
   hint?: string;
   name?: string;
   autoComplete?: string;
+  maxLength?: number;
 }
 
 const Input: React.FC<InputProps> = ({
@@ -33,7 +34,8 @@ const Input: React.FC<InputProps> = ({
   disabled = false,
   hint = '',
   name,
-  autoComplete
+  autoComplete,
+  maxLength,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   
@@ -132,6 +134,7 @@ const Input: React.FC<InputProps> = ({
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         name={name}
+        maxLength={maxLength}
       />
       {label && (
         <label 

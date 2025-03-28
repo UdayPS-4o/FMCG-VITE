@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 
 interface ToastProps {
+  isVisible?: boolean;
   message: string;
   type: 'success' | 'error' | 'warning' | 'info';
   duration?: number;
   onClose?: () => void;
-  isVisible: boolean;
 }
 
 const Toast: React.FC<ToastProps> = ({
@@ -13,7 +13,7 @@ const Toast: React.FC<ToastProps> = ({
   type = 'info',
   duration = 3000,
   onClose,
-  isVisible,
+  isVisible = true,
 }) => {
   const [isShowing, setIsShowing] = useState(false);
 

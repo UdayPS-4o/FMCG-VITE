@@ -7,6 +7,7 @@ const {
   getDbfData,
   ensureDirectoryExistence,
   saveDataToJsonFile,
+  getSTOCKFILE,
 } = require('./utilities');
 
 const getCmplData = async () => {
@@ -278,22 +279,151 @@ async function getNextGodownId(req, res) {
   }
 }
 
-async function getNextInvoiceId(req, res) {
-  const filePath = path.join(__dirname, '..', 'db', 'invoicing.json');
-  let nextGodownId = 1;
+// Add these at the top with other global variables
+let cachedInvoiceIdData = null;
+let cachedInvoiceIdHash = null;
+let lastInvoiceFileModTimes = {};
 
+async function getInvoiceFileModificationTimes() {
+  const filePaths = [
+    path.join(__dirname, '..', 'db', 'invoicing.json'),
+    path.join(__dirname, '..', '..', 'd01-2324/data/json', 'billdtl.json')
+  ];
+  
+  const modTimes = {};
+  for (const file of filePaths) {
+    try {
+      const stats = await fs.stat(file);
+      modTimes[file] = stats.mtime.getTime();
+    } catch (error) {
+      console.error(`Error getting modification time for ${file}:`, error);
+      // If we can't get the mod time, use current time to force recalculation
+      modTimes[file] = Date.now();
+    }
+  }
+  
+  return modTimes;
+}
+
+async function haveInvoiceFilesChanged(newModTimes) {
+  // If we don't have last mod times, assume files have changed
+  if (Object.keys(lastInvoiceFileModTimes).length === 0) return true;
+  
+  // Check if any file has a different modification time
+  for (const file in newModTimes) {
+    if (!lastInvoiceFileModTimes[file] || lastInvoiceFileModTimes[file] !== newModTimes[file]) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+async function getNextInvoiceId(req, res) {
   try {
+    const clientHash = req.headers['if-none-match'] || req.query.hash;
+    
+    // Get current file modification times
+    const currentFileModTimes = await getInvoiceFileModificationTimes();
+    const filesHaveChanged = await haveInvoiceFilesChanged(currentFileModTimes);
+    
+    // If we have cached data and no file has changed
+    if (cachedInvoiceIdData && cachedInvoiceIdHash && !filesHaveChanged) {
+      console.log('Invoice source files unchanged, using cached invoice ID data');
+      
+      // If client hash matches cached hash, return 304
+      if (clientHash && (clientHash === cachedInvoiceIdHash || clientHash === `"${cachedInvoiceIdHash}"`)) {
+        console.log('Invoice ID data cache hit with 304');
+        return res.status(304).set({
+          'ETag': `"${cachedInvoiceIdHash}"`,
+          'Cache-Control': 'private, max-age=0',
+          'Access-Control-Expose-Headers': 'ETag'
+        }).send('Not Modified');
+      }
+      
+      // Otherwise return cached data
+      res.set({
+        'ETag': `"${cachedInvoiceIdHash}"`,
+        'Cache-Control': 'private, max-age=0',
+        'Access-Control-Expose-Headers': 'ETag'
+      });
+      return res.json(cachedInvoiceIdData);
+    }
+    
+    // If we get here, files have changed or cache doesn't exist
+    console.log('Files changed or no cache, recalculating invoice ID data');
+    
+    // Get the next invoice ID from invoicing.json as before
+    const filePath = path.join(__dirname, '..', 'db', 'invoicing.json');
     const data = await fs.readFile(filePath, 'utf8').then(
       (data) => JSON.parse(data),
       (error) => {
         if (error.code !== 'ENOENT') throw error; // Ignore file not found errors
+        return [];
       },
     );
-    const GodownId = data[data.length - 1].id;
+    const GodownId = data.length > 0 ? data[data.length - 1].id : 0;
     const nextInvoiceId = Number(GodownId) + 1;
-    res.send({ nextInvoiceId });
+    
+    // Get the billdtl.json data using getSTOCKFILE function
+    const billData = await getSTOCKFILE('billdtl.json');
+    
+    // Calculate the next bill number for each series
+    const seriesMap = {};
+    
+    // Process each bill entry to find max bill number per series
+    billData.forEach(entry => {
+      const series = entry.SERIES;
+      const billNumber = Number(entry.BILL);
+      
+      if (!seriesMap[series] || billNumber > seriesMap[series]) {
+        seriesMap[series] = billNumber;
+      }
+    });
+    
+    // Increment each max bill number by 1 to get the next bill number
+    const nextSeries = {};
+    for (const series in seriesMap) {
+      nextSeries[series] = seriesMap[series] + 1;
+    }
+    
+    // Prepare the response data
+    const responseData = { 
+      nextInvoiceId,
+      nextSeries
+    };
+    
+    // Generate a hash for the invoice ID data
+    const currentHash = require('crypto')
+      .createHash('md5')
+      .update(JSON.stringify(responseData))
+      .digest('hex');
+    
+    // Update cache and file mod times
+    cachedInvoiceIdData = responseData;
+    cachedInvoiceIdHash = currentHash;
+    lastInvoiceFileModTimes = currentFileModTimes;
+    
+    // Set ETag header with proper quotes
+    const etagValue = `"${currentHash}"`;
+    res.set({
+      'ETag': etagValue,
+      'Cache-Control': 'private, max-age=0',
+      'Access-Control-Expose-Headers': 'ETag'
+    });
+    
+    console.log(`Invoice ID API: Generated hash: ${currentHash}, client hash: ${clientHash || 'none'}`);
+    
+    // Compare again after calculation in case hashes match
+    if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
+      console.log('Invoice ID data matches after recalculation');
+      return res.status(304).send('Not Modified');
+    }
+    
+    console.log('Sending full invoice ID data');
+    res.json(responseData);
   } catch (error) {
-    console.error('Failed to read or parse godowns.json:', error);
+    console.error('Failed to process invoice data:', error);
     res.status(500).send('Server error');
   }
 }
