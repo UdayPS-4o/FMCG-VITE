@@ -227,12 +227,15 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
 
   const handleGodownChange = (newValue: string | null) => {
     if (!newValue || !item.selectedItem) {
-      // If godown is cleared, clear stock as well
+      // If godown is cleared, clear stock as well as qty
       const updatedData = {
         ...item,
         godown: '',
         stock: '',
         stockLimit: 0,
+        qty: '', // Reset qty when godown is cleared
+        amount: '', // Also reset calculated values
+        netAmount: ''
       };
       updateItem(index, updatedData);
       return;
