@@ -79,6 +79,7 @@ const CollapsibleItemSection: React.FC<Props> = ({
 }) => {
   const [error, setError] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [unitOptions, setUnitOptions] = useState<string[]>([]);
   
   useEffect(() => {
     // If item and godown are set, update the stock value
@@ -119,6 +120,17 @@ const CollapsibleItemSection: React.FC<Props> = ({
       }
     }
   }, [itemData.item, itemData.godown, pmpl, index, updateItem, stockData, itemData.stock]);
+
+  // Update unitOptions when item changes
+  useEffect(() => {
+    if (itemData.item) {
+      const product = pmpl.find(p => p.CODE === itemData.item);
+      if (product) {
+        const units = [product.UNIT_1, product.UNIT_2].filter(Boolean);
+        setUnitOptions(units);
+      }
+    }
+  }, [itemData.item, pmpl]);
 
   // Get stock for a specific item and godown
   const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {
@@ -166,6 +178,10 @@ const CollapsibleItemSection: React.FC<Props> = ({
         unitValue = selectedPMPL.UNIT_2;
       }
 
+      // Set unit options
+      const units = [selectedPMPL.UNIT_1, selectedPMPL.UNIT_2].filter(Boolean);
+      setUnitOptions(units);
+
       updateItem(index, {
         ...itemData,
         item: value,
@@ -197,23 +213,44 @@ const CollapsibleItemSection: React.FC<Props> = ({
     
     setError('');
     
+    // Find the selected product to get MULT_F and unit info
+    const product = pmpl.find(p => p.CODE === itemData.item);
+    if (!product) {
+      updateItem(index, {
+        ...itemData,
+        qty: value
+      });
+      return;
+    }
+    
+    const multF = parseInt(product.MULT_F, 10) || 1;
+    
     // Check if quantity is less than or equal to max allowed
     if (value && itemData.stock) {
       const qty = parseInt(value, 10);
-      const stock = parseInt(itemData.stock, 10);
       const origQty = originalQty ? parseInt(originalQty, 10) : 0;
       
-      // Allow quantity up to the maximum of either:
-      // 1. Original quantity, or
-      // 2. Current stock + original quantity
-      const maxAllowedQty = Math.max(origQty, stock + origQty);
+      // Get current stock value and adjust for unit type
+      const stockValue = parseInt(itemData.stock, 10);
+      
+      // Calculate maximum allowed quantity based on unit type
+      let maxAllowedQty;
+      
+      if (itemData.unit === product.UNIT_2) {
+        // Unit is BOX - divide stock by MULT_F to get max box count
+        const maxBoxes = Math.floor((stockValue + (origQty * multF)) / multF);
+        maxAllowedQty = Math.max(origQty, maxBoxes);
+      } else {
+        // Unit is PCS - direct comparison
+        maxAllowedQty = Math.max(origQty, stockValue + origQty);
+      }
       
       if (qty > maxAllowedQty) {
         // Different error message based on whether it's an original item or not
         if (isOriginalItem) {
-          setError(`Quantity cannot exceed ${maxAllowedQty} (original: ${origQty}, stock: ${stock})`);
+          setError(`Quantity cannot exceed ${maxAllowedQty} (original: ${origQty}, stock: ${stockValue})`);
         } else {
-          setError(`Quantity cannot exceed available stock (${stock})`);
+          setError(`Quantity cannot exceed available stock (${maxAllowedQty} ${itemData.unit})`);
         }
         return;
       }
@@ -222,6 +259,41 @@ const CollapsibleItemSection: React.FC<Props> = ({
     updateItem(index, {
       ...itemData,
       qty: value
+    });
+  };
+
+  const handleSwapUnit = () => {
+    if (unitOptions.length < 2 || !itemData.unit) return;
+    
+    // Find the product for MULT_F
+    const product = pmpl.find(p => p.CODE === itemData.item);
+    if (!product) return;
+    
+    // Find the other unit option that's not currently selected
+    const otherUnit = unitOptions.find(unit => unit !== itemData.unit);
+    if (!otherUnit) return;
+    
+    // Check if any quantity is already entered
+    const currentQty = itemData.qty ? parseInt(itemData.qty, 10) : 0;
+    const multF = parseInt(product.MULT_F, 10) || 1;
+    
+    // Convert quantity based on unit type
+    let newQty = "";
+    if (currentQty > 0) {
+      if (itemData.unit === product.UNIT_1 && otherUnit === product.UNIT_2) {
+        // Converting from PCS to BOX
+        newQty = Math.floor(currentQty / multF).toString();
+      } else if (itemData.unit === product.UNIT_2 && otherUnit === product.UNIT_1) {
+        // Converting from BOX to PCS
+        newQty = (currentQty * multF).toString();
+      }
+    }
+    
+    // Update item with new unit and converted quantity
+    updateItem(index, {
+      ...itemData,
+      unit: otherUnit,
+      qty: newQty
     });
   };
 
@@ -402,15 +474,33 @@ const CollapsibleItemSection: React.FC<Props> = ({
                 variant="outlined"
               />
             </div>
-            <div className="relative" style={{ zIndex: 900 }}>
-              <Autocomplete
-                id={`unit-${index}`}
-                label="Unit"
-                options={getUnitOptions()}
-                onChange={handleUnitChange}
-                defaultValue={itemData.unit}
-                className="z-[900]"
-              />
+            <div className="relative">
+              <div className="relative border border-gray-300 dark:border-gray-700 rounded-lg transition-all duration-200 bg-white dark:bg-gray-800">
+                <Input
+                  id={`unit-${index}`}
+                  label="Unit"
+                  value={itemData.unit}
+                  disabled
+                  variant="outlined"
+                  className="pr-10"
+                />
+                {unitOptions.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleSwapUnit();
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-500 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 p-1"
+                    title="Swap Unit"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M7 16V4M7 4L3 8M7 4L11 8" />
+                      <path d="M17 8v12m0-12l4-4m-4 4l-4-4" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <Input

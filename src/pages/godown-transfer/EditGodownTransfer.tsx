@@ -198,10 +198,33 @@ const EditGodownTransfer: React.FC = () => {
             stockValue = stockData[item.code][originalData.fromGodown].toString();
           }
           
+          // Convert unit codes to text values
+          let unitValue = item.unit || '';
+          
+          // Map unit codes to their text representations
+          if (product) {
+            // If the unit is "01" use the product's UNIT_1 value (e.g., "PCS")
+            if (unitValue === "01" && product.UNIT_1) {
+              unitValue = product.UNIT_1;
+            } 
+            // If the unit is "02" use the product's UNIT_2 value (e.g., "BOX")
+            else if (unitValue === "02" && product.UNIT_2) {
+              unitValue = product.UNIT_2;
+            }
+            // If the unit matches UNIT_1_DESC but code is being displayed, use UNIT_1
+            else if (unitValue === "01" && product.UNIT_1_DESC) {
+              unitValue = product.UNIT_1_DESC;
+            }
+            // If the unit matches UNIT_2_DESC but code is being displayed, use UNIT_2
+            else if (unitValue === "02" && product.UNIT_2_DESC) {
+              unitValue = product.UNIT_2_DESC;
+            }
+          }
+          
           return {
             item: item.code || '',
             qty: item.qty || '',
-            unit: item.unit || '',
+            unit: unitValue,
             stock: stockValue,
             pack: product?.PACK || '',
             gst: product?.GST || '',

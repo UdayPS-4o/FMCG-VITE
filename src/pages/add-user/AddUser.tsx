@@ -20,11 +20,17 @@ interface User {
   powers: string[];
   subgroup: any | null;
   username?: string;
+  smCode?: string;
 }
 
 interface SubGroup {
   title: string;
   subgroupCode: string;
+}
+
+interface SmOption {
+  value: string;
+  label: string;
 }
 
 const AddUser: React.FC = () => {
@@ -42,6 +48,7 @@ const AddUser: React.FC = () => {
   
   const [powersOptions] = useState<string[]>(['Read', 'Write', 'Delete']);
   const [subgroupOptions, setSubgroupOptions] = useState<SubGroup[]>([]);
+  const [smOptions, setSmOptions] = useState<SmOption[]>([]);
   const [userData, setUserData] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +61,7 @@ const AddUser: React.FC = () => {
   const [routeAccess, setRouteAccess] = useState<string[]>([]);
   const [powers, setPowers] = useState<string[]>([]);
   const [subgroup, setSubgroup] = useState<SubGroup | null>(null);
+  const [smCode, setSmCode] = useState<string>('');
   const [userId, setUserId] = useState<number | null>(null);
   
   const navigate = useNavigate();
@@ -97,6 +105,11 @@ const AddUser: React.FC = () => {
               ? userToEdit.powers 
               : [userToEdit.powers]);
             
+            // Set SM code if available
+            if (userToEdit.smCode) {
+              setSmCode(userToEdit.smCode);
+            }
+            
             // Make sure to set the subgroup correctly
             if (userToEdit.subgroup) {
               // Wait for subgroupOptions to be loaded
@@ -128,28 +141,75 @@ const AddUser: React.FC = () => {
     fetchUserData();
   }, []);
   
+  // Fetch subgroups and salesman data
   useEffect(() => {
-    const fetchSubgroupData = async () => {
+    const fetchData = async () => {
       try {
-        const url = `${constants.baseURL}/slink/subgrp`;
-        const response = await fetch(url, {
+        // Fetch subgroup data
+        const subgroupUrl = `${constants.baseURL}/slink/subgrp`;
+        const subgroupResponse = await fetch(subgroupUrl, {
           credentials: 'include'
         });
         
-        if (!response.ok) {
+        if (!subgroupResponse.ok) {
           throw new Error('Failed to fetch subgroup data');
         }
         
-        const subgroups = await response.json();
+        const subgroups = await subgroupResponse.json();
         setSubgroupOptions(subgroups);
+
+        // Fetch salesman data - codes that start with SM
+        const salesmanUrl = `${constants.baseURL}/cmpl`;
+        const salesmanResponse = await fetch(salesmanUrl, {
+          credentials: 'include'
+        });
+        
+        if (!salesmanResponse.ok) {
+          throw new Error('Failed to fetch salesman data');
+        }
+        
+        const salesmanData = await salesmanResponse.json();
+        
+        // Filter for entries where code starts with 'SM' and not ending with '000'
+        const smData = salesmanData.filter((sm: any) => 
+          sm.C_CODE.startsWith('SM') && !sm.C_CODE.endsWith('000')
+        );
+        
+        // Map to the required format
+        const formattedSmOptions = smData.map((sm: any) => ({
+          value: sm.C_CODE,
+          label: `${sm.C_NAME} | ${sm.C_CODE}`
+        }));
+        
+        setSmOptions(formattedSmOptions);
+
+        // If editing a user, find and select the matching SM
+        if (isEdit && smCode && formattedSmOptions.length > 0) {
+          // Already handled in separate effect
+        }
+        
       } catch (err) {
-        console.error('Failed to fetch subgroup data:', err);
-        setError('Failed to load subgroup details');
+        console.error('Failed to fetch data:', err);
+        setError('Failed to load data');
       }
     };
     
-    fetchSubgroupData();
+    fetchData();
   }, []);
+
+  // Update SM selection when smOptions changes and we're in edit mode
+  useEffect(() => {
+    if (isEdit && smCode && smOptions.length > 0) {
+      // Auto-select SM when editing
+      const matchedSm = smOptions.find(
+        sm => sm.value === smCode
+      );
+      
+      if (matchedSm) {
+        // SM is already set by ID, no need to update state again
+      }
+    }
+  }, [smOptions, isEdit, smCode]);
 
   // Update subgroup when subgroupOptions changes and we're in edit mode
   useEffect(() => {
@@ -179,6 +239,7 @@ const AddUser: React.FC = () => {
         powers,
         username: 'admin',
         subgroup: subgroup ? subgroup : null,
+        smCode: smCode || undefined,
       };
       
       if (isEdit && userId) {
@@ -249,8 +310,14 @@ const AddUser: React.FC = () => {
     setRouteAccess([]);
     setPowers([]);
     setSubgroup(null);
+    setSmCode('');
     setIsEdit(false);
     setUserId(null);
+  };
+  
+  // Handle SM change
+  const handleSmChange = (value: string) => {
+    setSmCode(value);
   };
 
   // Add loading state check to render the skeleton loader
@@ -337,6 +404,17 @@ const AddUser: React.FC = () => {
                     }}
                     defaultValue={subgroup?.subgroupCode ?? ''}
                     value={subgroup?.subgroupCode ?? ''}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="relative">
+                  <Autocomplete
+                    id="smCode"
+                    label="S/M"
+                    options={smOptions}
+                    onChange={handleSmChange}
+                    defaultValue={smCode}
+                    value={smCode}
                     autoComplete="off"
                   />
                 </div>

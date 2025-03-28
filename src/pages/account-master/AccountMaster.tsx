@@ -191,10 +191,43 @@ const AccountMaster: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
-    setFormValues({
-      ...formValues,
-      [id]: value,
-    });
+    
+    if (id === 'pan') {
+      // Format PAN: 5 characters + 4 numbers + 1 character
+      const panRegex = /^[A-Z]{0,5}[0-9]{0,4}[A-Z]{0,1}$/;
+      if (value === '' || panRegex.test(value.toUpperCase())) {
+        setFormValues({
+          ...formValues,
+          [id]: value.toUpperCase(),
+        });
+      }
+    } else if (id === 'mobile') {
+      // Format mobile: 10 digits
+      const mobileRegex = /^[0-9]{0,10}$/;
+      if (value === '' || mobileRegex.test(value)) {
+        setFormValues({
+          ...formValues,
+          [id]: value,
+        });
+      }
+    } else if (id === 'aadhar') {
+      // Remove any existing dashes for processing
+      const cleanValue = value.replace(/-/g, '');
+      const aadharRegex = /^[0-9]{0,12}$/;
+      
+      if (cleanValue === '' || aadharRegex.test(cleanValue)) {
+        // Store raw value (without dashes)
+        setFormValues({
+          ...formValues,
+          [id]: cleanValue,
+        });
+      }
+    } else {
+      setFormValues({
+        ...formValues,
+        [id]: value,
+      });
+    }
   };
 
   const handleStateChange = (value: string) => {
@@ -298,6 +331,18 @@ const AccountMaster: React.FC = () => {
     return null;
   };
 
+  // Format Aadhar for display
+  const formatAadhar = (value: string) => {
+    // Add dashes after every 4 digits for display
+    if (!value) return '';
+    const cleanValue = value.replace(/-/g, '');
+    const parts = [];
+    for (let i = 0; i < cleanValue.length; i += 4) {
+      parts.push(cleanValue.substring(i, i + 4));
+    }
+    return parts.join('-');
+  };
+
   if (isLoading) {
     return (
       <div>
@@ -343,7 +388,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="achead" 
-                label="A/C Head" 
+                label="A/C Head *" 
                 value={formValues.achead}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -354,7 +399,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="addressline1" 
-                label="Address Line 1" 
+                label="Address Line 1 *" 
                 value={formValues.addressline1}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -375,7 +420,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="place" 
-                label="Place" 
+                label="Place *" 
                 value={formValues.place}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -386,7 +431,7 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="pincode" 
-                label="Pin Code" 
+                label="Pin Code *" 
                 value={formValues.pincode}
                 onChange={handleInputChange}
                 variant="outlined"
@@ -397,33 +442,37 @@ const AccountMaster: React.FC = () => {
             <div>
               <Input 
                 id="mobile" 
-                label="Mobile" 
+                label="Mobile *" 
                 value={formValues.mobile}
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
                 required
+                maxLength={10}
+                placeholder="10 digit number"
               />
             </div>
             <div>
               <Input 
                 id="pan" 
-                label="PAN" 
+                label="PAN *" 
                 value={formValues.pan}
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
                 required
+                maxLength={10}
               />
             </div>
             <div>
               <Input 
                 id="aadhar" 
                 label="AADHAR" 
-                value={formValues.aadhar}
+                value={formatAadhar(formValues.aadhar)}
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
+                maxLength={14}
               />
             </div>
             <div>

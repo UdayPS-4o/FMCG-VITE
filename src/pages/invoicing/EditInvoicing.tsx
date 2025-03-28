@@ -414,6 +414,7 @@ const EditInvoicingContent: React.FC<{
         body: JSON.stringify({
           id,
           series,
+          billNo,
           date,
           cash,
           party: party?.value || '',
@@ -426,6 +427,24 @@ const EditInvoicingContent: React.FC<{
         }),
         credentials: 'include'
       });
+      
+      // Handle duplicate bill number error (409 Conflict)
+      if (response.status === 409) {
+        const errorData = await response.json();
+        setToast({
+          visible: true,
+          message: errorData.message,
+          type: 'error'
+        });
+        
+        // Update the bill number with the suggested number
+        if (errorData.suggestedBillNo) {
+          setBillNo(errorData.suggestedBillNo);
+        }
+        
+        setIsSubmitting(false);
+        return;
+      }
       
       if (!response.ok) {
         let errorMessage = 'Failed to update invoice';

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Autocomplete from '../../components/form/input/Autocomplete';
 import Input from '../../components/form/input/Input';
 import { useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
@@ -35,6 +35,10 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     type: 'info',
   });
   
+  // Remove godownRef as it's not working with Autocomplete
+  // Instead use DOM-based approach
+  const [shouldFocusGodown, setShouldFocusGodown] = useState<boolean>(false);
+  
   // Get shared data from context
   const { pmplData, stockList, godownOptions, items } = useInvoiceContext();
 
@@ -70,6 +74,26 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     }
   }, [item.selectedItem]);
 
+  // New approach: Focus godown field using DOM when triggered
+  useEffect(() => {
+    if (shouldFocusGodown && expanded && item.item) {
+      // Reset flag
+      setShouldFocusGodown(false);
+      
+      // Use setTimeout to ensure DOM is ready
+      setTimeout(() => {
+        // Find godown dropdown by ID and interact with it
+        const godownDropdown = document.getElementById(`godown-${index}`);
+        if (godownDropdown) {
+          godownDropdown.focus();
+          
+          // Simulate a click to open the dropdown
+          godownDropdown.click();
+        }
+      }, 100);
+    }
+  }, [shouldFocusGodown, expanded, item.item, index]);
+
   const checkForDuplicateItem = (itemCode: string): { isDuplicate: boolean, existingItem?: ItemData, itemIndex?: number } => {
     // Skip check for empty items or self
     if (!itemCode) return { isDuplicate: false };
@@ -92,7 +116,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       // Reset all fields when item is cleared via the cross button in autocomplete
       const resetData = {
         item: '',
-        godown: '',
+        godown: '', // Make sure godown is reset
         unit: '',
         stock: '',
         pack: '',
@@ -111,6 +135,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
         stockLimit: 0,
       };
       updateItem(index, resetData);
+      
+      // Force re-render of the component by using a key
+      forceUpdate({});
       return;
     }
 
@@ -130,7 +157,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       // Clear the item selection
       const resetData = {
         item: '',
-        godown: '',
+        godown: '', // Make sure godown is reset
         unit: '',
         stock: '',
         pack: '',
@@ -190,7 +217,13 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     
     setUnitOptions(units);
     updateItem(index, updatedData);
+    
+    // Trigger godown focus after item selection
+    setShouldFocusGodown(true);
   };
+
+  // Helper to force re-render
+  const [, forceUpdate] = useState({});
 
   const handleGodownChange = (newValue: string | null) => {
     if (!newValue || !item.selectedItem) {
@@ -456,6 +489,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
               <Autocomplete
                 id={`godown-${index}`}
                 label="Godown"
+                key={`godown-${index}-${item.item || 'empty'}`} 
                 className={shouldShowValidation && item.item && !item.godown ? "border-red-500" : ""}
                 options={Object.entries(stockList[item.item] || {})
                   .filter(([gdnCode, stock]) => gdnCode && parseInt(stock as string, 10) > 0)
@@ -556,10 +590,14 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 value={item.qty}
                 onChange={(e) => handleFieldChange('qty', e.target.value)}
                 variant="outlined"
+                disabled={!item.godown} 
                 className={shouldShowValidation && item.item && !item.qty ? "border-red-500" : ""}
               />
               {shouldShowValidation && item.item && !item.qty && (
                 <p className="text-xs text-red-500 mt-1">Quantity is required</p>
+              )}
+              {!item.godown && item.item && item.qty && (
+                <p className="text-xs text-amber-500 mt-1">Select a godown first</p>
               )}
             </div>
           </div>

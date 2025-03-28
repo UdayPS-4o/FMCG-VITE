@@ -26,7 +26,6 @@ app.get('/api/checkIsAuth', (req, res) => {
       const users = JSON.parse(data);
       const user = users.find((u) => u.token === token);
       if (user) {
-        // Return user details in the expected format
         return res.status(200).json({
           authenticated: true,
           user: {
@@ -35,11 +34,11 @@ app.get('/api/checkIsAuth', (req, res) => {
             username: user.username,
             routeAccess: user.routeAccess,
             powers: user.powers,
-            subgroup: user.subgroup
+            subgroup: user.subgroup,
+            smCode: user.smCode
           }
         });
       } else {
-        // Return unauthorized if user is not found
         return res.status(401).json({ authenticated: false });
       }
     })

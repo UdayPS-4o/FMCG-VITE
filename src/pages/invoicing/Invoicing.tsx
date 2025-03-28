@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -11,6 +11,7 @@ import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
+import useAuth from '../../hooks/useAuth';
 
 interface Option {
   value: string;
@@ -20,6 +21,7 @@ interface Option {
 
 const InvoicingContent: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [searchItems, setSearchItems] = useState<string>('');
   const [showValidationErrors, setShowValidationErrors] = useState<boolean>(false);
@@ -48,7 +50,7 @@ const InvoicingContent: React.FC = () => {
   const [party, setParty] = useState<Option | null>(null);
   const [sm, setSm] = useState<Option | null>(null);
   const [ref, setRef] = useState<string>('');
-  const [dueDays, setDueDays] = useState<string>('');
+  const [dueDays, setDueDays] = useState<string>('7');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [toast, setToast] = useState<{ 
     visible: boolean, 
@@ -60,6 +62,22 @@ const InvoicingContent: React.FC = () => {
     type: 'info' 
   });
 
+  // Filter SM options based on user's role and assigned SM code
+  const filteredSmOptions = useMemo(() => {
+    if (!user || !smOptions) return [];
+    
+    const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+    
+    // If user is not admin and has an assigned SM code, only show that option
+    if (!isAdmin && user.smCode) {
+      const userSm = smOptions.find(option => option.value === user.smCode);
+      return userSm ? [userSm] : [];
+    }
+    
+    // Otherwise, show all options
+    return smOptions;
+  }, [user, smOptions]);
+
   // Update bill number whenever series changes
   useEffect(() => {
     if (series && invoiceIdInfo?.nextSeries) {
@@ -69,6 +87,22 @@ const InvoicingContent: React.FC = () => {
       setBillNo('1');
     }
   }, [series, invoiceIdInfo]);
+
+  // Auto-select SM based on user's smCode
+  useEffect(() => {
+    // Only proceed if we have user data and SM options loaded
+    if (user && smOptions && smOptions.length > 0) {
+      // If user has smCode and is not admin, auto-select their SM
+      const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+      
+      if (user.smCode && !isAdmin) {
+        const userSm = smOptions.find(option => option.value === user.smCode);
+        if (userSm) {
+          setSm(userSm);
+        }
+      }
+    }
+  }, [user, smOptions]);
 
   const handleAccordionChange = (panel: number) => (_: React.SyntheticEvent, isExpanded: boolean) => {
     setExpandedIndex?.(isExpanded ? panel : -1);
@@ -91,7 +125,17 @@ const InvoicingContent: React.FC = () => {
   };
 
   const toggleCash = () => {
-    setCash(prev => prev === 'Y' ? 'N' : 'Y');
+    setCash(prev => {
+      // When changing to credit (N), ensure due days is set to 7 if empty
+      if (prev === 'Y') {
+        if (!dueDays) {
+          setDueDays('7');
+        }
+        return 'N';
+      } else {
+        return 'Y';
+      }
+    });
   };
 
   const handleDueDaysChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,9 +194,12 @@ const InvoicingContent: React.FC = () => {
     setIsSubmitting(true);
     
     try {
+      // For non-admin users with an assigned smCode, the SM field is locked to their code
+      // This is handled in the UI by making the field disabled and auto-selecting their SM
       const apiData = {
         date,
         series,
+        billNo,
         cash,
         party: party?.value || '',
         partyName: party?.label.split('|')[0]?.trim() || '',
@@ -183,6 +230,24 @@ const InvoicingContent: React.FC = () => {
         body: JSON.stringify(apiData),
         credentials: 'include'
       });
+      
+      // Handle duplicate bill number error (409 Conflict)
+      if (response.status === 409) {
+        const errorData = await response.json();
+        setToast({
+          visible: true,
+          message: errorData.message,
+          type: 'error'
+        });
+        
+        // Update the bill number with the suggested number
+        if (errorData.suggestedBillNo) {
+          setBillNo(errorData.suggestedBillNo);
+        }
+        
+        setIsSubmitting(false);
+        return;
+      }
       
       if (!response.ok) {
         throw new Error(`Error: ${response.status}`);
@@ -353,10 +418,16 @@ const InvoicingContent: React.FC = () => {
               <Autocomplete
                 id="sm"
                 label="S/M"
-                options={smOptions}
+                options={filteredSmOptions}
                 onChange={handleSmChange}
+                defaultValue={sm?.value || ''}
+                value={sm?.value || ''}
+                disabled={!!(user && !user.routeAccess.includes('Admin') && user.smCode)}
                 autoComplete="off"
               />
+              {user && !user.routeAccess.includes('Admin') && user.smCode && (
+                <p className="mt-1 text-xs text-gray-500">S/M is locked to your assigned salesman code</p>
+              )}
               {errors.sm && (
                 <p className="mt-1 text-sm text-red-500">{errors.sm}</p>
               )}
