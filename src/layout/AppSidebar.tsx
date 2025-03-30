@@ -173,8 +173,16 @@ const AppSidebar: React.FC = () => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          navigate('/login');
+          return;
+        }
+
         const response = await fetch(`${constants.baseURL}/api/checkIsAuth`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
         
         if (response.ok) {
@@ -183,11 +191,16 @@ const AppSidebar: React.FC = () => {
             setUser(data.user);
           } else {
             // Redirect to login if not authenticated
+            localStorage.removeItem('token');
             navigate('/login');
           }
+        } else {
+          localStorage.removeItem('token');
+          navigate('/login');
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
+        localStorage.removeItem('token');
         navigate('/login');
       }
     };
@@ -346,26 +359,27 @@ const AppSidebar: React.FC = () => {
   // Fix the handleLogout function
   const handleLogout = async () => {
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${constants.baseURL}/api/logout`, {
         method: 'POST',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
       if (response.ok) {
         // Clear any locally stored data
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        
-        // Use window.location for a full page refresh to clear all React state
-        window.location.href = '/login';
-      } else {
-        console.error('Logout failed');
-        // Still redirect even if logout failed
-        window.location.href = '/login';
+        // Redirect to login page
+        navigate('/login');
       }
     } catch (error) {
       console.error('Logout error:', error);
-      window.location.href = '/login';
+      // Still try to clear data and redirect even if API call fails
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      navigate('/login');
     }
   };
 

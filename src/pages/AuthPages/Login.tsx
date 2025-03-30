@@ -11,12 +11,17 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // If token is present in cookies, redirect to /account-master
+    // If token is present in localStorage, check if it's valid
     const checkAuthentication = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
         const response = await fetch(constants.baseURL + '/api/checkIsAuth', {
           method: 'GET',
-          credentials: 'include', // Ensure cookies are sent with the request
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
 
         if (response.ok) {
@@ -28,10 +33,13 @@ const Login: React.FC = () => {
             window.location.href = '/account-master';
           }
         } else {
+          // If token is invalid, remove it
+          localStorage.removeItem('token');
           console.error('Failed to authenticate user.');
         }
       } catch (error) {
         // Handle error if the user is not authenticated
+        localStorage.removeItem('token');
         console.error('Authentication check failed:', error);
       }
     };
@@ -51,16 +59,24 @@ const Login: React.FC = () => {
         body: JSON.stringify({
           mobile,
           password,
-        }),
-        credentials: 'include', // Ensure cookies (token) are included in the request
+        })
       });
 
       if (response.ok) {
-        // If login is successful, redirect to /account-master
-        navigate('/account-master');
+        const data = await response.json();
+        
+        if (data.success && data.token) {
+          // Store the JWT token in localStorage
+          localStorage.setItem('token', data.token);
+          
+          // If login is successful, redirect to /account-master
+          navigate('/account-master');
+        } else {
+          setError('Login failed. Please check your credentials.');
+        }
       } else {
-        const errorMessage = await response.text();
-        setError(errorMessage);
+        const errorData = await response.json();
+        setError(errorData.message || 'Invalid username or password');
       }
     } catch (err) {
       console.error('Login request failed:', err);

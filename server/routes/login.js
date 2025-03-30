@@ -3,6 +3,7 @@ const app = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 const {
   redirect,
   getDbfData,
@@ -14,41 +15,63 @@ const {
 const { cp } = require('fs');
 const { id } = require('date-fns/locale');
 
+// JWT secret key - in production, this should be in an environment variable
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+const JWT_EXPIRY = '10d'; // Token expiry time
+
+// Middleware to extract JWT token from Authorization header
+const extractToken = (req) => {
+  if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+    return req.headers.authorization.split(' ')[1];
+  }
+  return null;
+};
 
 app.get('/api/checkIsAuth', (req, res) => {
-  const token = req.cookies.token;
+  const token = extractToken(req);
   if (!token) {
     return res.status(401).json({ authenticated: false });
   }
-  const filePath = path.join(__dirname, '..', 'db', 'users.json');
-  fs.readFile(filePath, 'utf8')
-    .then((data) => {
-      const users = JSON.parse(data);
-      const user = users.find((u) => u.token === token);
-      if (user) {
-        return res.status(200).json({
-          authenticated: true,
-          user: {
-            id: user.id,
-            name: user.name,
-            username: user.username,
-            routeAccess: user.routeAccess,
-            powers: user.powers,
-            subgroups: user.subgroups,
-            smCode: user.smCode,
-            defaultSeries: user.defaultSeries,
-            godownAccess: user.godownAccess,
-            canSelectSeries: user.canSelectSeries
-          }
-        });
-      } else {
-        return res.status(401).json({ authenticated: false });
-      }
-    })
-    .catch((err) => {
-      console.error(err);
-      return res.status(500).json({ authenticated: false, error: 'Internal server error' });
-    });
+
+  try {
+    // Verify the JWT token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Get user from users.json file
+    const filePath = path.join(__dirname, '..', 'db', 'users.json');
+    fs.readFile(filePath, 'utf8')
+      .then((data) => {
+        const users = JSON.parse(data);
+        const user = users.find((u) => u.id === decoded.userId);
+        
+        if (user) {
+          return res.status(200).json({
+            authenticated: true,
+            user: {
+              id: user.id,
+              name: user.name,
+              username: user.username,
+              routeAccess: user.routeAccess,
+              powers: user.powers,
+              subgroups: user.subgroups,
+              smCode: user.smCode,
+              defaultSeries: user.defaultSeries,
+              godownAccess: user.godownAccess,
+              canSelectSeries: user.canSelectSeries
+            }
+          });
+        } else {
+          return res.status(401).json({ authenticated: false });
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        return res.status(500).json({ authenticated: false, error: 'Internal server error' });
+      });
+  } catch (err) {
+    console.error('JWT verification failed:', err);
+    return res.status(401).json({ authenticated: false });
+  }
 });
 
 app.post('/api/login', async (req, res) => {
@@ -61,89 +84,41 @@ app.post('/api/login', async (req, res) => {
     const user = users.find((user) => user.number === mobile && user.password === password);
 
     if (user) {
-      const newToken = Math.random().toString(36).substring(7);
-      user.token = newToken;
+      // Create JWT token
+      const token = jwt.sign(
+        { 
+          userId: user.id,
+          username: user.username
+        }, 
+        JWT_SECRET, 
+        { expiresIn: JWT_EXPIRY }
+      );
 
-      // Save the updated users data with the new token
-      await fs.writeFile(filePath, JSON.stringify(users, null, 2), 'utf8');
-
-      // Get host info
-      const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
-                    req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
-      
-      // Determine if the request is using HTTPS
-      const isSecure = req.secure || req.get('x-forwarded-proto') === 'https';
-      
-      // Default cookie options that work in most environments
-      const cookieOptions = {
-        path: '/',
-        httpOnly: true,
-        maxAge: 10 * 365 * 24 * 60 * 60 * 1000 // 10 years in milliseconds
-      };
-      
-      // Add secure flag if the connection is secure
-      if (isSecure) {
-        cookieOptions.secure = true;
-      }
-      
-      // Use Lax for better compatibility with most browsers
-      // "Lax" allows cookies to be sent when users navigate to your site from external sites
-      cookieOptions.sameSite = 'lax';
-      
-      // Add domain only if it's set
-      if (domain) {
-        cookieOptions.domain = domain;
-      }
-      
-      res
-        .status(200)
-        .cookie('token', newToken, cookieOptions)
-        .json({ 
-          success: true, 
-          user: {
-            id: user.id,
-            name: user.name,
-            username: user.username,
-            routeAccess: user.routeAccess,
-            powers: user.powers,
-            subgroup: user.subgroup
-          }
-        });
+      // Return the token in the response
+      res.status(200).json({ 
+        success: true, 
+        token: token,
+        user: {
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          routeAccess: user.routeAccess,
+          powers: user.powers,
+          subgroup: user.subgroup
+        }
+      });
     } else {
-      res.status(404).send('Error: Invalid username or password.');
+      res.status(404).json({ success: false, message: 'Invalid username or password.' });
     }
   } catch (err) {
     console.error(err);
-    res.status(500).send('Failed to login: ' + err.message);
+    res.status(500).json({ success: false, message: 'Failed to login: ' + err.message });
   }
 });
 
 app.get('/logout', (req, res) => {
-  // Get the domain similar to login route
-  const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
-                req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
-  
-  // Determine if the request is using HTTPS
-  const isSecure = req.secure || req.get('x-forwarded-proto') === 'https';
-  
-  // Default cookie options 
-  const cookieOptions = {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax'
-  };
-  
-  // Add secure flag if the connection is secure
-  if (isSecure) {
-    cookieOptions.secure = true;
-  }
-  
-  // Add domain only if it's set
-  if (domain) {
-    cookieOptions.domain = domain;
-  }
-  
-  res.status(200).clearCookie('token', cookieOptions).redirect('/login');
+  // JWT logout just redirects - client should clear the token
+  res.status(200).redirect('/login');
 });
 
 const DIR = 'd01-2324';
@@ -359,34 +334,7 @@ app.get('/api/stock', async (req, res) => {
 
 // Add this POST route for /api/logout
 app.post('/api/logout', (req, res) => {
-  // Get the domain similar to login route
-  const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
-                req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
-  
-  // Determine if the request is using HTTPS
-  const isSecure = req.secure || req.get('x-forwarded-proto') === 'https';
-  
-  // Default cookie options
-  const cookieOptions = {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax'
-  };
-  
-  // Add secure flag if the connection is secure
-  if (isSecure) {
-    cookieOptions.secure = true;
-  }
-  
-  // Add domain only if it's set
-  if (domain) {
-    cookieOptions.domain = domain;
-  }
-  
-  // Clear token cookie with same settings as when it was set
-  res.clearCookie('token', cookieOptions);
-  
-  // Send a success response that the client can handle
+  // JWT doesn't need server-side logout, just return success
   res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
 

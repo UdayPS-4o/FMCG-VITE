@@ -46,8 +46,13 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
         const response = await fetch(`${constants.baseURL}/api/checkIsAuth`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
         
         if (response.ok) {
@@ -82,7 +87,7 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/godown.json`),
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
           apiCache.fetchWithCache<any>(`${constants.baseURL}/json/balance`),
-          apiCache.fetchWithCache<any>(`${constants.baseURL}/slink/invoiceID`, { credentials: 'include' })
+          apiCache.fetchWithCache<any>(`${constants.baseURL}/slink/invoiceID`)
         ]);
         
         // Mark data as fetched to avoid repeating expensive operations

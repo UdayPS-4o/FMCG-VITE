@@ -16,18 +16,28 @@ const AppHeader: React.FC = () => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
         const response = await fetch(`${constants.baseURL}/api/checkIsAuth`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
         
         if (response.ok) {
           const data = await response.json();
           if (data.authenticated && data.user) {
             setUser(data.user);
+          } else {
+            localStorage.removeItem('token');
           }
+        } else {
+          localStorage.removeItem('token');
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
+        localStorage.removeItem('token');
       }
     };
 
