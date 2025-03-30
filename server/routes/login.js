@@ -108,8 +108,23 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/logout', (req, res) => {
-  res.status(200).clearCookie('token').redirect('/login');
-  // .send("Logout successful." + redirect("/login", 2000));
+  // Get the domain similar to login route
+  const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
+                req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
+  
+  const cookieOptions = {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
+  };
+  
+  // Add domain only if it's set
+  if (domain) {
+    cookieOptions.domain = domain;
+  }
+  
+  res.status(200).clearCookie('token', cookieOptions).redirect('/login');
 });
 
 const DIR = 'd01-2324';
@@ -325,12 +340,24 @@ app.get('/api/stock', async (req, res) => {
 
 // Add this POST route for /api/logout
 app.post('/api/logout', (req, res) => {
-  // Clear token cookie with same path and domain as when it was set
-  res.clearCookie('token', {
+  // Get the domain similar to login route
+  const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
+                req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
+  
+  const cookieOptions = {
     path: '/',
-    sameSite: 'lax',
-    httpOnly: true
-  });
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
+  };
+  
+  // Add domain only if it's set
+  if (domain) {
+    cookieOptions.domain = domain;
+  }
+  
+  // Clear token cookie with same settings as when it was set
+  res.clearCookie('token', cookieOptions);
   
   // Send a success response that the client can handle
   res.status(200).json({ success: true, message: 'Logged out successfully' });
