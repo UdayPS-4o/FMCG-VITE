@@ -74,6 +74,21 @@ export const hasSingleSubgroup = (user: User | null): boolean => {
   return false;
 };
 
+// Get token from localStorage
+const getToken = (): string | null => {
+  return localStorage.getItem('token');
+};
+
+// Set token in localStorage
+const setToken = (token: string): void => {
+  localStorage.setItem('token', token);
+};
+
+// Remove token from localStorage
+const removeToken = (): void => {
+  localStorage.removeItem('token');
+};
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -97,19 +112,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        const token = getToken();
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
         const response = await fetch(constants.baseURL + '/api/checkIsAuth', {
           method: 'GET',
-          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
 
         if (response.ok) {
           const data = await response.json();
           if (data.authenticated && data.user) {
             setUser(data.user);
+          } else {
+            // If token is invalid, remove it
+            removeToken();
           }
+        } else {
+          // If request fails, remove token
+          removeToken();
         }
       } catch (error) {
         console.error('Authentication check failed:', error);
+        removeToken();
       } finally {
         setLoading(false);
       }
@@ -129,14 +159,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         body: JSON.stringify({
           mobile,
           password,
-        }),
-        credentials: 'include',
+        })
       });
 
       if (response.ok) {
         const userData = await response.json();
-        setUser(userData.user);
-        return true;
+        
+        if (userData.success && userData.token) {
+          setToken(userData.token);
+          setUser(userData.user);
+          return true;
+        }
       }
       return false;
     } catch (error) {
@@ -148,14 +181,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Logout function
   const logout = async () => {
     try {
+      const token = getToken();
       const response = await fetch(constants.baseURL + '/api/logout', {
         method: 'POST',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
       // Clear user regardless of API success
       setUser(null);
-      localStorage.removeItem('token');
+      removeToken();
       localStorage.removeItem('user');
       
       // Use window.location instead of navigate for a full refresh
@@ -163,6 +199,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('Logout error:', error);
       setUser(null);
+      removeToken();
       window.location.href = '/login';
     }
   };
@@ -223,9 +260,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Add a function to refresh user data without logging out
   const refreshUser = async (): Promise<boolean> => {
     try {
+      const token = getToken();
+      if (!token) return false;
+
       const response = await fetch(constants.baseURL + '/api/checkIsAuth', {
         method: 'GET',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       if (response.ok) {
@@ -233,6 +275,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (data.authenticated && data.user) {
           setUser(data.user);
           return true;
+        } else {
+          removeToken();
         }
       }
       return false;
@@ -261,7 +305,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 };
 
-// Custom hook to use auth context
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {

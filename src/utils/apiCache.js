@@ -140,12 +140,18 @@ class ApiCache {
       console.log(`Using ETag: ${cachedHash} for ${url}`);
     }
     
+    // Add JWT token to authorization header if available
+    const token = localStorage.getItem('token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     try {
       // Make the fetch request with the cached hash
       const response = await fetch(url, {
         ...options,
-        headers,
-        credentials: 'include' // Include credentials for API requests
+        headers
+        // Remove credentials: 'include' as we're using JWT now
       });
       
       console.log(`Response status for ${url}: ${response.status}`);
