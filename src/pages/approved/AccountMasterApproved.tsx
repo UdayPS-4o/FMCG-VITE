@@ -127,7 +127,7 @@ const AccountMasterApproved: React.FC = () => {
       <PageBreadcrumb pageTitle="Account Master Approved" />
       
       <div className="container mx-auto px-4 py-6 overflow-hidden">
-        <div className="bg-white max-w-[1140px] dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
+        <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Account Master Approved Data</h2>
             <div className="flex space-x-4">

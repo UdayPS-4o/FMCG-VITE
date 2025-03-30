@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Input from "../../components/form/input/Input";
@@ -18,9 +18,10 @@ interface User {
   password: string;
   routeAccess: string[];
   powers: string[];
-  subgroup: any | null;
+  subgroups: SubGroup[];
   username?: string;
   smCode?: string;
+  subgroup?: SubGroup | SubGroup[];
 }
 
 interface SubGroup {
@@ -60,12 +61,80 @@ const AddUser: React.FC = () => {
   const [password, setPassword] = useState<string>('');
   const [routeAccess, setRouteAccess] = useState<string[]>([]);
   const [powers, setPowers] = useState<string[]>([]);
-  const [subgroup, setSubgroup] = useState<SubGroup | null>(null);
+  const [subgroups, setSubgroups] = useState<SubGroup[]>([]);
   const [smCode, setSmCode] = useState<string>('');
   const [userId, setUserId] = useState<number | null>(null);
+  const [formKey, setFormKey] = useState<number>(0);
   
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, refreshUser } = useAuth();
+
+  // Function to load user data when id parameter is present
+  const loadUserData = useCallback(async (userId: string) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Find the user in already loaded userData
+      const userToEdit = userData.find((user: any) => user.id === Number(userId));
+      
+      if (userToEdit) {
+        setIsEdit(true);
+        setUserId(userToEdit.id);
+        setName(userToEdit.name);
+        setNumber(userToEdit.number);
+        setPassword(userToEdit.password);
+        setRouteAccess(Array.isArray(userToEdit.routeAccess) 
+          ? userToEdit.routeAccess 
+          : [userToEdit.routeAccess]);
+        setPowers(Array.isArray(userToEdit.powers) 
+          ? userToEdit.powers 
+          : [userToEdit.powers]);
+        
+        // Set SM code if available
+        if (userToEdit.smCode) {
+          setSmCode(userToEdit.smCode);
+        }
+        
+        // Handle subgroups (can be either old format with single subgroup or new format with array)
+        if (userToEdit.subgroups) {
+          // New format - array of subgroups
+          setSubgroups(userToEdit.subgroups);
+        } else if (userToEdit.subgroup) {
+          // Old format - single subgroup
+          // Convert to array format
+          if (Array.isArray(userToEdit.subgroup)) {
+            setSubgroups(userToEdit.subgroup);
+          } else {
+            setSubgroups(userToEdit.subgroup ? [userToEdit.subgroup] : []);
+          }
+        } else {
+          setSubgroups([]);
+        }
+      } else {
+        setError('User not found');
+      }
+    } catch (err) {
+      console.error('Failed to load user data:', err);
+      setError('Failed to load user details');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userData]);
+
+  // Listen for URL parameter changes to load user data
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    
+    if (id && userData.length) {
+      loadUserData(id);
+    } else if (!id) {
+      // Reset form if no ID in URL
+      handleClearForm();
+    }
+  }, [location.search, userData, loadUserData]);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -84,52 +153,6 @@ const AddUser: React.FC = () => {
         
         const users = await response.json();
         setUserData(users);
-        
-        // Check if we're in edit mode
-        const params = new URLSearchParams(window.location.search);
-        const id = params.get('id');
-        
-        if (id && users.length) {
-          const userToEdit = users.find((user: any) => user.id === Number(id));
-          
-          if (userToEdit) {
-            setIsEdit(true);
-            setUserId(userToEdit.id);
-            setName(userToEdit.name);
-            setNumber(userToEdit.number);
-            setPassword(userToEdit.password);
-            setRouteAccess(Array.isArray(userToEdit.routeAccess) 
-              ? userToEdit.routeAccess 
-              : [userToEdit.routeAccess]);
-            setPowers(Array.isArray(userToEdit.powers) 
-              ? userToEdit.powers 
-              : [userToEdit.powers]);
-            
-            // Set SM code if available
-            if (userToEdit.smCode) {
-              setSmCode(userToEdit.smCode);
-            }
-            
-            // Make sure to set the subgroup correctly
-            if (userToEdit.subgroup) {
-              // Wait for subgroupOptions to be loaded
-              if (subgroupOptions.length > 0) {
-                const matchedSubgroup = subgroupOptions.find(
-                  sg => sg.title === userToEdit.subgroup.title || 
-                       sg.subgroupCode === userToEdit.subgroup.subgroupCode
-                );
-                setSubgroup(matchedSubgroup || userToEdit.subgroup);
-              } else {
-                // Store the subgroup to be matched when subgroupOptions loads
-                setSubgroup(userToEdit.subgroup);
-              }
-            } else {
-              setSubgroup(null);
-            }
-          } else {
-            setError('User not found');
-          }
-        }
       } catch (err) {
         console.error('Failed to fetch user data:', err);
         setError('Failed to load user details');
@@ -211,19 +234,20 @@ const AddUser: React.FC = () => {
     }
   }, [smOptions, isEdit, smCode]);
 
-  // Update subgroup when subgroupOptions changes and we're in edit mode
+  // Update subgroups when subgroupOptions changes and we're in edit mode
   useEffect(() => {
-    if (isEdit && subgroup && subgroupOptions.length > 0) {
-      // Try to find a matching subgroup in the loaded options
-      const matchedSubgroup = subgroupOptions.find(
-        sg => sg.title === subgroup.title || sg.subgroupCode === subgroup.subgroupCode
-      );
+    if (isEdit && subgroups.length > 0 && subgroupOptions.length > 0) {
+      // Try to find matching subgroups in the loaded options
+      const updatedSubgroups = subgroups.map(subgroup => {
+        const matchedSubgroup = subgroupOptions.find(
+          sg => sg.title === subgroup.title || sg.subgroupCode === subgroup.subgroupCode
+        );
+        return matchedSubgroup || subgroup;
+      });
       
-      if (matchedSubgroup) {
-        setSubgroup(matchedSubgroup);
-      }
+      setSubgroups(updatedSubgroups);
     }
-  }, [subgroupOptions, isEdit, subgroup]);
+  }, [subgroupOptions, isEdit, subgroups]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -238,7 +262,7 @@ const AddUser: React.FC = () => {
         routeAccess,
         powers,
         username: 'admin',
-        subgroup: subgroup ? subgroup : null,
+        subgroups,
         smCode: smCode || undefined,
       };
       
@@ -281,12 +305,18 @@ const AddUser: React.FC = () => {
         await refreshUser();
       }
       
-      // Reset form after save
+      // Reset form completely
+      const originalFormKey = formKey;
       handleClearForm();
       
-      // Redirect to add-user page after successful update if in edit mode
+      // Ensure formKey is different to force complete re-render
+      if (formKey === originalFormKey) {
+        setFormKey(prev => prev + 1);
+      }
+      
+      // Update URL without a full page reload if in edit mode
       if (isEdit) {
-        navigate('/add-user');
+        navigate('/add-user', { replace: true });
       }
       
     } catch (err) {
@@ -309,10 +339,12 @@ const AddUser: React.FC = () => {
     setPassword('');
     setRouteAccess([]);
     setPowers([]);
-    setSubgroup(null);
+    setSubgroups([]);
     setSmCode('');
     setIsEdit(false);
     setUserId(null);
+    // Increment key to force re-render of components
+    setFormKey(prev => prev + 1);
   };
   
   // Handle SM change
@@ -354,7 +386,7 @@ const AddUser: React.FC = () => {
               {error}
             </div>
           ) : (
-            <FormComponent onSubmit={handleSubmit}>
+            <FormComponent key={formKey} onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <Input
@@ -392,23 +424,6 @@ const AddUser: React.FC = () => {
                 </div>
                 <div className="relative">
                   <Autocomplete
-                    id="subgroup"
-                    label="Sub Group"
-                    options={subgroupOptions.map(sg => ({
-                      label: sg.title,
-                      value: sg.subgroupCode
-                    }))}
-                    onChange={(value) => {
-                      const selected = subgroupOptions.find(sg => sg.subgroupCode === value);
-                      setSubgroup(selected || null);
-                    }}
-                    defaultValue={subgroup?.subgroupCode ?? ''}
-                    value={subgroup?.subgroupCode ?? ''}
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="relative">
-                  <Autocomplete
                     id="smCode"
                     label="S/M"
                     options={smOptions}
@@ -420,15 +435,40 @@ const AddUser: React.FC = () => {
                 </div>
                 <div className="relative">
                   <MultiSelect
+                    key={`subgroups-${formKey}`}
+                    label="Sub Groups"
+                    options={subgroupOptions.map(sg => ({
+                      text: sg.title,
+                      value: sg.subgroupCode
+                    }))}
+                    value={subgroups.map(sg => sg.subgroupCode)}
+                    onChange={(values) => {
+                      // Convert selected values back to SubGroup objects
+                      const selectedSubgroups = values.map(value => {
+                        const selected = subgroupOptions.find(sg => sg.subgroupCode === value);
+                        return selected || { title: value, subgroupCode: value };
+                      });
+                      setSubgroups(selectedSubgroups);
+                    }}
+                    allowFiltering={true}
+                    selectOnEnter={true}
+                    matchThreshold={3}
+                  />
+                </div>
+                <div className="relative">
+                  <MultiSelect
                     label="Route Access"
                     options={routeAccessOptions.map(ra => ({
                       text: ra,
                       value: ra
                     }))}
-                    defaultSelected={routeAccess}
+                    value={routeAccess}
                     onChange={(values) => {
                       setRouteAccess(values);
                     }}
+                    allowFiltering={true}
+                    selectOnEnter={true}
+                    matchThreshold={3}
                   />
                 </div>
                 <div className="relative">
@@ -438,10 +478,13 @@ const AddUser: React.FC = () => {
                       text: po,
                       value: po
                     }))}
-                    defaultSelected={powers}
+                    value={powers}
                     onChange={(values) => {
                       setPowers(values);
                     }}
+                    allowFiltering={true}
+                    selectOnEnter={true}
+                    matchThreshold={3}
                   />
                 </div>
               </div>

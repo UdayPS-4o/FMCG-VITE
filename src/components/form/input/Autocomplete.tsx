@@ -88,9 +88,22 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   const isActive = isFocused || searchTerm;
 
   // Filter options based on search term
-  const filteredOptions = options.filter(option =>
-    option && option.label && option.label.toLowerCase().includes((searchTerm || '').toLowerCase())
-  );
+  const filteredOptions = options.filter(option => {
+    if (!option || !option.label) {
+      return false;
+    }
+    const labelLower = option.label.toLowerCase();
+    const searchTermsLower = (searchTerm || '').toLowerCase();
+    const searchWords = searchTermsLower.split(' ').filter(word => word.length > 0);
+    
+    // If no search words, show all options (or handle as needed)
+    if (searchWords.length === 0) {
+      return true; // Or false, depending on desired behavior for empty search
+    }
+    
+    // Check if all search words are included in the label
+    return searchWords.every(word => labelLower.includes(word));
+  });
 
   // Set initial selected option based on defaultValue or value
   useEffect(() => {

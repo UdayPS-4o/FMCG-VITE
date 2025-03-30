@@ -70,5 +70,15 @@
     "discount": 12,
     "voucherNo": "asdfasdfsdavasd23123",
     "party": "CT001"
+  },
+  {
+    "date": "2025-03-30",
+    "series": "A",
+    "amount": "123124",
+    "discount": "150",
+    "voucherNo": "1234556",
+    "narration": "narration 1234 gggggggggg",
+    "party": "OT069",
+    "createdAt": "2025-03-30T02:14:52.882Z"
   }
 ]

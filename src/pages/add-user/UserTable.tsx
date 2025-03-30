@@ -1,4 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+interface SubGroup {
+  title: string;
+  subgroupCode: string;
+}
 
 interface User {
   id?: number;
@@ -7,7 +13,8 @@ interface User {
   password: string;
   routeAccess: string[];
   powers: string[];
-  subgroup: any | null;
+  subgroups: SubGroup[];
+  subgroup?: any;
   smCode?: string;
 }
 
@@ -25,6 +32,7 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
   const [isLoading, setIsLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<number | null>(null);
+  const navigate = useNavigate();
   
   useEffect(() => {
     // Sort data by ID in descending order
@@ -43,7 +51,7 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
     { key: 'number', label: 'Phone Number' },
     { key: 'routeAccess', label: 'Route Access' },
     { key: 'powers', label: 'Powers' },
-    { key: 'subgroup', label: 'Subgroup' },
+    { key: 'subgroups', label: 'Subgroups' },
     { key: 'smCode', label: 'S/M Code' },
   ];
   
@@ -122,7 +130,7 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
   
   const handleEdit = (id: number) => {
     if (!id) return;
-    window.location.href = `/add-user?id=${id}`;
+    navigate(`/add-user?id=${id}`);
   };
   
   const formatCellValue = (row: User, header: { key: string; label: string }) => {
@@ -133,11 +141,24 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
     }
     
     if (Array.isArray(value)) {
+      if (header.key === 'subgroups') {
+        // Format subgroups array
+        return (value as SubGroup[]).map(sg => sg.title).join(', ');
+      }
       return value.join(', ');
     }
     
-    if (header.key === 'subgroup' && value && typeof value === 'object') {
-      return value.title || '';
+    // Handle legacy format or when header is 'subgroup' but data is in 'subgroups'
+    if (header.key === 'subgroup') {
+      // First check if we have subgroups array
+      if (row.subgroups && Array.isArray(row.subgroups) && row.subgroups.length > 0) {
+        return row.subgroups.map(sg => sg.title).join(', ');
+      }
+      
+      // Fall back to legacy format
+      if (value && typeof value === 'object') {
+        return value.title || '';
+      }
     }
     
     return value;

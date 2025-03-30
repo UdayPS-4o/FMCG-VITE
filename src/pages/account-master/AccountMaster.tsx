@@ -123,24 +123,37 @@ const AccountMaster: React.FC = () => {
             throw new Error('Failed to fetch subgroup data');
           }
           const data = await response.json();
-          setGroup(
-            data.map((party: any) => ({
-              label: party.title,
-              value: party.subgroupCode,
-            }))
-          );
-
-          // If user has a subgroup and is not admin, pre-select it
-          if (user && user.subgroup && user.subgroup.subgroupCode && !isAdmin) {
-            const userSubgroup = {
-              label: user.subgroup.title,
-              value: user.subgroup.subgroupCode
-            };
-            setSubgroup([userSubgroup]);
-            setFormValues(prev => ({
-              ...prev,
-              subgroup: user.subgroup.subgroupCode
-            }));
+          
+          // Get all available subgroups
+          const allSubgroups = data.map((party: any) => ({
+            label: party.title,
+            value: party.subgroupCode,
+          }));
+          
+          // Filter subgroups based on user permissions
+          if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
+            // For non-admin users, filter subgroups to only show those they have access to
+            const allowedSubgroupCodes = user.subgroups.map(sg => sg.subgroupCode);
+            const filteredSubgroups = allSubgroups.filter(sg => 
+              allowedSubgroupCodes.includes(sg.value)
+            );
+            setGroup(filteredSubgroups);
+            
+            // If user has only one subgroup, pre-select it
+            if (user.subgroups.length === 1) {
+              const userSubgroup = {
+                label: user.subgroups[0].title,
+                value: user.subgroups[0].subgroupCode
+              };
+              setSubgroup([userSubgroup]);
+              setFormValues(prev => ({
+                ...prev,
+                subgroup: user.subgroups[0].subgroupCode
+              }));
+            }
+          } else {
+            // For admin users, show all subgroups
+            setGroup(allSubgroups);
           }
         }
 
@@ -305,8 +318,9 @@ const AccountMaster: React.FC = () => {
   };
 
   const getSubgroupValue = () => {
-    if (user && user.subgroup && !isAdmin) {
-      return { label: user.subgroup.title, value: user.subgroup.subgroupCode };
+    if (!isAdmin && user && user.subgroups && user.subgroups.length === 1) {
+      // If non-admin user has exactly one subgroup, it's locked
+      return { label: user.subgroups[0].title, value: user.subgroups[0].subgroupCode };
     }
     
     if (!subgroup || !subgroup.length) {
@@ -373,15 +387,20 @@ const AccountMaster: React.FC = () => {
               <Autocomplete
                 id="subgroup"
                 label="Sub Group"
-                options={isAdmin ? group : (user && user.subgroup ? [{ label: user.subgroup.title, value: user.subgroup.subgroupCode }] : [])}
+                options={group}
                 onChange={handlePartyChange}
                 defaultValue={getSubgroupValue()?.value ?? ''}
-                disabled={Boolean(!isAdmin && user && user.subgroup)}
+                disabled={Boolean(!isAdmin && user && user.subgroups && user.subgroups.length === 1)}
                 autoComplete="off"
               />
-              {!isAdmin && user && user.subgroup && (
+              {!isAdmin && user && user.subgroups && user.subgroups.length === 1 && (
                 <p className="text-xs text-gray-500 mt-1">
                   Subgroup is locked to your assigned subgroup
+                </p>
+              )}
+              {!isAdmin && user && user.subgroups && user.subgroups.length > 1 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  You can only select from your assigned subgroups
                 </p>
               )}
             </div>

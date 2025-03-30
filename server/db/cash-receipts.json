@@ -177,5 +177,15 @@
     "receiptNo": 84,
     "party": "AA001",
     "createdAt": "2025-03-17T23:40:22.455Z"
+  },
+  {
+    "date": "2025-03-30",
+    "series": "A",
+    "amount": "6789.95",
+    "discount": "20",
+    "receiptNo": "85",
+    "narration": "narration 1234",
+    "party": "AA001",
+    "createdAt": "2025-03-30T05:46:27.895Z"
   }
 ]

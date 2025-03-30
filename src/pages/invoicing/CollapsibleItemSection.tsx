@@ -25,6 +25,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
 }) => {
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [initialInteraction, setInitialInteraction] = useState<boolean>(true);
+  const [error, setError] = useState<string>('');
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
@@ -271,6 +272,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       stockLimit: stockLimit,
     };
 
+    // Clear any previous errors
+    setError('');
+    
     updateItem(index, updatedData);
   };
 
@@ -304,38 +308,65 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
 
     updatedData.stockLimit = stockLimit;
 
-    // Optionally adjust qty if it exceeds new stockLimit
-    if (parseInt(updatedData.qty, 10) > stockLimit) {
+    // Check if the existing quantity exceeds the new stockLimit
+    if (updatedData.qty && parseInt(updatedData.qty, 10) > stockLimit) {
       updatedData.qty = stockLimit.toString();
+      // Show a message about the automatic adjustment
+      setError(`Quantity adjusted to maximum available: ${stockLimit} ${otherUnit}`);
+    } else {
+      setError('');
     }
 
     updateItem(index, calculateAmounts(updatedData));
   };
 
   const handleFieldChange = (name: string, newValue: string) => {
-    let updatedData = { ...item, [name]: newValue };
-
     if (name === 'qty') {
-      if (newValue === '') {
-        updatedData.qty = '';
-      } else {
-        const totalQty = parseInt(newValue, 10);
-
-        if (!isNaN(totalQty)) {
-          const stockLimit = item.stockLimit;
-
-          if (stockLimit > 0 && totalQty > stockLimit) {
-            updatedData.qty = stockLimit.toString();
-          } else {
-            updatedData.qty = totalQty.toString();
-          }
-        }
+      // Only accept numbers
+      if (newValue && !/^\d*$/.test(newValue)) {
+        setError('Only numbers are allowed for quantity');
+        return;
       }
 
-      updatedData = calculateAmounts(updatedData);
+      if (newValue === '') {
+        const updatedData = { ...item, qty: '', amount: '', netAmount: '' };
+        updateItem(index, updatedData);
+        setError('');
+        return;
+      }
+
+      const totalQty = parseInt(newValue, 10);
+      if (!isNaN(totalQty)) {
+        const stockLimit = item.stockLimit;
+        
+        // Special case: If unit is BOX and stockLimit is 0 (not enough items to make a box)
+        if (item.selectedItem && item.unit === item.selectedItem.UNIT_2 && stockLimit === 0) {
+          setError(`Not enough stock to make a complete box (need ${item.pcBx} pieces per box)`);
+          return;
+        }
+        
+        // Enforce stock limit - don't allow values greater than stock limit
+        if (stockLimit > 0 && totalQty > stockLimit) {
+          // Don't update with a value beyond the stock limit
+          setError(`Quantity cannot exceed available stock (${stockLimit} ${item.unit})`);
+          return;
+        }
+        
+        // Valid quantity within stock limit - update and clear error
+        const updatedData = { ...item, qty: totalQty.toString() };
+        updateItem(index, calculateAmounts(updatedData));
+        setError('');
+        return;
+      }
+
+      // Handle NaN case
+      setError('Please enter a valid number');
+      return;
     }
 
-    if (['rate', 'cess', 'cd', 'sch'].includes(name)) {
+    // For other fields (not qty)
+    let updatedData = { ...item, [name]: newValue };
+    if (['rate', 'schRs', 'cd', 'sch'].includes(name)) {
       updatedData = calculateAmounts(updatedData);
     }
 
@@ -381,17 +412,19 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
 
     let netAmount = amount;
 
-    // Process additional charges and discounts
-    if (data.cess && !isNaN(parseFloat(data.cess))) {
-      netAmount += amount * (parseFloat(data.cess) / 100);
-    }
-
-    if (data.cd && !isNaN(parseFloat(data.cd))) {
-      netAmount -= amount * (parseFloat(data.cd) / 100);
-    }
-
+    // Process scheme percentage discount
     if (data.sch && !isNaN(parseFloat(data.sch))) {
       netAmount -= amount * (parseFloat(data.sch) / 100);
+    }
+
+    // Process scheme amount discount (previously CESS)
+    if (data.schRs && !isNaN(parseFloat(data.schRs))) {
+      netAmount -= parseFloat(data.schRs);
+    }
+
+    // Process cash discount percentage
+    if (data.cd && !isNaN(parseFloat(data.cd))) {
+      netAmount -= amount * (parseFloat(data.cd) / 100);
     }
 
     // Ensure we don't return NaN or invalid calculations
@@ -594,13 +627,17 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 onChange={(e) => handleFieldChange('qty', e.target.value)}
                 variant="outlined"
                 disabled={!item.godown} 
-                className={shouldShowValidation && item.item && !item.qty ? "border-red-500" : ""}
+                className={`${shouldShowValidation && item.item && !item.qty ? "border-red-500" : ""} ${error ? "border-red-500" : ""}`}
               />
-              {shouldShowValidation && item.item && !item.qty && (
+              {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+              {shouldShowValidation && item.item && !item.qty && !error && (
                 <p className="text-xs text-red-500 mt-1">Quantity is required</p>
               )}
               {!item.godown && item.item && item.qty && (
                 <p className="text-xs text-amber-500 mt-1">Select a godown first</p>
+              )}
+              {item.godown && item.stockLimit > 0 && (
+                <p className="text-xs text-gray-500 mt-1">Available: {item.stockLimit} {item.unit}</p>
               )}
             </div>
           </div>
@@ -609,9 +646,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
             <div>
               <Input
                 id={`cess-${index}`}
-                label="Cess"
-                value={item.cess}
-                onChange={(e) => handleFieldChange('cess', e.target.value)}
+                label="SCH (RS)"
+                value={item.schRs}
+                onChange={(e) => handleFieldChange('schRs', e.target.value)}
                 variant="outlined"
               />
             </div>

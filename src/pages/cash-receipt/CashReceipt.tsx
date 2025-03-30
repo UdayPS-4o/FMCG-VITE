@@ -79,7 +79,7 @@ const CashReceipt: React.FC = () => {
 
         const receipt = id;
 
-        const receiptToEdit = data.find((rec: any) => rec.receiptNo === receipt);
+        const receiptToEdit = data.find((rec: any) => rec.receiptNo == receipt);
 
         if (!receiptToEdit) {
           setToastMessage('Receipt record not found');
@@ -119,14 +119,23 @@ const CashReceipt: React.FC = () => {
         // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
         let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
         
-        if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
-          const subgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
-          console.log(`Filtering parties by subgroup prefix: ${subgroupPrefix}`);
+        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
+          console.log(`Filtering parties by user's assigned subgroups`);
           
+          // Get all subgroup prefixes from user's assigned subgroups
+          const subgroupPrefixes = user.subgroups.map((sg: any) => 
+            sg.subgroupCode.substring(0, 2).toUpperCase()
+          );
+          
+          console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+          
+          // Filter parties where C_CODE starts with any of the user's subgroup prefixes
           filteredPartyData = filteredPartyData.filter((party: any) => {
             const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-            return partyPrefix === subgroupPrefix;
+            return subgroupPrefixes.includes(partyPrefix);
           });
+          
+          console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
         } else if (isAdmin) {
           console.log('User is admin - showing all parties without filtering');
         }
@@ -147,7 +156,7 @@ const CashReceipt: React.FC = () => {
         });
 
         setPartyOptions(partyList);
-        setParty(partyList.find((p: PartyOption) => p.value === receiptToEdit.party));
+        setParty(partyList.find((p: PartyOption) => p.value == receiptToEdit.party));
       } catch (error) {
         console.error('Failed to fetch data for edit:', error);
         setToastMessage('Failed to load receipt details');
@@ -184,14 +193,23 @@ const CashReceipt: React.FC = () => {
         // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
         let filteredPartyData = dataParty.filter((party: any) => !party.C_CODE.endsWith('000'));
         
-        if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
-          const subgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
-          console.log(`Filtering parties by subgroup prefix: ${subgroupPrefix}`);
+        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
+          console.log(`Filtering parties by user's assigned subgroups`);
           
+          // Get all subgroup prefixes from user's assigned subgroups
+          const subgroupPrefixes = user.subgroups.map((sg: any) => 
+            sg.subgroupCode.substring(0, 2).toUpperCase()
+          );
+          
+          console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+          
+          // Filter parties where C_CODE starts with any of the user's subgroup prefixes
           filteredPartyData = filteredPartyData.filter((party: any) => {
             const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-            return partyPrefix === subgroupPrefix;
+            return subgroupPrefixes.includes(partyPrefix);
           });
+          
+          console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
         } else if (isAdmin) {
           console.log('User is admin - showing all parties without filtering');
         }
@@ -233,7 +251,7 @@ const CashReceipt: React.FC = () => {
   }, [id, user]); // Add user as dependency
 
   const handlePartyChange = (value: string) => {
-    const selectedParty = partyOptions.find(p => p.value === value);
+    const selectedParty = partyOptions.find(p => p.value == value);
     setParty(selectedParty || null);
   };
 
@@ -242,7 +260,7 @@ const CashReceipt: React.FC = () => {
     const { name, value } = e.target;
     
     // Auto-capitalize series input
-    if (name === 'series') {
+    if (name == 'series') {
       setFormValues(prev => ({
         ...prev,
         [name]: value.toUpperCase()

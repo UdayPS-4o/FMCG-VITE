@@ -34,7 +34,7 @@ app.get('/api/checkIsAuth', (req, res) => {
             username: user.username,
             routeAccess: user.routeAccess,
             powers: user.powers,
-            subgroup: user.subgroup,
+            subgroups: user.subgroups,
             smCode: user.smCode
           }
         });

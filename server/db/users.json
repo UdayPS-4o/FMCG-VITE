@@ -70,7 +70,7 @@
       "title": "ADEGAON",
       "subgroupCode": "AD002"
     },
-    "token": "5vgiqn"
+    "token": "shtt1"
   },
   {
     "id": 8,
@@ -103,7 +103,8 @@
       "Godown Transfer",
       "Cash Receipts",
       "Account Master",
-      "Invoicing"
+      "Invoicing",
+      "Cash Payments"
     ],
     "powers": [
       "Read",
@@ -113,7 +114,17 @@
       "title": "BANDOL-CHAPARA | 264",
       "subgroupCode": "BC264"
     },
-    "token": "5zklwh",
-    "smCode": "SM002"
+    "token": "6xa9x6",
+    "smCode": "SM002",
+    "subgroups": [
+      {
+        "title": "BANDOL-CHAPARA | 264",
+        "subgroupCode": "BC264"
+      },
+      {
+        "title": "BARGHAT ROAD-DUNDA S | 046",
+        "subgroupCode": "BD046"
+      }
+    ]
   }
 ]
