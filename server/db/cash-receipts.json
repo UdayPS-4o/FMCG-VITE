@@ -181,11 +181,33 @@
   {
     "date": "2025-03-30",
     "series": "A",
-    "amount": "6789.95",
+    "amount": "111111111111",
     "discount": "20",
     "receiptNo": "85",
     "narration": "narration 1234",
     "party": "AA001",
-    "createdAt": "2025-03-30T05:46:27.895Z"
+    "createdAt": "2025-03-30T05:46:27.895Z",
+    "lastUpdated": "2025-03-30T07:42:58.991Z"
+  },
+  {
+    "date": "2025-03-30",
+    "series": "A",
+    "amount": "1111",
+    "discount": "222",
+    "receiptNo": "86",
+    "narration": "3123",
+    "party": "OT069",
+    "createdAt": "2025-03-30T07:41:11.757Z",
+    "lastUpdated": "2025-03-30T07:42:54.355Z"
+  },
+  {
+    "date": "2025-03-30",
+    "series": "A",
+    "amount": "1110",
+    "discount": "11",
+    "receiptNo": "87",
+    "narration": "111100",
+    "createdAt": "2025-03-30T07:41:55.368Z",
+    "lastUpdated": "2025-03-30T07:43:05.865Z"
   }
 ]
