@@ -31,3 +31,6 @@ test.html
 
 server/db/
 server/db/*
+server/db/*.json
+
+server/db

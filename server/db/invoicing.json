@@ -322,9 +322,45 @@
     "billNo": "5",
     "cash": "N",
     "party": "OT069",
-    "partyName": "UDAY SHEETY",
+    "partyName": "UDAY SHEETY | OT069",
     "sm": "SM002",
-    "smName": "GANESH BAGHEL",
+    "smName": "GANESH BAGHEL | SM002",
+    "ref": "",
+    "dueDays": "7",
+    "items": [
+      {
+        "item": "MK001",
+        "godown": "02",
+        "unit": "PCS",
+        "rate": "100",
+        "qty": "1",
+        "cess": "",
+        "schRs": "",
+        "sch": "10",
+        "cd": "10",
+        "amount": "100.00",
+        "netAmount": "81.00",
+        "stock": "7297 (Total: 7371)",
+        "stockLimit": 7297,
+        "pack": "4.21KG",
+        "gst": 5,
+        "pcBx": 4,
+        "mrp": 940
+      }
+    ],
+    "id": "5",
+    "createdAt": "2025-03-30T03:40:16.890Z",
+    "lastUpdated": "2025-03-30T12:50:07.316Z"
+  },
+  {
+    "date": "2025-03-30",
+    "series": "T",
+    "billNo": "6",
+    "cash": "N",
+    "party": "CT001",
+    "partyName": "MEENASANKAR MATCH IND. PVT LTD",
+    "sm": "SM001",
+    "smName": "SHYAM YADAV KOHKNA",
     "ref": "",
     "dueDays": "7",
     "items": [
@@ -340,9 +376,22 @@
         "cd": "10",
         "amount": "100.00",
         "netAmount": "72.90"
+      },
+      {
+        "item": "ME006",
+        "godown": "02",
+        "unit": "BOX",
+        "rate": 440,
+        "qty": "20",
+        "cess": "",
+        "schRs": "800",
+        "sch": "12.5",
+        "cd": "14.3",
+        "amount": "8800.00",
+        "netAmount": "5999.00"
       }
     ],
-    "id": "5",
-    "createdAt": "2025-03-30T03:40:16.890Z"
+    "id": "6",
+    "createdAt": "2025-03-30T13:11:40.975Z"
   }
 ]

@@ -161,7 +161,12 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
         if (data.length > 0) {
           const dataHeaders = Object.keys(data[0]);
           setHeaders(dataHeaders);
-          setOrderBy(dataHeaders[0]);
+          // Set initial sorting to be by 'id' in descending order if the id field exists
+          if (dataHeaders.includes('id')) {
+            setOrderBy('id');
+          } else {
+            setOrderBy(dataHeaders[0]);
+          }
           
           // We'll load hidden columns in a separate useEffect
         }

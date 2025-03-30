@@ -494,21 +494,23 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       amount = rate * qty;
     }
 
-    let netAmount = amount;
-
-    // Process scheme percentage discount
-    if (data.sch && !isNaN(parseFloat(data.sch))) {
-      netAmount -= amount * (parseFloat(data.sch) / 100);
-    }
-
-    // Process scheme amount discount (previously CESS)
+    // Apply discounts in a compound manner: [(AMOUNT-SCHRS)-SCH%]-CD%
+    let remainingAmount = amount;
+    
+    // Step 1: First subtract the scheme amount (SCHRS)
     if (data.schRs && !isNaN(parseFloat(data.schRs))) {
-      netAmount -= parseFloat(data.schRs);
+      remainingAmount -= parseFloat(data.schRs);
     }
-
-    // Process cash discount percentage
+    
+    // Step 2: Then apply the scheme percentage discount (SCH%)
+    if (data.sch && !isNaN(parseFloat(data.sch))) {
+      remainingAmount -= remainingAmount * (parseFloat(data.sch) / 100);
+    }
+    
+    // Step 3: Finally apply the cash discount percentage (CD%)
+    let netAmount = remainingAmount;
     if (data.cd && !isNaN(parseFloat(data.cd))) {
-      netAmount -= amount * (parseFloat(data.cd) / 100);
+      netAmount -= remainingAmount * (parseFloat(data.cd) / 100);
     }
 
     // Ensure we don't return NaN or invalid calculations
