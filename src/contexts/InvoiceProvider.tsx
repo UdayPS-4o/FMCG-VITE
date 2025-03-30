@@ -128,16 +128,24 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           const currentUser = userRef.current;
           const isAdmin = currentUser && currentUser.routeAccess && currentUser.routeAccess.includes('Admin');
           
-          // Only filter parties if user is not an admin and has a subgroup
-          if (!isAdmin && currentUser && currentUser.subgroup && currentUser.subgroup.subgroupCode) {
-            const subgroupPrefix = currentUser.subgroup.subgroupCode.substring(0, 2).toUpperCase();
-            console.log(`Filtering parties by subgroup prefix: ${subgroupPrefix}`);
+          // Only filter parties if user is not an admin and has assigned subgroups
+          if (!isAdmin && currentUser && currentUser.subgroups && currentUser.subgroups.length > 0) {
+            console.log(`Filtering parties by user's assigned subgroups`);
             
-            // Filter parties where C_CODE starts with the same prefix as the user's subgroupCode
+            // Get all subgroup prefixes from user's assigned subgroups
+            const subgroupPrefixes = currentUser.subgroups.map(sg => 
+              sg.subgroupCode.substring(0, 2).toUpperCase()
+            );
+            
+            console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+            
+            // Filter parties where C_CODE starts with any of the user's subgroup prefixes
             dtParties = dtParties.filter(party => {
               const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-              return partyPrefix === subgroupPrefix;
+              return subgroupPrefixes.includes(partyPrefix);
             });
+            
+            console.log(`Filtered to ${dtParties.length} parties based on user's subgroups`);
           } else if (isAdmin) {
             console.log('User is admin - showing all parties without filtering');
           }

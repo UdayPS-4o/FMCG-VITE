@@ -228,7 +228,7 @@ app.post('/editCashReciept', async (req, res) => {
     );
 
     // Extract and trim the receiptNo from the request body
-    const { receiptNo, date, series, party, amount, discount } = req.body;
+    const { receiptNo, date, series, party, amount, discount, narration } = req.body;
     const trimmedReceiptNo = receiptNo.trim();
 
     // Find the index of the entry with the provided receiptNo
@@ -247,6 +247,7 @@ app.post('/editCashReciept', async (req, res) => {
       party,
       amount,
       discount,
+      narration,
     };
 
     // Write the updated data back to the JSON file
@@ -456,8 +457,8 @@ async function printGodown(req, res) {
 }
 
 const EditUser = async (req, res) => {
-  const { id, name, number, routeAccess, password, powers, subgroup, smCode } = req.body; // Include smCode in the destructure
-  console.log('Editing user', id, name, number, routeAccess, powers, password, subgroup, smCode);
+  const { id, name, number, routeAccess, password, powers, subgroups, smCode } = req.body; // Updated to use subgroups
+  console.log('Editing user', id, name, number, routeAccess, powers, password, subgroups, smCode);
 
   try {
     // Read users from users.json file
@@ -473,8 +474,12 @@ const EditUser = async (req, res) => {
       user.routeAccess = routeAccess;
       user.password = password;
       user.powers = powers;
-      user.subgroup = subgroup; // Update the subgroup field
-      user.smCode = smCode; // Update the smCode field
+      user.subgroups = subgroups; // Update subgroups array
+      user.smCode = smCode;
+
+      // For backward compatibility, also set the legacy subgroup field
+      // Set it to the first subgroup in the array or null
+      user.subgroup = subgroups && subgroups.length > 0 ? subgroups[0] : null;
 
       // Save the updated users list back to the JSON file
       await fs.writeFile(path.join(__dirname, '../db/users.json'), JSON.stringify(users, null, 2));
@@ -502,7 +507,7 @@ app.get('/json/users', async (req, res) => {
 });
 
 app.post('/addUser', async (req, res) => {
-  const { name, number, password, routeAccess, powers, username, subgroup, smCode } = req.body; // Include smCode in the destructure
+  const { name, number, password, routeAccess, powers, username, subgroups, smCode } = req.body; // Updated to use subgroups
 
   try {
     let users = await fs.readFile('./db/users.json');
@@ -526,8 +531,10 @@ app.post('/addUser', async (req, res) => {
       password: password,
       routeAccess: routeAccess,
       powers: powers,
-      subgroup: subgroup,
-      smCode: smCode, // Include smCode in the new user object
+      subgroups: subgroups, // Store subgroups array
+      // For backward compatibility
+      subgroup: subgroups && subgroups.length > 0 ? subgroups[0] : null,
+      smCode: smCode,
     };
 
     // Add new user to users array

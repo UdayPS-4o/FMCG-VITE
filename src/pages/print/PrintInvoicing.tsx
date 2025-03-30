@@ -220,6 +220,55 @@ const PrintInvoicing: React.FC = () => {
     }, { totalGoods: 0, totalSGST: 0, totalCGST: 0 });
   };
 
+  // Calculate actual totals for scheme and cash discounts
+  const calculateActualTotals = () => {
+    if (!data) return { totalSch: 0, totalCd: 0, netAmount: 0, roundOff: 0, grossAmount: 0 };
+
+    let totalGrossAmount = 0;
+    let totalSchDiscount = 0;
+    let totalCdDiscount = 0;
+    let totalNetAmountExact = 0;
+
+    data.items.forEach(item => {
+        const amount = parseFloat(item.amount) || 0;
+        const schRs = parseFloat(item.schRs) || 0;
+        const schPercent = parseFloat(item.sch) || 0;
+        const cdPercent = parseFloat(item.cd) || 0;
+        const itemNetAmount = parseFloat(item.netAmount) || 0;
+
+        totalGrossAmount += amount;
+        totalNetAmountExact += itemNetAmount;
+
+        // Calculate discounts applied for *this item* to sum up for summary
+        let amountAfterSchRs = amount - schRs;
+        let schPercentDiscount = 0;
+        if (schPercent > 0) {
+            schPercentDiscount = amountAfterSchRs * (schPercent / 100);
+        }
+        let amountAfterSch = amountAfterSchRs - schPercentDiscount;
+        
+        let cdDiscount = 0;
+        if (cdPercent > 0) {
+            cdDiscount = amountAfterSch * (cdPercent / 100);
+        }
+
+        totalSchDiscount += schRs + schPercentDiscount;
+        totalCdDiscount += cdDiscount;
+    });
+
+    // Round final net amount
+    const netAmountRounded = Math.round(totalNetAmountExact);
+    const roundOff = netAmountRounded - totalNetAmountExact;
+
+    return {
+        grossAmount: totalGrossAmount,
+        totalSch: totalSchDiscount,
+        totalCd: totalCdDiscount,
+        netAmount: netAmountRounded, // Use the rounded value for display
+        roundOff: roundOff
+    };
+  };
+
   // Tax details ko group karna by tax rate
   const groupTaxDetailsByRate = () => {
     if (!data) return [];
@@ -249,6 +298,7 @@ const PrintInvoicing: React.FC = () => {
   };
 
   const { totalGoods, totalSGST, totalCGST } = calculateTaxTotals();
+  const { grossAmount, totalSch, totalCd, netAmount, roundOff } = calculateActualTotals();
   const groupedTaxDetails = groupTaxDetailsByRate();
 
   // Items ko chunks mein split karna
@@ -363,27 +413,27 @@ const PrintInvoicing: React.FC = () => {
                       <td colSpan={11} className="border border-black p-2">
                         <div className="flex">
                           <div className="w-1/3">
-                            <p className="font-bold">GSTN: {data.company.gstin}</p>
+                            <p className="print:font-bold print:text-black">GSTN: {data.company.gstin}</p>
                             {/* <p className="font-bold">{data.company.subject}</p> */}
-                            <p className="font-bold">FSSAI NO: {data.company.fssaiNo}</p>
-                            <p className="font-bold">D.L. No.: {data.dlNo}</p>
+                            <p className="print:font-bold print:text-black">FSSAI NO: {data.company.fssaiNo}</p>
+                            <p className="print:font-bold print:text-black">D.L. No.: {data.dlNo}</p>
                           </div>
                           <div className="w-1/3 text-center">
-                            <p className="font-bold">Tax Invoice</p>
-                            <p className="text-xl font-bold">{data.company.name}</p>
-                            <p className="font-bold">{data.company.address}</p>
+                            <p className="font-bold print:text-black">Tax Invoice</p>
+                            <p className="text-xl font-bold print:text-black">{data.company.name}</p>
+                            <p className="font-bold print:text-black">{data.company.address}</p>
                           </div>
                           <div className="w-1/3 text-right">
-                            <p className="font-bold">{data.company.phone}</p>
-                            <p>Office No: {data.company.officeNo}</p>
-                            <p className="font-bold">State Code: {data.company.stateCode}</p>
+                            <p className="print:font-bold print:text-black">{data.company.phone}</p>
+                            <p className="print:font-bold print:text-black">Office No: {data.company.officeNo}</p>
+                            <p className="print:font-bold print:text-black">State Code: {data.company.stateCode}</p>
                           </div>
                         </div>
                       </td>
                       <td colSpan={3} className="border border-black p-2 align-middle">
                         <div className="text-center">
-                          <p className="text-xl font-bold">{data.company.name}</p>
-                          <p>BILL MADE BY: {data.billMadeBy || 'SHUBHAM'}</p>
+                          <p className="text-xl font-bold print:text-black">{data.company.name}</p>
+                          <p className="print:font-bold print:text-black">BILL MADE BY: {data.billMadeBy || 'SHUBHAM'}</p>
                         </div>
                       </td>
                     </tr>
@@ -393,35 +443,35 @@ const PrintInvoicing: React.FC = () => {
                       <td colSpan={11} className="border border-black p-2">
                         <div className="flex">
                           <div className="w-2/3 border-r border-black pr-2">
-                            <p><span className="font-bold text-blue-800">Party</span> {data.party.name}</p>
-                            <p><span className="font-bold text-blue-800">Address</span> {data.party.address}</p>
+                            <p><span className="font-bold text-blue-800 print:text-black">Party</span> {data.party.name}</p>
+                            <p><span className="font-bold text-blue-800 print:text-black">Address</span> {data.party.address}</p>
                             <p>
-                              <span className="font-bold text-blue-800">GSTIN</span> {data.party.gstin || 'N/A'}
-                              <span className="ml-4 font-bold text-blue-800">State Code :</span> {data.party.stateCode}
+                              <span className="font-bold text-blue-800 print:text-black">GSTIN</span> {data.party.gstin || 'N/A'}
+                              <span className="ml-4 font-bold text-blue-800 print:text-black">State Code :</span> {data.party.stateCode}
                             </p>
                             <p>
-                              <span className="font-bold text-blue-800">Mobile No.</span> {data.party.mobileNo}
-                              <span className="ml-4 font-bold text-blue-800">Balance</span> {data.party.balanceBf ? `${data.party.balanceBf}` : 'N/A'}
+                              <span className="font-bold text-blue-800 print:text-black">Mobile No.</span> {data.party.mobileNo}
+                              <span className="ml-4 font-bold text-blue-800 print:text-black">Balance</span> {data.party.balanceBf ? `${data.party.balanceBf}` : 'N/A'}
                             </p>
                           </div>
                           <div className="w-1/3 pl-2">
                             <div className="flex justify-between">
-                              <p><span className="font-bold text-blue-800">Inv. No :</span> {data.invoice.displayNo || data.invoice.no}</p>
-                              <p><span className="font-bold text-blue-800">Mode:</span> {data.invoice.mode}</p>
+                              <p><span className="font-bold text-blue-800 print:text-black">Inv. No :</span> {data.invoice.displayNo || data.invoice.no}</p>
+                              <p><span className="font-bold text-blue-800 print:text-black">Mode:</span> {data.invoice.mode}</p>
                             </div>
-                            <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.time}</p>
+                            <p><span className="font-bold text-blue-800 print:text-black">Date:</span> {data.invoice.time}</p>
                             {data.invoice.dueDate && (
-                              <p><span className="font-bold text-blue-800">Due Date</span> {data.invoice.dueDate}</p>
+                              <p><span className="font-bold text-blue-800 print:text-black">Due Date</span> {data.invoice.dueDate}</p>
                             )}
                           </div>
                         </div>
                       </td>
                       <td colSpan={3} className="border border-black p-2">
                         <div>
-                          <p><span className="font-bold text-blue-800">Invoice No :</span> {data.invoice.displayNo || data.invoice.no}</p>
-                          <p><span className="font-bold text-blue-800">Date:</span> {data.invoice.date}</p>
-                          <p><span className="font-bold text-blue-800">Party</span> {data.party.name}</p>
-                          <p><span className="font-bold text-blue-800">Mode:</span> {data.invoice.mode}</p>
+                          <p><span className="font-bold text-blue-800 print:text-black">Invoice No :</span> {data.invoice.displayNo || data.invoice.no}</p>
+                          <p><span className="font-bold text-blue-800 print:text-black">Date:</span> {data.invoice.date}</p>
+                          <p><span className="font-bold text-blue-800 print:text-black">Party</span> {data.party.name}</p>
+                          <p><span className="font-bold text-blue-800 print:text-black">Mode:</span> {data.invoice.mode}</p>
                         </div>
                       </td>
                     </tr>
@@ -430,9 +480,9 @@ const PrintInvoicing: React.FC = () => {
                     <tr>
                       <td colSpan={11} className="border border-black p-2">
                         <div className="flex justify-between">
-                          <p><span className="font-bold text-blue-800">Ack. No:</span> {data.ack.no}</p>
-                          <p><span className="font-bold text-blue-800">Ack. Date:</span> {data.ack.date}</p>
-                          <p><span className="font-bold text-blue-800">IRN No:</span> {data.irn}</p>
+                          <p><span className="font-bold text-blue-800 print:text-black">Ack. No:</span> {data.ack.no}</p>
+                          <p><span className="font-bold text-blue-800 print:text-black">Ack. Date:</span> {data.ack.date}</p>
+                          <p><span className="font-bold text-blue-800 print:text-black">IRN No:</span> {data.irn}</p>
                         </div>
                       </td>
                       <td colSpan={3} className="border border-black"></td>
@@ -440,32 +490,32 @@ const PrintInvoicing: React.FC = () => {
                     
                     {/* Table Headers */}
                     <tr className="bg-white">
-                      <th className="border border-black p-1 font-bold text-blue-800 w-[200px]">Particulars/HSN</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">Pack</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">M.R.P</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">GST%</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black w-[200px]">Particulars/HSN</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">Pack</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">M.R.P</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">GST%</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">
                         Rate<br />
                         <span className="text-xs">(incl of Tax)</span>
                       </th>
-                      <th className="border border-black p-1 font-bold text-blue-800">Unit</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">Qty</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">Free</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">Sch Rs</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">Unit</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">Qty</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">Free</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">Sch Rs</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">
                         Co. Sch%<br />
                         Cash Disc%
                       </th>
-                      <th className="border border-black p-1 font-bold text-blue-800">Net Amt.</th>
-                      <th className="border border-black p-1 font-bold text-blue-800 w-[200px]">
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">Net Amt.</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black w-[200px]">
                         Particulars<br />
                         <div className="flex justify-between">
                           <span>Unit</span>
                           <span>M.R.P.</span>
                         </div>
                       </th>
-                      <th className="border border-black p-1 font-bold text-blue-800">Free</th>
-                      <th className="border border-black p-1 font-bold text-blue-800">Qty</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">Free</th>
+                      <th className="border border-black p-1 font-bold text-blue-800 print:text-black">Qty</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -477,23 +527,24 @@ const PrintInvoicing: React.FC = () => {
                       // Add this code to handle BOX rate calculation
                       const isBox = item.unit?.toUpperCase() == "BOX";
                       const displayRate = isBox && item.pcBx ? Number(item.rate) * Number(item.pcBx) : Number(item.rate);
+                      // Show the pcBx on all pages
                       const unitDisplay = isBox && item.pcBx ? `${item.unit} - ${item.pcBx}` : item.unit;
-                      
+                      console.log({item, isBox, unitDisplay, pcb:item.pcBx})
                       return (
                         <tr key={index} className={isBlankRow ? "blank-row h-10" : ""}>
-                          <td className={`border border-black p-1 text-left text-blue-800 ${needsSmallerFont ? 'text-[smaller]' : ''}`}>
+                          <td className={`border border-black p-1 text-left text-blue-800 print:text-black ${needsSmallerFont ? 'text-[smaller]' : ''}`}>
                             {particular}
                             {isBlankRow && <span className="invisible">Placeholder for consistent spacing</span>}
                           </td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.pack : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow && item.mrp ? Number(item.mrp).toFixed(2) : ""}</td>
-                          <td className="border border-black p-1 text-center text-orange-600">{!isBlankRow && item.gst ? item.gst.toFixed(2) : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow && item.rate ? displayRate.toFixed(2) : ""}</td>
-                          <td className="border border-black p-1 text-center text-[smaller]">{!isBlankRow ? unitDisplay : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.qty : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? "" : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.schRs : ""}</td>
-                          <td className="border border-black p-1 text-center">
+                          <td className="border border-black p-1 text-center print:text-black">{!isBlankRow ? item.pack : ""}</td>
+                          <td className="border border-black p-1 text-center print:text-black">{!isBlankRow && item.mrp ? Number(item.mrp).toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center text-orange-600 print:text-black">{!isBlankRow && item.gst ? item.gst.toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center print:text-black">{!isBlankRow && item.rate ? displayRate.toFixed(2) : ""}</td>
+                          <td className="border border-black p-1 text-center text-[smaller] print:text-black">{!isBlankRow ? unitDisplay : ""}</td>
+                          <td className="border border-black p-1 text-center print:text-black">{!isBlankRow ? item.qty : ""}</td>
+                          <td className="border border-black p-1 text-center print:text-black">{!isBlankRow ? "" : ""}</td>
+                          <td className="border border-black p-1 text-center print:text-black">{!isBlankRow ? item.schRs : ""}</td>
+                          <td className="border border-black p-1 text-center print:text-black">
                             {!isBlankRow ? (
                               <>
                                 <div>{item.sch}{item.sch? "%" : ""}</div>
@@ -501,14 +552,14 @@ const PrintInvoicing: React.FC = () => {
                               </>
                             ) : ""}
                           </td>
-                          <td className="border border-black p-1 text-center text-blue-800">{!isBlankRow ? item.netAmount : ""}</td>
+                          <td className="border border-black p-1 text-center text-blue-800 print:text-black">{!isBlankRow ? item.netAmount : ""}</td>
                           <td className={`border border-black p-1 text-left`}>
                             {!isBlankRow ? (
                               <>
-                                <span className={`text-blue-800 ${needsSmallerFont ? 'text-[smaller]' : ''}`}>{particular}</span>
-                                <div className="flex justify-between">
-                                  <span className="text-[smaller]">{unitDisplay}</span>
-                                  <span>{item.mrp ? Number(item.mrp).toFixed(2) : ""}</span>
+                                <span className={`text-blue-800 print:text-black ${needsSmallerFont ? 'text-[smaller]' : ''}`}>{particular}</span>
+                                <div className="flex justify-between print:text-black">
+                                  <span className="text-[smaller] print:text-black">{unitDisplay}</span>
+                                  <span className="print:text-black">{item.mrp ? Number(item.mrp).toFixed(2) : ""}</span>
                                 </div>
                               </>
                             ) : (
@@ -521,8 +572,8 @@ const PrintInvoicing: React.FC = () => {
                               </>
                             )}
                           </td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? "" : ""}</td>
-                          <td className="border border-black p-1 text-center">{!isBlankRow ? item.qty : ""}</td>
+                          <td className="border border-black p-1 text-center print:text-black">{!isBlankRow ? "" : ""}</td>
+                          <td className="border border-black p-1 text-center print:text-black">{!isBlankRow ? item.qty : ""}</td>
                         </tr>
                       );
                     })}
@@ -535,33 +586,33 @@ const PrintInvoicing: React.FC = () => {
                             <table className="w-full text-xs border-collapse">
                               <tr>
                                 <td className="align-top border border-black p-1 text-[11px]" style={{ width: '10%' }}>
-                                  <p className="font-bold text-blue-800">Items in Bill: {data.summary.itemsInBill}</p>
-                                  <p className="font-bold text-blue-800">Cases in Bill: {data.summary.casesInBill}</p>
-                                  <p className="font-bold text-blue-800">Loose items in Bill: {data.summary.looseItemsInBill}</p>
+                                  <p className="font-bold text-blue-800 print:text-black">Items in Bill: {data.summary.itemsInBill}</p>
+                                  <p className="font-bold text-blue-800 print:text-black">Cases in Bill: {data.summary.casesInBill}</p>
+                                  <p className="font-bold text-blue-800 print:text-black">Loose items in Bill: {data.summary.looseItemsInBill}</p>
                                 </td>
                                 
                                 <td className="align-top border border-black p-1" style={{ width: '25%' }}>
-                                  <p className="font-bold text-blue-800">Terms & Conditions:</p>
-                                  <p className="text-[10px]">1. We hereby certify that articles of food mentioned in the invoice are warranted to be of the nature and quality which they purport to be as per the Food Safety and Standards Act and Rules.</p>
-                                  <p className="text-[10px]">2. Goods once sold will not be taken back. E & OE.</p>
+                                  <p className="font-bold text-blue-800 print:text-black">Terms & Conditions:</p>
+                                  <p className="text-[10px] print:text-black">1. We hereby certify that articles of food mentioned in the invoice are warranted to be of the nature and quality which they purport to be as per the Food Safety and Standards Act and Rules.</p>
+                                  <p className="text-[10px] print:text-black">2. Goods once sold will not be taken back. E & OE.</p>
                                 </td>
                                 
                                 <td className="align-top border border-black" style={{ width: '20%' }}>
                                   <table className="w-full text-xs border-collapse">
                                     <tr className="text-xs">
-                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800">Goods</td>
-                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800">SGST%</td>
-                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800">Value</td>
-                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800">CGST%</td>
-                                      <td className="border-b border-black p-1 font-bold text-blue-800">Value</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 print:text-black">Goods</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 print:text-black">SGST%</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 print:text-black">Value</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 print:text-black">CGST%</td>
+                                      <td className="border-b border-black p-1 font-bold text-blue-800 print:text-black">Value</td>
                                     </tr>
                                     {groupedTaxDetails.map((tax, index) => (
                                       <tr key={index} className="text-xs">
-                                        <td className="border-r border-black p-1">{tax.goods || '0.00'}</td>
-                                        <td className="border-r border-black p-1">{tax.sgst?.toFixed(2)}%</td>
-                                        <td className="border-r border-black p-1">{tax.sgstValue?.toFixed(2)}</td>
-                                        <td className="border-r border-black p-1">{tax.cgst?.toFixed(2)}%</td>
-                                        <td className="p-1">{tax.cgstValue?.toFixed(2)}</td>
+                                        <td className="border-r border-black p-1 print:text-black">{tax.goods || '0.00'}</td>
+                                        <td className="border-r border-black p-1 print:text-black">{tax.sgst?.toFixed(2)}%</td>
+                                        <td className="border-r border-black p-1 print:text-black">{tax.sgstValue?.toFixed(2)}</td>
+                                        <td className="border-r border-black p-1 print:text-black">{tax.cgst?.toFixed(2)}%</td>
+                                        <td className="p-1 print:text-black">{tax.cgstValue?.toFixed(2)}</td>
                                       </tr>
                                     ))}
                                     {Array(3 - groupedTaxDetails.length).fill(0).map((_, i) => (
@@ -574,11 +625,11 @@ const PrintInvoicing: React.FC = () => {
                                       </tr>
                                     ))}
                                     <tr className="text-xs">
-                                      <td className="border-t border-r border-black p-1 font-bold">{totalGoods.toFixed(2)}</td>
-                                      <td className="border-t border-r border-black p-1 font-bold"></td>
-                                      <td className="border-t border-r border-black p-1 font-bold">{totalSGST.toFixed(2)}</td>
-                                      <td className="border-t border-r border-black p-1 font-bold"></td>
-                                      <td className="border-t border-black p-1 font-bold">{totalCGST.toFixed(2)}</td>
+                                      <td className="border-t border-r border-black p-1 font-bold print:text-black">{totalGoods.toFixed(2)}</td>
+                                      <td className="border-t border-r border-black p-1 font-bold print:text-black"></td>
+                                      <td className="border-t border-r border-black p-1 font-bold print:text-black">{totalSGST.toFixed(2)}</td>
+                                      <td className="border-t border-r border-black p-1 font-bold print:text-black"></td>
+                                      <td className="border-t border-black p-1 font-bold print:text-black">{totalCGST.toFixed(2)}</td>
                                     </tr>
                                   </table>
                                 </td>
@@ -586,24 +637,24 @@ const PrintInvoicing: React.FC = () => {
                                 <td className="align-top border border-black p-0" style={{ width: '25%' }}>
                                   <table className="w-full text-xs border-collapse">
                                     <tr>
-                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Gross Amt.</td>
-                                      <td className="border-b border-black p-1 text-right">{data.totals.grossAmt?.toFixed(2)}</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 print:text-black text-left">Gross Amt.</td>
+                                      <td className="border-b border-black p-1 text-right print:text-black">{grossAmount?.toFixed(2)}</td>
                                     </tr>
                                     <tr>
-                                      <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 text-left">Less Sch.</td>
-                                      <td className="border-b border-black border-b-dashed p-1 text-right">{data.totals.lessSch?.toFixed(2)}</td>
+                                      <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 print:text-black text-left">Less Sch.</td>
+                                      <td className="border-b border-black border-b-dashed p-1 text-right print:text-black">{totalSch.toFixed(2)}</td>
                                     </tr>
                                     <tr>
-                                      <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 text-left">Less CD</td>
-                                      <td className="border-b border-black border-b-dashed p-1 text-right">{data.totals.lessCd?.toFixed(2)}</td>
+                                      <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 print:text-black text-left">Less CD</td>
+                                      <td className="border-b border-black border-b-dashed p-1 text-right print:text-black">{totalCd.toFixed(2)}</td>
                                     </tr>
                                     <tr>
-                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">R.Off</td>
-                                      <td className="border-b border-black p-1 text-right">{data.totals.rOff?.toFixed(2)}</td>
+                                      <td className="border-b border-r border-black p-1 font-bold text-blue-800 print:text-black text-left">R.Off</td>
+                                      <td className="border-b border-black p-1 text-right print:text-black">{roundOff.toFixed(2)}</td>
                                     </tr>
                                     <tr>
-                                      <td className="border-r border-black p-1 font-bold text-blue-800 text-left">Net Amt.</td>
-                                      <td className="p-1 font-bold text-right">{data.totals.netAmount?.toFixed(2)}</td>
+                                      <td className="border-r border-black p-1 font-bold text-blue-800 print:text-black text-left">Net Amt.</td>
+                                      <td className="p-1 font-bold text-right print:text-black">{netAmount.toFixed(2)}</td>
                                     </tr>
                                   </table>
                                 </td>
@@ -613,32 +664,35 @@ const PrintInvoicing: React.FC = () => {
                           <td colSpan={3} className="border border-black p-0">
                             <table className="w-full text-xs border-collapse">
                               <tr>
-                                <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">Gross Amt.</td>
-                                <td className="border-b border-black p-1 text-right">{data.totals.grossAmt?.toFixed(2)}</td>
+                                <td className="border-b border-r border-black p-1 font-bold text-blue-800 print:text-black text-left">Gross Amt.</td>
+                                <td className="border-b border-black p-1 text-right print:text-black">{grossAmount?.toFixed(2)}</td>
                               </tr>
                               <tr>
-                                <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 text-left">Less Sch.</td>
-                                <td className="border-b border-black border-b-dashed p-1 text-right">{data.totals.lessSch?.toFixed(2)}</td>
+                                <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 print:text-black text-left">Less Sch.</td>
+                                <td className="border-b border-black border-b-dashed p-1 text-right print:text-black">{totalSch.toFixed(2)}</td>
                               </tr>
                               <tr>
-                                <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 text-left">Less CD</td>
-                                <td className="border-b border-black border-b-dashed p-1 text-right">{data.totals.lessCd?.toFixed(2)}</td>
+                                <td className="border-b border-r border-black border-b-dashed p-1 font-bold text-blue-800 print:text-black text-left">Less CD</td>
+                                <td className="border-b border-black border-b-dashed p-1 text-right print:text-black">{totalCd.toFixed(2)}</td>
                               </tr>
                               <tr>
-                                <td className="border-b border-r border-black p-1 font-bold text-blue-800 text-left">R.Off</td>
-                                <td className="border-b border-black p-1 text-right">{data.totals.rOff?.toFixed(2)}</td>
+                                <td className="border-b border-r border-black p-1 font-bold text-blue-800 print:text-black text-left">R.Off</td>
+                                <td className="border-b border-black p-1 text-right print:text-black">{roundOff.toFixed(2)}</td>
                               </tr>
                               <tr>
-                                <td className="border-r border-black p-1 font-bold text-blue-800 text-left">Net Amt.</td>
-                                <td className="p-1 font-bold text-right">{data.totals.netAmount?.toFixed(2)}</td>
+                                <td className="border-r border-black p-1 font-bold text-blue-800 print:text-black text-left">Net Amt.</td>
+                                <td className="p-1 font-bold text-right print:text-black">{netAmount.toFixed(2)}</td>
                               </tr>
                             </table>
                           </td>
                         </tr>
                         <tr>
-                          <td colSpan={14} className="border border-black p-1 text-center text-xs">
+                          <td colSpan={11} className="border border-black p-1 text-center text-xs print:font-bold print:text-black">
                             This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
-                            <div className={`float-right w-fit text-right font-bold ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                            <div className={`float-right w-fit text-right font-bold print:text-black ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                          </td>
+                          <td colSpan={3} className="border border-black p-1 text-right text-xs">
+                            <div className={`font-bold print:text-black ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
                           </td>
                         </tr>
                       </>
@@ -647,10 +701,13 @@ const PrintInvoicing: React.FC = () => {
                     {/* Page number for non-last pages */}
                     {chunkIndex !== chunksArray.length - 1 && (
                       <tr>
-                        <td colSpan={14} className="border border-black p-1 text-center text-xs">
+                        <td colSpan={11} className="border border-black p-1 text-center text-xs print:font-bold print:text-black">
                             This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
-                            <div className={`float-right w-fit text-right font-bold ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
-                          </td>
+                            <div className={`float-right w-fit text-right font-bold print:text-black ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                        </td>
+                        <td colSpan={3} className="border border-black p-1 text-right text-xs">
+                            <div className={`font-bold print:text-black ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                        </td>
                       </tr>
                     )}
                   </tbody>

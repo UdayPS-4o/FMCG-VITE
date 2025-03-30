@@ -13,7 +13,7 @@ const CashReceipt: React.FC = () => {
       <PageBreadcrumb pageTitle="Cash Receipts" />
       
       <div className="container mx-auto px-4 py-6 overflow-hidden">
-        <div className="bg-white max-w-[1140px] dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
+        <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">Cash Receipts Database</h2>
           <DatabaseTable endpoint="cash-receipts" tableId="cash-receipts-db" />
         </div>

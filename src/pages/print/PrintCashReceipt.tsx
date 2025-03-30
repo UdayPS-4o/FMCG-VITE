@@ -18,6 +18,7 @@ interface CashData {
   C_CODE?: string;
   C_NAME?: string;
   AmountInWords?: string;
+  narration: string;
 }
 
 const PrintCashReceipt: React.FC = () => {
@@ -36,6 +37,14 @@ const PrintCashReceipt: React.FC = () => {
     type: 'info'
   });
   const printRef = useRef<HTMLDivElement>(null);
+
+  // Format date to British format (DD-MM-YYYY)
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const parts = dateString.split('-');
+    if (parts.length !== 3) return dateString;
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  };
 
   // Extract the query parameters
   const getQueryParams = () => {
@@ -175,7 +184,7 @@ const PrintCashReceipt: React.FC = () => {
             <div className="content">
               <div className="details border-white print:border-black" style={{ margin: 0, padding: '30px 10px', fontSize: 'larger' }}>
                 <div>
-                  Date: <span>{data.date}</span>
+                  Date: <span>{formatDate(data.date)}</span>
                 </div>
                 <div>
                   Mode: <span>Cash</span>
@@ -205,7 +214,7 @@ const PrintCashReceipt: React.FC = () => {
                   <tr>
                     <td className="text-white print:text-black">
                       {' '}
-                      By {isReceipt ? 'R/no' : 'V/no'} {data.M_NAME} {data.C_CODE}
+                      By {isReceipt ? 'R/no' : 'V/no'}: {data.narration}
                     </td>
                     <td className="text-white print:text-black"> </td>
                     <td id="amount" className="border-white print:border-black text-white print:text-black"> </td>
@@ -229,11 +238,10 @@ const PrintCashReceipt: React.FC = () => {
         {`
         .receipt {
           width: 80%;
-          margin: 20px auto;
+          margin: 0px auto;
           display: flex;
           flex-direction: column;
-          gap: 50px;
-          padding: 20px;
+          padding: 0 20px;
           font-family: Arial, sans-serif;
         }
 

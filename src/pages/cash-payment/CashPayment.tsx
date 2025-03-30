@@ -119,14 +119,23 @@ const CashPayment: React.FC = () => {
         // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
         let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
         
-        if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
-          const subgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
-          console.log(`Filtering parties by subgroup prefix: ${subgroupPrefix}`);
+        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
+          console.log(`Filtering parties by user's assigned subgroups`);
           
+          // Get all subgroup prefixes from user's assigned subgroups
+          const subgroupPrefixes = user.subgroups.map((sg: any) => 
+            sg.subgroupCode.substring(0, 2).toUpperCase()
+          );
+          
+          console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+          
+          // Filter parties where C_CODE starts with any of the user's subgroup prefixes
           filteredPartyData = filteredPartyData.filter((party: any) => {
             const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-            return partyPrefix === subgroupPrefix;
+            return subgroupPrefixes.includes(partyPrefix);
           });
+          
+          console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
         } else if (isAdmin) {
           console.log('User is admin - showing all parties without filtering');
         }
@@ -140,9 +149,7 @@ const CashPayment: React.FC = () => {
           
           return {
             value: party.C_CODE,
-            label: hasNonZeroBalance
-              ? `${party.C_NAME} | ${party.C_CODE} / ${balance}`
-              : `${party.C_NAME} | ${party.C_CODE}`,
+            label: `${party.C_NAME} | ${party.C_CODE}`,
           };
         });
 
@@ -184,14 +191,23 @@ const CashPayment: React.FC = () => {
         // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
         let filteredPartyData = dataParty.filter((party: any) => !party.C_CODE.endsWith('000'));
         
-        if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
-          const subgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
-          console.log(`Filtering parties by subgroup prefix: ${subgroupPrefix}`);
+        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
+          console.log(`Filtering parties by user's assigned subgroups`);
           
+          // Get all subgroup prefixes from user's assigned subgroups
+          const subgroupPrefixes = user.subgroups.map((sg: any) => 
+            sg.subgroupCode.substring(0, 2).toUpperCase()
+          );
+          
+          console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+          
+          // Filter parties where C_CODE starts with any of the user's subgroup prefixes
           filteredPartyData = filteredPartyData.filter((party: any) => {
             const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-            return partyPrefix === subgroupPrefix;
+            return subgroupPrefixes.includes(partyPrefix);
           });
+          
+          console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
         } else if (isAdmin) {
           console.log('User is admin - showing all parties without filtering');
         }
@@ -205,9 +221,7 @@ const CashPayment: React.FC = () => {
           
           return {
             value: party.C_CODE,
-            label: hasNonZeroBalance
-              ? `${party.C_NAME} | ${party.C_CODE} / ${balance}`
-              : `${party.C_NAME} | ${party.C_CODE}`,
+            label: `${party.C_NAME} | ${party.C_CODE}`,
           };
         });
 

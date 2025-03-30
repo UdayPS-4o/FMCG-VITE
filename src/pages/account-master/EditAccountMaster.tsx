@@ -88,13 +88,23 @@ const EditAccountMaster: React.FC = () => {
           throw new Error('No subgroup parameter provided');
         }
         
-        // If user is not admin and has a subgroup, check if they're allowed to edit this subgroup
-        if (!isAdmin && user && user.subgroup && user.subgroup.subgroupCode) {
-          const userSubgroupPrefix = user.subgroup.subgroupCode.substring(0, 2).toUpperCase();
-          const editSubgroupPrefix = subgroupParam.substring(0, 2).toUpperCase();
+        // If user is not admin and has subgroups, check if they're allowed to edit this subgroup
+        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
+          // Check if the subgroup to edit is in user's assigned subgroups
+          const hasPermission = user.subgroups.some(sg => {
+            // Check by subgroup code
+            if (sg.subgroupCode === subgroupParam) {
+              return true;
+            }
+            
+            // Or check by prefix (first 2 characters)
+            const userSubgroupPrefix = sg.subgroupCode.substring(0, 2).toUpperCase();
+            const editSubgroupPrefix = subgroupParam.substring(0, 2).toUpperCase();
+            return userSubgroupPrefix === editSubgroupPrefix;
+          });
           
-          if (userSubgroupPrefix !== editSubgroupPrefix) {
-            throw new Error('You do not have permission to edit accounts outside your subgroup');
+          if (!hasPermission) {
+            throw new Error('You do not have permission to edit accounts outside your assigned subgroups');
           }
         }
         
