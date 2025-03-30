@@ -457,8 +457,8 @@ async function printGodown(req, res) {
 }
 
 const EditUser = async (req, res) => {
-  const { id, name, number, routeAccess, password, powers, subgroups, smCode } = req.body; // Updated to use subgroups
-  console.log('Editing user', id, name, number, routeAccess, powers, password, subgroups, smCode);
+  const { id, name, number, routeAccess, password, powers, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess } = req.body; // Updated to use subgroups
+  console.log('Editing user', id, name, number, routeAccess, powers, password, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess);
 
   try {
     // Read users from users.json file
@@ -476,6 +476,9 @@ const EditUser = async (req, res) => {
       user.powers = powers;
       user.subgroups = subgroups; // Update subgroups array
       user.smCode = smCode;
+      user.defaultSeries = defaultSeries;
+      user.canSelectSeries = canSelectSeries;
+      user.godownAccess = godownAccess;
 
       // For backward compatibility, also set the legacy subgroup field
       // Set it to the first subgroup in the array or null
@@ -507,7 +510,7 @@ app.get('/json/users', async (req, res) => {
 });
 
 app.post('/addUser', async (req, res) => {
-  const { name, number, password, routeAccess, powers, username, subgroups, smCode } = req.body; // Updated to use subgroups
+  const { name, number, password, routeAccess, powers, username, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess } = req.body; // Updated to use subgroups
 
   try {
     let users = await fs.readFile('./db/users.json');
@@ -535,6 +538,9 @@ app.post('/addUser', async (req, res) => {
       // For backward compatibility
       subgroup: subgroups && subgroups.length > 0 ? subgroups[0] : null,
       smCode: smCode,
+      defaultSeries: defaultSeries,
+      canSelectSeries: canSelectSeries,
+      godownAccess: godownAccess
     };
 
     // Add new user to users array

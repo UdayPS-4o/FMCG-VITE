@@ -11,6 +11,7 @@ import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type Option, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
+import useAuth from "../../hooks/useAuth";
 
 const EditInvoicingContent: React.FC<{
   invoiceItemsRef: React.RefObject<ItemData[]>;
@@ -20,6 +21,7 @@ const EditInvoicingContent: React.FC<{
   const { id } = useParams<{ id: string }>();
   const dataLoadedRef = useRef(false);
   const invoiceDataRef = useRef<any>(null);
+  const { user } = useAuth();
   
   // Get shared invoice data from context
   const { 
@@ -324,10 +326,10 @@ const EditInvoicingContent: React.FC<{
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Auto-capitalize and limit to single letter
-    const value = e.target.value.toUpperCase();
-    const singleLetter = value.length > 0 ? value.charAt(value.length - 1) : '';
-    setSeries(singleLetter);
+    // Take only the last character typed and convert to uppercase
+    const value = e.target.value;
+    const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
+    setSeries(newValue);
   };
 
   const handleBillNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -568,7 +570,7 @@ const EditInvoicingContent: React.FC<{
   }
 
   return (
-    <div>
+    <div className="relative bg-white dark:bg-gray-900 rounded-sm shadow-sm w-full h-full p-6">
       <PageMeta
         title="Edit Invoice | FMCG Vite Admin Template"
         description="Edit Invoice page in FMCG Vite Admin Template"
@@ -607,6 +609,8 @@ const EditInvoicingContent: React.FC<{
                   variant="outlined"
                   autoComplete="off"
                   maxLength={1}
+                  disabled={user && user.canSelectSeries === false}
+                  seriesMode={true}
                 />
               </div>
               <div>

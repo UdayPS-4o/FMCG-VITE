@@ -10,6 +10,7 @@ import constants from "../../constants";
 import CollapsibleItemSection from './CollapsibleItemSection';
 import apiCache from '../../utils/apiCache';
 import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
+import useAuth from "../../hooks/useAuth";
 
 // Update the item interface to include godown field
 interface ItemData {
@@ -68,6 +69,7 @@ const EditGodownTransfer: React.FC = () => {
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
   
   // State to track the loading status of different data sources
   const [dataLoadStatus, setDataLoadStatus] = useState({
@@ -136,7 +138,17 @@ const EditGodownTransfer: React.FC = () => {
         ]);
         
         if (Array.isArray(godownData)) {
-          setPartyOptions(godownData);
+          // Filter godowns based on user access rights
+          let filteredGodowns = godownData;
+          
+          // If user has godownAccess restrictions, filter the godowns
+          if (user && user.godownAccess && user.godownAccess.length > 0) {
+            filteredGodowns = godownData.filter(godown => 
+              user.godownAccess.includes(godown.GDN_CODE)
+            );
+          }
+          
+          setPartyOptions(filteredGodowns);
         } else {
           console.error('Data fetched is not an array:', godownData);
         }
@@ -173,7 +185,7 @@ const EditGodownTransfer: React.FC = () => {
     // Fetch godown transfer data and other data in parallel
     fetchGodownTransferData();
     fetchAllData();
-  }, [id, baseURL]);
+  }, [id, baseURL, user]);
 
   // Second effect: Wait for all data to be loaded, then prefill the form
   useEffect(() => {
@@ -242,6 +254,20 @@ const EditGodownTransfer: React.FC = () => {
         }) : [],
       });
       
+      // Check if user has access to the godowns
+      const hasAccessToFromGodown = user?.godownAccess ? 
+        !user.godownAccess.length || user.godownAccess.includes(originalData.fromGodown) : 
+        true;
+        
+      const hasAccessToToGodown = user?.godownAccess ? 
+        !user.godownAccess.length || user.godownAccess.includes(originalData.toGodown) : 
+        true;
+      
+      // If user doesn't have access to either godown, show error
+      if (!hasAccessToFromGodown || !hasAccessToToGodown) {
+        setError('You do not have access to one or more godowns in this transfer');
+      }
+      
       // Update Godown selections
       if (originalData.fromGodown && partyOptions.length > 0) {
         const selectedFromGodown = partyOptions.find(option => option.GDN_CODE === originalData.fromGodown);
@@ -257,7 +283,19 @@ const EditGodownTransfer: React.FC = () => {
       formPrefilled.current = true;
       setLoading(false);
     }
-  }, [dataLoadStatus, originalData, pmplData, stockData, partyOptions]);
+}, [dataLoadStatus, originalData, pmplData, stockData, partyOptions, user]);
+
+  // Apply default series if present in user settings
+  useEffect(() => {
+    if (user && user.defaultSeries && !formPrefilled.current) {
+      if (user.defaultSeries.godown) {
+        setFormValues(prev => ({
+          ...prev,
+          series: user.defaultSeries.godown
+        }));
+      }
+    }
+  }, [user]);
 
   // Get stock for a specific item and godown
   const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {
@@ -269,7 +307,15 @@ const EditGodownTransfer: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormValues({ ...formValues, [name]: value });
+    
+    // Handle series as a single letter field that autocapitalizes
+    if (name === 'series') {
+      // If value is not empty, take only the last character and uppercase it
+      const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
+      setFormValues(prev => ({ ...prev, [name]: newValue }));
+    } else {
+      setFormValues({ ...formValues, [name]: value });
+    }
   };
 
   const handleFromGodownChange = (value: string) => {
@@ -556,7 +602,8 @@ const EditGodownTransfer: React.FC = () => {
                 value={formValues.series}
                 onChange={handleChange}
                 variant="outlined"
-                disabled
+                disabled={user && user.canSelectSeries === false}
+                seriesMode={true}
               />
             </div>
             <div>

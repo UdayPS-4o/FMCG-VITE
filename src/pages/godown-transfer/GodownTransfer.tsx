@@ -9,6 +9,7 @@ import constants from "../../constants";
 import CollapsibleItemSection from './CollapsibleItemSection';
 import apiCache from '../../utils/apiCache';
 import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
+import useAuth from "../../hooks/useAuth";
 
 // Update the item interface to include godown field
 interface ItemData {
@@ -59,6 +60,7 @@ const GodownTransfer: React.FC = () => {
   const [stockDataLoaded, setStockDataLoaded] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const baseURL = constants.baseURL;
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -78,9 +80,19 @@ const GodownTransfer: React.FC = () => {
         // Process ID data
         setId(idRes.nextGodownId);
 
-        // Process godown data
+        // Process godown data with access rights filter
         if (Array.isArray(godownData)) {
-          setPartyOptions(godownData);
+          // Filter godowns based on user access rights
+          let filteredGodowns = godownData;
+          
+          // If user has godownAccess restrictions, filter the godowns
+          if (user && user.godownAccess && user.godownAccess.length > 0) {
+            filteredGodowns = godownData.filter(godown => 
+              user.godownAccess.includes(godown.GDN_CODE)
+            );
+          }
+          
+          setPartyOptions(filteredGodowns);
         } else {
           console.error('Godown data is not an array:', godownData);
         }
@@ -113,6 +125,19 @@ const GodownTransfer: React.FC = () => {
     }
   }, []); // Empty dependency array prevents infinite re-renders
 
+  // Apply default series if present in user settings
+  useEffect(() => {
+    if (user && user.defaultSeries) {
+      // Set default series for godown transfer if specified in user settings
+      if (user.defaultSeries.godown) {
+        setFormValues(prev => ({
+          ...prev,
+          series: user.defaultSeries.godown
+        }));
+      }
+    }
+  }, [user]);
+
   // Get stock for a specific item and godown
   const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {
     if (!stockData[itemCode] || !stockData[itemCode][godownCode]) {
@@ -123,7 +148,15 @@ const GodownTransfer: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormValues({ ...formValues, [name]: value });
+    
+    // Handle series as a single letter field that autocapitalizes
+    if (name === 'series') {
+      // If value is not empty, take only the last character and uppercase it
+      const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
+      setFormValues(prev => ({ ...prev, [name]: newValue }));
+    } else {
+      setFormValues({ ...formValues, [name]: value });
+    }
   };
 
   const handleFromGodownChange = (value: string) => {
@@ -376,7 +409,8 @@ const GodownTransfer: React.FC = () => {
                 value={formValues.series}
                 onChange={handleChange}
                 variant="outlined"
-                disabled
+                disabled={user && user.canSelectSeries === false}
+                seriesMode={true}
               />
             </div>
             <div>
