@@ -10,6 +10,28 @@ import Toast from '../../components/ui/toast/Toast';
 import apiCache from '../../utils/apiCache';
 import useAuth from "../../hooks/useAuth";
 
+// Helper functions for date formatting
+const formatDateForDisplay = (isoDate: string): string => {
+  if (!isoDate) return '';
+  const [year, month, day] = isoDate.split('-');
+  return `${day}-${month}-${year}`;
+};
+
+const formatDateForAPI = (displayDate: string): string => {
+  if (!displayDate) return '';
+  const [day, month, year] = displayDate.split('-');
+  return `${year}-${month}-${day}`;
+};
+
+// Get today's date in DD-MM-YYYY format
+const getTodayFormatted = (): string => {
+  const today = new Date();
+  const day = String(today.getDate()).padStart(2, '0');
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const year = today.getFullYear();
+  return `${day}-${month}-${year}`;
+};
+
 interface PartyOption {
   value: string;
   label: string;
@@ -31,7 +53,7 @@ const CashPayment: React.FC = () => {
   const [partyOptions, setPartyOptions] = useState<PartyOption[]>([]);
   const [voucherNo, setVoucherNo] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<FormValues>({
-    date: new Date().toISOString().split('T')[0],
+    date: getTodayFormatted(),
     series: '',
     amount: '',
     discount: '',
@@ -144,7 +166,7 @@ const CashPayment: React.FC = () => {
           setVoucherNo(paymentToEdit.voucherNo);
 
           setFormValues({
-            date: paymentToEdit.date,
+            date: formatDateForDisplay(paymentToEdit.date),
             series: paymentToEdit.series,
             amount: paymentToEdit.amount,
             discount: paymentToEdit.discount,
@@ -355,7 +377,7 @@ const CashPayment: React.FC = () => {
     
     const formData = new FormData(e.currentTarget);
     const formValues: FormValues = {
-      date: formData.get('date') as string,
+      date: formatDateForAPI(formData.get('date') as string),
       series: formData.get('series') as string,
       amount: formData.get('amount') as string,
       discount: formData.get('discount') as string,
@@ -421,12 +443,13 @@ const CashPayment: React.FC = () => {
                   <Input
                     id="date"
                     name="date"
-                    type="date"
-                    label="Date"
+                    type="text"
+                    label="Date (dd-mm-yyyy)"
                     value={formValues.date}
                     onChange={handleInputChange}
                     required
                     className="w-full"
+                    placeholder="DD-MM-YYYY"
                   />
                 </div>
               </div>
