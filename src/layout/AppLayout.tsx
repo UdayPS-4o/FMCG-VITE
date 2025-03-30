@@ -1,11 +1,22 @@
 import { SidebarProvider, useSidebar } from "../context/SidebarContext";
 import { Outlet } from "react-router-dom";
+import React, { useState, useEffect } from "react";
 import AppHeader from "./AppHeader";
 import AppSidebar from "./AppSidebar";
 import BottomNav from "../components/navigation/BottomNav";
 
 const LayoutContent: React.FC = () => {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
     <div className="min-h-screen xl:flex bg-gray-50 dark:bg-gray-900">
@@ -18,7 +29,9 @@ const LayoutContent: React.FC = () => {
         } ${isMobileOpen ? "ml-0" : ""}`}
       >
         <AppHeader />
-        <div className="p-4 mx-auto w-full max-w-(--breakpoint-2xl) md:p-6 flex-1 pb-16 lg:pb-4">
+        <div className={`mx-auto w-full max-w-(--breakpoint-2xl) flex-1 
+          ${isDesktop ? "p-4 md:p-6 pb-16 lg:pb-4" : "p-2 pt-0 pb-20"}
+          ${isExpanded || isHovered ? "lg:pt-6" : "lg:pt-4"}`}>
           <Outlet />
         </div>
         <BottomNav />

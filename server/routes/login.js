@@ -67,17 +67,28 @@ app.post('/api/login', async (req, res) => {
       // Save the updated users data with the new token
       await fs.writeFile(filePath, JSON.stringify(users, null, 2), 'utf8');
 
-      // Set token in the cookie and respond with user data
+      // Get host info
       const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
                     req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
       
+      // Determine if the request is using HTTPS
+      const isSecure = req.secure || req.get('x-forwarded-proto') === 'https';
+      
+      // Default cookie options that work in most environments
       const cookieOptions = {
         path: '/',
         httpOnly: true,
-        sameSite: 'none',
-        secure: true,
         maxAge: 10 * 365 * 24 * 60 * 60 * 1000 // 10 years in milliseconds
       };
+      
+      // Add secure flag if the connection is secure
+      if (isSecure) {
+        cookieOptions.secure = true;
+      }
+      
+      // Use Lax for better compatibility with most browsers
+      // "Lax" allows cookies to be sent when users navigate to your site from external sites
+      cookieOptions.sameSite = 'lax';
       
       // Add domain only if it's set
       if (domain) {
@@ -112,12 +123,20 @@ app.get('/logout', (req, res) => {
   const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
                 req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
   
+  // Determine if the request is using HTTPS
+  const isSecure = req.secure || req.get('x-forwarded-proto') === 'https';
+  
+  // Default cookie options 
   const cookieOptions = {
     path: '/',
     httpOnly: true,
-    sameSite: 'none',
-    secure: true
+    sameSite: 'lax'
   };
+  
+  // Add secure flag if the connection is secure
+  if (isSecure) {
+    cookieOptions.secure = true;
+  }
   
   // Add domain only if it's set
   if (domain) {
@@ -344,12 +363,20 @@ app.post('/api/logout', (req, res) => {
   const domain = req.get('host').includes('ekta-enterprises.com') ? '.ekta-enterprises.com' : 
                 req.get('host').includes('server.udayps.cfd') ? '.udayps.cfd' : null;
   
+  // Determine if the request is using HTTPS
+  const isSecure = req.secure || req.get('x-forwarded-proto') === 'https';
+  
+  // Default cookie options
   const cookieOptions = {
     path: '/',
     httpOnly: true,
-    sameSite: 'none',
-    secure: true
+    sameSite: 'lax'
   };
+  
+  // Add secure flag if the connection is secure
+  if (isSecure) {
+    cookieOptions.secure = true;
+  }
   
   // Add domain only if it's set
   if (domain) {
