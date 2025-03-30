@@ -23,7 +23,48 @@ export interface User {
     title: string;
     subgroupCode?: string;
   } | null;
+  subgroups?: Array<{
+    title: string;
+    subgroupCode?: string;
+  }>;
 }
+
+// Helper functions to handle the transition from subgroup to subgroups
+export const getUserSubgroups = (user: User | null): Array<{title: string; subgroupCode?: string}> => {
+  if (!user) return [];
+  
+  // If user has subgroups array, use that
+  if (user.subgroups && user.subgroups.length > 0) {
+    return user.subgroups;
+  }
+  
+  // If user has old subgroup structure, convert to array format
+  if (user.subgroup) {
+    return [user.subgroup];
+  }
+  
+  return [];
+};
+
+export const hasMultipleSubgroups = (user: User | null): boolean => {
+  if (!user) return false;
+  return !!(user.subgroups && user.subgroups.length > 1);
+};
+
+export const hasSingleSubgroup = (user: User | null): boolean => {
+  if (!user) return false;
+  
+  // Check if user has exactly one subgroup (either in new or old format)
+  if (user.subgroups && user.subgroups.length === 1) {
+    return true;
+  }
+  
+  if (user.subgroup && !user.subgroups) {
+    return true;
+  }
+  
+  return false;
+};
 
 interface AuthContextType {
   user: User | null;

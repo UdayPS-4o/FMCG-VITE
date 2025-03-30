@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, KeyboardEvent } from 'react';
 import Autocomplete from '../../components/form/input/Autocomplete';
 import Input from '../../components/form/input/Input';
 import { useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
@@ -36,9 +36,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     type: 'info',
   });
   
-  // Remove godownRef as it's not working with Autocomplete
-  // Instead use DOM-based approach
+  // Use DOM-based approach for focus control
   const [shouldFocusGodown, setShouldFocusGodown] = useState<boolean>(false);
+  const [shouldFocusQty, setShouldFocusQty] = useState<boolean>(false);
   
   // Get shared data from context
   const { pmplData, stockList, godownOptions, items } = useInvoiceContext();
@@ -75,13 +75,94 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     }
   }, [item.selectedItem]);
 
+  // Focus qty field after godown selection
+  useEffect(() => {
+    if (shouldFocusQty && expanded && item.godown) {
+      // Reset flag
+      setShouldFocusQty(false);
+      
+      // Use setTimeout to ensure DOM is ready
+      setTimeout(() => {
+        const qtyInput = document.getElementById(`qty-${index}`);
+        if (qtyInput) {
+          qtyInput.focus();
+        }
+      }, 100);
+    }
+  }, [shouldFocusQty, expanded, item.godown, index]);
+
+  // Handle Enter key for form field navigation
+  useEffect(() => {
+    // Add keyboard event listeners to the input fields
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        
+        const fieldOrder = ['qty', 'schRs', 'sch', 'cd'];
+        const currentId = (e.target as HTMLElement).id;
+        
+        // Extract the field name from the id (e.g., "qty-1" => "qty")
+        const currentField = currentId.split('-')[0];
+        
+        // Find current field index
+        const currentIndex = fieldOrder.indexOf(currentField);
+        
+        // If found and not the last field, move to the next one
+        if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
+          const nextFieldId = `${fieldOrder[currentIndex + 1]}-${index}`;
+          const nextField = document.getElementById(nextFieldId);
+          if (nextField) {
+            nextField.focus();
+          }
+        }
+      }
+    };
+
+    // Add event listeners to all the relevant inputs when the component is expanded
+    if (expanded) {
+      const qtyInput = document.getElementById(`qty-${index}`);
+      const schRsInput = document.getElementById(`schRs-${index}`);
+      const schInput = document.getElementById(`sch-${index}`);
+      const cdInput = document.getElementById(`cd-${index}`);
+      
+      if (qtyInput) qtyInput.addEventListener('keydown', handleKeyDown as any);
+      if (schRsInput) schRsInput.addEventListener('keydown', handleKeyDown as any);
+      if (schInput) schInput.addEventListener('keydown', handleKeyDown as any);
+      if (cdInput) cdInput.addEventListener('keydown', handleKeyDown as any);
+      
+      // Cleanup function to remove event listeners
+      return () => {
+        if (qtyInput) qtyInput.removeEventListener('keydown', handleKeyDown as any);
+        if (schRsInput) schRsInput.removeEventListener('keydown', handleKeyDown as any);
+        if (schInput) schInput.removeEventListener('keydown', handleKeyDown as any);
+        if (cdInput) cdInput.removeEventListener('keydown', handleKeyDown as any);
+      };
+    }
+  }, [expanded, index]);
+
   // New approach: Focus godown field using DOM when triggered
   useEffect(() => {
     if (shouldFocusGodown && expanded && item.item) {
       // Reset flag
       setShouldFocusGodown(false);
       
-      // Use setTimeout to ensure DOM is ready
+      // Before trying to focus, check if there's only one godown with stock
+      // and auto-select it if that's the case
+      if (stockList[item.item]) {
+        const availableGodowns = Object.entries(stockList[item.item])
+          .filter(([gdnCode, stock]) => gdnCode && parseInt(stock as string, 10) > 0);
+        
+        if (availableGodowns.length === 1) {
+          // If there's only one godown available, auto-select it
+          const [gdnCode] = availableGodowns[0];
+          handleGodownChange(gdnCode);
+          // Set focus to qty field instead of godown
+          setShouldFocusQty(true);
+          return;
+        }
+      }
+      
+      // If multiple godowns available, focus the godown dropdown
       setTimeout(() => {
         // Find godown dropdown by ID and interact with it
         const godownDropdown = document.getElementById(`godown-${index}`);
@@ -93,7 +174,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
         }
       }, 100);
     }
-  }, [shouldFocusGodown, expanded, item.item, index]);
+  }, [shouldFocusGodown, expanded, item.item, index, stockList]);
 
   const checkForDuplicateItem = (itemCode: string): { isDuplicate: boolean, existingItem?: ItemData, itemIndex?: number } => {
     // Skip check for empty items or self
@@ -276,6 +357,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     setError('');
     
     updateItem(index, updatedData);
+
+    // Set focus to qty field after godown selection
+    setShouldFocusQty(true);
   };
 
   const handleSwapUnit = () => {
@@ -645,7 +729,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
             <div>
               <Input
-                id={`cess-${index}`}
+                id={`schRs-${index}`}
                 label="SCH (RS)"
                 value={item.schRs}
                 onChange={(e) => handleFieldChange('schRs', e.target.value)}

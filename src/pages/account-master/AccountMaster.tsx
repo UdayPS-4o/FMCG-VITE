@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -6,7 +6,7 @@ import Input from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
-import useAuth from "../../hooks/useAuth";
+import { useAuth, getUserSubgroups, hasMultipleSubgroups, hasSingleSubgroup } from '../../contexts/AuthContext';
 import apiCache from '../../utils/apiCache';
 import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
 import Toast from '../../components/ui/toast/Toast';
@@ -72,6 +72,74 @@ const AccountMaster: React.FC = () => {
   // Check if user is admin
   const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
 
+  // Configure field order for Enter key navigation
+  const fieldOrder = [
+    'subgroup',
+    'achead',
+    'addressline1',
+    'addressline2', 
+    'place',
+    'pincode',
+    'mobile',
+    'pan',
+    'aadhar',
+    'gst',
+    'dlno',
+    'fssaino',
+    'email',
+    'statecode'
+  ];
+
+  // Handle Enter key for field navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        // Get the active element's ID
+        const activeElement = document.activeElement as HTMLElement;
+        if (!activeElement || !activeElement.id) return;
+        
+        // Prevent form submission
+        e.preventDefault();
+        
+        // Find the current field index in our order
+        const currentIndex = fieldOrder.indexOf(activeElement.id);
+        
+        // If found and not the last field, move to the next one
+        if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
+          const nextFieldId = fieldOrder[currentIndex + 1];
+          const nextField = document.getElementById(nextFieldId);
+          if (nextField) {
+            nextField.focus();
+            
+            // If it's an input, move cursor to the end
+            if (nextField instanceof HTMLInputElement) {
+              const inputLength = nextField.value.length;
+              nextField.setSelectionRange(inputLength, inputLength);
+            }
+          }
+        }
+      }
+    };
+    
+    // Add event listener to each field
+    fieldOrder.forEach(fieldId => {
+      const element = document.getElementById(fieldId);
+      if (element) {
+        element.addEventListener('keydown', handleKeyDown);
+      }
+    });
+    
+    // Cleanup function
+    return () => {
+      fieldOrder.forEach(fieldId => {
+        const element = document.getElementById(fieldId);
+        if (element) {
+          element.removeEventListener('keydown', handleKeyDown);
+        }
+      });
+    };
+  }, [fieldOrder]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -131,25 +199,31 @@ const AccountMaster: React.FC = () => {
           }));
           
           // Filter subgroups based on user permissions
-          if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-            // For non-admin users, filter subgroups to only show those they have access to
-            const allowedSubgroupCodes = user.subgroups.map(sg => sg.subgroupCode);
-            const filteredSubgroups = allSubgroups.filter(sg => 
-              allowedSubgroupCodes.includes(sg.value)
+          if (!isAdmin && user) {
+            const userSubgroups = getUserSubgroups(user);
+            const allowedSubgroupCodes = userSubgroups.map(sg => sg.subgroupCode);
+            
+            // Filter groups to only include allowed subgroups
+            const filteredGroups = allSubgroups.filter(g => 
+              allowedSubgroupCodes.includes(g.value)
             );
-            setGroup(filteredSubgroups);
+            
+            setGroup(filteredGroups);
             
             // If user has only one subgroup, pre-select it
-            if (user.subgroups.length === 1) {
-              const userSubgroup = {
-                label: user.subgroups[0].title,
-                value: user.subgroups[0].subgroupCode
+            if (hasSingleSubgroup(user)) {
+              const userSubgroups = getUserSubgroups(user);
+              const subgroupOption = {
+                label: userSubgroups[0]?.title || 'Unknown',
+                value: userSubgroups[0]?.subgroupCode || ''
               };
-              setSubgroup([userSubgroup]);
-              setFormValues(prev => ({
-                ...prev,
-                subgroup: user.subgroups[0].subgroupCode
-              }));
+              
+              setSubgroup([subgroupOption]);
+              
+              setFormValues({
+                ...formValues,
+                subgroup: userSubgroups[0]?.subgroupCode || ''
+              });
             }
           } else {
             // For admin users, show all subgroups
@@ -318,9 +392,13 @@ const AccountMaster: React.FC = () => {
   };
 
   const getSubgroupValue = () => {
-    if (!isAdmin && user && user.subgroups && user.subgroups.length === 1) {
-      // If non-admin user has exactly one subgroup, it's locked
-      return { label: user.subgroups[0].title, value: user.subgroups[0].subgroupCode };
+    // Check if user has exactly one subgroup
+    if (!isAdmin && user && hasSingleSubgroup(user)) {
+      const userSubgroups = getUserSubgroups(user);
+      return { 
+        label: userSubgroups[0]?.title || 'Unknown',
+        value: userSubgroups[0]?.subgroupCode || ''
+      };
     }
     
     if (!subgroup || !subgroup.length) {
@@ -390,15 +468,15 @@ const AccountMaster: React.FC = () => {
                 options={group}
                 onChange={handlePartyChange}
                 defaultValue={getSubgroupValue()?.value ?? ''}
-                disabled={Boolean(!isAdmin && user && user.subgroups && user.subgroups.length === 1)}
+                disabled={Boolean(!isAdmin && user && hasSingleSubgroup(user))}
                 autoComplete="off"
               />
-              {!isAdmin && user && user.subgroups && user.subgroups.length === 1 && (
+              {!isAdmin && user && hasSingleSubgroup(user) && (
                 <p className="text-xs text-gray-500 mt-1">
                   Subgroup is locked to your assigned subgroup
                 </p>
               )}
-              {!isAdmin && user && user.subgroups && user.subgroups.length > 1 && (
+              {!isAdmin && user && hasMultipleSubgroups(user) && (
                 <p className="text-xs text-gray-500 mt-1">
                   You can only select from your assigned subgroups
                 </p>
@@ -466,20 +544,17 @@ const AccountMaster: React.FC = () => {
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
-                required
                 maxLength={10}
-                placeholder="10 digit number"
               />
             </div>
             <div>
               <Input 
                 id="pan" 
-                label="PAN *" 
+                label="PAN" 
                 value={formValues.pan}
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
-                required
                 maxLength={10}
               />
             </div>

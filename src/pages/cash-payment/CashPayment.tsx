@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -45,6 +45,67 @@ const CashPayment: React.FC = () => {
   const [user, setUser] = useState<any>(null);
 
   const navigate = useNavigate();
+
+  // Define field order for Enter key navigation
+  const fieldOrder = [
+    'party-select',
+    'date',
+    'series',
+    'voucherNo',
+    'amount',
+    'discount',
+    'narration'
+  ];
+
+  // Handle Enter key for field navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        // Get the active element's ID
+        const activeElement = document.activeElement as HTMLElement;
+        if (!activeElement || !activeElement.id) return;
+        
+        // Prevent form submission
+        e.preventDefault();
+        
+        // Find the current field index in our order
+        const currentIndex = fieldOrder.indexOf(activeElement.id);
+        
+        // If found and not the last field, move to the next one
+        if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
+          const nextFieldId = fieldOrder[currentIndex + 1];
+          const nextField = document.getElementById(nextFieldId);
+          if (nextField) {
+            nextField.focus();
+            
+            // If it's an input, move cursor to the end
+            if (nextField instanceof HTMLInputElement) {
+              const inputLength = nextField.value.length;
+              nextField.setSelectionRange(inputLength, inputLength);
+            }
+          }
+        }
+      }
+    };
+    
+    // Add event listener to each field
+    fieldOrder.forEach(fieldId => {
+      const element = document.getElementById(fieldId);
+      if (element) {
+        element.addEventListener('keydown', handleKeyDown);
+      }
+    });
+    
+    // Cleanup function
+    return () => {
+      fieldOrder.forEach(fieldId => {
+        const element = document.getElementById(fieldId);
+        if (element) {
+          element.removeEventListener('keydown', handleKeyDown);
+        }
+      });
+    };
+  }, [fieldOrder]);
 
   // Fetch user data first
   useEffect(() => {
@@ -285,7 +346,7 @@ const CashPayment: React.FC = () => {
     };
 
     try {
-      const route = isEditMode ? `/slink/editCashPayment` : `/cash-payments`;
+      const route = isEditMode ? `/edit/cash-payments` : `/cash-payments`;
       const response = await fetch(constants.baseURL + route, {
         method: 'POST',
         body: JSON.stringify(formValues),

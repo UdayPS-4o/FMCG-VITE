@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import Input from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
 
@@ -80,6 +80,7 @@ const CollapsibleItemSection: React.FC<Props> = ({
   const [error, setError] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
+  const [shouldFocusQty, setShouldFocusQty] = useState<boolean>(false);
   
   useEffect(() => {
     // If item and godown are set, update the stock value
@@ -132,6 +133,62 @@ const CollapsibleItemSection: React.FC<Props> = ({
     }
   }, [itemData.item, pmpl]);
 
+  // Focus qty field after item is selected
+  useEffect(() => {
+    if (shouldFocusQty && expanded === index && itemData.item) {
+      // Reset flag
+      setShouldFocusQty(false);
+      
+      // Use setTimeout to ensure DOM is ready
+      setTimeout(() => {
+        const qtyInput = document.getElementById(`qty-${index}`);
+        if (qtyInput) {
+          qtyInput.focus();
+        }
+      }, 100);
+    }
+  }, [shouldFocusQty, expanded, itemData.item, index]);
+
+  // Handle Enter key for form field navigation
+  useEffect(() => {
+    // Add keyboard event listeners to the input fields
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        
+        const fieldOrder = ['qty', 'unit']; // Add more fields as needed
+        const currentId = (e.target as HTMLElement).id;
+        
+        // Extract the field name from the id (e.g., "qty-1" => "qty")
+        const currentField = currentId.split('-')[0];
+        
+        // Find current field index
+        const currentIndex = fieldOrder.indexOf(currentField);
+        
+        // If found and not the last field, move to the next one
+        if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
+          const nextFieldId = `${fieldOrder[currentIndex + 1]}-${index}`;
+          const nextField = document.getElementById(nextFieldId);
+          if (nextField) {
+            nextField.focus();
+          }
+        }
+      }
+    };
+
+    // Add event listeners to all the relevant inputs when the component is expanded
+    if (expanded === index) {
+      const qtyInput = document.getElementById(`qty-${index}`);
+      
+      if (qtyInput) qtyInput.addEventListener('keydown', handleKeyDown as any);
+      
+      // Cleanup function to remove event listeners
+      return () => {
+        if (qtyInput) qtyInput.removeEventListener('keydown', handleKeyDown as any);
+      };
+    }
+  }, [expanded, index]);
+
   // Get stock for a specific item and godown
   const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {
     // Check if stock data is available
@@ -143,7 +200,29 @@ const CollapsibleItemSection: React.FC<Props> = ({
     return stockData[itemCode][godownCode];
   };
 
-  const handleItemChange = (value: string) => {
+  const handleItemChange = (value: string | null) => {
+    // Clear the item if null value is passed (cross button clicked)
+    if (!value) {
+      updateItem(index, {
+        item: '',
+        stock: '',
+        pack: '',
+        gst: '',
+        unit: '',
+        pcBx: '',
+        mrp: '',
+        rate: '',
+        qty: '',
+        cess: '',
+        cd: '',
+        sch: '',
+        amount: '',
+        netAmount: '',
+        godown: itemData.godown // Keep the godown selection
+      });
+      return;
+    }
+
     const selectedPMPL = pmpl.find(
       (product) => product.CODE === value
     );
@@ -182,7 +261,7 @@ const CollapsibleItemSection: React.FC<Props> = ({
       const units = [selectedPMPL.UNIT_1, selectedPMPL.UNIT_2].filter(Boolean);
       setUnitOptions(units);
 
-      updateItem(index, {
+      const updatedData = {
         ...itemData,
         item: value,
         stock: stockValue,
@@ -193,7 +272,12 @@ const CollapsibleItemSection: React.FC<Props> = ({
         mrp: selectedPMPL.MRP1 || "",
         rate: selectedPMPL.RATE1 || "",
         qty: ""
-      });
+      };
+
+      updateItem(index, updatedData);
+      
+      // Focus on quantity field after item selection
+      setShouldFocusQty(true);
     } else {
       updateItem(index, {
         ...itemData,

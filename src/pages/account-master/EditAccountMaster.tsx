@@ -10,6 +10,7 @@ import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader"
 import Toast from '../../components/ui/toast/Toast';
 import useAuth from '../../hooks/useAuth';
 import apiCache from '../../utils/apiCache';
+import { getUserSubgroups } from '../../contexts/AuthContext';
 
 interface Option {
   label: string;
@@ -89,22 +90,27 @@ const EditAccountMaster: React.FC = () => {
         }
         
         // If user is not admin and has subgroups, check if they're allowed to edit this subgroup
-        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-          // Check if the subgroup to edit is in user's assigned subgroups
-          const hasPermission = user.subgroups.some(sg => {
-            // Check by subgroup code
-            if (sg.subgroupCode === subgroupParam) {
-              return true;
-            }
-            
-            // Or check by prefix (first 2 characters)
-            const userSubgroupPrefix = sg.subgroupCode.substring(0, 2).toUpperCase();
-            const editSubgroupPrefix = subgroupParam.substring(0, 2).toUpperCase();
-            return userSubgroupPrefix === editSubgroupPrefix;
-          });
+        if (!isAdmin && user) {
+          // Get user's subgroups using the helper function
+          const userSubgroups = getUserSubgroups(user);
           
-          if (!hasPermission) {
-            throw new Error('You do not have permission to edit accounts outside your assigned subgroups');
+          if (userSubgroups.length > 0) {
+            // Check if the subgroup to edit is in user's assigned subgroups
+            const hasPermission = userSubgroups.some(sg => {
+              // Check by subgroup code
+              if (sg.subgroupCode === subgroupParam) {
+                return true;
+              }
+              
+              // Or check by prefix (first 2 characters)
+              const userSubgroupPrefix = sg.subgroupCode?.substring(0, 2).toUpperCase() || '';
+              const editSubgroupPrefix = subgroupParam.substring(0, 2).toUpperCase();
+              return userSubgroupPrefix === editSubgroupPrefix;
+            });
+            
+            if (!hasPermission) {
+              throw new Error('You do not have permission to edit accounts outside your assigned subgroups');
+            }
           }
         }
         
@@ -421,18 +427,16 @@ const EditAccountMaster: React.FC = () => {
                 autoComplete="off"
                 required
                 maxLength={10}
-                placeholder="10 digit number"
               />
             </div>
             <div>
               <Input 
                 id="pan" 
-                label="PAN *" 
+                label="PAN" 
                 value={formValues.pan}
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
-                required
                 maxLength={10}
               />
             </div>
