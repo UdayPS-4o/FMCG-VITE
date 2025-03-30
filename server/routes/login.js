@@ -35,7 +35,10 @@ app.get('/api/checkIsAuth', (req, res) => {
             routeAccess: user.routeAccess,
             powers: user.powers,
             subgroups: user.subgroups,
-            smCode: user.smCode
+            smCode: user.smCode,
+            defaultSeries: user.defaultSeries,
+            godownAccess: user.godownAccess,
+            canSelectSeries: user.canSelectSeries
           }
         });
       } else {

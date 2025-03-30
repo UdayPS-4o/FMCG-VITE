@@ -22,6 +22,14 @@ interface User {
   username?: string;
   smCode?: string;
   subgroup?: SubGroup | SubGroup[];
+  defaultSeries?: {
+    billing?: string;
+    cashReceipt?: string;
+    cashPayment?: string;
+    godown?: string;
+  };
+  godownAccess?: string[];
+  canSelectSeries?: boolean;
 }
 
 interface SubGroup {
@@ -54,6 +62,7 @@ const AddUser: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isEdit, setIsEdit] = useState<boolean>(false);
+  const [godownOptions, setGodownOptions] = useState<any[]>([]);
   
   // Form state
   const [name, setName] = useState<string>('');
@@ -65,6 +74,14 @@ const AddUser: React.FC = () => {
   const [smCode, setSmCode] = useState<string>('');
   const [userId, setUserId] = useState<number | null>(null);
   const [formKey, setFormKey] = useState<number>(0);
+  
+  // New state for default series
+  const [defaultBillingSeries, setDefaultBillingSeries] = useState<string>('');
+  const [defaultCashReceiptSeries, setDefaultCashReceiptSeries] = useState<string>('');
+  const [defaultCashPaymentSeries, setDefaultCashPaymentSeries] = useState<string>('');
+  const [defaultGodownSeries, setDefaultGodownSeries] = useState<string>('');
+  const [canSelectSeries, setCanSelectSeries] = useState<boolean>(false);
+  const [godownAccess, setGodownAccess] = useState<string[]>([]);
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -95,6 +112,22 @@ const AddUser: React.FC = () => {
         // Set SM code if available
         if (userToEdit.smCode) {
           setSmCode(userToEdit.smCode);
+        }
+        
+        // Handle default series settings
+        if (userToEdit.defaultSeries) {
+          setDefaultBillingSeries(userToEdit.defaultSeries.billing || '');
+          setDefaultCashReceiptSeries(userToEdit.defaultSeries.cashReceipt || '');
+          setDefaultCashPaymentSeries(userToEdit.defaultSeries.cashPayment || '');
+          setDefaultGodownSeries(userToEdit.defaultSeries.godown || '');
+        }
+        
+        // Handle series selection permission
+        setCanSelectSeries(userToEdit.canSelectSeries !== false);
+        
+        // Handle godown access rights
+        if (userToEdit.godownAccess) {
+          setGodownAccess(userToEdit.godownAccess);
         }
         
         // Handle subgroups (can be either old format with single subgroup or new format with array)
@@ -249,6 +282,29 @@ const AddUser: React.FC = () => {
     }
   }, [subgroupOptions, isEdit, subgroups]);
 
+  // Fetch godown data
+  useEffect(() => {
+    const fetchGodowns = async () => {
+      try {
+        const godownUrl = `${constants.baseURL}/api/dbf/godown.json`;
+        const response = await fetch(godownUrl, {
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch godown data');
+        }
+        
+        const godowns = await response.json();
+        setGodownOptions(godowns);
+      } catch (err) {
+        console.error('Failed to fetch godown data:', err);
+      }
+    };
+    
+    fetchGodowns();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -264,6 +320,14 @@ const AddUser: React.FC = () => {
         username: 'admin',
         subgroups,
         smCode: smCode || undefined,
+        defaultSeries: {
+          billing: defaultBillingSeries || undefined,
+          cashReceipt: defaultCashReceiptSeries || undefined,
+          cashPayment: defaultCashPaymentSeries || undefined,
+          godown: defaultGodownSeries || undefined
+        },
+        canSelectSeries,
+        godownAccess
       };
       
       if (isEdit && userId) {
@@ -341,6 +405,12 @@ const AddUser: React.FC = () => {
     setPowers([]);
     setSubgroups([]);
     setSmCode('');
+    setDefaultBillingSeries('');
+    setDefaultCashReceiptSeries('');
+    setDefaultCashPaymentSeries('');
+    setDefaultGodownSeries('');
+    setCanSelectSeries(false);
+    setGodownAccess([]);
     setIsEdit(false);
     setUserId(null);
     // Increment key to force re-render of components
@@ -350,6 +420,32 @@ const AddUser: React.FC = () => {
   // Handle SM change
   const handleSmChange = (value: string) => {
     setSmCode(value);
+  };
+
+  // Handle series input change - single digit, auto capitalize, auto-fill others if empty
+  // This function ensures series inputs are single character, uppercase, and populates other series fields
+  // when the billing series changes and other fields are empty
+  const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>, setterFunction: React.Dispatch<React.SetStateAction<string>>) => {
+    const { name, value } = e.target;
+    
+    // Take only the last character and uppercase it
+    const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
+    
+    // Update the current field
+    setterFunction(newValue);
+    
+    // If it's the billing series and has a value, auto-fill all other empty fields
+    if (name === 'defaultBillingSeries' && newValue) {
+      if (defaultCashReceiptSeries === '') {
+        setDefaultCashReceiptSeries(newValue);
+      }
+      if (defaultCashPaymentSeries === '') {
+        setDefaultCashPaymentSeries(newValue);
+      }
+      if (defaultGodownSeries === '') {
+        setDefaultGodownSeries(newValue);
+      }
+    }
   };
 
   // Add loading state check to render the skeleton loader
@@ -487,8 +583,92 @@ const AddUser: React.FC = () => {
                     matchThreshold={3}
                   />
                 </div>
+                <div className="relative">
+                  <MultiSelect
+                    key={`godownAccess-${formKey}`}
+                    label="Godown Access"
+                    options={godownOptions.map(godown => ({
+                      text: `${godown.GDN_NAME} (${godown.GDN_CODE})`,
+                      value: godown.GDN_CODE
+                    }))}
+                    value={godownAccess}
+                    onChange={(values) => {
+                      setGodownAccess(values);
+                    }}
+                    allowFiltering={true}
+                    selectOnEnter={true}
+                    matchThreshold={3}
+                  />
+                </div>
               </div>
-              
+
+              {/* Default Series Section */}
+              <div className="mt-6 mb-4">
+               
+                
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <Input
+                      id="defaultBillingSeries"
+                      label="Default Billing Series"
+                      value={defaultBillingSeries}
+                      name="defaultBillingSeries"
+                      onChange={(e) => handleSeriesChange(e, setDefaultBillingSeries)}
+                      variant="outlined"
+                      autoComplete="off"
+                      seriesMode={true}
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      id="defaultCashReceiptSeries"
+                      label="Default Cash Receipt Series"
+                      value={defaultCashReceiptSeries}
+                      name="defaultCashReceiptSeries"
+                      onChange={(e) => handleSeriesChange(e, setDefaultCashReceiptSeries)}
+                      variant="outlined"
+                      autoComplete="off"
+                      seriesMode={true}
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      id="defaultCashPaymentSeries"
+                      label="Default Cash Payment Series"
+                      value={defaultCashPaymentSeries}
+                      name="defaultCashPaymentSeries"
+                      onChange={(e) => handleSeriesChange(e, setDefaultCashPaymentSeries)}
+                      variant="outlined"
+                      autoComplete="off"
+                      seriesMode={true}
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      id="defaultGodownSeries"
+                      label="Default Godown Series"
+                      value={defaultGodownSeries}
+                      name="defaultGodownSeries"
+                      onChange={(e) => handleSeriesChange(e, setDefaultGodownSeries)}
+                      variant="outlined"
+                      autoComplete="off"
+                      seriesMode={true}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 mb-4">
+                  <input
+                    type="checkbox"
+                    id="canSelectSeries"
+                    checked={canSelectSeries}
+                    onChange={(e) => setCanSelectSeries(e.target.checked)}
+                    className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                  />
+                  <label htmlFor="canSelectSeries" className="text-gray-700 dark:text-gray-300">
+                    Allow selecting different series
+                  </label>
+                </div>
               <div className="mt-6 flex justify-end space-x-4">
                 <button
                   type="submit"
@@ -506,6 +686,7 @@ const AddUser: React.FC = () => {
                   Cancel
                 </button>
               </div>
+              
             </FormComponent>
           )}
         </div>

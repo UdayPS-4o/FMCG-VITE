@@ -8,6 +8,7 @@ import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
 import apiCache from '../../utils/apiCache';
+import useAuth from "../../hooks/useAuth";
 
 interface PartyOption {
   value: string;
@@ -42,7 +43,7 @@ const CashPayment: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
-  const [user, setUser] = useState<any>(null);
+  const { user } = useAuth();
 
   const navigate = useNavigate();
 
@@ -107,205 +108,221 @@ const CashPayment: React.FC = () => {
     };
   }, [fieldOrder]);
 
-  // Fetch user data first
+  // Apply default series from user settings
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const response = await fetch(`${constants.baseURL}/api/checkIsAuth`, {
-          credentials: 'include'
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.authenticated && data.user) {
-            setUser(data.user);
+    if (user && user.defaultSeries && user.defaultSeries.cashPayment && !isEditMode && !formValues.series) {
+      setFormValues(prev => ({
+        ...prev,
+        series: user.defaultSeries.cashPayment
+      }));
+    }
+  }, [user, isEditMode, formValues.series]);
+
+  // Fetch edit data if in edit mode
+  useEffect(() => {
+    if (id) {
+      setIsEditMode(true);
+      const fetchEditData = async () => {
+        try {
+          const res = await fetch(constants.baseURL + '/json/cash-payments', {
+            credentials: 'include'
+          });
+          const data = await res.json();
+          console.log('data', data);
+
+          const voucher = id;
+
+          const paymentToEdit = data.find((payment: any) => payment.voucherNo === voucher);
+
+          if (!paymentToEdit) {
+            setToastMessage('Payment record not found');
+            setToastType('error');
+            setShowToast(true);
+            return;
           }
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-      }
-    };
 
-    fetchUserData();
-  }, []);
+          setVoucherNo(paymentToEdit.voucherNo);
 
-  useEffect(() => {
-    const fetchEditData = async () => {
-      try {
-        const res = await fetch(constants.baseURL + '/json/cash-payments', {
-          credentials: 'include'
-        });
-        const data = await res.json();
-        console.log('data', data);
+          setFormValues({
+            date: paymentToEdit.date,
+            series: paymentToEdit.series,
+            amount: paymentToEdit.amount,
+            discount: paymentToEdit.discount,
+            voucherNo: paymentToEdit.voucherNo,
+            narration: paymentToEdit.narration,
+          });
 
-        const voucher = id;
+          // Use apiCache for CMPL data
+          const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
+          
+          // Use apiCache for balance data
+          const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
 
-        const paymentToEdit = data.find((payment: any) => payment.voucherNo === voucher);
+          // Create a balance lookup map
+          const balanceMap = new Map();
+          if (balanceData && Array.isArray(balanceData.data)) {
+            balanceData.data.forEach((item: any) => {
+              balanceMap.set(item.partycode, item.result);
+            });
+          }
 
-        if (!paymentToEdit) {
-          setToastMessage('Payment record not found');
+          // Check if user is admin
+          const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
+
+          // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
+          let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
+          
+          if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
+            console.log(`Filtering parties by user's assigned subgroups`);
+            
+            // Get all subgroup prefixes from user's assigned subgroups
+            const subgroupPrefixes = user.subgroups.map((sg: any) => 
+              sg.subgroupCode.substring(0, 2).toUpperCase()
+            );
+            
+            console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+            
+            // Filter parties where C_CODE starts with any of the user's subgroup prefixes
+            filteredPartyData = filteredPartyData.filter((party: any) => {
+              const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+              return subgroupPrefixes.includes(partyPrefix);
+            });
+            
+            console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
+          } else if (isAdmin) {
+            console.log('User is admin - showing all parties without filtering');
+          }
+
+          const partyList = filteredPartyData.map((party: any) => {
+            // Get balance for this party
+            const balance = balanceMap.get(party.C_CODE);
+            
+            // Check if balance is non-zero (either greater or in negative)
+            const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
+            
+            return {
+              value: party.C_CODE,
+              label: `${party.C_NAME} | ${party.C_CODE}`,
+            };
+          });
+
+          setPartyOptions(partyList);
+          
+          setParty(partyList.find((p: PartyOption) => p.value === paymentToEdit.party));
+        } catch (error) {
+          console.error('Error fetching edit data:', error);
+          setToastMessage('Failed to load payment details');
           setToastType('error');
           setShowToast(true);
-          return;
         }
+      };
+      fetchEditData();
+    } else {
+      // Fetch party data for new payment
+      const fetchPartyData = async () => {
+        try {
+          // Use apiCache for CMPL data
+          const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
+          
+          // Use apiCache for balance data
+          const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
 
-        setVoucherNo(paymentToEdit.voucherNo);
+          // Create a balance lookup map
+          const balanceMap = new Map();
+          if (balanceData && Array.isArray(balanceData.data)) {
+            balanceData.data.forEach((item: any) => {
+              balanceMap.set(item.partycode, item.result);
+            });
+          }
 
-        setFormValues({
-          date: paymentToEdit.date,
-          series: paymentToEdit.series,
-          amount: paymentToEdit.amount,
-          discount: paymentToEdit.discount,
-          voucherNo: paymentToEdit.voucherNo,
-          narration: paymentToEdit.narration,
-        });
+          // Check if user is admin
+          const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
 
-        // Use apiCache for CMPL data
-        const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
-        
-        // Use apiCache for balance data
-        const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
+          // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
+          let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
+          
+          if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
+            console.log(`Filtering parties by user's assigned subgroups`);
+            
+            // Get all subgroup prefixes from user's assigned subgroups
+            const subgroupPrefixes = user.subgroups.map((sg: any) => 
+              sg.subgroupCode.substring(0, 2).toUpperCase()
+            );
+            
+            console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+            
+            // Filter parties where C_CODE starts with any of the user's subgroup prefixes
+            filteredPartyData = filteredPartyData.filter((party: any) => {
+              const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+              return subgroupPrefixes.includes(partyPrefix);
+            });
+            
+            console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
+          } else if (isAdmin) {
+            console.log('User is admin - showing all parties without filtering');
+          }
 
-        // Create a balance lookup map
-        const balanceMap = new Map();
-        if (balanceData && Array.isArray(balanceData.data)) {
-          balanceData.data.forEach((item: any) => {
-            balanceMap.set(item.partycode, item.result);
+          const partyList = filteredPartyData.map((party: any) => {
+            // Get balance for this party
+            const balance = balanceMap.get(party.C_CODE);
+            
+            // Check if balance is non-zero (either greater or in negative)
+            const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
+            
+            return {
+              value: party.C_CODE,
+              label: `${party.C_NAME} | ${party.C_CODE}`,
+            };
           });
+
+          setPartyOptions(partyList);
+          
+          // Clear expired cache entries
+          apiCache.clearExpiredCache();
+        } catch (error) {
+          setToastMessage('Failed to fetch party data');
+          setToastType('error');
+          setShowToast(true);
         }
+      };
+      
+      fetchPartyData();
+    }
+  }, [id, user]);
 
-        // Check if user is admin
-        const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
-
-        // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
-        let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
-        
-        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-          console.log(`Filtering parties by user's assigned subgroups`);
-          
-          // Get all subgroup prefixes from user's assigned subgroups
-          const subgroupPrefixes = user.subgroups.map((sg: any) => 
-            sg.subgroupCode.substring(0, 2).toUpperCase()
-          );
-          
-          console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
-          
-          // Filter parties where C_CODE starts with any of the user's subgroup prefixes
-          filteredPartyData = filteredPartyData.filter((party: any) => {
-            const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-            return subgroupPrefixes.includes(partyPrefix);
-          });
-          
-          console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
-        } else if (isAdmin) {
-          console.log('User is admin - showing all parties without filtering');
-        }
-
-        const partyList = filteredPartyData.map((party: any) => {
-          // Get balance for this party
-          const balance = balanceMap.get(party.C_CODE);
-          
-          // Check if balance is non-zero (either greater or in negative)
-          const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
-          
-          return {
-            value: party.C_CODE,
-            label: `${party.C_NAME} | ${party.C_CODE}`,
-          };
-        });
-
-        setPartyOptions(partyList);
-        setParty(partyList.find((p: PartyOption) => p.value === paymentToEdit.party));
-      } catch (error) {
-        console.error('Failed to fetch data for edit:', error);
-        setToastMessage('Failed to load payment details');
-        setToastType('error');
-        setShowToast(true);
-      }
-    };
-
-    const fetchNewData = async () => {
+  // Handle fetch next voucher number
+  useEffect(() => {
+    const fetchNextVoucherNo = async () => {
       try {
-        const resVoucher = await fetch(constants.baseURL + '/slink/cash-payments', {
+        const response = await fetch(`${constants.baseURL}/cash-payments`, {
           credentials: 'include'
         });
-        const dataVoucher = await resVoucher.json();
-        setVoucherNo(dataVoucher.nextVoucherNo);
-
-        // Use apiCache for CMPL data
-        const dataParty = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
+        const data = await response.json();
         
-        // Use apiCache for balance data
-        const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
-
-        // Create a balance lookup map
-        const balanceMap = new Map();
-        if (balanceData && Array.isArray(balanceData.data)) {
-          balanceData.data.forEach((item: any) => {
-            balanceMap.set(item.partycode, item.result);
-          });
+        setVoucherNo(data.nextReceiptNo.toString());
+        
+        // Apply default series if available
+        if (user?.defaultSeries?.cashPayment && !isEditMode) {
+          setFormValues(prev => ({
+            ...prev,
+            series: user.defaultSeries.cashPayment,
+            voucherNo: data.nextReceiptNo.toString()
+          }));
+        } else {
+          setFormValues(prev => ({
+            ...prev,
+            voucherNo: data.nextReceiptNo.toString()
+          }));
         }
-
-        // Check if user is admin
-        const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
-
-        // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
-        let filteredPartyData = dataParty.filter((party: any) => !party.C_CODE.endsWith('000'));
-        
-        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-          console.log(`Filtering parties by user's assigned subgroups`);
-          
-          // Get all subgroup prefixes from user's assigned subgroups
-          const subgroupPrefixes = user.subgroups.map((sg: any) => 
-            sg.subgroupCode.substring(0, 2).toUpperCase()
-          );
-          
-          console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
-          
-          // Filter parties where C_CODE starts with any of the user's subgroup prefixes
-          filteredPartyData = filteredPartyData.filter((party: any) => {
-            const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-            return subgroupPrefixes.includes(partyPrefix);
-          });
-          
-          console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
-        } else if (isAdmin) {
-          console.log('User is admin - showing all parties without filtering');
-        }
-
-        const partyList = filteredPartyData.map((party: any) => {
-          // Get balance for this party
-          const balance = balanceMap.get(party.C_CODE);
-          
-          // Check if balance is non-zero (either greater or in negative)
-          const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
-          
-          return {
-            value: party.C_CODE,
-            label: `${party.C_NAME} | ${party.C_CODE}`,
-          };
-        });
-
-        setPartyOptions(partyList);
-        
-        // Clear expired cache entries
-        apiCache.clearExpiredCache();
       } catch (error) {
-        setToastMessage('Failed to fetch data for new entry');
-        setToastType('error');
-        setShowToast(true);
+        console.error('Error fetching next voucher number:', error);
       }
     };
 
-    if (user) { // Only fetch data once we have user info
-      if (id) {
-        setIsEditMode(true);
-        fetchEditData();
-      } else {
-        fetchNewData();
-      }
+    if (!isEditMode) {
+      fetchNextVoucherNo();
     }
-  }, [id, user]); // Add user as dependency
+  }, [isEditMode, user]);
 
   const handlePartyChange = (value: string) => {
     const selectedParty = partyOptions.find(p => p.value === value);
@@ -316,11 +333,13 @@ const CashPayment: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Auto-capitalize series input
+    // Handle series as a single letter field that autocapitalizes
     if (name === 'series') {
+      // If value is not empty, take only the last character and uppercase it
+      const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
       setFormValues(prev => ({
         ...prev,
-        [name]: value.toUpperCase()
+        [name]: newValue
       }));
     } else {
       setFormValues(prev => ({
@@ -424,6 +443,8 @@ const CashPayment: React.FC = () => {
                       required
                       maxLength={1}
                       className="w-full uppercase"
+                      disabled={user && user.canSelectSeries === false}
+                      seriesMode={true}
                     />
                   </div>
                   
@@ -482,7 +503,7 @@ const CashPayment: React.FC = () => {
               </div>
             </div>
             
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 flex justify-end space-x-4">
               <button
                 type="button"
                 onClick={() => navigate('/db/cash-payments')}
@@ -507,6 +528,7 @@ const CashPayment: React.FC = () => {
         <Toast
           message={toastMessage}
           type={toastType}
+          isVisible={showToast}
           onClose={() => setShowToast(false)}
         />
       )}

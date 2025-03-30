@@ -27,6 +27,14 @@ export interface User {
     title: string;
     subgroupCode?: string;
   }>;
+  defaultSeries?: {
+    billing?: string;
+    cashReceipt?: string;
+    cashPayment?: string;
+    godown?: string;
+  };
+  godownAccess?: string[];
+  canSelectSeries?: boolean;
 }
 
 // Helper functions to handle the transition from subgroup to subgroups

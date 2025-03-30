@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 interface InputProps {
   id?: string;
@@ -17,6 +17,7 @@ interface InputProps {
   name?: string;
   autoComplete?: string;
   maxLength?: number;
+  seriesMode?: boolean;
 }
 
 const Input: React.FC<InputProps> = ({
@@ -36,12 +37,42 @@ const Input: React.FC<InputProps> = ({
   name,
   autoComplete,
   maxLength,
+  seriesMode = false,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   const isActive = isFocused || value;
   
-  // Different styles based on variant and state
+  useEffect(() => {
+    if (seriesMode && inputRef.current) {
+      inputRef.current.value = value.toUpperCase();
+    }
+  }, [value, seriesMode]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (seriesMode) {
+      const inputValue = e.target.value;
+      if (inputValue.length > 0) {
+        const lastChar = inputValue.charAt(inputValue.length - 1).toUpperCase();
+        
+        const newEvent = {
+          ...e,
+          target: {
+            ...e.target,
+            value: lastChar
+          }
+        } as React.ChangeEvent<HTMLInputElement>;
+        
+        onChange(newEvent);
+      } else {
+        onChange(e);
+      }
+    } else {
+      onChange(e);
+    }
+  };
+  
   const getContainerClasses = () => {
     let baseClasses = 'relative transition-all duration-200';
     
@@ -122,19 +153,20 @@ const Input: React.FC<InputProps> = ({
   return (
     <div className={`${getContainerClasses()} ${className}`}>
       <input
+        ref={inputRef}
         id={id}
         type={type}
         value={value}
-        onChange={onChange}
+        onChange={handleChange}
         placeholder={placeholder}
         required={required}
         disabled={disabled}
-        autoComplete={autoComplete}
-        className={getInputClasses()}
+        autoComplete={seriesMode ? 'off' : autoComplete}
+        className={`${getInputClasses()} ${seriesMode ? 'uppercase' : ''}`}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         name={name}
-        maxLength={maxLength}
+        maxLength={seriesMode ? 1 : maxLength}
       />
       {label && (
         <label 

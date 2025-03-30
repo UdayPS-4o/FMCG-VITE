@@ -62,6 +62,13 @@ const InvoicingContent: React.FC = () => {
     type: 'info' 
   });
 
+  // Apply default series from user settings
+  useEffect(() => {
+    if (user && user.defaultSeries && user.defaultSeries.billing) {
+      setSeries(user.defaultSeries.billing);
+    }
+  }, [user]);
+
   // Filter SM options based on user's role and assigned SM code
   const filteredSmOptions = useMemo(() => {
     if (!user || !smOptions) return [];
@@ -114,10 +121,10 @@ const InvoicingContent: React.FC = () => {
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Auto-capitalize and limit to single letter
-    const value = e.target.value.toUpperCase();
-    const singleLetter = value.length > 0 ? value.charAt(value.length - 1) : '';
-    setSeries(singleLetter);
+    // Take only the last character typed and convert to uppercase
+    const value = e.target.value;
+    const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
+    setSeries(newValue);
   };
 
   const handleBillNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -385,7 +392,7 @@ const InvoicingContent: React.FC = () => {
       
       <FormComponent onSubmit={handleSubmit} autoComplete="off">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div>
               <Input
                 id="date"
@@ -395,50 +402,52 @@ const InvoicingContent: React.FC = () => {
                 onChange={handleDateChange}
                 variant="outlined"
                 autoComplete="off"
+                required
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Input
-                  id="series"
-                  label="Series"
-                  placeholder="T"
-                  value={series}
-                  onChange={handleSeriesChange}
-                  variant="outlined"
-                  autoComplete="off"
-                  maxLength={1}
-                />
-              </div>
-              <div>
-                <Input
-                  id="billNo"
-                  label="Bill No."
-                  value={billNo}
-                  onChange={handleBillNoChange}
-                  variant="outlined"
-                  autoComplete="off"
-                />
-              </div>
+            <div>
+              <Input
+                id="series"
+                label="Series"
+                value={series}
+                onChange={handleSeriesChange}
+                variant="outlined"
+                maxLength={1}
+                autoComplete="off"
+                required
+                className="uppercase"
+                disabled={user && user.canSelectSeries === false}
+                seriesMode={true}
+              />
             </div>
-            <div className="flex items-center">
-              <div className="flex items-center space-x-2">
-                <span className="text-gray-700 dark:text-gray-300">CREDIT {cash === 'N' ? '(O)' : ''}</span>
-                <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out rounded-full cursor-pointer">
-                  <input
-                    type="checkbox"
-                    id="cash-toggle"
-                    className="absolute w-6 h-6 transition duration-200 ease-in-out transform bg-white border rounded-full appearance-none cursor-pointer peer border-gray-300 dark:border-gray-600 checked:right-0 checked:border-brand-500 checked:bg-brand-500 dark:checked:border-brand-400 dark:checked:bg-brand-400"
-                    checked={cash === 'Y'}
-                    onChange={toggleCash}
-                    autoComplete="off"
+            <div>
+              <Input
+                id="billNo"
+                label="Bill No."
+                value={billNo}
+                onChange={handleBillNoChange}
+                variant="outlined"
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div>
+              <div className="flex items-center h-full">
+                <div
+                  className={`relative inline-block w-16 h-8 cursor-pointer rounded-full transition-colors ease-in-out duration-200 ${
+                    cash === 'Y' ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                  onClick={toggleCash}
+                >
+                  <span
+                    className={`absolute left-1 top-1 inline-block w-6 h-6 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                      cash === 'Y' ? 'translate-x-8' : 'translate-x-0'
+                    }`}
                   />
-                  <label
-                    htmlFor="cash-toggle"
-                    className="block h-full overflow-hidden rounded-full cursor-pointer bg-gray-300 dark:bg-gray-700 peer-checked:bg-brand-100 dark:peer-checked:bg-brand-900"
-                  ></label>
                 </div>
-                <span className="text-gray-700 dark:text-gray-300">CASH {cash === 'Y' ? '(O)' : ''}</span>
+                <div className="ml-3 text-gray-700 dark:text-gray-300 text-sm">
+                  {cash === 'Y' ? 'Cash' : 'Credit'}
+                </div>
               </div>
             </div>
           </div>

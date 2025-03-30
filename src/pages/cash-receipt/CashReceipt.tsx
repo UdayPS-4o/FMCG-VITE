@@ -8,6 +8,7 @@ import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
 import apiCache from '../../utils/apiCache';
+import useAuth from "../../hooks/useAuth";
 
 interface PartyOption {
   value: string;
@@ -42,7 +43,7 @@ const CashReceipt: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
-  const [user, setUser] = useState<any>(null);
+  const { user } = useAuth();
 
   const navigate = useNavigate();
 
@@ -107,27 +108,49 @@ const CashReceipt: React.FC = () => {
     };
   }, [fieldOrder]);
 
-  // Fetch user data first
+  // Apply default series from user settings
   useEffect(() => {
-    const fetchUserData = async () => {
+    if (user && user.defaultSeries && user.defaultSeries.cashReceipt && !isEditMode && !formValues.series) {
+      setFormValues(prev => ({
+        ...prev,
+        series: user.defaultSeries.cashReceipt
+      }));
+    }
+  }, [user, isEditMode, formValues.series]);
+
+  // Handle fetch next receipt number
+  useEffect(() => {
+    const fetchNextReceiptNo = async () => {
       try {
-        const response = await fetch(`${constants.baseURL}/api/checkIsAuth`, {
+        const response = await fetch(`${constants.baseURL}/cash-receipts`, {
           credentials: 'include'
         });
+        const data = await response.json();
         
-        if (response.ok) {
-          const data = await response.json();
-          if (data.authenticated && data.user) {
-            setUser(data.user);
-          }
+        setReceiptNo(data.nextReceiptNo.toString());
+        
+        // Apply default series if available
+        if (user?.defaultSeries?.cashReceipt && !isEditMode) {
+          setFormValues(prev => ({
+            ...prev,
+            series: user.defaultSeries.cashReceipt,
+            receiptNo: data.nextReceiptNo.toString()
+          }));
+        } else {
+          setFormValues(prev => ({
+            ...prev,
+            receiptNo: data.nextReceiptNo.toString()
+          }));
         }
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        console.error('Error fetching next receipt number:', error);
       }
     };
 
-    fetchUserData();
-  }, []);
+    if (!isEditMode) {
+      fetchNextReceiptNo();
+    }
+  }, [isEditMode, user]);
 
   useEffect(() => {
     const fetchEditData = async () => {
@@ -320,11 +343,13 @@ const CashReceipt: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Auto-capitalize series input
-    if (name == 'series') {
+    // Handle series as a single letter field that autocapitalizes
+    if (name === 'series') {
+      // If value is not empty, take only the last character and uppercase it
+      const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
       setFormValues(prev => ({
         ...prev,
-        [name]: value.toUpperCase()
+        [name]: newValue
       }));
     } else {
       setFormValues(prev => ({
@@ -428,6 +453,8 @@ const CashReceipt: React.FC = () => {
                       required
                       maxLength={1}
                       className="w-full uppercase"
+                      disabled={user && user.canSelectSeries === false}
+                      seriesMode={true}
                     />
                   </div>
                   
@@ -486,7 +513,7 @@ const CashReceipt: React.FC = () => {
               </div>
             </div>
             
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 flex justify-end space-x-4">
               <button
                 type="button"
                 onClick={() => navigate('/db/cash-receipts')}
@@ -511,6 +538,7 @@ const CashReceipt: React.FC = () => {
         <Toast
           message={toastMessage}
           type={toastType}
+          isVisible={showToast}
           onClose={() => setShowToast(false)}
         />
       )}
