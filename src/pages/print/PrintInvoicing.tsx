@@ -240,13 +240,17 @@ const PrintInvoicing: React.FC = () => {
         totalNetAmountExact += itemNetAmount;
 
         // Calculate discounts applied for *this item* to sum up for summary
+        // Apply discounts in a compound manner: [(AMOUNT-SCHRS)-SCH%]-CD%
         let amountAfterSchRs = amount - schRs;
+        
+        // Calculate scheme percentage amount
         let schPercentDiscount = 0;
         if (schPercent > 0) {
             schPercentDiscount = amountAfterSchRs * (schPercent / 100);
         }
         let amountAfterSch = amountAfterSchRs - schPercentDiscount;
         
+        // Calculate cash discount amount
         let cdDiscount = 0;
         if (cdPercent > 0) {
             cdDiscount = amountAfterSch * (cdPercent / 100);

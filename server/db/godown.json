@@ -44,5 +44,20 @@
       }
     ],
     "createdAt": "2025-03-30T07:58:15.094Z"
+  },
+  {
+    "date": "2025-03-30",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "03",
+    "id": "5",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "12",
+        "unit": "PCS"
+      }
+    ],
+    "createdAt": "2025-03-30T13:30:28.459Z"
   }
 ]
