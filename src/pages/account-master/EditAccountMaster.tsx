@@ -252,16 +252,28 @@ const EditAccountMaster: React.FC = () => {
         subgroup: subgroup[0].value,
       };
 
-      console.log('Submitting form to:', `${constants.baseURL}/edit/account-master`);
+      console.log('Submitting form to:', `${constants.baseURL}/account-master/update/${id}`);
       console.log('Form values:', values);
 
-      const response = await fetch(`${constants.baseURL}/edit/account-master`, {
+      const response = await fetch(`${constants.baseURL}/account-master/update/${id}`, {
         method: 'POST',
-        body: JSON.stringify(values),
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        credentials: 'include'
+        body: JSON.stringify({
+          code: values.achead,
+          name: values.achead,
+          gst: values.gst || '',
+          address: values.addressline1 + ' ' + values.addressline2 + ' ' + values.place,
+          city: values.statecode,
+          pincode: values.pincode,
+          phone: values.mobile,
+          email: values.email,
+          subgroup: values.subgroup,
+          area: '',
+          salesman: ''
+        })
       });
 
       let data;

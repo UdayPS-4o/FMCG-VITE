@@ -9,6 +9,57 @@ const {
   ensureDirectoryExistence,
   saveDataToJsonFile,
 } = require("../utilities");
+const jwt = require('jsonwebtoken');
+
+// JWT secret key
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+
+// Extract JWT token from Authorization header
+const extractToken = (req) => {
+  if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+    return req.headers.authorization.split(' ')[1];
+  }
+  return null;
+};
+
+// Middleware to verify JWT token
+const verifyToken = async (req, res, next) => {
+  const token = extractToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: 'Authentication required' 
+    });
+  }
+
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Get user from users.json file
+    const filePath = path.join(__dirname, "..", "..", "db", "users.json");
+    const data = await fs.readFile(filePath, "utf8");
+    const users = JSON.parse(data);
+    const user = users.find((u) => u.id === decoded.userId);
+    
+    if (user) {
+      req.user = user;
+      next();
+    } else {
+      res.status(401).json({ 
+        error: 'Unauthorized', 
+        message: 'Invalid or expired authentication token' 
+      });
+    }
+  } catch (err) {
+    console.error("JWT verification failed:", err);
+    res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: 'Invalid or expired token' 
+    });
+  }
+};
 
 const uniqueIdentifiers = ["subgroup", "receiptNo", "voucherNo", 'id', 'achead'];
 
@@ -67,7 +118,7 @@ app.get("/edit/:page/:id", async (req, res) => {
 });
 
 // make this route delete/cash-receipts/${id}
-app.get("/delete/:page/:id", async (req, res) => {
+app.get("/delete/:page/:id", verifyToken, async (req, res) => {
   const { page, id } = req.params;
   console.log(`Attempting to delete ${page} record with ID: ${id}`);
   
@@ -161,7 +212,7 @@ app.get("/edit/invoicing/:id", async (req, res) => {
 });
 
 // Add a specific route for deleting approved records
-app.get("/delete/approved/:page/:id", async (req, res) => {
+app.get("/delete/approved/:page/:id", verifyToken, async (req, res) => {
   const { page, id } = req.params;
   console.log(`Attempting to delete approved ${page} record with ID: ${id}`);
   

@@ -130,8 +130,16 @@ const PrintInvoicing: React.FC = () => {
       }
 
       try {
+        // Get token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Authentication required');
+        }
+        
         const response = await fetch(`${constants.baseURL}/slink/printInvoice?id=${invoiceId}`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
         if (!response.ok) {
           throw new Error('Failed to fetch invoice data');
@@ -436,8 +444,7 @@ const PrintInvoicing: React.FC = () => {
                       </td>
                       <td colSpan={3} className="border border-black p-2 align-middle">
                         <div className="text-center">
-                          <p className="text-xl font-bold print:text-black">{data.company.name}</p>
-                          <p className="print:font-bold print:text-black">BILL MADE BY: {data.billMadeBy || 'SHUBHAM'}</p>
+                          <p className="text-xl font-bold print:text-black">BILL MADE BY: {data.billMadeBy || 'SHUBHAM'}</p>
                         </div>
                       </td>
                     </tr>

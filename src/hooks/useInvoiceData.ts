@@ -37,24 +37,7 @@ export const useInvoiceData = () => {
         // Fetch all data in parallel for better performance
         const [accountData, pmplRes, stockRes, godownRes, balanceRes] = await Promise.all([
           // Fetch account data with fallback
-          (async () => {
-            try {
-              // Try primary endpoint with caching
-              return await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
-            } catch (error) {
-              if ((error as Error).name === 'AbortError') {
-                throw error;
-              }
-              console.error('Failed to fetch from /cmpl', error);
-              // Try original endpoint as fallback if needed
-              const accRes = await fetch(`${constants.baseURL}/api/dbf/acm.json`, { 
-                signal,
-                credentials: 'include' 
-              });
-              if (!accRes.ok) throw new Error('Primary and fallback endpoints failed');
-              return await accRes.json();
-            }
-          })(),
+          apiCache.fetchWithCache(`${constants.baseURL}/cmpl`),
           // Fetch PMPL data
           apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/pmpl.json`),
           // Fetch stock data

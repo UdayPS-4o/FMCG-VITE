@@ -78,9 +78,17 @@ const PrintCashReceipt: React.FC = () => {
       }
 
       try {
+        // Get token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Authentication required');
+        }
+        
         // Make the API call using the exact same pattern as the React version
         const response = await fetch(`${constants.baseURL}/print?${queryKey}=${value}`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
         if (!response.ok) {
           throw new Error('Failed to fetch data');
@@ -154,7 +162,7 @@ const PrintCashReceipt: React.FC = () => {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-8 max-w-full mx-auto">
       <PageMeta title={`Cash ${isReceipt ? 'Receipt' : 'Payment'} Print`} description={`Print cash ${isReceipt ? 'receipt' : 'payment'} details`} />
       
       {/* Print controls - hidden when printing */}
@@ -174,7 +182,7 @@ const PrintCashReceipt: React.FC = () => {
       </div>
       
       {/* Content */}
-      <div ref={printRef} className="bg-gray-900 text-white print:bg-white print:text-black">
+      <div ref={printRef} className="bg-gray-900 text-white print:bg-white print:text-black overflow-hidden">
         {data && (
           <div className="receipt">
             <header className="header">
@@ -237,11 +245,11 @@ const PrintCashReceipt: React.FC = () => {
       <style>
         {`
         .receipt {
-          width: 80%;
-          margin: 0px auto;
+          width: 100%;
+          margin: 0 auto;
           display: flex;
           flex-direction: column;
-          padding: 0 20px;
+          padding: 0;
           font-family: Arial, sans-serif;
         }
 
@@ -274,6 +282,7 @@ const PrintCashReceipt: React.FC = () => {
           width: 100%;
           border-collapse: collapse;
           margin-bottom: 20px;
+          table-layout: fixed;
         }
 
         table, th {
@@ -283,6 +292,7 @@ const PrintCashReceipt: React.FC = () => {
         th, td {
           padding: 8px;
           text-align: left;
+          word-wrap: break-word;
         }
 
         #amount {
@@ -305,10 +315,17 @@ const PrintCashReceipt: React.FC = () => {
           body {
             background-color: white;
             color: black;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
           }
           
           .receipt {
             color: black;
+            width: 100%;
+            max-width: none;
           }
           
           .details, table, th, #amount, .in-words {

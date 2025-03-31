@@ -97,7 +97,9 @@ const EditInvoicingContent: React.FC<{
         try {
           console.log(`Fetching invoice data from ${constants.baseURL}/edit/invoicing/${id}`);
           response = await fetch(`${constants.baseURL}/edit/invoicing/${id}`, {
-            credentials: 'include'
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
           });
           
           if (!response.ok) {
@@ -111,9 +113,11 @@ const EditInvoicingContent: React.FC<{
           console.error('Error with primary endpoint:', primaryError);
           
           try {
-            console.log(`Trying fallback endpoint ${constants.baseURL}/invoicing/${id}`);
-            response = await fetch(`${constants.baseURL}/invoicing/${id}`, {
-              credentials: 'include'
+            console.log(`Trying fallback endpoint ${constants.baseURL}/invoicing`);
+            response = await fetch(`${constants.baseURL}/invoicing`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+              }
             });
             
             if (!response.ok) {
@@ -326,10 +330,8 @@ const EditInvoicingContent: React.FC<{
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Take only the last character typed and convert to uppercase
-    const value = e.target.value;
-    const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
-    setSeries(newValue);
+    // Let the Input component handle the conversion to uppercase with its seriesMode
+    setSeries(e.target.value);
   };
 
   const handleBillNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -472,6 +474,7 @@ const EditInvoicingContent: React.FC<{
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
           id,
@@ -486,8 +489,7 @@ const EditInvoicingContent: React.FC<{
           ref,
           dueDays,
           items: formattedItems
-        }),
-        credentials: 'include'
+        })
       });
       
       // Handle duplicate bill number error (409 Conflict)
@@ -610,7 +612,6 @@ const EditInvoicingContent: React.FC<{
                   autoComplete="off"
                   maxLength={1}
                   disabled={user && user.canSelectSeries === false}
-                  seriesMode={true}
                 />
               </div>
               <div>

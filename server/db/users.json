@@ -70,7 +70,18 @@
       "title": "ADEGAON",
       "subgroupCode": "AD002"
     },
-    "token": "e2h0ce"
+    "token": "e2h0ce",
+    "subgroups": [
+      {
+        "title": "ADEGAON",
+        "subgroupCode": "AD002"
+      }
+    ],
+    "defaultSeries": {
+      "cashReceipt": "V"
+    },
+    "canSelectSeries": true,
+    "godownAccess": []
   },
   {
     "id": 8,
@@ -130,7 +141,7 @@
       "billing": "X",
       "cashReceipt": "X",
       "cashPayment": "X",
-      "godown": "X"
+      "godown": "B"
     },
     "canSelectSeries": true,
     "godownAccess": [

@@ -288,9 +288,9 @@ const InvoicingContent: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(apiData),
-        credentials: 'include'
+        body: JSON.stringify(apiData)
       });
       
       // Handle duplicate bill number error (409 Conflict)
@@ -417,7 +417,6 @@ const InvoicingContent: React.FC = () => {
                 required
                 className="uppercase"
                 disabled={user && user.canSelectSeries === false}
-                seriesMode={true}
               />
             </div>
             <div>

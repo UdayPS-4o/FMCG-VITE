@@ -147,7 +147,9 @@ const CashPayment: React.FC = () => {
       const fetchEditData = async () => {
         try {
           const res = await fetch(constants.baseURL + '/json/cash-payments', {
-            credentials: 'include'
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
           });
           const data = await res.json();
           console.log('data', data);
@@ -317,7 +319,9 @@ const CashPayment: React.FC = () => {
     const fetchNextVoucherNo = async () => {
       try {
         const response = await fetch(`${constants.baseURL}/cash-payments`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
         const data = await response.json();
         
@@ -355,20 +359,20 @@ const CashPayment: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Handle series as a single letter field that autocapitalizes
-    if (name === 'series') {
-      // If value is not empty, take only the last character and uppercase it
-      const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
-      setFormValues(prev => ({
-        ...prev,
-        [name]: newValue
-      }));
-    } else {
-      setFormValues(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
+    // Simply set the value directly, Input component's seriesMode will handle capitalization
+    setFormValues(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Add a simple function to ensure uppercase series input
+  const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uppercaseValue = e.target.value.toUpperCase();
+    setFormValues(prev => ({
+      ...prev,
+      series: uppercaseValue
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -390,11 +394,11 @@ const CashPayment: React.FC = () => {
       const route = isEditMode ? `/edit/cash-payments` : `/cash-payments`;
       const response = await fetch(constants.baseURL + route, {
         method: 'POST',
-        body: JSON.stringify(formValues),
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        credentials: 'include'
+        body: JSON.stringify(formValues)
       });
 
       if (!response.ok) {
@@ -462,12 +466,11 @@ const CashPayment: React.FC = () => {
                       name="series" 
                       label="Series" 
                       value={formValues.series}
-                      onChange={handleInputChange}
+                      onChange={handleSeriesChange}
                       required
                       maxLength={1}
                       className="w-full uppercase"
                       disabled={user && user.canSelectSeries === false}
-                      seriesMode={true}
                     />
                   </div>
                   

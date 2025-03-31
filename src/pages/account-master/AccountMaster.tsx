@@ -185,7 +185,9 @@ const AccountMaster: React.FC = () => {
         } else {
           setIsEDIT(false);
           const response = await fetch(`${constants.baseURL}/slink/subgrp`, {
-            credentials: 'include'
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
           });
           if (!response.ok) {
             throw new Error('Failed to fetch subgroup data');
@@ -345,11 +347,11 @@ const AccountMaster: React.FC = () => {
 
       const response = await fetch(`${constants.baseURL}${route}`, {
         method: 'POST',
-        body: JSON.stringify(values),
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        credentials: 'include'
+        body: JSON.stringify(values)
       });
 
       let data;

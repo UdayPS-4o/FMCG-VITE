@@ -138,14 +138,16 @@ const CashReceipt: React.FC = () => {
         series: user.defaultSeries.cashReceipt
       }));
     }
-  }, [user, isEditMode, formValues.series]);
+  }, [user, isEditMode]);
 
   // Handle fetch next receipt number
   useEffect(() => {
     const fetchNextReceiptNo = async () => {
       try {
         const response = await fetch(`${constants.baseURL}/cash-receipts`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
         const data = await response.json();
         
@@ -178,7 +180,9 @@ const CashReceipt: React.FC = () => {
     const fetchEditData = async () => {
       try {
         const res = await fetch(constants.baseURL + '/json/cash-receipts', {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
         const data = await res.json();
         console.log('data', data);
@@ -274,7 +278,9 @@ const CashReceipt: React.FC = () => {
     const fetchNewData = async () => {
       try {
         const resReceipt = await fetch(constants.baseURL + '/slink/cash-receipts', {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
         const dataReceipt = await resReceipt.json();
         setReceiptNo(dataReceipt.nextReceiptNo);
@@ -361,24 +367,24 @@ const CashReceipt: React.FC = () => {
     setParty(selectedParty || null);
   };
 
+  // Add a simple function to ensure uppercase series input
+  const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uppercaseValue = e.target.value.toUpperCase();
+    setFormValues(prev => ({
+      ...prev,
+      series: uppercaseValue
+    }));
+  };
+
   // New handler for input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Handle series as a single letter field that autocapitalizes
-    if (name === 'series') {
-      // If value is not empty, take only the last character and uppercase it
-      const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
-      setFormValues(prev => ({
-        ...prev,
-        [name]: newValue
-      }));
-    } else {
-      setFormValues(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
+    // Simply set the value directly, Input component's seriesMode will handle capitalization
+    setFormValues(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -400,11 +406,11 @@ const CashReceipt: React.FC = () => {
       const route = isEditMode ? `/edit/cash-receipts` : `/cash-receipts`;
       const response = await fetch(constants.baseURL + route, {
         method: 'POST',
-        body: JSON.stringify(formValues),
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        credentials: 'include'
+        body: JSON.stringify(formValues)
       });
 
       if (!response.ok) {
@@ -472,12 +478,11 @@ const CashReceipt: React.FC = () => {
                       name="series" 
                       label="Series" 
                       value={formValues.series}
-                      onChange={handleInputChange}
+                      onChange={handleSeriesChange}
                       required
                       maxLength={1}
                       className="w-full uppercase"
                       disabled={user && user.canSelectSeries === false}
-                      seriesMode={true}
                     />
                   </div>
                   

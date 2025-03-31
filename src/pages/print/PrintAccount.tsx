@@ -19,8 +19,16 @@ const PrintAccount: React.FC = () => {
       }
 
       try {
+        // Get token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Authentication required');
+        }
+        
         const response = await fetch(`${constants.baseURL}/edit/account-master/${achead}`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
         
         if (!response.ok) {

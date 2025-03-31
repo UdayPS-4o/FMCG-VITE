@@ -39,8 +39,19 @@ export default function PrintGodown() {
     }
 
     setIsLoading(true);
+    
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Authentication required');
+      setIsLoading(false);
+      return;
+    }
+    
     fetch(`${constants.baseURL}/slink/printGodown?retreat=${godownId}`, {
-      credentials: 'include'
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
     })
       .then((res) => {
         if (!res.ok) {

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 
 interface InputProps {
   id?: string;
@@ -17,7 +17,6 @@ interface InputProps {
   name?: string;
   autoComplete?: string;
   maxLength?: number;
-  seriesMode?: boolean;
 }
 
 const Input: React.FC<InputProps> = ({
@@ -37,40 +36,14 @@ const Input: React.FC<InputProps> = ({
   name,
   autoComplete,
   maxLength,
-  seriesMode = false,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
   const isActive = isFocused || value;
   
-  useEffect(() => {
-    if (seriesMode && inputRef.current) {
-      inputRef.current.value = value.toUpperCase();
-    }
-  }, [value, seriesMode]);
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (seriesMode) {
-      const inputValue = e.target.value;
-      if (inputValue.length > 0) {
-        const lastChar = inputValue.charAt(inputValue.length - 1).toUpperCase();
-        
-        const newEvent = {
-          ...e,
-          target: {
-            ...e.target,
-            value: lastChar
-          }
-        } as React.ChangeEvent<HTMLInputElement>;
-        
-        onChange(newEvent);
-      } else {
-        onChange(e);
-      }
-    } else {
-      onChange(e);
-    }
+    onChange(e);
   };
   
   const getContainerClasses = () => {
@@ -161,12 +134,12 @@ const Input: React.FC<InputProps> = ({
         placeholder={placeholder}
         required={required}
         disabled={disabled}
-        autoComplete={seriesMode ? 'off' : autoComplete}
-        className={`${getInputClasses()} ${seriesMode ? 'uppercase' : ''}`}
+        autoComplete={autoComplete}
+        className={getInputClasses()}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         name={name}
-        maxLength={seriesMode ? 1 : maxLength}
+        maxLength={maxLength}
       />
       {label && (
         <label 
