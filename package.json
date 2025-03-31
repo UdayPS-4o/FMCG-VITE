@@ -4,7 +4,7 @@
   "version": "2.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 3000",
+    "dev": "vite --port 3000 --host",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview --port 5173 --host"

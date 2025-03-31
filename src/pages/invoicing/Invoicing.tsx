@@ -121,9 +121,10 @@ const InvoicingContent: React.FC = () => {
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Take only the last character typed and convert to uppercase
+    // Only allow alphabetic characters and convert to uppercase
     const value = e.target.value;
-    const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
+    const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
+    const newValue = alphabeticValue.length > 0 ? alphabeticValue.charAt(alphabeticValue.length - 1).toUpperCase() : '';
     setSeries(newValue);
   };
 

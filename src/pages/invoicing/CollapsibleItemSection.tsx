@@ -703,6 +703,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 value={item.rate}
                 onChange={(e) => handleFieldChange('rate', e.target.value)}
                 variant="outlined"
+                type="number"
               />
             </div>
             <div>
@@ -712,6 +713,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 value={item.qty}
                 onChange={(e) => handleFieldChange('qty', e.target.value)}
                 variant="outlined"
+                type="number"
                 disabled={!item.godown} 
                 className={`${shouldShowValidation && item.item && !item.qty ? "border-red-500" : ""} ${error ? "border-red-500" : ""}`}
               />
@@ -745,6 +747,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 value={item.sch}
                 onChange={(e) => handleFieldChange('sch', e.target.value)}
                 variant="outlined"
+                type="number"
               />
             </div>
             <div>

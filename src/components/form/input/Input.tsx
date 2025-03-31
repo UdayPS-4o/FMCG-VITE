@@ -7,16 +7,20 @@ interface InputProps {
   type?: string;
   placeholder?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: () => void;
+  onFocus?: () => void;
   required?: boolean;
   className?: string;
   variant?: 'outlined' | 'underlined';
-  error?: boolean;
+  error?: boolean | string;
   success?: boolean;
   disabled?: boolean;
   hint?: string;
   name?: string;
   autoComplete?: string;
   maxLength?: number;
+  inputMode?: 'search' | 'text' | 'email' | 'tel' | 'numeric' | 'url' | 'none' | 'decimal';
+  fieldType?: 'pan' | 'gstin' | 'default';
 }
 
 const Input: React.FC<InputProps> = ({
@@ -26,6 +30,8 @@ const Input: React.FC<InputProps> = ({
   type = 'text',
   placeholder = ' ',
   onChange = () => {},
+  onBlur,
+  onFocus,
   required = false,
   className = '',
   variant = 'outlined',
@@ -36,14 +42,52 @@ const Input: React.FC<InputProps> = ({
   name,
   autoComplete,
   maxLength,
+  inputMode,
+  fieldType = 'default',
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
   const isActive = isFocused || value;
   
+  // Determine the appropriate inputMode based on current cursor position
+  const getInputMode = () => {
+    if (inputMode) return inputMode as 'search' | 'text' | 'email' | 'tel' | 'numeric' | 'url' | 'none' | 'decimal';
+    
+    if (fieldType === 'pan') {
+      // First 5 chars are alphabetic, next 4 are numeric, last one is alphabetic
+      const cursorPos = value.length;
+      if (cursorPos < 5 || cursorPos === 9) return 'text';
+      if (cursorPos >= 5 && cursorPos < 9) return 'numeric';
+    }
+    
+    if (fieldType === 'gstin') {
+      // Pattern: 2-numeric, 5-alpha, 4-numeric, 1-alpha, 1-numeric, 1-alpha, 1-alphanumeric
+      const cursorPos = value.length;
+      if (cursorPos < 2) return 'numeric';
+      if (cursorPos >= 2 && cursorPos < 7) return 'text';
+      if (cursorPos >= 7 && cursorPos < 11) return 'numeric';
+      if (cursorPos === 11) return 'text';
+      if (cursorPos === 12) return 'numeric';
+      if (cursorPos === 13) return 'text';
+      if (cursorPos === 14) return 'text'; // Alphanumeric, but text keyboard is better for last char
+    }
+    
+    return type === 'tel' ? 'numeric' : 'text';
+  };
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(e);
+  };
+  
+  const handleFocus = () => {
+    setIsFocused(true);
+    if (onFocus) onFocus();
+  };
+  
+  const handleBlur = () => {
+    setIsFocused(false);
+    if (onBlur) onBlur();
   };
   
   const getContainerClasses = () => {
@@ -124,33 +168,40 @@ const Input: React.FC<InputProps> = ({
   };
 
   return (
-    <div className={`${getContainerClasses()} ${className}`}>
-      <input
-        ref={inputRef}
-        id={id}
-        type={type}
-        value={value}
-        onChange={handleChange}
-        placeholder={placeholder}
-        required={required}
-        disabled={disabled}
-        autoComplete={autoComplete}
-        className={getInputClasses()}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
-        name={name}
-        maxLength={maxLength}
-      />
-      {label && (
-        <label 
-          htmlFor={id} 
-          className={getLabelClasses()}
-        >
-          {label}
-        </label>
-      )}
+    <div className="flex flex-col">
+      <div className={`${getContainerClasses()} ${className}`}>
+        <input
+          ref={inputRef}
+          id={id}
+          type={type}
+          value={value}
+          onChange={handleChange}
+          placeholder={placeholder}
+          required={required}
+          disabled={disabled}
+          autoComplete={autoComplete}
+          className={getInputClasses()}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          name={name}
+          maxLength={maxLength}
+          inputMode={getInputMode()}
+        />
+        {label && (
+          <label 
+            htmlFor={id} 
+            className={getLabelClasses()}
+          >
+            {label}
+          </label>
+        )}
+      </div>
       
-      {hint && (
+      {typeof error === 'string' && error ? (
+        <div className="mt-1 text-xs text-red-500 dark:text-red-400">
+          {error}
+        </div>
+      ) : hint && (
         <div className={`mt-1 text-xs ${
           error ? 'text-red-500 dark:text-red-400' : 
           success ? 'text-green-500 dark:text-green-400' : 
