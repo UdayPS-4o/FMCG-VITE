@@ -106,15 +106,17 @@ const EditGodownTransfer: React.FC = () => {
 
       try {
         // This is a specific edit endpoint, so we don't cache it
-        const godownRes = await fetch(`${baseURL}/edit/godown/${id}`, {
-          credentials: 'include'
+        const response = await fetch(`${baseURL}/edit/godown/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
 
-        if (!godownRes.ok) {
-          throw new Error(`Failed to fetch godown transfer data: ${godownRes.statusText}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch godown transfer data: ${response.statusText}`);
         }
 
-        const godownData = await godownRes.json();
+        const godownData = await response.json();
         console.log('Fetched godown transfer data:', godownData);
         
         // Store the original data
@@ -477,20 +479,20 @@ const EditGodownTransfer: React.FC = () => {
     };
 
     try {
-      const res = await fetch(`${baseURL}/edit/godown`, {
+      const response = await fetch(`${baseURL}/edit/godown`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(payload),
-        credentials: 'include'
       });
       
-      if (!res.ok) {
-        throw new Error(`Error ${res.status}: ${await res.text()}`);
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${await response.text()}`);
       }
       
-      const json = await res.json();
+      const json = await response.json();
       showToast(json.message || 'Godown transfer updated successfully', 'success');
       
       // Reset form or redirect
@@ -603,7 +605,6 @@ const EditGodownTransfer: React.FC = () => {
                 onChange={handleChange}
                 variant="outlined"
                 disabled={user && user.canSelectSeries === false}
-                seriesMode={true}
               />
             </div>
             <div>

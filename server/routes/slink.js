@@ -9,6 +9,57 @@ const {
   saveDataToJsonFile,
   getSTOCKFILE,
 } = require('./utilities');
+const jwt = require('jsonwebtoken');
+
+// JWT secret key
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+
+// Extract JWT token from Authorization header
+const extractToken = (req) => {
+  if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+    return req.headers.authorization.split(' ')[1];
+  }
+  return null;
+};
+
+// Middleware to verify JWT token
+const verifyToken = async (req, res, next) => {
+  const token = extractToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: 'Authentication required' 
+    });
+  }
+
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Get user from users.json file
+    const filePath = path.join(__dirname, "..", "db", "users.json");
+    const data = await fs.readFile(filePath, "utf8");
+    const users = JSON.parse(data);
+    const user = users.find((u) => u.id === decoded.userId);
+    
+    if (user) {
+      req.user = user;
+      next();
+    } else {
+      res.status(401).json({ 
+        error: 'Unauthorized', 
+        message: 'Invalid or expired authentication token' 
+      });
+    }
+  } catch (err) {
+    console.error("JWT verification failed:", err);
+    res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: 'Invalid or expired token' 
+    });
+  }
+};
 
 const getCmplData = async () => {
   const dbfFilePath = path.join(__dirname, '..', '..', 'd01-2324/data', 'CMPL.dbf');
@@ -323,11 +374,38 @@ async function haveInvoiceFilesChanged(newModTimes) {
 async function getNextInvoiceId(req, res) {
   try {
     const clientHash = req.headers['if-none-match'] || req.query.hash;
-    
+
+    // Update file paths to include invoicing.json for modification time check
+    const invoiceFilePaths = [
+      path.join(__dirname, '..', 'db', 'invoicing.json'),
+      path.join(__dirname, '..', '..', 'd01-2324/data/json', 'billdtl.json')
+    ];
+
     // Get current file modification times
-    const currentFileModTimes = await getInvoiceFileModificationTimes();
-    const filesHaveChanged = await haveInvoiceFilesChanged(currentFileModTimes);
+    const currentFileModTimes = {};
+    for (const file of invoiceFilePaths) {
+      try {
+        const stats = await fs.stat(file);
+        currentFileModTimes[file] = stats.mtime.getTime();
+      } catch (error) {
+        console.error(`Error getting modification time for ${file}:`, error);
+        currentFileModTimes[file] = Date.now(); // Force recalculation on error
+      }
+    }
     
+    // Check if files have changed compared to last known times
+    let filesHaveChanged = false;
+    if (Object.keys(lastInvoiceFileModTimes).length !== invoiceFilePaths.length) {
+       filesHaveChanged = true; // If file count differs, assume change
+    } else {
+        for (const file of invoiceFilePaths) {
+            if (!lastInvoiceFileModTimes[file] || lastInvoiceFileModTimes[file] !== currentFileModTimes[file]) {
+                filesHaveChanged = true;
+                break;
+            }
+        }
+    }
+
     // If we have cached data and no file has changed
     if (cachedInvoiceIdData && cachedInvoiceIdHash && !filesHaveChanged) {
       console.log('Invoice source files unchanged, using cached invoice ID data');
@@ -343,6 +421,7 @@ async function getNextInvoiceId(req, res) {
       }
       
       // Otherwise return cached data
+      console.log('Invoice ID data cache hit with new data');
       res.set({
         'ETag': `"${cachedInvoiceIdHash}"`,
         'Cache-Control': 'private, max-age=0',
@@ -354,32 +433,45 @@ async function getNextInvoiceId(req, res) {
     // If we get here, files have changed or cache doesn't exist
     console.log('Files changed or no cache, recalculating invoice ID data');
     
-    // Get the next invoice ID from invoicing.json as before
-    const filePath = path.join(__dirname, '..', 'db', 'invoicing.json');
-    const data = await fs.readFile(filePath, 'utf8').then(
+    // Get the next invoice ID from invoicing.json
+    const invoicingFilePath = path.join(__dirname, '..', 'db', 'invoicing.json');
+    const invoicingData = await fs.readFile(invoicingFilePath, 'utf8').then(
       (data) => JSON.parse(data),
       (error) => {
         if (error.code !== 'ENOENT') throw error; // Ignore file not found errors
         return [];
       },
     );
-    const GodownId = data.length > 0 ? data[data.length - 1].id : 0;
-    const nextInvoiceId = Number(GodownId) + 1;
-    
+    // Calculate next internal ID based on the 'id' field in invoicing.json
+    const maxInternalId = invoicingData.reduce((maxId, inv) => Math.max(maxId, parseInt(inv.id || 0, 10)), 0);
+    const nextInvoiceId = maxInternalId + 1;
+
     // Get the billdtl.json data using getSTOCKFILE function
     const billData = await getSTOCKFILE('billdtl.json');
     
-    // Calculate the next bill number for each series
+    // Calculate the next bill number for each series considering BOTH files
     const seriesMap = {};
     
-    // Process each bill entry to find max bill number per series
+    // Process billdtl.json (stock file)
     billData.forEach(entry => {
-      const series = entry.SERIES;
+      const series = entry.SERIES?.toUpperCase(); // Ensure consistent casing
       const billNumber = Number(entry.BILL);
-      
-      if (!seriesMap[series] || billNumber > seriesMap[series]) {
-        seriesMap[series] = billNumber;
+      if (series && !isNaN(billNumber)) {
+          if (!seriesMap[series] || billNumber > seriesMap[series]) {
+              seriesMap[series] = billNumber;
+          }
       }
+    });
+
+    // Process invoicing.json (local database)
+    invoicingData.forEach(entry => {
+        const series = entry.series?.toUpperCase(); // Ensure consistent casing
+        const billNumber = Number(entry.billNo);
+        if (series && !isNaN(billNumber)) {
+            if (!seriesMap[series] || billNumber > seriesMap[series]) {
+                seriesMap[series] = billNumber;
+            }
+        }
     });
     
     // Increment each max bill number by 1 to get the next bill number
@@ -403,7 +495,7 @@ async function getNextInvoiceId(req, res) {
     // Update cache and file mod times
     cachedInvoiceIdData = responseData;
     cachedInvoiceIdHash = currentHash;
-    lastInvoiceFileModTimes = currentFileModTimes;
+    lastInvoiceFileModTimes = { ...currentFileModTimes }; // Update last known mod times
     
     // Set ETag header with proper quotes
     const etagValue = `"${currentHash}"`;
@@ -417,7 +509,7 @@ async function getNextInvoiceId(req, res) {
     
     // Compare again after calculation in case hashes match
     if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
-      console.log('Invoice ID data matches after recalculation');
+      console.log('Invoice ID data matches after recalculation, sending 304');
       return res.status(304).send('Not Modified');
     }
     
@@ -746,7 +838,7 @@ app.get('/invocingPage', async (req, res) => {
   // console.log(encodedData);
 });
 
-app.get('/printInvoice', printInvoicing);
+app.get('/printInvoice', verifyToken, printInvoicing);
 
 const DeleteUser = async (req, res) => {
   // const { id } = req.params; // Get user ID from the URL parameters
@@ -781,11 +873,11 @@ const DeleteUser = async (req, res) => {
 };
 app.get('/deleteUser', DeleteUser);
 app.post('/editUser', EditUser);
-app.get('/printGodown', printGodown);
+app.get('/printGodown', verifyToken, printGodown);
 app.get('/godownId', getNextGodownId);
 app.get('/invoiceId', getNextInvoiceId);
 
-app.get('/printPage', async (req, res) => {
+app.get('/printPage', verifyToken, async (req, res) => {
   console.log('printPage');
 
   // console.log(path.join(__dirname, '..', 'dist', 'index.html'));

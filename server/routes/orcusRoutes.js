@@ -4,6 +4,58 @@ const fs = require('fs').promises;
 const path = require('path');
 const { getCmplData } = require('./utilities');
 const baseURL = 'http://localhost:8000';
+const jwt = require('jsonwebtoken');
+
+// JWT secret key
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+
+// Extract JWT token from Authorization header
+const extractToken = (req) => {
+  if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+    return req.headers.authorization.split(' ')[1];
+  }
+  return null;
+};
+
+// Middleware to verify JWT token
+const verifyToken = async (req, res, next) => {
+  const token = extractToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: 'Authentication required' 
+    });
+  }
+
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Get user from users.json file
+    const filePath = path.join(__dirname, "..", "db", "users.json");
+    const data = await fs.readFile(filePath, "utf8");
+    const users = JSON.parse(data);
+    const user = users.find((u) => u.id === decoded.userId);
+    
+    if (user) {
+      req.user = user;
+      next();
+    } else {
+      res.status(401).json({ 
+        error: 'Unauthorized', 
+        message: 'Invalid or expired authentication token' 
+      });
+    }
+  } catch (err) {
+    console.error("JWT verification failed:", err);
+    res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: 'Invalid or expired token' 
+    });
+  }
+};
+
 function convertAmountToWords(amount) {
   const oneToTwenty = [
     '',
@@ -70,7 +122,7 @@ function convertAmountToWords(amount) {
   const words = convert(amount);
   return words ? words + ' Only' : 'Zero Only';
 }
-app.get('/print', async (req, res) => {
+app.get('/print', verifyToken, async (req, res) => {
   try {
     const { ReceiptNo, voucherNo, godownId } = req.query;
     if (!ReceiptNo && !voucherNo && !godownId)
@@ -114,7 +166,7 @@ app.get('/print', async (req, res) => {
     res.send(error);
   }
 });
-app.get('/account-master', async (req, res) => {
+app.get('/account-master', verifyToken, async (req, res) => {
   try {
     const { code } = req.query;
     const data = await fs.readFile(path.resolve(__dirname, '../db/account-master.json'));
@@ -142,7 +194,7 @@ app.post('/signin', async (req, res) => {
   }
 });
 
-app.post('/approve', async (req, res) => {
+app.post('/approve', verifyToken, async (req, res) => {
   try {
     const { approved, endpoint } = req.body;
     console.log('approved', approved, 'endpoint', endpoint);
@@ -210,7 +262,7 @@ app.post('/approve', async (req, res) => {
   }
 });
 
-app.post('/toDBF', async (req, res) => {
+app.post('/toDBF', verifyToken, async (req, res) => {
   try {
     const { approved, endpoint } = req.body;
     console.log('approved', approved, 'endpoint', endpoint);
@@ -277,7 +329,7 @@ app.post('/toDBF', async (req, res) => {
 });
 
 // Add a route to revert approved records back to the database
-app.post('/revert-approved', async (req, res) => {
+app.post('/revert-approved', verifyToken, async (req, res) => {
   try {
     const { endpoint, records } = req.body;
     
@@ -381,7 +433,7 @@ app.post('/revert-approved', async (req, res) => {
 });
 
 // Add a route to delete approved records (used after successful DBF sync)
-app.post('/delete-approved-records', async (req, res) => {
+app.post('/delete-approved-records', verifyToken, async (req, res) => {
   try {
     const { endpoint, records } = req.body;
     

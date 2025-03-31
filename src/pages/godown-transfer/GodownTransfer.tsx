@@ -70,7 +70,9 @@ const GodownTransfer: React.FC = () => {
         // Fetch all data in parallel using Promise.all
         const [idRes, godownData, pmplResponse, stockResponse] = await Promise.all([
           fetch(`${baseURL}/slink/godownId`, {
-            credentials: 'include'
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
           }).then(res => res.json()),
           apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`),
           apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`),
@@ -149,14 +151,8 @@ const GodownTransfer: React.FC = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Handle series as a single letter field that autocapitalizes
-    if (name === 'series') {
-      // If value is not empty, take only the last character and uppercase it
-      const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
-      setFormValues(prev => ({ ...prev, [name]: newValue }));
-    } else {
-      setFormValues({ ...formValues, [name]: value });
-    }
+    // Simply set the value directly, Input component's seriesMode will handle capitalization
+    setFormValues(prev => ({ ...prev, [name]: value }));
   };
 
   const handleFromGodownChange = (value: string) => {
@@ -309,9 +305,9 @@ const GodownTransfer: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(payload),
-        credentials: 'include'
       });
       
       if (!res.ok) {
@@ -409,8 +405,7 @@ const GodownTransfer: React.FC = () => {
                 value={formValues.series}
                 onChange={handleChange}
                 variant="outlined"
-                disabled={user && user.canSelectSeries === false}
-                seriesMode={true}
+                disabled={Boolean(user && ((user.defaultSeries?.godown) || user.canSelectSeries === false))}
               />
             </div>
             <div>

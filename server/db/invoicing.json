@@ -358,9 +358,9 @@
     "billNo": "6",
     "cash": "N",
     "party": "CT001",
-    "partyName": "MEENASANKAR MATCH IND. PVT LTD",
+    "partyName": "MEENASANKAR MATCH IND. PVT LTD | CT001",
     "sm": "SM001",
-    "smName": "SHYAM YADAV KOHKNA",
+    "smName": "SHYAM YADAV KOHKNA | SM001",
     "ref": "",
     "dueDays": "7",
     "items": [
@@ -375,7 +375,13 @@
         "sch": "10",
         "cd": "10",
         "amount": "100.00",
-        "netAmount": "72.90"
+        "netAmount": "72.90",
+        "stock": "72852 (Total: 79767)",
+        "stockLimit": 72852,
+        "pack": "4.21KG",
+        "gst": 5,
+        "pcBx": 4,
+        "mrp": 940
       },
       {
         "item": "ME006",
@@ -388,10 +394,104 @@
         "sch": "12.5",
         "cd": "14.3",
         "amount": "8800.00",
-        "netAmount": "5999.00"
+        "netAmount": "5999.00",
+        "stock": "747 (Total: 747)",
+        "stockLimit": 747,
+        "pack": "10'SPACK",
+        "gst": 12,
+        "pcBx": 1,
+        "mrp": 600
       }
     ],
     "id": "6",
-    "createdAt": "2025-03-30T13:11:40.975Z"
+    "createdAt": "2025-03-30T13:11:40.975Z",
+    "lastUpdated": "2025-03-31T05:00:32.217Z"
+  },
+  {
+    "date": "2025-03-31",
+    "series": "T",
+    "billNo": "7",
+    "cash": "N",
+    "party": "CT001",
+    "partyName": "MEENASANKAR MATCH IND. PVT LTD",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
+    "ref": "",
+    "dueDays": "7",
+    "items": [
+      {
+        "item": "ME006",
+        "godown": "02",
+        "unit": "BOX",
+        "rate": 440,
+        "qty": "123",
+        "cess": "",
+        "schRs": "12",
+        "sch": "213",
+        "cd": "12",
+        "amount": "54120.00",
+        "netAmount": "-53805.00"
+      }
+    ],
+    "id": "7",
+    "createdAt": "2025-03-31T05:01:24.473Z"
+  },
+  {
+    "date": "2025-03-31",
+    "series": "B",
+    "billNo": "12045",
+    "cash": "N",
+    "party": "CT001",
+    "partyName": "MEENASANKAR MATCH IND. PVT LTD",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
+    "ref": "",
+    "dueDays": "7",
+    "items": [
+      {
+        "item": "MK001",
+        "godown": "02",
+        "unit": "PCS",
+        "rate": 675,
+        "qty": "123",
+        "cess": "",
+        "schRs": "12",
+        "sch": "12",
+        "cd": "12",
+        "amount": "83025.00",
+        "netAmount": "64285.27"
+      }
+    ],
+    "id": "8",
+    "createdAt": "2025-03-31T05:05:28.077Z"
+  },
+  {
+    "date": "2025-03-31",
+    "series": "B",
+    "billNo": 12045,
+    "cash": "N",
+    "party": "CT002",
+    "partyName": "A.M.ENTERPRISES JBP",
+    "sm": "SM002",
+    "smName": "GANESH BAGHEL",
+    "ref": "",
+    "dueDays": "7",
+    "items": [
+      {
+        "item": "MK001",
+        "godown": "02",
+        "unit": "PCS",
+        "rate": "20",
+        "qty": "852",
+        "cess": "",
+        "schRs": "100",
+        "sch": "1",
+        "cd": "1",
+        "amount": "17040.00",
+        "netAmount": "16602.89"
+      }
+    ],
+    "id": "9",
+    "createdAt": "2025-03-31T05:06:14.213Z"
   }
 ]

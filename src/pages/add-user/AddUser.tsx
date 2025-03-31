@@ -177,7 +177,9 @@ const AddUser: React.FC = () => {
       try {
         const url = `${constants.baseURL}/slink/json/users`;
         const response = await fetch(url, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
         
         if (!response.ok) {
@@ -204,7 +206,9 @@ const AddUser: React.FC = () => {
         // Fetch subgroup data
         const subgroupUrl = `${constants.baseURL}/slink/subgrp`;
         const subgroupResponse = await fetch(subgroupUrl, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
         
         if (!subgroupResponse.ok) {
@@ -217,7 +221,9 @@ const AddUser: React.FC = () => {
         // Fetch salesman data - codes that start with SM
         const salesmanUrl = `${constants.baseURL}/cmpl`;
         const salesmanResponse = await fetch(salesmanUrl, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
         
         if (!salesmanResponse.ok) {
@@ -288,7 +294,9 @@ const AddUser: React.FC = () => {
       try {
         const godownUrl = `${constants.baseURL}/api/dbf/godown.json`;
         const response = await fetch(godownUrl, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
         
         if (!response.ok) {
@@ -337,16 +345,16 @@ const AddUser: React.FC = () => {
       const url = isEdit 
         ? `${constants.baseURL}/slink/editUser` 
         : `${constants.baseURL}/slink/addUser`;
-      
+        
       const method = 'POST';
       
       const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(payload),
-        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -604,55 +612,53 @@ const AddUser: React.FC = () => {
 
               {/* Default Series Section */}
               <div className="mt-6 mb-4">
-               
-                
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <Input
                       id="defaultBillingSeries"
-                      label="Default Billing Series"
+                      label="S (Billing)"
                       value={defaultBillingSeries}
                       name="defaultBillingSeries"
                       onChange={(e) => handleSeriesChange(e, setDefaultBillingSeries)}
                       variant="outlined"
                       autoComplete="off"
-                      seriesMode={true}
+                      className="text-sm md:text-base"
                     />
                   </div>
                   <div>
                     <Input
                       id="defaultCashReceiptSeries"
-                      label="Default Cash Receipt Series"
+                      label="S (Cash Receipt)"
                       value={defaultCashReceiptSeries}
                       name="defaultCashReceiptSeries"
                       onChange={(e) => handleSeriesChange(e, setDefaultCashReceiptSeries)}
                       variant="outlined"
                       autoComplete="off"
-                      seriesMode={true}
+                      className="text-sm md:text-base"
                     />
                   </div>
                   <div>
                     <Input
                       id="defaultCashPaymentSeries"
-                      label="Default Cash Payment Series"
+                      label="S (Cash Payment)"
                       value={defaultCashPaymentSeries}
                       name="defaultCashPaymentSeries"
                       onChange={(e) => handleSeriesChange(e, setDefaultCashPaymentSeries)}
                       variant="outlined"
                       autoComplete="off"
-                      seriesMode={true}
+                      className="text-sm md:text-base"
                     />
                   </div>
                   <div>
                     <Input
                       id="defaultGodownSeries"
-                      label="Default Godown Series"
+                      label="S (Godown)"
                       value={defaultGodownSeries}
                       name="defaultGodownSeries"
                       onChange={(e) => handleSeriesChange(e, setDefaultGodownSeries)}
                       variant="outlined"
                       autoComplete="off"
-                      seriesMode={true}
+                      className="text-sm md:text-base"
                     />
                   </div>
                 </div>

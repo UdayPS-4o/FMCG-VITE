@@ -3,6 +3,7 @@ const app = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const {
   redirect,
   getDbfData,
@@ -11,12 +12,62 @@ const {
   saveDataToJsonFile,
 } = require('../utilities');
 
+// JWT secret key
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+
+// Extract JWT token from Authorization header
+const extractToken = (req) => {
+  if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+    return req.headers.authorization.split(' ')[1];
+  }
+  return null;
+};
+
+// Middleware to verify JWT token
+const verifyToken = async (req, res, next) => {
+  const token = extractToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: 'Authentication required' 
+    });
+  }
+
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Get user from users.json file
+    const filePath = path.join(__dirname, "..", "..", "db", "users.json");
+    const data = await fs.readFile(filePath, "utf8");
+    const users = JSON.parse(data);
+    const user = users.find((u) => u.id === decoded.userId);
+    
+    if (user) {
+      req.user = user;
+      next();
+    } else {
+      res.status(401).json({ 
+        error: 'Unauthorized', 
+        message: 'Invalid or expired authentication token' 
+      });
+    }
+  } catch (err) {
+    console.error("JWT verification failed:", err);
+    res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: 'Invalid or expired token' 
+    });
+  }
+};
+
 // Helper function to generate hash from data
 function generateHash(data) {
   return crypto.createHash('md5').update(JSON.stringify(data)).digest('hex');
 }
 
-app.get('/json/:file', async (req, res) => {
+app.get('/json/:file', verifyToken, async (req, res) => {
   const { file } = req.params;
   const clientHash = req.headers['if-none-match'] || req.query.hash;
   
@@ -53,7 +104,7 @@ app.get('/json/:file', async (req, res) => {
   }
 });
 
-app.get('/approved/json/:file', async (req, res) => {
+app.get('/approved/json/:file', verifyToken, async (req, res) => {
   console.log('approved');
   const { file } = req.params;
   const filePath = `./db/approved/${file}.json`;

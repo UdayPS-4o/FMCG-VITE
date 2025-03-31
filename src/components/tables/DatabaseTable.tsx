@@ -243,17 +243,40 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       }
     }
     
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Authentication required');
+      return [];
+    }
+    
     // Check if this is an approved table by checking the tableId
     if (tableId && tableId.includes('approved')) {
       const response = await fetch(`${constants.baseURL}/approved/json/${endpoint}`, {
-        credentials: 'include'
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
+      
+      if (response.status === 401) {
+        toast.error('Authentication required');
+        return [];
+      }
+      
       const data = await response.json();
       return data;
     } else {
       const response = await fetch(`${constants.baseURL}/json/${endpoint}`, {
-        credentials: 'include'
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
+      
+      if (response.status === 401) {
+        toast.error('Authentication required');
+        return [];
+      }
+      
       const data = await response.json();
       return data;
     }
@@ -395,8 +418,17 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       console.log(`Attempting to delete ${isApproved ? 'approved' : ''} ${endpoint} record with ID: ${idToDelete}`);
       console.log(`Using endpoint: ${deleteEndpoint}`);
       
+      // Get token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+      
       const response = await fetch(`${constants.baseURL}${deleteEndpoint}`, {
-        credentials: 'include'
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       const data = await response.json();
 
@@ -498,16 +530,23 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
 
     try {
       // Updated to match the implementation in FMCG_REACT/src/components/pages/Database/accountMasterTable.js
+      // Get token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+      
       const response = await fetch(`${constants.baseURL}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           endpoint,
           approved: selectedItems
-        }),
-        credentials: 'include'
+        })
       });
 
       if (response.ok) {

@@ -75,10 +75,11 @@ const UserTable: React.FC<UserTableProps> = ({ data, onUserDeleted, baseURL }) =
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${baseURL}/slink/deleteUser/?id=${id}`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include'
+      const response = await fetch(`${baseURL}/users/delete/${id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
 
       if (!response.ok) {

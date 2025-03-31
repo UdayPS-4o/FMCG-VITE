@@ -1,0 +1,2072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIPLOVISION</title>
+    <link rel="stylesheet" href="scroll-sections.css">
+    <style>
+        /* Reset some defaults */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0F0F0F;
+            color: #ffffff;
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            padding-top: 0; /* Will be set by JS */
+        }
+
+        /* Navigation styling */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            background: rgba(10, 10, 20, 0.8); /* Added background for visibility */
+            backdrop-filter: blur(10px);
+        }
+        
+        /* Video Section Styling */
+        .hero-video-section {
+            position: relative;
+            width: 100%;
+            height: auto; /* Height will be set by JS */
+            overflow: hidden;
+            background-color: #0F0F0F; /* Match body background */
+            line-height: 0; /* Prevent extra space */
+        }
+        
+        .video-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #hero-video {
+            width: 100%;
+            height: 100%; /* Fill the container */
+            display: block;
+            object-fit: cover;
+        }
+        
+        .video-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            background: rgba(15, 15, 15, 0.3); /* Optional: subtle overlay */
+        }
+        
+        .cta-buttons {
+            display: flex;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .cta-buttons {
+                flex-direction: column;
+                width: 80%;
+                max-width: 300px;
+            }
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 12px 30px;
+            background: transparent;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: 2px solid #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+            min-width: 180px;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .cta-button.outline {
+            background: transparent;
+        }
+        
+        .cta-button.outline:hover {
+            border-color: rgba(255, 255, 255, 0.8);
+        }
+        
+        /* Subsequent sections */
+        .dcs-section, .giant-text {
+            position: relative;
+            z-index: 1;
+            /* Add padding/margin as needed for spacing BELOW the video section */
+            padding-top: 3rem; 
+        }
+        .giant-text {
+             padding-top: 1rem; /* Adjust spacing if needed */
+        }
+    </style>
+
+    <!-- HTML Structure -->
+    <nav>
+        <div class="logo"><a href="index.html" style="color: inherit; text-decoration: none;">DIPLOVISION</a></div>
+        <div class="hamburger-menu">
+            <div></div>
+            <div></div>
+            <div></div>
+        </div>
+        <div class="nav-links">
+            <a href="index.html">HOME</a>
+            <a href="dcs2025.html">DCS 2025</a>
+            <a href="secretariat.html">Secretariat</a>
+            <a href="register.html">CA APPLICATIONS →</a>
+        </div>
+    </nav>
+    
+    <section id="summit-iframe" class="hero-video-section">
+        <div class="video-container">
+            <video autoplay loop muted playsinline id="hero-video">
+                <source src="datesvid.mp4" type="video/mp4">
+            </video>
+            <div class="video-content">
+                <div class="cta-buttons">
+                    <a href="register.html" class="cta-button">JOIN TEAM</a>
+                    <a href="dcs2025.html" class="cta-button outline">LEARN MORE</a>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <div class="giant-text">DIPLOMATIC CENTRAL SUMMIT</div>
+    
+    <div class="dcs-section">
+        <h1 class="dcs-title reveal-text">Diplomatic Central Summit <span class="dcs-highlight">2025</span></h1>
+        <div class="dcs-content reveal-text">
+            <p>The Diplomatic Central Summit, Indore's biggest high school regional conference, is an organization with the aim of creating a platform for teenagers to discuss, deliberate, and learn about real-world issues. We successfully organized a remarkable conference last year, hosting 500+ delegates, 9+ committees, and 2 events, all instilled with zeal to initiate change. DCS is a platform created for fostering global awareness, diplomacy, and leadership skills in young minds. Join us in shaping a world of dialogue, cooperation, and impactful change! 
+            </p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const nav = document.querySelector('nav');
+            const heroVideo = document.getElementById('hero-video');
+            const videoSection = document.getElementById('summit-iframe');
+            
+            function adjustLayout() {
+                if (!nav || !heroVideo || !videoSection) return;
+                
+                const navHeight = nav.offsetHeight;
+                
+                // Set margin-top on the video section instead of padding on body
+                videoSection.style.marginTop = navHeight + 'px';
+                document.body.style.paddingTop = '0';
+                
+                // Calculate video height based on aspect ratio
+                const videoAdjustment = function() {
+                    if (heroVideo.videoWidth && heroVideo.videoHeight) {
+                        const aspectRatio = heroVideo.videoWidth / heroVideo.videoHeight;
+                        const screenWidth = window.innerWidth; // Use window width for accurate scaling
+                        const calculatedHeight = screenWidth / aspectRatio;
+                        
+                        // Set the section height precisely
+                        videoSection.style.height = calculatedHeight + 'px';
+                    } else if (heroVideo.readyState >= 1) {
+                        // Fallback if dimensions aren't ready initially
+                        const aspectRatio = 16 / 9; // Assume 16:9 if needed
+                        const screenWidth = window.innerWidth;
+                        const calculatedHeight = screenWidth / aspectRatio;
+                        videoSection.style.height = calculatedHeight + 'px';
+                    }
+                };
+                
+                videoAdjustment();
+            }
+
+            // Run adjustments
+            adjustLayout(); // Initial run
+            
+            // Run when video data is loaded
+            heroVideo.addEventListener('loadedmetadata', adjustLayout);
+            
+            // Run on resize
+            window.addEventListener('resize', adjustLayout);
+
+            // If video might already be loaded (e.g., cached)
+            if (heroVideo.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+                adjustLayout();
+            }
+            
+            // Hamburger menu functionality (keep existing logic)
+            const hamburger = document.querySelector('.hamburger-menu');
+            const navLinks = document.querySelector('.nav-links');
+            if (hamburger && navLinks) {
+                hamburger.addEventListener('click', () => { 
+                    hamburger.classList.toggle('active');
+                    navLinks.classList.toggle('active');
+                    document.body.classList.toggle('menu-active');
+                    document.body.style.overflow = navLinks.classList.contains('active') ? 'hidden' : '';
+                    
+                    setTimeout(() => {
+                        if (navLinks.classList.contains('active')) {
+                            navLinks.style.opacity = '1';
+                            navLinks.style.visibility = 'visible';
+                            navLinks.style.zIndex = '100000';
+                        }
+                    }, 10);
+                 });
+            }
+        });
+    </script>
+
+    <!-- Hero Video Section Styles -->
+    <style>
+        /* Navigation styling */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+        }
+        
+        /* Video Section Styling */
+        .hero-video-section {
+            position: relative;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0F0F0F;
+            box-sizing: border-box;
+        }
+        
+        .video-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
+        }
+        
+        #hero-video {
+            width: 100%;
+            height: 100%;
+            display: block;
+            padding: 0;
+            margin: 0;
+            object-fit: cover;
+        }
+        
+        .video-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .cta-buttons {
+                flex-direction: column;
+                width: 80%;
+                max-width: 300px;
+            }
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 12px 30px;
+            background: transparent;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: 2px solid #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+            min-width: 180px;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .cta-button.outline {
+            background: transparent;
+        }
+        
+        .cta-button.outline:hover {
+            border-color: rgba(255, 255, 255, 0.8);
+        }
+        
+        /* Giant text positioning - adjust to be directly below video */
+        .giant-text {
+            position: relative;
+            z-index: 1;
+            margin-top: 0; /* Remove any margin */
+            padding-top: 2rem; /* Add padding instead */
+        }
+        
+        /* Next section positioning */
+        .dcs-section {
+            position: relative;
+            z-index: 1;
+        }
+    </style>
+    
+    <!-- About Us Section -->
+    <section class="about-section" id="about">
+        <div class="about-container">
+            <div class="about-left">
+                <span class="about-tag">About Us</span>
+                <h2>DIPLOVISION</h2>
+                <p class="about-description">A platform dedicated to nurturing future leaders by providing them a place to learn, debate, and strive in their chosen fields. A beginner-friendly conference, for everyone who wants to change the world, one step at a time. 
+
+                </p>
+            </div>
+            <div class="about-right">
+                <div class="scroll-cards">
+                    <div class="scroll-card">
+                        <span class="card-tag">Our Committees</span>
+                        <h3>Structure, Oversight, Efficiency</h3>
+                        <p>divided by different agendas but united by the zeal to change the world! 
+                        </p>
+                        <div class="card-icon">🌍</div>
+                    </div>
+                    <div class="scroll-card">
+                        <span class="card-tag">The Socials</span>
+                        <h3>Where diplomacy meets networking
+                        </h3>
+                        <p>With dynamic lighting, immersive stage setups, and curated playlists to help delegates unwind, engage, and build lasting connections after saving the world!
+                        </p>
+                        <div class="card-icon">⚡</div>
+                    </div>
+                    <div class="scroll-card">
+                        <span class="card-tag">Our Events</span>
+                        <h3>Where speed meets strategy.
+                        </h3>
+                        <p>are you ready to get your minds racing? at DCS we have events including The Loot-era, the ultimate treasure hunt, and the commerce fest, a shark tank-style pitch.</p>
+                        <div class="card-icon">💫</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+                    
+
+                </div>
+            </div>
+            <!-- Removed scroll indicator dots as boxes were removed -->
+        </div>
+    </section>
+
+    <div style="height: 4rem;"></div>
+
+    <!-- Combined Partners and Milestones Section -->
+    <section id="partners-milestones" style="padding: 4rem 2rem; background: rgba(255, 255, 255, 0.05); overflow: hidden;">
+        <div style="max-width: 1400px; margin: 0 auto;">
+            <div class="section-header">
+                <h2 style="font-size: clamp(1.5rem, 4vw, 2.5rem); margin-bottom: 2rem; text-align: center;">Our Network</h2>
+                <div class="section-tabs">
+                    <button class="section-tab active" data-tab="milestones">Our Milestones</button>
+                    <button class="section-tab" data-tab="partners">Our Trusted Partners</button>
+                </div>
+            </div>
+            
+            <div class="tab-content">
+                <!-- Partners Tab Content -->
+                <div class="tab-pane" id="partners-tab">
+                    <div class="partners-slider">
+                        <div class="partners-track">
+                            <div class="partners-slide">
+                                <img src="upgrad.png" alt="UpGrad Indore">
+                            </div>
+                            <div class="partners-slide">
+                                <img src="TOPR.png" alt="Toprankers">
+                            </div>
+                            <div class="partners-slide">
+                                <img src="kisna.png" alt="Kisna">
+                            </div>
+                            <div class="partners-slide">
+                                <img src="shreedhi.png" alt="Shridhi">
+                            </div>
+                            <div class="partners-slide">
+                                <img src="sv.png" alt="Logo">
+                            </div>
+                            <div class="partners-slide">
+                                <img src="treasuire.png" alt="UpGrad Indore">
+                            </div>
+                            <div class="partners-slide">
+                                <img src="bagline.png" alt="Toprankers">
+                            </div>
+                            <div class="partners-slide">
+                                <img src="kalani_group_logo.jpeg" alt="Kisna">
+                            </div>
+                        </div>
+                        <div class="slider-controls partners-controls">
+                            <div class="slider-dots partners-dots">
+                                <span class="dot active"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Milestones Tab Content -->
+                <div class="tab-pane active" id="milestones-tab">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" data-count="500">0</div>
+                            <div class="stat-label">Delegates</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" data-count="45">0</div>
+                            <div class="stat-label">Institutions</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" data-count="12">0</div>
+                            <div class="stat-label">Partners</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" data-count="70">0</div>
+                            <div class="stat-label">Interns</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <style>
+            /* Section Tabs Styling */
+            .section-header {
+                text-align: center;
+                margin-bottom: 3rem;
+            }
+            
+            .section-tabs {
+                display: flex;
+                justify-content: center;
+                gap: 1rem;
+                margin-top: 1rem;
+            }
+            
+            .section-tab {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: white;
+                padding: 0.75rem 1.5rem;
+                border-radius: 30px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                font-size: 1rem;
+            }
+            
+            .section-tab.active {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.4);
+                transform: translateY(-3px);
+                box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            }
+            
+            .section-tab:hover {
+                background: rgba(255, 255, 255, 0.15);
+                transform: translateY(-2px);
+            }
+            
+            /* Tab Content Styling */
+            .tab-content {
+                position: relative;
+            }
+            
+            .tab-pane {
+                display: none;
+                opacity: 0;
+                transition: opacity 0.5s ease;
+            }
+            
+            .tab-pane.active {
+                display: block;
+                opacity: 1;
+            }
+            
+            /* Partners Styling */
+            .partners-slider {
+                position: relative;
+                overflow: hidden;
+                padding: 3rem 0;
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(10px);
+                border-radius: 16px;
+                box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                transition: all 0.4s ease;
+            }
+            
+            .partners-slider:hover {
+                border-color: rgba(255, 255, 255, 0.3);
+                box-shadow: 0 10px 40px rgba(30, 58, 138, 0.2);
+            }
+            
+            .partners-track {
+                display: flex;
+                transition: transform 0.5s ease;
+            }
+            
+            .partners-slide {
+                display: flex;
+                min-width: 33.33%;
+                justify-content: center;
+                align-items: center;
+                padding: 0 1.5rem;
+            }
+            
+            .partners-slide img {
+                height: 90px;
+                width: 90px;
+                object-fit: contain;
+                transition: all 0.4s ease;
+                transform: scale(0.95);
+                margin: 0 15px;
+                border-radius: 12px;
+                background-color: rgba(255, 255, 255, 0.1);
+                padding: 10px;
+            }
+            
+            .partners-slide img:hover {
+                transform: scale(1.1);
+                box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+            }
+            
+            .partners-controls {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin-top: 2rem;
+            }
+            
+            .partners-prev-btn, .partners-next-btn {
+                display: none; /* Hide the buttons */
+            }
+            
+            .partners-dots .dot {
+                width: 10px;
+                height: 10px;
+                background: rgba(255, 255, 255, 0.3);
+                border-radius: 50%;
+                display: inline-block;
+                margin: 0 5px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+            
+            .partners-dots .dot.active {
+                background: white;
+                transform: scale(1.2);
+            }
+            
+            @media (max-width: 768px) {
+                .section-tabs {
+                    flex-direction: column;
+                    gap: 0.5rem;
+                }
+                
+                .partners-slider {
+                    padding: 2rem 0;
+                }
+                
+                .partners-slide {
+                    gap: 1.5rem;
+                    flex-wrap: wrap;
+                }
+                
+                .partners-slide img {
+                    margin: 10px;
+                }
+            }
+        </style>
+    </section>
+    
+    <!-- Features Horizontal Scroll Section -->
+    <section class="features-scroll-section">
+        <div class="features-scroll-container">
+            <div class="features-scroll-bg"></div>
+            <div class="features-scroll-header">
+                <h2>Why Choose DIPLOVISION</h2>
+                <p class="features-subtitle">Discover the advantages that set us apart</p>
+            </div>
+            <div class="features-scroll-content">
+                <div class="features-scroll-track">
+                    <div class="features-scroll-cards">
+            <div class="feature-scroll-card">
+                <div class="feature-card-inner">
+                    <div class="feature-scroll-icon">🎓</div>
+                    <h3>Beginner-Friendly 
+                    </h3>
+                    <div class="feature-card-content">
+                        <p>At DCS, we welcome delegates of all experience levels! Our structured committees, expert chairs, and engaging discussions ensure that even first-time participants feel confident and empowered to voice their opinions, making learning and growth the heart of every session.
+                        </p>
+                        <div class="feature-card-number"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="feature-scroll-card">
+                <div class="feature-card-inner">
+                    <div class="feature-scroll-icon">🔍</div>
+                    <h3>Unmatched experience
+                    </h3>
+                    <div class="feature-card-content">
+                        <p>With DCS, delegates enjoy an unforgettable experience! From an incredible venue to exciting socials, we offer a unique blend of learning and fun, ensuring every participant leaves with a basket of cherished memories.
+                        </p>
+                        <div class="feature-card-number"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="feature-scroll-card">
+                <div class="feature-card-inner">
+                    <div class="feature-scroll-icon">🌍</div>
+                    <h3>Diverse events
+                    </h3>
+                    <div class="feature-card-content">
+                        <p>The Diplomatic Central Summit offers a variety of events, including simulations of the Indian Parliament, the United Nations, the International Press, and two special events, ensuring there's something for everyone to enjoy.
+                        </p>
+                        <div class="feature-card-number"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="feature-scroll-card">
+                <div class="feature-card-inner">
+                    <div class="feature-scroll-icon">💼</div>
+                    <h3>Experienced chairs
+                    </h3>
+                    <div class="feature-card-content">
+                        <p>Our knowledgeable chairs ensure engaging debates, constructive discussions, and a rewarding experience. With expertise in global affairs, parliamentary procedures, and crisis management, they guide participants through thought-provoking sessions while fostering collaboration.
+                        </p>
+                        <div class="feature-card-number"></div>
+                    </div>
+                </div>
+            </div>
+                        <div class="feature-scroll-card" data-index="4">
+                            <div class="feature-card-inner">
+                                <div class="feature-scroll-icon">🤝</div>
+                                <h3>Professionalism & Fun
+                                </h3>
+                                <div class="feature-card-content">
+                                    <p>We balance professionalism with fun! Delegates engage in meaningful debates while enjoying a lively and interactive environment. Creativity, camaraderie, and excitement make every moment at DCS both enriching and memorable.
+                                    </p>
+                                    <div class="feature-card-number"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="feature-scroll-card" data-index="5">
+                            <div class="feature-card-inner">
+                                <div class="feature-scroll-icon">📚</div>
+                                <h3>Skill Development
+                                </h3>
+                                <div class="feature-card-content">
+                                    <p>DCS enhances critical thinking, public speaking, and diplomacy through dynamic discussions. Participants receive recognized certificates, boosting their academic and professional profiles while gaining valuable skills for the future.</p>
+                                    <div class="feature-card-number"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="features-progress-bar">
+                    <div class="features-progress-indicator"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Statistics Section moved to combined Partners-Milestones section above -->
+      
+    </section>
+
+    <!-- Summit 2024 Section -->
+  
+    
+    <!-- About section replaced with vertical scroll section above -->
+
+    <!-- Testimonials Section -->
+    <section id="testimonials" class="testimonials-section">
+        <div class="container">
+            <h2 class="section-title">TESTIMONIALS</h2>
+            <div class="testimonials-grid">
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        <p>"I'm confident that these students will showcase innovative solutions and understand the true value of collaboration and international dialogue."</p>
+                    </div>
+                    <div class="testimonial-author">
+                        <div class="author-avatar">👤</div>
+                        <div class="author-info">
+                            <h4>Pushyamitra Bhargawa</h4>
+                            <p>Mayor indore</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        <p>"The level of professionalism and attention to detail at DIPLOVISION was outstanding. It truly sets the standard for student-led diplomatic conferences."</p>
+                    </div>
+                    <div class="testimonial-author">
+                        <div class="author-avatar">👤</div>
+                        <div class="author-info">
+                            <h4>Sarah Chen</h4>
+                            <p>International Relations Expert</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        <p>"DIPLOVISION provided an exceptional platform for young diplomats to engage in meaningful dialogue. The organization was flawless."</p>
+                    </div>
+                    <div class="testimonial-author">
+                        <div class="author-avatar">👤</div>
+                        <div class="author-info">
+                            <h4>Michael Thompson</h4>
+                            <p>Foreign Policy Analyst</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+                   
+            </div>
+        </div>
+    </section>
+
+    <style>
+        .about-us {
+            padding: 20rem 2rem 8rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .about-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 6rem;
+        }
+
+        .about-item {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeInUp 1s ease-out forwards;
+        }
+
+        .about-item.reverse {
+            direction: rtl;
+        }
+
+        .about-item.reverse .about-content {
+            direction: ltr;
+        }
+        
+        /* About Box Styles */
+        .about-section {
+            padding: 6rem 2rem;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+        }
+
+        .about-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 4rem;
+            position: relative;
+        }
+
+        .about-left {
+            position: sticky;
+            top: 100px;
+            height: fit-content;
+        }
+
+        .about-tag {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #8B5CF6;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .about-left h2 {
+            font-size: 3.5rem;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, #fff 0%, #8B5CF6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .about-description {
+            font-size: 1.5rem;
+            line-height: 1.7;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .about-right {
+            overflow: visible;
+        }
+
+        .scroll-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            padding: 1rem;
+        }
+
+        .scroll-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 2rem;
+            border-radius: 24px;
+            backdrop-filter: blur(10px);
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .scroll-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(139, 92, 246, 0.5);
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-tag {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8B5CF6;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .scroll-card h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fff 0%, #8B5CF6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .scroll-card p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 1rem;
+        }
+
+        .card-icon {
+            font-size: 2.5rem;
+            position: absolute;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            opacity: 0.2;
+            transition: all 0.4s ease;
+        }
+
+        .scroll-card:hover .card-icon {
+            opacity: 0.4;
+            transform: scale(1.1);
+        }
+
+        @media (max-width: 1024px) {
+            .about-container {
+                grid-template-columns: 1fr;
+                gap: 3rem;
+            }
+
+            .about-left {
+                position: relative;
+                top: 0;
+                text-align: center;
+            }
+
+            .about-left h2 {
+                font-size: 2.5rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .about-section {
+                padding: 4rem 1rem;
+            }
+
+            .scroll-card {
+                padding: 1.5rem;
+            }
+
+            .scroll-card h3 {
+                font-size: 1.5rem;
+            }
+
+            .card-icon {
+                font-size: 2rem;
+            }
+        }
+        
+        .about-box {
+            display: flex;
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.4s ease;
+            backdrop-filter: blur(10px);
+            opacity: 0.75;
+        }
+        
+        .about-box:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 15px 50px rgba(69, 104, 220, 0.5), 0 0 20px rgba(176, 106, 179, 0.3);
+            border-color: rgba(69, 104, 220, 0.6);
+            background: rgba(20, 30, 60, 0.9);
+            opacity: 1;
+            z-index: 10;
+            position: relative;
+        }
+        
+        .about-box-image {
+            flex: 0 0 40%;
+            overflow: hidden;
+        }
+        
+        .about-box-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s ease;
+        }
+        
+        .about-box:hover .about-box-image img {
+            transform: scale(1.05);
+            filter: brightness(1.1) contrast(1.1);
+        }
+        
+        .about-box-content {
+            flex: 0 0 60%;
+            padding: 2rem;
+        }
+        
+        .about-box-content h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            display: inline-block;
+            transition: all 0.4s ease;
+        }
+        
+        .about-box-content h3::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #1E3A8A, transparent);
+            transition: all 0.4s ease;
+        }
+        
+        .about-box:hover .about-box-content h3 {
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+        
+        .about-box:hover .about-box-content h3::after {
+            background: linear-gradient(90deg, #4568DC, rgba(176, 106, 179, 0.5), transparent);
+            height: 4px;
+        }
+        
+        .about-box-content p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.7);
+            transition: all 0.4s ease;
+        }
+        
+        .about-box:hover .about-box-content p {
+            color: rgba(255, 255, 255, 0.95);
+        }
+        
+        @media (max-width: 768px) {
+            .about-box {
+                flex-direction: column;
+            }
+            
+            .about-box-image,
+            .about-box-content {
+                flex: 0 0 100%;
+            }
+        }
+
+        .about-image {
+            position: relative;
+            height: 400px;
+            overflow: hidden;
+            border-radius: 20px;
+        }
+
+        .about-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.6s ease;
+        }
+
+        .about-item:hover .about-image img {
+            transform: scale(1.05);
+        }
+
+        .about-content {
+            padding: 2rem;
+        }
+
+        .about-content h2 {
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+            color: #4ADE80;
+        }
+
+        .about-content p {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            opacity: 0.9;
+        }
+
+        @media (max-width: 768px) {
+            .about-item {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .about-image {
+                height: 300px;
+            }
+
+            .about-item.reverse {
+                direction: ltr;
+            }
+
+            .about-content {
+                padding: 1rem 0;
+            }
+
+            .about-content h2 {
+                font-size: 2rem;
+            }
+        }
+        
+        /* Testimonials Section Styles */
+        .testimonials-section {
+            padding: 6rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+        
+        .testimonial-slider {
+            position: relative;
+            overflow: hidden;
+            margin-top: 5rem;
+        }
+        
+        .testimonial-track {
+            display: flex;
+            gap: 2rem;
+            transition: transform 0.5s ease;
+        }
+        
+        .testimonial-card {
+            min-width: calc(33.333% - 1.33rem);
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(8px);
+            transition: all 0.3s ease;
+        }
+        
+        .testimonial-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .testimonial-content {
+            margin-bottom: 1.5rem;
+        }
+        
+        .testimonial-content p {
+            font-size: 1.1rem;
+            line-height: 1.7;
+            font-style: italic;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 0;
+        }
+
+        .testimonial-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            height: 100%;
+        }
+
+        .testimonial-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .testimonial-content {
+            margin-bottom: 1.5rem;
+        }
+
+        .testimonial-content p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: auto;
+        }
+
+        .author-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .author-info h4 {
+            font-size: 1.1rem;
+            margin-bottom: 0.3rem;
+            color: #ffffff;
+        }
+
+        .author-info p {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .statistics-section {
+            padding: 8rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            overflow: hidden;
+            position: relative;
+            background: rgba(15, 15, 15, 0.7);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 2rem;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.4s ease;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            transform: scale(0.5);
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 40px rgba(30, 58, 138, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .stat-card:hover::before {
+            opacity: 1;
+            transform: scale(1);
+        }
+        
+        .stat-value {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #ffffff, #4568dc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+            position: relative;
+            z-index: 1;
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover .stat-value {
+            transform: scale(1.05);
+        }
+        
+        .stat-label {
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.8);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: color 0.3s ease;
+        }
+        
+        .stat-card:hover .stat-label {
+            color: rgba(255, 255, 255, 1);
+        }
+        
+        @media (max-width: 768px) {
+            .statistics-section {
+                padding: 4rem 1rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+            }
+            
+            .stat-card {
+                padding: 1.5rem;
+            }
+            
+            .stat-value {
+                font-size: 2.5rem;
+            }
+            
+            .stat-label {
+                font-size: 1rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .location {
+                background: rgba(15, 15, 15, 0.7);
+                backdrop-filter: blur(10px);
+                border-radius: 16px;
+                padding: 1.5rem;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                margin: 1rem;
+                width: calc(100% - 2rem);
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+        }
+        
+        /* Summit 2024 Section Styles */
+        .summit-section {
+            padding: 8rem 2rem 6rem;
+            max-width: 100%;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+            background-color: transparent;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .summit-background-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(15, 15, 15, 0.8); /* Match the overlay color */
+        }
+        
+        .summit-background-video video {
+            position: relative;
+            width: 100%;
+            height: auto;
+            max-height: 100%;
+            object-fit: contain;
+            transform: none;
+        }
+        
+        .summit-video-overlay-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(15, 15, 15, 0.8), rgba(15, 15, 15, 0.6));
+            z-index: 1;
+        }
+        
+        .summit-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+            text-align: center;
+        }
+        .summit-title {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            text-align: center;
+            margin-bottom: 3rem;
+            color: #ffffff;
+            position: relative;
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            display: none;
+        }
+        
+        
+        .summit-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .summit-info {
+            text-align: center;
+            color: #ffffff;
+            margin-bottom: 3rem;
+        }
+
+        .summit-dates,
+        .summit-location {
+            font-size: clamp(1.5rem, 3vw, 2.5rem);
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            display: none; /* Hide the date and location text */
+        }
+
+        .summit-dates {
+            background: linear-gradient(90deg, #ffffff, #ffffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .summit-location {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .summit-video-container {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            transform: translateY(0);
+            transition: transform 0.5s ease, box-shadow 0.5s ease;
+            background: #000;
+        }
+        
+        .summit-video-container:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 30px 70px rgba(74, 222, 128, 0.2);
+        }
+        
+        .summit-video-wrapper {
+            position: relative;
+            padding-bottom: 75%; /* Increased height ratio */
+            height: 0;
+            overflow: hidden;
+            max-width: 90%;
+            margin: 0 auto;
+        }
+        
+        .summit-video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            transition: opacity 0.3s ease;
+        }
+        
+        .summit-video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .summit-video-container:hover .summit-video-overlay {
+            opacity: 0;
+        }
+        
+        .summit-play-button {
+            width: 80px;
+            height: 80px;
+            background: rgba(30, 58, 138, 0.8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(69, 104, 220, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 15px rgba(69, 104, 220, 0);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(69, 104, 220, 0);
+            }
+        }
+        
+        .summit-play-button i {
+            color: #ffffff;
+            font-size: 2rem;
+            margin-left: 5px;
+        }
+        
+        .summit-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .summit-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.4s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            transform: translateY(0);
+            opacity: 0;
+            animation: cardFadeIn 0.8s ease-out forwards;
+        }
+        
+        .summit-card:nth-child(1) { animation-delay: 0.2s; }
+        .summit-card:nth-child(2) { animation-delay: 0.4s; }
+        .summit-card:nth-child(3) { animation-delay: 0.6s; }
+        
+        .summit-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 40px rgba(30, 58, 138, 0.2);
+            border-color: rgba(69, 104, 220, 0.3);
+        }
+        
+        .summit-icon {
+            font-size: 3rem;
+            margin-bottom: 1.5rem;
+            display: inline-block;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .summit-icon::after {
+            content: '';
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(30, 58, 138, 0.1);
+            border-radius: 50%;
+            z-index: -1;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: all 0.3s ease;
+        }
+        
+        .summit-card:hover .summit-icon::after {
+            width: 80px;
+            height: 80px;
+            background: rgba(69, 104, 220, 0.2);
+        }
+        
+        .summit-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #ffffff;
+        }
+        
+        .summit-card p {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .summit-cta {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-top: 15rem;
+            flex-wrap: wrap;
+        }
+        
+        .summit-button {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: transparent;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: 2px solid #fefeff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+        
+        .summit-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            z-index: -1;
+        }
+        
+        .summit-button:hover::before {
+            width: 100%;
+        }
+        
+        .summit-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(28, 70, 185, 0.3);
+        }
+        
+        .summit-button.secondary {
+            background: transparent;
+            color: #ffffff;
+            border: 2px solid #ffffff;
+        }
+        
+        .summit-button.secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #5387cb;
+        }
+        
+        @media (max-width: 768px) {
+            .summit-section {
+                min-height: calc(100vh - 80px);
+                padding: 5rem 1.5rem 4rem;
+            }
+            
+            .summit-info {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+            
+            .summit-cta {
+                flex-direction: column;
+                align-items: center;
+                gap: 1rem;
+            }
+            
+            .summit-button {
+                width: 100%;
+                text-align: center;
+            }
+            
+            .summit-play-button {
+                width: 60px;
+                height: 60px;
+            }
+            
+            .summit-play-button i {
+                font-size: 1.5rem;
+            }
+        }
+    
+</style>
+    
+<footer class="site-footer">
+    <div class="footer-container">
+        <div class="footer-section">
+            <h3>Contact Us</h3>
+            <p><i class="fas fa-envelope"></i> Email: Diplomaticcentralsummit@gmail.com</p>
+            <p><i class="fas fa-phone"></i> Phone: +91 9755401680<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+91 9999553377</p>
+            <p><i class="fas fa-map-marker-alt"></i> 3rd Floor,Scan&Co Building,Behind C21 Mall.</p>
+        </div>
+        
+        <div class="footer-section">
+            <h3>Connect With Us</h3>
+            <div class="social-links">
+                <a href="https://www.instagram.com/diplomaticcentralsummit" class="social-link"><i class="fab fa-instagram"></i></a>
+                <a href="https://www.linkedin.com/company/diplovision/" class="social-link"><i class="fab fa-linkedin"></i></a>
+                <a href="https://www.youtube.com/channel/UCba467q_cBLX_IV4hO_S9eg" class="social-link"><i class="fab fa-youtube"></i></a>
+            </div>
+        </div>
+        
+        <div class="footer-section">
+            <h3>Quick Links</h3>
+            <ul class="footer-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="dcs2025.html">DCS 2025</a></li>
+                <li><a href="secretariat.html">Secretariat</a></li>
+                <li><a href="register.html">Register</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>&copy; 2025 DIPLOVISION. All rights reserved.</p>
+        <div class="footer-credit">
+            <p>Made by <a href="https://www.instagram.com/ab.kabeer.sheikh/" target="_blank">Abdul Kabeer Sheikh</a></p>
+        </div>
+    </div>
+</footer>
+
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+    <style>
+        /* Footer Styles */
+        .site-footer {
+            background: rgba(15, 15, 15, 0.95);
+            color: #ffffff;
+            padding: 3rem 0 1rem;
+            margin-top: 4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .footer-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .footer-section {
+            flex: 1;
+            min-width: 250px;
+            margin-bottom: 2rem;
+        }
+        
+        .footer-section h3 {
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            padding-bottom: 0.5rem;
+        }
+        
+        .footer-section h3::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 50px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .footer-section p {
+            margin-bottom: 0.8rem;
+            opacity: 0.8;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .social-links {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .social-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .social-link:hover {
+            background: #ffffff;
+            color: #0F0F0F;
+            transform: translateY(-5px) scale(1.1);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .social-link {
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        .footer-links {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.8rem;
+        }
+        
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+        
+        .footer-links a:hover {
+            color: #ffffff;
+            transform: translateX(5px);
+        }
+        
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 2rem;
+            margin-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.9rem;
+            opacity: 0.7;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 2rem 0;
+        }
+        
+        .footer-credit {
+            text-align: right;
+        }
+        
+        .footer-credit a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .footer-credit a::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background: linear-gradient(90deg, #4568dc, #b06ab3);
+            transition: width 0.3s ease;
+        }
+        
+        .footer-credit a:hover {
+            color: #ffffff;
+        }
+        
+        .footer-credit a:hover::after {
+            width: 100%;
+        }
+        
+        @media (max-width: 768px) {
+            .testimonial-card {
+                min-width: 100%;
+                padding: 1.5rem;
+                margin: 0 0.5rem;
+            }
+            
+            .testimonial-content p {
+                font-size: 1rem;
+            }
+            
+            .testimonial-track {
+                gap: 1rem;
+            }
+            
+            .testimonials-section {
+                padding: 4rem 1rem;
+            }
+            
+            .slider-controls {
+                margin-top: 1.5rem;
+            }
+            
+            .footer-container {
+                flex-direction: column;
+            }
+            
+            .footer-section {
+                margin-bottom: 2.5rem;
+            }
+            
+            .footer-bottom {
+                flex-direction: column;
+                text-align: center;
+                gap: 1rem;
+            }
+            
+            .footer-credit {
+                text-align: center;
+            }
+        }
+    </style>
+<script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <script src="scroll-sections.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            particlesJS('particles-js', {
+    particles: {
+        number: {
+            value: 80,
+            density: {
+                enable: true,
+                value_area: 800
+            }
+        },
+        color: {
+            value: '#4a90e2'
+        },
+        shape: {
+            type: 'circle'
+        },
+        opacity: {
+            value: 0.3,
+            random: true
+        },
+        size: {
+            value: 3,
+            random: true
+        },
+        line_linked: {
+            enable: true,
+            distance: 150,
+            color: '#6495ed',
+            opacity: 0.2,
+            width: 1
+        },
+        move: {
+            enable: true,
+            speed: 2,
+            direction: 'none',
+            random: false,
+            straight: false,
+            out_mode: 'out',
+            bounce: false
+        }
+    },
+    interactivity: {
+        detect_on: 'canvas',
+        events: {
+            onhover: {
+                enable: true,
+                mode: 'grab'
+            },
+            onclick: {
+                enable: true,
+                mode: 'push'
+            },
+            resize: true
+        }
+    },
+    retina_detect: true
+            });
+        });
+    </script>
+    
+    <!-- Additional responsive styles for video -->
+    <style>
+        .summit-section {
+            min-height: 100vh;
+            padding: 0;
+            margin: 0;
+            position: relative;
+            background-color: #0F0F0F;
+        }
+        
+        .summit-background-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #0F0F0F;
+        }
+        
+        .summit-background-video video {
+            position: relative;
+            width: 100%;
+            height: auto;
+            max-height: 100%;
+            object-fit: contain;
+            background-color: #0F0F0F;
+        }
+        
+        .summit-video-overlay-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(15, 15, 15, 0.8), rgba(15, 15, 15, 0.6));
+            z-index: 1;
+        }
+        
+        .summit-container {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 1.5rem;
+        }
+        
+        .summit-content {
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .summit-cta {
+                margin-top: 1rem;
+            }
+            
+            .summit-button {
+                padding: 0.75rem 1.5rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</body>
+</html>
