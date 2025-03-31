@@ -151,8 +151,15 @@ const GodownTransfer: React.FC = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Simply set the value directly, Input component's seriesMode will handle capitalization
-    setFormValues(prev => ({ ...prev, [name]: value }));
+    // For series field, only allow alphabetic characters
+    if (name === 'series') {
+      const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
+      const uppercaseValue = alphabeticValue.toUpperCase();
+      setFormValues(prev => ({ ...prev, [name]: uppercaseValue }));
+    } else {
+      // For other fields, simply set the value directly
+      setFormValues(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleFromGodownChange = (value: string) => {

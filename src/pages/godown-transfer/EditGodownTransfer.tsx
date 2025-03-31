@@ -312,8 +312,9 @@ const EditGodownTransfer: React.FC = () => {
     
     // Handle series as a single letter field that autocapitalizes
     if (name === 'series') {
-      // If value is not empty, take only the last character and uppercase it
-      const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
+      // Only allow alphabetic characters and convert to uppercase
+      const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
+      const newValue = alphabeticValue.length > 0 ? alphabeticValue.charAt(alphabeticValue.length - 1).toUpperCase() : '';
       setFormValues(prev => ({ ...prev, [name]: newValue }));
     } else {
       setFormValues({ ...formValues, [name]: value });

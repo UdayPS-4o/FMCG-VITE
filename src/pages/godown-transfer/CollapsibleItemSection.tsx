@@ -620,6 +620,7 @@ const CollapsibleItemSection: React.FC<Props> = ({
                 value={itemData.qty}
                 onChange={handleQuantityChange}
                 variant="outlined"
+                type="number"
               />
               {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
             </div>

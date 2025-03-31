@@ -368,7 +368,11 @@ const CashPayment: React.FC = () => {
 
   // Add a simple function to ensure uppercase series input
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const uppercaseValue = e.target.value.toUpperCase();
+    const value = e.target.value;
+    // Only allow alphabetic characters and convert to uppercase
+    const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
+    const uppercaseValue = alphabeticValue.toUpperCase();
+    
     setFormValues(prev => ({
       ...prev,
       series: uppercaseValue

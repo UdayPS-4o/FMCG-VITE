@@ -330,8 +330,10 @@ const EditInvoicingContent: React.FC<{
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Let the Input component handle the conversion to uppercase with its seriesMode
-    setSeries(e.target.value);
+    // Only allow alphabetic characters and convert to uppercase
+    const value = e.target.value;
+    const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
+    setSeries(alphabeticValue.toUpperCase());
   };
 
   const handleBillNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
