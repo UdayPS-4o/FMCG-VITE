@@ -15,9 +15,8 @@ const {
 const { cp } = require('fs');
 const { id } = require('date-fns/locale');
 
-// JWT secret key - in production, this should be in an environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
-const JWT_EXPIRY = '10d'; // Token expiry time
+const JWT_EXPIRY = '10d'; 
 
 // Middleware to extract JWT token from Authorization header
 const extractToken = (req) => {

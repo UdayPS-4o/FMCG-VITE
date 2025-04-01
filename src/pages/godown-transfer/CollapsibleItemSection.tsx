@@ -438,19 +438,8 @@ const CollapsibleItemSection: React.FC<Props> = ({
         const stockAmount = stockData && stockData[product.CODE] ? 
                          stockData[product.CODE][itemData.godown] || 0 : 0;
                          
-        if (stockAmount > 0) return true;
-        
-        // Fallback to legacy method if needed
-        if (product.stock) {
-          const hasNonZeroStock = product.stock.some(
-            (stockItem: StockItem) => 
-              stockItem.GDN_CODE === itemData.godown && 
-              stockItem.STOCK > 0
-          );
-          return hasNonZeroStock;
-        }
-        
-        return false;
+        // Only include items that have stock in the godown
+        return stockAmount > 0;
       })
       .map(product => ({
         value: product.CODE,
