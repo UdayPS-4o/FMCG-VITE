@@ -40,6 +40,7 @@ interface StockData {
 const GodownTransfer: React.FC = () => {
   const [id, setId] = useState(0);
   const [partyOptions, setPartyOptions] = useState<any[]>([]);
+  const [allGodowns, setAllGodowns] = useState<any[]>([]); // Store all godowns
   const [fromGodown, setFromGodown] = useState<any>(null);
   const [toGodown, setToGodown] = useState<any>(null);
   const [pmplData, setPmplData] = useState<any[]>([]); // Hold product data from pmpl.json
@@ -82,9 +83,11 @@ const GodownTransfer: React.FC = () => {
         // Process ID data
         setId(idRes.nextGodownId);
 
-        // Process godown data with access rights filter
+        // Store all godowns for the To Godown dropdown
         if (Array.isArray(godownData)) {
-          // Filter godowns based on user access rights
+          setAllGodowns(godownData);
+          
+          // Filter godowns based on user access rights for From Godown
           let filteredGodowns = godownData;
           
           // If user has godownAccess restrictions, filter the godowns
@@ -184,7 +187,7 @@ const GodownTransfer: React.FC = () => {
   };
 
   const handleToGodownChange = (value: string) => {
-    const selectedGodown = partyOptions.find(option => option.GDN_CODE === value);
+    const selectedGodown = allGodowns.find(option => option.GDN_CODE === value);
     setToGodown(selectedGodown);
     
     // If this is the first time both godowns are selected and stock data is loaded, add the first item
@@ -443,7 +446,8 @@ const GodownTransfer: React.FC = () => {
               <Autocomplete
                 id="toGodown"
                 label="To Godown"
-                options={partyOptions
+                options={allGodowns
+                  // Only filter out the current fromGodown
                   .filter(option => option.GDN_CODE !== formValues.fromGodown)
                   .map(option => ({
                     value: option.GDN_CODE,

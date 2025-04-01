@@ -58,6 +58,7 @@ const EditGodownTransfer: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [partyOptions, setPartyOptions] = useState<any[]>([]);
+  const [allGodowns, setAllGodowns] = useState<any[]>([]); // Store all godowns
   const [fromGodown, setFromGodown] = useState<any>(null);
   const [toGodown, setToGodown] = useState<any>(null);
   const [pmplData, setPmplData] = useState<any[]>([]); // Hold product data from pmpl.json
@@ -140,7 +141,10 @@ const EditGodownTransfer: React.FC = () => {
         ]);
         
         if (Array.isArray(godownData)) {
-          // Filter godowns based on user access rights
+          // Store all godowns for the "To Godown" dropdown
+          setAllGodowns(godownData);
+          
+          // Filter godowns based on user access rights for "From Godown"
           let filteredGodowns = godownData;
           
           // If user has godownAccess restrictions, filter the godowns
@@ -339,14 +343,19 @@ const EditGodownTransfer: React.FC = () => {
       items: updatedItems
     });
     
-    // Don't reset toGodown when editing an existing transfer
+    // Only reset toGodown if it matches fromGodown
     if (value === formValues.toGodown) {
       showToast('From and To Godowns cannot be the same', 'error');
+      setToGodown(null);
+      setFormValues(prev => ({
+        ...prev,
+        toGodown: ''
+      }));
     }
   };
 
   const handleToGodownChange = (value: string) => {
-    const selectedGodown = partyOptions.find(option => option.GDN_CODE === value);
+    const selectedGodown = allGodowns.find(option => option.GDN_CODE === value);
     setToGodown(selectedGodown);
     
     if (value === formValues.fromGodown) {
@@ -636,7 +645,8 @@ const EditGodownTransfer: React.FC = () => {
               <Autocomplete
                 id="toGodown"
                 label="To Godown"
-                options={partyOptions
+                options={allGodowns
+                  // Only filter out the current fromGodown, show all other godowns
                   .filter(option => option.GDN_CODE !== formValues.fromGodown)
                   .map(option => ({
                     value: option.GDN_CODE,

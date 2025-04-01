@@ -149,8 +149,13 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       // Before trying to focus, check if there's only one godown with stock
       // and auto-select it if that's the case
       if (stockList[item.item]) {
+        // Get all godowns with stock for this item that user has access to
         const availableGodowns = Object.entries(stockList[item.item])
-          .filter(([gdnCode, stock]) => gdnCode && parseInt(stock as string, 10) > 0);
+          .filter(([gdnCode, stock]) => {
+            // Check if this godown is in user's accessible godowns
+            const isAccessible = godownOptions.some(g => g.value === gdnCode);
+            return isAccessible && gdnCode && parseInt(stock as string, 10) > 0;
+          });
         
         if (availableGodowns.length === 1) {
           // If there's only one godown available, auto-select it
@@ -174,7 +179,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
         }
       }, 100);
     }
-  }, [shouldFocusGodown, expanded, item.item, index, stockList]);
+  }, [shouldFocusGodown, expanded, item.item, index, stockList, godownOptions]);
 
   const checkForDuplicateItem = (itemCode: string): { isDuplicate: boolean, existingItem?: ItemData, itemIndex?: number } => {
     // Skip check for empty items or self
@@ -261,19 +266,23 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       return;
     }
 
+    // Calculate total stock across all accessible godowns
+    let totalStock = 0;
+    if (stockList[selectedItem.CODE]) {
+      Object.entries(stockList[selectedItem.CODE]).forEach(([gdnCode, stock]) => {
+        // Only count stock from godowns the user has access to
+        const isAccessible = godownOptions.some(g => g.value === gdnCode);
+        if (isAccessible) {
+          totalStock += parseInt(stock as string, 10);
+        }
+      });
+    }
+
     // Set the unit options
     const units = [selectedItem.UNIT_1, selectedItem.UNIT_2].filter(Boolean);
 
     // Set the initial unit
     const initialUnit = units[0];
-
-    // Calculate total stock across all godowns
-    let totalStock = 0;
-    if (stockList[selectedItem.CODE]) {
-      Object.values(stockList[selectedItem.CODE]).forEach(stock => {
-        totalStock += parseInt(stock as string, 10);
-      });
-    }
 
     // Update state with the selected item data and dropdown options
     const updatedData = {
@@ -326,11 +335,15 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     // Get stock for selected godown
     const godownStock = stockList[item.selectedItem.CODE]?.[newValue] || '0';
     
-    // Calculate total stock across all godowns
+    // Calculate total stock across all accessible godowns
     let totalStock = 0;
     if (stockList[item.selectedItem.CODE]) {
-      Object.values(stockList[item.selectedItem.CODE]).forEach(stock => {
-        totalStock += parseInt(stock as string, 10);
+      Object.entries(stockList[item.selectedItem.CODE]).forEach(([gdnCode, stock]) => {
+        // Only count stock from godowns the user has access to
+        const isAccessible = godownOptions.some(g => g.value === gdnCode);
+        if (isAccessible) {
+          totalStock += parseInt(stock as string, 10);
+        }
       });
     }
     
@@ -586,10 +599,25 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
               <Autocomplete
                 id={`item-${index}`}
                 label="Item Name"
-                options={pmplData.filter((item) => item.STK > 0).map((item) => ({
-                  value: item.CODE,
-                  label: `${item.CODE} | ${item.PRODUCT || 'No Product Name'}`
-                }))}
+                options={pmplData
+                  .filter((item) => {
+                    // Check if this item has stock in any of the user's accessible godowns
+                    if (stockList[item.CODE]) {
+                      const hasStockInAccessibleGodown = Object.entries(stockList[item.CODE]).some(
+                        ([gdnCode, stock]) => {
+                          // Check if this godown is in user's accessible godowns
+                          const isAccessible = godownOptions.some(g => g.value === gdnCode);
+                          return isAccessible && parseInt(stock as string, 10) > 0;
+                        }
+                      );
+                      return hasStockInAccessibleGodown;
+                    }
+                    return false;
+                  })
+                  .map((item) => ({
+                    value: item.CODE,
+                    label: `${item.CODE} | ${item.PRODUCT || 'No Product Name'}`
+                  }))}
                 onChange={(value) => {
                   const selectedItem = pmplData.find(item => item.CODE === value);
                   if (selectedItem) handleItemChange(selectedItem);
@@ -614,7 +642,11 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 key={`godown-${index}-${item.item || 'empty'}`} 
                 className={shouldShowValidation && item.item && !item.godown ? "border-red-500" : ""}
                 options={Object.entries(stockList[item.item] || {})
-                  .filter(([gdnCode, stock]) => gdnCode && parseInt(stock as string, 10) > 0)
+                  .filter(([gdnCode, stock]) => {
+                    // Check if this godown is in user's accessible godowns
+                    const isAccessible = godownOptions.some(g => g.value === gdnCode);
+                    return isAccessible && gdnCode && parseInt(stock as string, 10) > 0;
+                  })
                   .map(([gdnCode, stock]) => {
                     const godown = godownOptions.find((gdn) => gdn.value === gdnCode);
                     return {

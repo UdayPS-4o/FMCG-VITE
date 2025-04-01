@@ -111,11 +111,24 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
 
         // Process godown data
         if (Array.isArray(godownResponse)) {
-          const gdnOptions = godownResponse.map(gdn => ({
+          // First create all godown options
+          const allGodowns = godownResponse.map(gdn => ({
             value: gdn.GDN_CODE,
             label: gdn.GDN_NAME,
           }));
-          setGodownOptions(gdnOptions);
+          
+          // Filter godowns based on user access rights
+          let filteredGodowns = allGodowns;
+          
+          // If user has godownAccess restrictions, filter the godowns
+          if (userRef.current && userRef.current.godownAccess && userRef.current.godownAccess.length > 0) {
+            filteredGodowns = allGodowns.filter(godown => 
+              userRef.current.godownAccess.includes(godown.value)
+            );
+            console.log(`Filtered to ${filteredGodowns.length} godowns based on user's access`);
+          }
+          
+          setGodownOptions(filteredGodowns);
         } else {
           console.warn('Godown response is not an array:', godownResponse);
           setGodownOptions([]);
