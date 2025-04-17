@@ -56,6 +56,8 @@ interface InvoiceItem {
   gst: number;
   mrp: number;
   pcBx?: string;
+  unit1?: string;
+  unit2?: string;
 }
 
 interface Summary {
@@ -535,12 +537,27 @@ const PrintInvoicing: React.FC = () => {
                       const { text: particular, needsSmallerFont } = handleTextWrapping(item.particular);
                       const isBlankRow = !item.particular && !item.rate && !item.qty;
                       
-                      // Add this code to handle BOX rate calculation
-                      const isBox = item.unit?.toUpperCase() == "BOX";
-                      const displayRate = isBox && item.pcBx ? Number(item.rate) * Number(item.pcBx) : Number(item.rate);
-                      // Show the pcBx on all pages
-                      const unitDisplay = isBox && item.pcBx ? `${item.unit} - ${item.pcBx}` : item.unit;
-                      console.log({item, isBox, unitDisplay, pcb:item.pcBx})
+                      // --- DEBUG LOG --- START
+                      if (!isBlankRow) {
+                        console.log(`PrintItem ${index} Data:`, {
+                          unit: item.unit,
+                          unit1: item.unit1,
+                          unit2: item.unit2,
+                          pcBx: item.pcBx,
+                          rate: item.rate
+                        });
+                      }
+                      // --- DEBUG LOG --- END
+
+                      // Determine if the current unit is the box unit (UNIT_2)
+                      const isBoxUnit = item.unit && item.unit2 && item.unit === item.unit2; // Added check for item.unit2 existence
+                      
+                      // Display rate directly as it's already calculated for the unit
+                      const displayRate = Number(item.rate);
+                      
+                      // Format unit display: Show "BOX - {pcBx}" if it's a box unit, otherwise show the unit code
+                      const unitDisplay = isBoxUnit && item.pcBx ? `BOX - ${item.pcBx}` : item.unit;
+
                       return (
                         <tr key={index} className={isBlankRow ? "blank-row h-10" : ""}>
                           <td className={`border border-black p-1 text-left text-blue-800 print:text-black ${needsSmallerFont ? 'text-[smaller]' : ''}`}>

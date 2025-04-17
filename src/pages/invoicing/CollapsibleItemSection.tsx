@@ -281,11 +281,11 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     // Set the unit options
     const units = [selectedItem.UNIT_1, selectedItem.UNIT_2].filter(Boolean);
 
-    // Set the initial unit
-    const initialUnit = units[0];
+    // Set the initial unit (always use the code for UNIT_1 initially)
+    const initialUnit = selectedItem.UNIT_1 || '';
 
     // Update state with the selected item data and dropdown options
-    const updatedData = {
+    const updatedData: ItemData = {
       ...item,
       item: selectedItem.CODE,
       stock: totalStock > 0 ? totalStock.toString() : '', // Just show the total stock number
@@ -295,9 +295,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       gst: selectedItem.GST,
       pcBx: selectedItem.MULT_F,
       mrp: selectedItem.MRP1,
-      rate: selectedItem.RATE1,
+      rate: selectedItem.RATE1, // Initialize rate to piece rate (UNIT_1)
       qty: '',
-      unit: initialUnit, // Auto-select the first unit option
+      unit: initialUnit, // Auto-select the first unit option (UNIT_1 code)
       amount: '',
       netAmount: '',
       selectedItem: selectedItem, // Store the selected item
@@ -380,40 +380,58 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     
     // Find the other unit option that's not currently selected
     const otherUnit = unitOptions.find(unit => unit !== item.unit);
-    if (!otherUnit) return;
+    if (!otherUnit || !item.selectedItem) return;
     
-    const updatedData = {
-      ...item,
-      unit: otherUnit,
-    };
+    const selectedItem = item.selectedItem;
+    let newRate = item.rate;
+    let newStockLimit = item.stockLimit;
+    let newUnitCode = item.unit; // Will hold the code (UNIT_1 or UNIT_2)
 
-    // Recalculate stockLimit based on the new unit
-    let stockLimit = 0;
-    
-    if (item.godown && item.selectedItem) {
-      const godownStock = stockList[item.selectedItem.CODE]?.[item.godown] || '0';
-      const stockValue = parseInt(godownStock, 10);
-      
-      if (otherUnit === item.selectedItem?.UNIT_2) {
-        // Unit is BOX
-        stockLimit = Math.floor(stockValue / parseInt(item.pcBx, 10));
+    // Calculate new rate and stock limit based on the unit being switched to
+    if (otherUnit === selectedItem.UNIT_2) { // Switching to BOX (UNIT_2 code)
+      newUnitCode = selectedItem.UNIT_2; // Store the UNIT_2 code
+      const multF = selectedItem.MULT_F ? parseInt(selectedItem.MULT_F, 10) : 1;
+      const rate1 = selectedItem.RATE1 ? parseFloat(selectedItem.RATE1) : 0;
+      newRate = (rate1 * multF).toFixed(2); // Calculate box rate
+
+      // Calculate stock limit for BOX
+      if (item.godown) {
+        const godownStock = stockList[selectedItem.CODE]?.[item.godown] || '0';
+        const stockValue = parseInt(godownStock, 10);
+        newStockLimit = Math.floor(stockValue / multF);
       } else {
-        // Unit is PCS
-        stockLimit = stockValue;
+        newStockLimit = 0;
+      }
+
+    } else { // Switching to PCS (UNIT_1 code)
+      newUnitCode = selectedItem.UNIT_1; // Store the UNIT_1 code
+      newRate = selectedItem.RATE1 || '0'; // Use piece rate
+
+      // Calculate stock limit for PCS
+      if (item.godown) {
+        const godownStock = stockList[selectedItem.CODE]?.[item.godown] || '0';
+        newStockLimit = parseInt(godownStock, 10);
+      } else {
+        newStockLimit = 0;
       }
     }
 
-    updatedData.stockLimit = stockLimit;
+    const updatedData = {
+      ...item,
+      unit: newUnitCode, // Store the actual unit code
+      rate: newRate, // Set the rate corresponding to the new unit
+      stockLimit: newStockLimit, // Update stock limit for the new unit
+    };
 
     // Check if the existing quantity exceeds the new stockLimit
-    if (updatedData.qty && parseInt(updatedData.qty, 10) > stockLimit) {
-      updatedData.qty = stockLimit.toString();
-      // Show a message about the automatic adjustment
-      setError(`Quantity adjusted to maximum available: ${stockLimit} ${otherUnit}`);
+    if (updatedData.qty && parseInt(updatedData.qty, 10) > newStockLimit) {
+      updatedData.qty = newStockLimit.toString(); // Adjust quantity
+      setError(`Quantity adjusted to maximum available: ${newStockLimit} ${otherUnit}`);
     } else {
       setError('');
     }
 
+    // Update item state and recalculate amounts with the new rate and unit
     updateItem(index, calculateAmounts(updatedData));
   };
 
@@ -463,7 +481,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
 
     // For other fields (not qty)
     let updatedData = { ...item, [name]: newValue };
-    if (['rate', 'schRs', 'cd', 'sch'].includes(name)) {
+
+    // Recalculate amounts if rate, scheme, or discount changes
+    if (['rate', 'schRs', 'sch', 'cd'].includes(name)) {
       updatedData = calculateAmounts(updatedData);
     }
 
@@ -480,8 +500,8 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       };
     }
 
-    let amount;
-    const rate = parseFloat(data.rate);
+    let amount = 0; // Initialize amount
+    const rate = parseFloat(data.rate); // Rate is already for the selected unit
 
     // Fix calculation issue by ensuring rate is properly used
     if (isNaN(rate)) {
@@ -492,20 +512,9 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       };
     }
 
-    const selectedItem = data.selectedItem;
-    const multF = selectedItem ? parseInt(selectedItem.MULT_F, 10) : 1;
-
-    if (selectedItem) {
-      if (data.unit === selectedItem.UNIT_2) {
-        // Unit is BOX - multiply qty by MULT_F
-        amount = rate * (qty * multF);
-      } else {
-        // Unit is PCS - direct multiplication
-        amount = rate * qty;
-      }
-    } else {
-      amount = rate * qty;
-    }
+    // The 'rate' field now holds the rate for the selected unit (PCS or BOX).
+    // So, the calculation is simply rate * quantity.
+    amount = rate * qty;
 
     // Apply discounts in a compound manner: [(AMOUNT-SCHRS)-SCH%]-CD%
     let remainingAmount = amount;
@@ -735,7 +744,6 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 value={item.rate}
                 onChange={(e) => handleFieldChange('rate', e.target.value)}
                 variant="outlined"
-                type="number"
               />
             </div>
             <div>

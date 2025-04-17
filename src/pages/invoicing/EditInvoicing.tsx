@@ -523,14 +523,29 @@ const EditInvoicingContent: React.FC<{
         throw new Error(errorMessage);
       }
       
+      // Get the response data
+      const responseData = await response.json();
+      const invoiceId = id || responseData.id || responseData._id;
+      
       setToast({
         visible: true,
         message: 'Invoice updated successfully',
         type: 'success',
       });
       
+      // Store whether we should redirect to print page
+      const shouldRedirectToPrint = localStorage.getItem('redirectToPrint') === 'true';
+      
       setTimeout(() => {
-        navigate('/invoicing');
+        if (shouldRedirectToPrint && invoiceId) {
+          // Remove the flag from localStorage
+          localStorage.removeItem('redirectToPrint');
+          // Redirect to print page with invoice ID
+          navigate(`/printInvoice?id=${invoiceId}`);
+        } else {
+          // Regular redirect to invoice list
+          navigate('/invoicing');
+        }
       }, 1500);
     } catch (error) {
       console.error('Error updating invoice:', error);
@@ -796,8 +811,26 @@ const EditInvoicingContent: React.FC<{
               type="submit"
               className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
               disabled={isSubmitting}
+              onClick={() => {
+                localStorage.removeItem('redirectToPrint');
+              }}
             >
               {isSubmitting ? 'Updating...' : 'Update Invoice'}
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 flex items-center gap-2"
+              disabled={isSubmitting}
+              onClick={() => {
+                localStorage.setItem('redirectToPrint', 'true');
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+              </svg>
+              {isSubmitting ? 'Updating...' : 'Update & Print'}
             </button>
             <button
               type="button"
