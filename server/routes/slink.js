@@ -711,17 +711,24 @@ async function printInvoicing(req, res) {
     
     // Count boxes (cases) vs loose items (PCS)
     const countBoxesAndLooseItems = (items) => {
+      // Find PMPL data for the items in the invoice
+      const pmplDataForInvoice = items.map(item => pmplData.find(p => p.CODE === item.item)).filter(Boolean);
+
       const boxes = items.reduce((acc, item) => {
-        // If unit is BOX or similar, count it as a box
-        if (item.unit && (item.unit.toUpperCase() === 'BOX' || item.unit.toUpperCase().includes('BOX'))) {
+        // Find the corresponding PMPL item to get UNIT_2
+        const pmplItem = pmplDataForInvoice.find(p => p.CODE === item.item);
+        // If the item's unit matches the PMPL item's UNIT_2, count it as a box
+        if (pmplItem && item.unit === pmplItem.UNIT_2) {
           return acc + Number(item.qty);
         }
         return acc;
       }, 0);
       
       const looseItems = items.reduce((acc, item) => {
-        // If unit is PCS or similar, count it as a loose item
-        if (item.unit && (item.unit.toUpperCase() === 'PCS' || item.unit.toUpperCase().includes('PCS'))) {
+        // Find the corresponding PMPL item to get UNIT_1
+        const pmplItem = pmplDataForInvoice.find(p => p.CODE === item.item);
+        // If the item's unit matches the PMPL item's UNIT_1, count it as loose
+        if (pmplItem && item.unit === pmplItem.UNIT_1) {
           return acc + Number(item.qty);
         }
         return acc;
@@ -771,13 +778,16 @@ async function printInvoicing(req, res) {
       billMadeBy: req.user ? req.user.name : 'ADMIN',
       items: [
         ...invoice.items.map((item) => {
-        const pmplItem = pmplData.find((pmplItem) => pmplItem.CODE === item.item);
+          const pmplItem = pmplData.find((pmplItemData) => pmplItemData.CODE === item.item);
           return {
             ...item,
             particular: pmplItem ? pmplItem.PRODUCT : '',
             pack: pmplItem ? pmplItem.PACK : '',
             gst: pmplItem ? pmplItem.GST : 0,
-            mrp: pmplItem ? pmplItem.MRP1 : "", 
+            mrp: pmplItem ? pmplItem.MRP1 : "",
+            pcBx: pmplItem ? pmplItem.MULT_F : undefined, // Add pcBx (MULT_F)
+            unit1: pmplItem ? pmplItem.UNIT_1 : undefined, // Add UNIT_1
+            unit2: pmplItem ? pmplItem.UNIT_2 : undefined, // Add UNIT_2
           };
         }),
       ],
