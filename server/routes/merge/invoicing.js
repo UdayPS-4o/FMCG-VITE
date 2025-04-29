@@ -22,6 +22,14 @@ function safeParseFloat(value, decimals = 2) {
   return parseFloat(num.toFixed(decimals));
 }
 
+// Helper to pad bill number
+function padBillNumber(series, billNo) {
+  // Format as "X-    Y" where X is series and Y is billNo with left padding to total 5 chars
+  const combinedString = `${series}-${billNo}`;
+  const paddedString = combinedString.padEnd(5, ' ');
+  return paddedString;
+}
+
 function mapToBillDbfFormat(invoice, customerData, calculatedTotals) {
   console.log("Mapping BILL for:", invoice.billNo, "Customer:", customerData?.C_NAME);
   const { netAmountRounded, roundOff } = calculatedTotals;
@@ -45,9 +53,9 @@ function mapToBillDbfFormat(invoice, customerData, calculatedTotals) {
     TR_DRIVER: "",
     TR_LIC_NO: "",
     TRNS_NAME: "",
-    BILL_BB: `${invoice.series}-${invoice.billNo}`,
+    BILL_BB: padBillNumber(invoice.series, invoice.billNo),
     BILL_DD: "",
-    BILL2: `${invoice.series}-${invoice.billNo}`,
+    BILL2: padBillNumber(invoice.series, invoice.billNo),
     BILL1: "",
     N_B_AMT: netAmountRounded,
     R_OFF: roundOff,
@@ -120,6 +128,20 @@ function mapToBillDtlDbfFormat(invoice, item, sno, productData, customerData) {
   const bas10 = safeParseFloat(rate / gstFactor, 2);
 
   const cess10 = safeParseFloat(cessPerUnit * qty, 2);
+  
+  // Determine if item unit matches UNIT_2, if so multiply TRADE by MULT_F
+  const multFactor = safeParseFloat(productData?.MULT_F || 1, 0);
+  const isUnit2 = item.unit.toUpperCase() === (productData?.UNIT_2 || '').toUpperCase();
+  const trade = safeParseFloat(productData?.TRADE1 || rate, 2);
+  const adjustedTrade = isUnit2 ? safeParseFloat(trade * multFactor, 2) : trade;
+  
+  // Determine UNIT_NO based on which unit matches
+  let unitNo = 1; // Default to UNIT_1
+  if (item.unit.toUpperCase() === (productData?.UNIT_2 || '').toUpperCase()) {
+    unitNo = 2;
+  } else if (item.unit.toUpperCase() === (productData?.UNIT_1 || '').toUpperCase()) {
+    unitNo = 1;
+  }
 
   const result = {
     SERIES: invoice.series,
@@ -128,8 +150,8 @@ function mapToBillDtlDbfFormat(invoice, item, sno, productData, customerData) {
     CODE: item.item,
     GDN_CODE: item.godown,
     UNIT: item.unit,
-    MULT_F: safeParseFloat(productData?.MULT_F || 1, 0),
-    TRADE: safeParseFloat(productData?.TRADE1 || rate, 2),
+    MULT_F: multFactor,
+    TRADE: adjustedTrade,
     R_OPT: "",
     MRP: safeParseFloat(productData?.MRP1 || 0, 2),
     RATE: rate,
@@ -142,7 +164,7 @@ function mapToBillDtlDbfFormat(invoice, item, sno, productData, customerData) {
     DISCOUNT: schPerc,
     SCHEME: sch10,
     C_DIS: null,
-    CASH_DIS: null,
+    CASH_DIS: cdPerc, // Map to item.cd value
     EXT_DESC: "",
     BATCH_NO: "",
     EXPIRY: null,
@@ -153,8 +175,8 @@ function mapToBillDtlDbfFormat(invoice, item, sno, productData, customerData) {
     CESS_RS: cessPerUnit,
     CESS_TOT: cess10,
     SNO: sno,
-    BILL_BB: `${invoice.series}-${invoice.billNo}`,
-    BILL2: `${invoice.series}-${invoice.billNo}`,
+    BILL_BB: padBillNumber(invoice.series, invoice.billNo),
+    BILL2: padBillNumber(invoice.series, invoice.billNo),
     DM_SERIES: "",
     DM_NO: null,
     CON_BILL: "",
@@ -174,10 +196,10 @@ function mapToBillDtlDbfFormat(invoice, item, sno, productData, customerData) {
     PRODUCT_L: productData?.PRODUCT_L || productData?.PRODUCT || "",
     PACK: productData?.PACK || "",
     OK: "Y",
-    UNIT_NO: parseInt(productData?.UNIT_NO || 1, 10),
+    UNIT_NO: unitNo,
     C_CODE: invoice.party,
     BR_CODE: invoice.sm,
-    C_CST: "",
+    C_CST: customerData?.C_CST || "", // Use customer's C_CST
     VR_NO_B: "",
     VR_NO_D: "",
     HSN_CODE: productData?.H_CODE || "",
