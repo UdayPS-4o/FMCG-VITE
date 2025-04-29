@@ -19,7 +19,7 @@ function safeParseFloat(value, decimals = 2) {
 }
 
 // Map godown transfer item to TRANSFER.DBF format
-function mapToTransferDbfFormat(transfer, item, sno, productData, isNegative = false) {
+function mapToTransferDbfFormat(transfer, item, sno, productData, isNegative = false, userId) {
   // Find the correct rate from product data or use a default
   const rate = safeParseFloat(productData?.RATE1 || 0);
   const gstPerc = safeParseFloat(productData?.GST || 0);
@@ -66,7 +66,9 @@ function mapToTransferDbfFormat(transfer, item, sno, productData, isNegative = f
     UNIT_NO: parseInt(productData?.UNIT_NO || 1, 10),
     EXP_C: "",
     REF_NO: "",
-    TRF_TO: transfer.toGodown
+    TRF_TO: transfer.toGodown,
+    USER_ID: userId || 0,
+    USER_TIME: new Date(),
   };
 }
 
@@ -76,6 +78,12 @@ router.post('/sync', async (req, res) => {
   const pmplDbf = new DbfORM(pmplDbfPath);
 
   try {
+    // Get authenticated user ID from middleware
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
+    }
+
     // Get the selected records from the request
     const { records } = req.body;
     
@@ -159,11 +167,11 @@ router.post('/sync', async (req, res) => {
         const productData = pmplMap[item.code];
         
         // Create FROM godown record (positive quantity)
-        const fromRecord = mapToTransferDbfFormat(transfer, item, sno, productData, false);
+        const fromRecord = mapToTransferDbfFormat(transfer, item, sno, productData, false, userId);
         transferRecordsToInsert.push(fromRecord);
         
         // Create TO godown record (negative quantity)
-        const toRecord = mapToTransferDbfFormat(transfer, item, sno, productData, true);
+        const toRecord = mapToTransferDbfFormat(transfer, item, sno, productData, true, userId);
         transferRecordsToInsert.push(toRecord);
         
         sno++;

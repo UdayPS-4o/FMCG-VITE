@@ -82,6 +82,12 @@ function mapToDbfFormat(record) {
 // POST endpoint to merge selected records to DBF
 router.post('/sync', async (req, res) => {
   try {
+    // Get authenticated user ID from middleware
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
+    }
+
     const { records } = req.body;
     
     if (!records || !Array.isArray(records) || records.length === 0) {
@@ -128,7 +134,7 @@ router.post('/sync', async (req, res) => {
     // Only process valid records
     if (validRecords.length > 0) {
       // Map the valid records to DBF format
-      const dbfRecords = validRecords.map(mapToDbfFormat);
+      const dbfRecords = validRecords.map(record => mapToDbfFormat(record));
       
       // Append the records to the DBF file
       await dbfOrm.insertMany(dbfRecords);

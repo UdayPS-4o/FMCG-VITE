@@ -30,7 +30,7 @@ function padBillNumber(series, billNo) {
   return paddedString;
 }
 
-function mapToBillDbfFormat(invoice, customerData, calculatedTotals) {
+function mapToBillDbfFormat(invoice, customerData, calculatedTotals, userId) {
   console.log("Mapping BILL for:", invoice.billNo, "Customer:", customerData?.C_NAME);
   const { netAmountRounded, roundOff } = calculatedTotals;
 
@@ -84,7 +84,7 @@ function mapToBillDbfFormat(invoice, customerData, calculatedTotals) {
     EWAYTRAN: "",
     CODE_ORG: invoice.party,
     SM_ORG: invoice.sm,
-    USER_ID: 2,
+    USER_ID: userId || 0,
     USER_TIME: new Date(),
     ORG_AMT: netAmountRounded,
     EWAYDOC: "",
@@ -252,6 +252,12 @@ router.post('/sync', async (req, res) => {
   const cmplDbf = new DbfORM(cmplDbfPath);
 
   try {
+    // Get authenticated user ID from middleware
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
+    }
+
     // 1. Read invoicing.json
     let invoicesData;
     try {
@@ -373,8 +379,8 @@ router.post('/sync', async (req, res) => {
       const calculatedTotals = { netAmountRounded, roundOff };
 
 
-      // Map BILL record using calculated totals
-      const billRecord = mapToBillDbfFormat(invoice, customerData, calculatedTotals);
+      // Map BILL record using calculated totals and userId
+      const billRecord = mapToBillDbfFormat(invoice, customerData, calculatedTotals, userId);
       billRecordsToInsert.push(billRecord);
 
       // Add the processed details to the main list
