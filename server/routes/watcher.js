@@ -54,7 +54,7 @@ process.on("uncaughtException", (err) => {
   };
   
   async function watchFile() {
-    const dbfFilePath = path.join(__dirname, "..",  "..", "d01-2324/data", "CASH.dbf");
+    const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, "data", "CASH.dbf");
     let lastModifiedTime = null;
   
     setInterval(async () => {
@@ -97,7 +97,7 @@ process.on("uncaughtException", (err) => {
   
   watchFile();
   
-  const dbfDir = path.join(__dirname, "..",  "..", "d01-2324/data");
+  const dbfDir = path.join(process.env.DBF_FOLDER_PATH, "data");
   const jsonDir = path.join(dbfDir, "json");
   const indexFilePath = path.join(__dirname, "..",  "db", "index.json");
   

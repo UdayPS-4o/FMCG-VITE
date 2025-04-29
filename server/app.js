@@ -1,11 +1,10 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 var cookieParser = require('cookie-parser');
 const fs = require('fs').promises;
 const path = require('path');
 const morgan = require('morgan');
-// Load environment variables from .env file
-require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 const io = require('socket.io');
@@ -71,6 +70,14 @@ app.use('/', orcusRoutes);
 // Register merge routes for DBF syncing
 const accountMasterMergeRoutes = require('./routes/merge/account-master');
 app.use('/api/merge/account-master', accountMasterMergeRoutes);
+
+// Register invoicing merge routes
+const invoicingMergeRoutes = require('./routes/merge/invoicing');
+app.use('/api/merge/invoicing', invoicingMergeRoutes);
+
+// Register godown transfer merge routes
+const godownTransferMergeRoutes = require('./routes/merge/godown-transfer');
+app.use('/api/merge/godown-transfer', godownTransferMergeRoutes);
 
 // set middleware to check if user is logged in
 const middleware = require('./routes/middleware');

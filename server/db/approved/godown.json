@@ -1,1 +1,33 @@
-[]
+[
+  {
+    "date": "2025-03-26",
+    "series": "T",
+    "fromGodown": "02",
+    "toGodown": "01",
+    "id": "1",
+    "items": [
+      {
+        "code": "MK005",
+        "qty": "38",
+        "unit": "01"
+      }
+    ],
+    "createdAt": "2025-03-26T11:25:54.613Z",
+    "lastUpdated": "2025-03-26T11:26:40.178Z"
+  },
+  {
+    "date": "2025-03-27",
+    "series": "T",
+    "fromGodown": "03",
+    "toGodown": "04",
+    "id": "3",
+    "items": [
+      {
+        "code": "MK001",
+        "qty": "4",
+        "unit": "PCS"
+      }
+    ],
+    "createdAt": "2025-03-27T20:18:58.334Z"
+  }
+]

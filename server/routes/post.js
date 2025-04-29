@@ -406,10 +406,7 @@ app.get('/add/godown', async (req, res) => {
 
   const getDbfData = async (file) => {
     let filepath = path.join(
-      __dirname,
-      '..',
-      '..',
-      'd01-2324',
+      process.env.DBF_FOLDER_PATH,
       'data',
       'json',
       file.replace(/\.dbf$/i, '.json'),
@@ -455,10 +452,7 @@ app.get('/add/godown', async (req, res) => {
 app.get('/api/TRFLAST', async (req, res) => {
   const getDbfData = async (file) => {
     let filepath = path.join(
-      __dirname,
-      '..',
-      '..',
-      'd01-2324',
+      process.env.DBF_FOLDER_PATH,
       'data',
       'json',
       file.replace(/\.dbf$/i, '.json'),

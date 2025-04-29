@@ -540,6 +540,8 @@ const PrintInvoicing: React.FC = () => {
                       // --- DEBUG LOG --- START
                       if (!isBlankRow) {
                         console.log(`PrintItem ${index} Data:`, {
+                          item: item.item,
+                          particular: item.particular,
                           unit: item.unit,
                           unit1: item.unit1,
                           unit2: item.unit2,
@@ -549,14 +551,31 @@ const PrintInvoicing: React.FC = () => {
                       }
                       // --- DEBUG LOG --- END
 
-                      // Determine if the current unit is the box unit (UNIT_2)
-                      const isBoxUnit = item.unit && item.unit2 && item.unit === item.unit2; // Added check for item.unit2 existence
-                      
+                      // Determine if the current unit matches the UNIT_2 from PMPL data
+                      // Make comparison case-insensitive and handle potential null/undefined values
+                      const isSecondUnit = item.unit && item.unit2 && 
+                        item.unit.trim().toLowerCase() === item.unit2.trim().toLowerCase();
+
                       // Display rate directly as it's already calculated for the unit
                       const displayRate = Number(item.rate);
-                      
-                      // Format unit display: Show "BOX - {pcBx}" if it's a box unit, otherwise show the unit code
-                      const unitDisplay = isBoxUnit && item.pcBx ? `BOX - ${item.pcBx}` : item.unit;
+
+                      // Format unit display:
+                      // If the selected unit is UNIT_2 and pcBx exists, show "UNIT_2 - pcBx"
+                      // Otherwise, just show the selected unit.
+                      // Use item.unit2 for display to get the canonical 'Box' or similar name from PMPL.
+                      const unitDisplay = isSecondUnit && item.pcBx 
+                        ? `${item.unit2.toUpperCase()} - ${item.pcBx}` 
+                        : (item.unit || "");
+
+                      // Keep the existing console log for debugging
+                      console.log(`Unit display for ${item.particular}:`, {
+                        selectedUnit: item.unit,
+                        unit1: item.unit1,
+                        unit2: item.unit2,
+                        pcBx: item.pcBx,
+                        isSecondUnit,
+                        finalDisplay: unitDisplay
+                      });
 
                       return (
                         <tr key={index} className={isBlankRow ? "blank-row h-10" : ""}>

@@ -74,7 +74,7 @@ const fieldDescriptors = [
 ];
 
 async function createTestDbf() {
-  const dbfFilePath = path.join(process.cwd(), 'd01-2324', 'data', 'dbf', 'CMPL.dbf');
+  const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'dbf', 'CMPL.dbf');
   console.log(`Creating test DBF file at: ${dbfFilePath}`);
 
   try {
