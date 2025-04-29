@@ -1,59 +1,6 @@
 [
   {
-    "id": 1,
-    "name": "Piyush s",
-    "username": "harkrishna",
-    "number": "7223969469",
-    "password": "7223969469",
-    "routeAccess": [
-      "Admin"
-    ],
-    "powers": [
-      "Read",
-      "Write"
-    ],
-    "token": "kcmv2b",
-    "subgroup": {
-      "title": "BHAIROGUNJ"
-    }
-  },
-  {
-    "id": 3,
-    "name": "1234",
-    "username": "admin",
-    "number": "12341234",
-    "password": "12341234",
-    "routeAccess": [
-      "Account Master",
-      "Cash Receipts"
-    ],
-    "powers": [
-      "Write"
-    ],
-    "subgroup": {
-      "title": "BHAIROGUNJ",
-      "subgroupCode": "BG007"
-    }
-  },
-  {
-    "id": 6,
-    "name": "Uday Pratap Singh Parihar",
-    "username": "admin",
-    "number": "2",
-    "password": "2",
-    "routeAccess": [
-      "Admin"
-    ],
-    "powers": [
-      "Write"
-    ],
-    "subgroup": {
-      "title": "BARAPATHAR"
-    },
-    "token": "13hnln"
-  },
-  {
-    "id": 7,
+    "id": 0,
     "name": "udayps",
     "username": "admin",
     "number": "8819923334",
@@ -84,69 +31,97 @@
     "godownAccess": []
   },
   {
-    "id": 8,
+    "id": 2,
+    "name": "ADMIN",
+    "username": "admin",
+    "number": "A",
+    "password": "A",
+    "routeAccess": [
+      "Admin"
+    ],
+    "powers": [
+      "Write",
+      "Read",
+      "Delete"
+    ],
+    "subgroups": [],
+    "subgroup": null,
+    "defaultSeries": {},
+    "canSelectSeries": true,
+    "godownAccess": []
+  },
+  {
+    "id": 3,
+    "name": "BALRAM",
+    "username": "admin",
+    "number": "9826623188",
+    "password": "BALRAM",
+    "routeAccess": [
+      "Admin"
+    ],
+    "powers": [],
+    "subgroups": [],
+    "subgroup": null,
+    "defaultSeries": {},
+    "canSelectSeries": true,
+    "godownAccess": []
+  },
+  {
+    "id": 4,
     "name": "SHUBHAM",
     "username": "admin",
     "number": "9179174888",
     "password": "9179174888",
     "routeAccess": [
-      "Invoicing",
-      "Cash Receipts",
-      "Cash Payments",
-      "Godown Transfer"
+      "Admin"
     ],
     "powers": [
-      "Write"
+      "Read",
+      "Write",
+      "Delete"
     ],
-    "subgroup": {
-      "title": "BANDOL-CHAPARA",
-      "subgroupCode": "BC004"
-    },
-    "token": "13zdi7"
+    "subgroups": [],
+    "subgroup": null,
+    "defaultSeries": {},
+    "canSelectSeries": false,
+    "godownAccess": []
   },
   {
-    "id": 10,
-    "name": "udayps",
+    "id": 5,
+    "name": "GULREZ KHAN",
     "username": "admin",
-    "number": "udayps",
-    "password": "udayps",
+    "number": "8878839594",
+    "password": "8878839594",
     "routeAccess": [
-      "Godown Transfer",
-      "Cash Receipts",
       "Account Master",
       "Invoicing",
-      "Cash Payments"
+      "Cash Receipts",
+      "Godown Transfer"
     ],
     "powers": [
       "Read",
       "Write"
     ],
-    "subgroup": {
-      "title": "BANDOL-CHAPARA | 264",
-      "subgroupCode": "BC264"
-    },
-    "token": "0101c8",
-    "smCode": "SM002",
     "subgroups": [
       {
-        "title": "BANDOL-CHAPARA | 264",
-        "subgroupCode": "BC264"
-      },
-      {
-        "title": "BARGHAT ROAD-DUNDA S | 046",
-        "subgroupCode": "BD046"
+        "title": "BHOMA-KEWLARI-PALARI | 381",
+        "subgroupCode": "BK381"
       }
     ],
-    "defaultSeries": {
-      "billing": "X",
-      "cashReceipt": "X",
-      "cashPayment": "X",
-      "godown": "B"
+    "subgroup": {
+      "title": "BHOMA-KEWLARI-PALARI | 381",
+      "subgroupCode": "BK381"
     },
-    "canSelectSeries": true,
+    "smCode": "SM007",
+    "defaultSeries": {
+      "billing": "K",
+      "cashReceipt": "K",
+      "cashPayment": "K",
+      "godown": "T"
+    },
+    "canSelectSeries": false,
     "godownAccess": [
-      "03",
-      "02"
+      "03"
     ]
   }
 ]
