@@ -4,7 +4,7 @@ const path = require('path');
 const { DbfORM } = require('../../dbf-orm');
 
 // Set the path to the DBF file
-const dbfFilePath = path.join(process.cwd(), ".." ,'d01-2324', 'data', 'CMPL.dbf');
+const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CMPL.dbf');
 
 console.log({dbfFilePath})
 // Map fields from JSON to DBF format

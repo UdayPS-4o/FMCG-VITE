@@ -1,5 +1,5 @@
 {
-  "lastModifiedTime": 1742753368001.0505,
+  "lastModifiedTime": 1745860258786.7603,
   "data": [
     {
       "partycode": "BB009",
@@ -63,7 +63,7 @@
     },
     {
       "partycode": "EE001",
-      "result": "47.69999999999857 CR"
+      "result": "47.79999999999859 CR"
     },
     {
       "partycode": "CT249",
@@ -667,7 +667,7 @@
     },
     {
       "partycode": "GG020",
-      "result": "734758.7000000253 DR"
+      "result": "720190.1400000248 DR"
     },
     {
       "partycode": "VI020",
@@ -1631,7 +1631,7 @@
     },
     {
       "partycode": "VG020",
-      "result": "203340.0599999982 CR"
+      "result": "205962.39999999804 CR"
     },
     {
       "partycode": "VG026",
@@ -4384,6 +4384,10 @@
     {
       "partycode": "BK228",
       "result": "0 CR"
+    },
+    {
+      "partycode": "OT069",
+      "result": "17191 DR"
     }
   ]
 }

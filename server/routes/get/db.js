@@ -160,11 +160,7 @@ app.get('/dbf/:file', async (req, res) => {
     let dbfFiles = await fs
       .readFile(
         path.join(
-          __dirname,
-          '..',
-          '..',
-          '..',
-          'd01-2324',
+          process.env.DBF_FOLDER_PATH,
           'data',
           'json',
           file.replace('.dbf', '.json').replace('.DBF', '.json'),
@@ -185,11 +181,7 @@ app.get('/api/dbf/:file', async (req, res) => {
 
   try {
     const filePath = path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'd01-2324',
+      process.env.DBF_FOLDER_PATH,
       'data',
       'json',
       file.replace('.dbf', '.json').replace('.DBF', '.json'),

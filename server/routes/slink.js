@@ -62,7 +62,7 @@ const verifyToken = async (req, res, next) => {
 };
 
 const getCmplData = async () => {
-  const dbfFilePath = path.join(__dirname, '..', '..', 'd01-2324/data', 'CMPL.dbf');
+  const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CMPL.dbf');
   console.log(dbfFilePath);
   try {
     let jsonData = await getDbfData(dbfFilePath);
@@ -82,7 +82,7 @@ const getCmplData = async () => {
 };
 
 const completeCmplData = async (C_CODE) => {
-  const dbfFilePath = path.join(__dirname, '..', '..', 'd01-2324/data/json', 'CMPL.json');
+  const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CMPL.json');
   const cmplData = await fs.readFile(dbfFilePath, 'utf8');
   let jsonData = JSON.parse(cmplData);
   let cmpld = jsonData.find((item) => item.C_CODE === C_CODE);
@@ -90,7 +90,7 @@ const completeCmplData = async (C_CODE) => {
 };
 
 const getPMPLData = async () => {
-  const dbfFilePath = path.join(__dirname, '..', '..', 'd01-2324/data', 'PMPL.dbf');
+  const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.dbf');
   console.log(dbfFilePath);
   try {
     let jsonData = await getDbfData(dbfFilePath);
@@ -101,6 +101,9 @@ const getPMPLData = async () => {
         PACK: entry.PACK,
         MRP1: entry.MRP1,
         GST: entry.GST,
+        UNIT_1: entry.UNIT_1,
+        UNIT_2: entry.UNIT_2,
+        MULT_F: entry.MULT_F,
       };
     });
     return jsonData;
@@ -311,22 +314,157 @@ app.post('/editCashReciept', async (req, res) => {
   }
 });
 
-async function getNextGodownId(req, res) {
-  const filePath = path.join(__dirname, '..', 'db', 'godown.json');
-  let nextGodownId = 1;
+// Add these at the top with other global variables
+let cachedGodownIdData = null;
+let cachedGodownIdHash = null;
+let lastGodownFileModTimes = {};
 
+async function getNextGodownId(req, res) {
   try {
-    const data = await fs.readFile(filePath, 'utf8').then(
+    const clientHash = req.headers['if-none-match'] || req.query.hash;
+
+    // Define file paths to check for modifications
+    const godownFilePaths = [
+      path.join(__dirname, '..', 'db', 'godown.json'),
+      path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'TRANSFER.json')
+    ];
+
+    // Get current file modification times
+    const currentFileModTimes = {};
+    for (const file of godownFilePaths) {
+      try {
+        const stats = await fs.stat(file);
+        currentFileModTimes[file] = stats.mtime.getTime();
+      } catch (error) {
+        console.error(`Error getting modification time for ${file}:`, error);
+        currentFileModTimes[file] = Date.now(); // Force recalculation on error
+      }
+    }
+    
+    // Check if files have changed compared to last known times
+    let filesHaveChanged = false;
+    if (Object.keys(lastGodownFileModTimes).length !== godownFilePaths.length) {
+       filesHaveChanged = true; // If file count differs, assume change
+    } else {
+        for (const file of godownFilePaths) {
+            if (!lastGodownFileModTimes[file] || lastGodownFileModTimes[file] !== currentFileModTimes[file]) {
+                filesHaveChanged = true;
+                break;
+            }
+        }
+    }
+
+    // If we have cached data and no file has changed
+    if (cachedGodownIdData && cachedGodownIdHash && !filesHaveChanged) {
+      console.log('Godown transfer source files unchanged, using cached godown ID data');
+      
+      // If client hash matches cached hash, return 304
+      if (clientHash && (clientHash === cachedGodownIdHash || clientHash === `"${cachedGodownIdHash}"`)) {
+        console.log('Godown ID data cache hit with 304');
+        return res.status(304).set({
+          'ETag': `"${cachedGodownIdHash}"`,
+          'Cache-Control': 'private, max-age=0',
+          'Access-Control-Expose-Headers': 'ETag'
+        }).send('Not Modified');
+      }
+      
+      // Otherwise return cached data
+      console.log('Godown ID data cache hit with new data');
+      res.set({
+        'ETag': `"${cachedGodownIdHash}"`,
+        'Cache-Control': 'private, max-age=0',
+        'Access-Control-Expose-Headers': 'ETag'
+      });
+      return res.json(cachedGodownIdData);
+    }
+    
+    // If we get here, files have changed or cache doesn't exist
+    console.log('Files changed or no cache, recalculating godown ID data');
+    
+    // Get the next godown ID from godown.json
+    const godownFilePath = path.join(__dirname, '..', 'db', 'godown.json');
+    const godownData = await fs.readFile(godownFilePath, 'utf8').then(
       (data) => JSON.parse(data),
       (error) => {
         if (error.code !== 'ENOENT') throw error; // Ignore file not found errors
+        return [];
       },
     );
-    const GodownId = data[data.length - 1]?.id || 0;
-    const nextGodownId = Number(GodownId) + 1;
-    res.send({ nextGodownId });
+    
+    // Calculate next internal ID based on the 'id' field in godown.json
+    const maxInternalId = godownData.reduce((maxId, gdn) => Math.max(maxId, parseInt(gdn.id || 0, 10)), 0);
+    const nextGodownId = maxInternalId + 1;
+
+    // Get the TRANSFER.json data using getSTOCKFILE function
+    const transferData = await getSTOCKFILE('TRANSFER.json');
+    
+    // Calculate the next transfer number for each series considering BOTH files
+    const seriesMap = {};
+    
+    // Process TRANSFER.json (stock file)
+    transferData.forEach(entry => {
+      const series = entry.SERIES?.toUpperCase(); // Ensure consistent casing
+      const billNumber = Number(entry.BILL);
+      if (series && !isNaN(billNumber)) {
+          if (!seriesMap[series] || billNumber > seriesMap[series]) {
+              seriesMap[series] = billNumber;
+          }
+      }
+    });
+
+    // Process godown.json (local database)
+    godownData.forEach(entry => {
+        const series = entry.series?.toUpperCase(); // Ensure consistent casing
+        const billNumber = Number(entry.id);
+        if (series && !isNaN(billNumber)) {
+            if (!seriesMap[series] || billNumber > seriesMap[series]) {
+                seriesMap[series] = billNumber;
+            }
+        }
+    });
+    
+    // Increment each max bill number by 1 to get the next bill number
+    const nextSeries = {};
+    for (const series in seriesMap) {
+      nextSeries[series] = seriesMap[series] + 1;
+    }
+    
+    // Prepare the response data
+    const responseData = { 
+      nextSeries
+    };
+    
+    // Generate a hash for the godown ID data
+    const currentHash = require('crypto')
+      .createHash('md5')
+      .update(JSON.stringify(responseData))
+      .digest('hex');
+    
+    // Update cache and file mod times
+    cachedGodownIdData = responseData;
+    cachedGodownIdHash = currentHash;
+    lastGodownFileModTimes = { ...currentFileModTimes }; // Update last known mod times
+    
+    // Set ETag header with proper quotes
+    const etagValue = `"${currentHash}"`;
+    res.set({
+      'ETag': etagValue,
+      'Cache-Control': 'private, max-age=0',
+      'Access-Control-Expose-Headers': 'ETag'
+    });
+    
+    console.log(`Godown ID API: Generated hash: ${currentHash}, client hash: ${clientHash || 'none'}`);
+    
+    // Compare again after calculation in case hashes match
+    if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
+      console.log('Godown ID data matches after recalculation, sending 304');
+      return res.status(304).send('Not Modified');
+    }
+    
+    console.log('Sending full godown ID data');
+    res.json(responseData);
   } catch (error) {
-    console.error('Failed to read or parse godowns.json:', error);
+    console.error('Failed to process godown transfer data:', error);
     res.status(500).send('Server error');
   }
 }
@@ -337,24 +475,28 @@ let cachedInvoiceIdHash = null;
 let lastInvoiceFileModTimes = {};
 
 async function getInvoiceFileModificationTimes() {
-  const filePaths = [
-    path.join(__dirname, '..', 'db', 'invoicing.json'),
-    path.join(__dirname, '..', '..', 'd01-2324/data/json', 'billdtl.json')
-  ];
-  
-  const modTimes = {};
-  for (const file of filePaths) {
-    try {
-      const stats = await fs.stat(file);
-      modTimes[file] = stats.mtime.getTime();
-    } catch (error) {
-      console.error(`Error getting modification time for ${file}:`, error);
-      // If we can't get the mod time, use current time to force recalculation
-      modTimes[file] = Date.now();
+  const folderPath = path.join(process.env.DBF_FOLDER_PATH, 'invoices');
+  try {
+    const files = await fs.readdir(folderPath);
+    
+    const modTimes = {};
+    for (const file of files) {
+      try {
+        const filePath = path.join(folderPath, file);
+        const stats = await fs.stat(filePath);
+        modTimes[file] = stats.mtime.getTime();
+      } catch (error) {
+        console.error(`Error getting modification time for ${file}:`, error);
+        // If we can't get the mod time, use current time to force recalculation
+        modTimes[file] = Date.now();
+      }
     }
+    
+    return modTimes;
+  } catch (error) {
+    console.error('Error reading invoices folder:', error);
+    return {};
   }
-  
-  return modTimes;
 }
 
 async function haveInvoiceFilesChanged(newModTimes) {
@@ -378,7 +520,7 @@ async function getNextInvoiceId(req, res) {
     // Update file paths to include invoicing.json for modification time check
     const invoiceFilePaths = [
       path.join(__dirname, '..', 'db', 'invoicing.json'),
-      path.join(__dirname, '..', '..', 'd01-2324/data/json', 'billdtl.json')
+      path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'billdtl.json')
     ];
 
     // Get current file modification times
@@ -779,6 +921,13 @@ async function printInvoicing(req, res) {
       items: [
         ...invoice.items.map((item) => {
           const pmplItem = pmplData.find((pmplItemData) => pmplItemData.CODE === item.item);
+          console.log(`Processing item ${item.item}:`, {
+            found: !!pmplItem,
+            MULT_F: pmplItem?.MULT_F,
+            UNIT_1: pmplItem?.UNIT_1,
+            UNIT_2: pmplItem?.UNIT_2
+          });
+          
           return {
             ...item,
             particular: pmplItem ? pmplItem.PRODUCT : '',

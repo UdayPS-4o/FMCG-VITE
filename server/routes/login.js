@@ -120,21 +120,18 @@ app.get('/logout', (req, res) => {
   res.status(200).redirect('/login');
 });
 
-const DIR = 'd01-2324';
-
-// Replace the cache variables
+4
 let cachedStock = null;
 let cachedStockHash = null;
 let lastFileModTimes = {}; // Store last modification times of files
 
 async function getFileModificationTimes() {
-  const DIR = 'd01-2324';
   const files = [
-    path.join(__dirname, '..', '..', DIR, 'data', 'json', 'billdtl.json'),
-    path.join(__dirname, '..', '..', DIR, 'data', 'json', 'purdtl.json'),
-    path.join(__dirname, '..', '..', DIR, 'data', 'json', 'transfer.json'),
-    path.join(__dirname, '..', '..', DIR, 'data', 'json', 'pmpl.json'),
-    path.join(__dirname, '..', 'db', 'godown.json')
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'billdtl.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'purdtl.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'transfer.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'pmpl.json'),
+    path.join(__dirname, '..', 'db', 'godown.json') // This path seems correct, leave as is
   ];
   
   const modTimes = {};

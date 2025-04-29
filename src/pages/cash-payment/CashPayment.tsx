@@ -167,14 +167,16 @@ const CashPayment: React.FC = () => {
 
           setVoucherNo(paymentToEdit.voucherNo);
 
-          setFormValues({
+          const updatedValues = {
             date: formatDateForDisplay(paymentToEdit.date),
             series: paymentToEdit.series,
             amount: paymentToEdit.amount,
             discount: paymentToEdit.discount,
             voucherNo: paymentToEdit.voucherNo,
             narration: paymentToEdit.narration,
-          });
+          };
+          
+          setFormValues(updatedValues);
 
           // Use apiCache for CMPL data
           const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
@@ -329,16 +331,24 @@ const CashPayment: React.FC = () => {
         
         // Apply default series if available
         if (user?.defaultSeries?.cashPayment && !isEditMode) {
-          setFormValues(prev => ({
-            ...prev,
+          const updatedValues = {
+            ...formValues,
             series: user.defaultSeries.cashPayment,
             voucherNo: data.nextReceiptNo.toString()
-          }));
+          };
+          setFormValues(updatedValues);
+          
+          // Generate narration based on voucher number and series
+          setTimeout(() => updateNarration(updatedValues), 0);
         } else {
-          setFormValues(prev => ({
-            ...prev,
+          const updatedValues = {
+            ...formValues,
             voucherNo: data.nextReceiptNo.toString()
-          }));
+          };
+          setFormValues(updatedValues);
+          
+          // Generate narration based on voucher number
+          setTimeout(() => updateNarration(updatedValues), 0);
         }
       } catch (error) {
         console.error('Error fetching next voucher number:', error);
@@ -360,10 +370,19 @@ const CashPayment: React.FC = () => {
     const { name, value } = e.target;
     
     // Simply set the value directly, Input component's seriesMode will handle capitalization
-    setFormValues(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormValues(prev => {
+      const updated = {
+        ...prev,
+        [name]: value
+      };
+      
+      // Update narration when amount or voucherNo changes
+      if (name === 'amount' || name === 'voucherNo') {
+        updateNarration(updated);
+      }
+      
+      return updated;
+    });
   };
 
   // Add a simple function to ensure uppercase series input
@@ -373,10 +392,30 @@ const CashPayment: React.FC = () => {
     const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
     const uppercaseValue = alphabeticValue.toUpperCase();
     
-    setFormValues(prev => ({
-      ...prev,
-      series: uppercaseValue
-    }));
+    setFormValues(prev => {
+      const updated = {
+        ...prev,
+        series: uppercaseValue
+      };
+      
+      // Update narration when series changes
+      updateNarration(updated);
+      return updated;
+    });
+  };
+  
+  // Function to automatically generate narration
+  const updateNarration = (values: FormValues) => {
+    if (values.voucherNo) {
+      const voucherText = values.series 
+        ? `VR.No.${values.series}-${values.voucherNo}`
+        : `VR.No.${values.voucherNo}`;
+      
+      setFormValues(prev => ({
+        ...prev,
+        narration: `TO CASH AS PER ${voucherText}`
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

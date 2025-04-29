@@ -155,16 +155,24 @@ const CashReceipt: React.FC = () => {
         
         // Apply default series if available
         if (user?.defaultSeries?.cashReceipt && !isEditMode) {
-          setFormValues(prev => ({
-            ...prev,
+          const updatedValues = {
+            ...formValues,
             series: user.defaultSeries.cashReceipt,
             receiptNo: data.nextReceiptNo.toString()
-          }));
+          };
+          setFormValues(updatedValues);
+          
+          // Generate narration based on receipt number and series
+          setTimeout(() => updateNarration(updatedValues), 0);
         } else {
-          setFormValues(prev => ({
-            ...prev,
+          const updatedValues = {
+            ...formValues,
             receiptNo: data.nextReceiptNo.toString()
-          }));
+          };
+          setFormValues(updatedValues);
+          
+          // Generate narration based on receipt number
+          setTimeout(() => updateNarration(updatedValues), 0);
         }
       } catch (error) {
         console.error('Error fetching next receipt number:', error);
@@ -200,14 +208,16 @@ const CashReceipt: React.FC = () => {
 
         setReceiptNo(receiptToEdit.receiptNo);
 
-        setFormValues({
+        const updatedValues = {
           date: formatDateForDisplay(receiptToEdit.date),
           series: receiptToEdit.series,
           amount: receiptToEdit.amount,
           discount: receiptToEdit.discount,
           receiptNo: receiptToEdit.receiptNo,
           narration: receiptToEdit.narration,
-        });
+        };
+        
+        setFormValues(updatedValues);
 
         // Use apiCache for CMPL data
         const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
@@ -374,10 +384,16 @@ const CashReceipt: React.FC = () => {
     const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
     const uppercaseValue = alphabeticValue.toUpperCase();
     
-    setFormValues(prev => ({
-      ...prev,
-      series: uppercaseValue
-    }));
+    setFormValues(prev => {
+      const updated = {
+        ...prev,
+        series: uppercaseValue
+      };
+      
+      // Update narration when series changes
+      updateNarration(updated);
+      return updated;
+    });
   };
 
   // New handler for input changes
@@ -385,10 +401,33 @@ const CashReceipt: React.FC = () => {
     const { name, value } = e.target;
     
     // Simply set the value directly, Input component's seriesMode will handle capitalization
-    setFormValues(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormValues(prev => {
+      const updated = {
+        ...prev,
+        [name]: value
+      };
+      
+      // Update narration when amount or receiptNo changes
+      if (name === 'amount' || name === 'receiptNo') {
+        updateNarration(updated);
+      }
+      
+      return updated;
+    });
+  };
+  
+  // Function to automatically generate narration
+  const updateNarration = (values: FormValues) => {
+    if (values.receiptNo) {
+      const receiptText = values.series 
+        ? `R/NO.${values.series}-${values.receiptNo}`
+        : `R/NO.${values.receiptNo}`;
+      
+      setFormValues(prev => ({
+        ...prev,
+        narration: `BY CASH ON ${receiptText}`
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

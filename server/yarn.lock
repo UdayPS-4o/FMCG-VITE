@@ -3154,7 +3154,7 @@ ws@7.4.6:
   resolved "https://registry.npmjs.org/ws/-/ws-7.4.6.tgz"
   integrity sha512-YmhHDO4MzaDLB+M9ym/mDA5z0naX8j7SIlT8f8z+I0VtzsRbekxEutHSme7NPS2qE8StCYQNUnfWdXta/Yu85A==
 
-xlsx@^0.19.3, "xlsx@https://cdn.sheetjs.com/xlsx-0.19.3/xlsx-0.19.3.tgz":
+"xlsx@https://cdn.sheetjs.com/xlsx-0.19.3/xlsx-0.19.3.tgz":
   version "0.19.3"
   resolved "https://cdn.sheetjs.com/xlsx-0.19.3/xlsx-0.19.3.tgz"
   integrity sha512-8IfgFctB7fkvqkTGF2MnrDrC6vzE28Wcc1aSbdDQ+4/WFtzfS73YuapbuaPZwGqpR2e0EeDMIrFOJubQVLWFNA==

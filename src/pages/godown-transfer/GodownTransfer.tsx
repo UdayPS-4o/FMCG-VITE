@@ -37,6 +37,13 @@ interface StockData {
   }
 }
 
+// Interface for godown ID data from API
+interface GodownIdData {
+  nextSeries: {
+    [key: string]: number;
+  };
+}
+
 const GodownTransfer: React.FC = () => {
   const [id, setId] = useState(0);
   const [partyOptions, setPartyOptions] = useState<any[]>([]);
@@ -62,27 +69,64 @@ const GodownTransfer: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const baseURL = constants.baseURL;
   const { user } = useAuth();
+  const [godownIdInfo, setGodownIdInfo] = useState<GodownIdData | null>(null);
+  const [godownIdHash, setGodownIdHash] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         
-        // Fetch all data in parallel using Promise.all
-        const [idRes, godownData, pmplResponse, stockResponse] = await Promise.all([
-          fetch(`${baseURL}/slink/godownId`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
+        // Fetch godownId with caching support
+        let godownIdResponse;
+        try {
+          const headers: HeadersInit = {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          };
+          
+          // Add the ETag if we have a hash
+          if (godownIdHash) {
+            headers['If-None-Match'] = godownIdHash;
+          }
+          
+          godownIdResponse = await fetch(`${baseURL}/slink/godownId`, {
+            headers
+          });
+          
+          // Update the stored hash from the response
+          const newEtag = godownIdResponse.headers.get('ETag');
+          if (newEtag) {
+            setGodownIdHash(newEtag.replace(/"/g, ''));
+          }
+          
+          // If we got a 304 Not Modified, use our cached data
+          if (godownIdResponse.status === 304) {
+            console.log('Using cached godown ID data');
+          } else if (godownIdResponse.ok) {
+            // Otherwise parse the new data
+            const godownIdData = await godownIdResponse.json();
+            setGodownIdInfo(godownIdData);
+            // Update ID based on series
+            if (godownIdData.nextSeries && godownIdData.nextSeries[formValues.series]) {
+              setId(godownIdData.nextSeries[formValues.series]);
+            } else {
+              // If series not found, default to 1
+              setId(1);
             }
-          }).then(res => res.json()),
+          } else {
+            throw new Error('Failed to fetch godown ID');
+          }
+        } catch (error) {
+          console.error('Error fetching godown ID:', error);
+        }
+        
+        // Fetch all data in parallel using Promise.all
+        const [godownData, pmplResponse, stockResponse] = await Promise.all([
           apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`),
           apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`),
           apiCache.fetchWithCache(`${baseURL}/api/stock`)
         ]);
         
-        // Process ID data
-        setId(idRes.nextGodownId);
-
         // Store all godowns for the To Godown dropdown
         if (Array.isArray(godownData)) {
           setAllGodowns(godownData);
@@ -142,6 +186,19 @@ const GodownTransfer: React.FC = () => {
       }
     }
   }, [user]);
+
+  // Update id whenever series changes
+  useEffect(() => {
+    if (godownIdInfo && godownIdInfo.nextSeries && formValues.series) {
+      const upperSeries = formValues.series.toUpperCase();
+      if (godownIdInfo.nextSeries[upperSeries]) {
+        setId(godownIdInfo.nextSeries[upperSeries]);
+      } else {
+        // If no specific series ID is found, default to 1
+        setId(1);
+      }
+    }
+  }, [formValues.series, godownIdInfo]);
 
   // Get stock for a specific item and godown
   const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {

@@ -29,12 +29,12 @@ const generateHash = (data) => {
 };
   
 const getCmplData = async (req, res) => {
-  const dbfFilePath = path.join(__dirname, "..", "..", "d01-2324/data", "CMPL.dbf");
+  const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, "data", "CMPL.dbf");
   console.log(dbfFilePath);
   try {
     console.log("-----------------------------------------------------")
-    let jsonData = await fs.readFile(path.resolve(__dirname,  "..", "..", "d01-2324/data/json", "CMPL.json"), 'utf8');
-    console.log(path.resolve(__dirname,  "..", "..", "d01-2324/data/json", "CMPL.json"));
+    let jsonData = await fs.readFile(path.resolve(process.env.DBF_FOLDER_PATH, "data/json", "CMPL.json"), 'utf8');
+    console.log(path.resolve(process.env.DBF_FOLDER_PATH, "data/json", "CMPL.json"));
     
     // Parse the JSON string into an array
     jsonData = JSON.parse(jsonData);
@@ -132,16 +132,11 @@ const saveDataToJsonFile = async (filePath, data) => {
   await fs.writeFile(filePath, JSON.stringify(existingData, null, 4));
 };
 
-const DIR = 'd01-2324';
-
 async function getSTOCKFILE(vvv) {
   return await fs
     .readFile(
       path.join(
-        __dirname,
-        '..',
-        '..',
-        DIR,
+        process.env.DBF_FOLDER_PATH,
         'data',
         'json',
         vvv.replace('.dbf', '.json').replace('.DBF', '.json'),
