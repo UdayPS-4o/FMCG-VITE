@@ -57,40 +57,31 @@ const spawn = require('child_process').spawn;// app.use(express.static(80/public
 app.use(bodyParser.json()); // for parsing application/json
 app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 
-// Public routes (Login, etc.)
+// use external routes from ./routes/login.js
 const loginRoutes = require('./routes/login');
-app.use(loginRoutes); // Login routes should be accessible without auth
+app.use(loginRoutes);
 
-// Apply authentication middleware globally for subsequent routes
-const middleware = require('./routes/middleware');
-app.use(middleware);
-
-// Protected routes below this point
 const slinkRoutes = require('./routes/slink');
 const orcusRoutes = require('./routes/orcusRoutes');
-app.use(express.static(path.join(__dirname, '.', 'dist'))); // Static files might or might not need auth depending on setup
+app.use(express.static(path.join(__dirname, '.', 'dist')));
 app.use('/slink', slinkRoutes);
 app.use('/', orcusRoutes);
 
-// Register merge routes for DBF syncing (Protected)
+// Register merge routes for DBF syncing
 const accountMasterMergeRoutes = require('./routes/merge/account-master');
 app.use('/api/merge/account-master', accountMasterMergeRoutes);
 
-// Register invoicing merge routes (Protected)
+// Register invoicing merge routes
 const invoicingMergeRoutes = require('./routes/merge/invoicing');
 app.use('/api/merge/invoicing', invoicingMergeRoutes);
 
-// Register godown transfer merge routes (Protected)
+// Register godown transfer merge routes
 const godownTransferMergeRoutes = require('./routes/merge/godown-transfer');
 app.use('/api/merge/godown-transfer', godownTransferMergeRoutes);
 
-// Register cash receipt merge routes (Protected)
-const cashReceiptMergeRoutes = require('./routes/merge/cash-receipts');
-app.use('/api/merge/cash-receipts', cashReceiptMergeRoutes);
-
-// Register cash payment merge routes (Protected)
-const cashPaymentMergeRoutes = require('./routes/merge/cash-payments');
-app.use('/api/merge/cash-payments', cashPaymentMergeRoutes);
+// set middleware to check if user is logged in
+const middleware = require('./routes/middleware');
+app.use(middleware);
 
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);
