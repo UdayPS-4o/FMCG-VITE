@@ -124,7 +124,7 @@ router.post('/sync', async (req, res) => {
     console.log('Checking for duplicate transfers...');
     const existingTransfers = await transferDbf.findAll();
     const existingTransferKeys = new Set();
-    
+
     existingTransfers.forEach(record => {
       existingTransferKeys.add(`${record.SERIES}-${record.BILL}`);
     });
