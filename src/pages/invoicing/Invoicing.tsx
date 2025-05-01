@@ -42,8 +42,16 @@ const InvoicingContent: React.FC = () => {
     invoiceIdInfo
   } = useInvoiceContext();
   
-  // Form state
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  // Helper function to format local date as YYYY-MM-DD
+  const getLocalDateYYYYMMDD = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Add 1 because months are 0-indexed
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  // Form state - Use local date for default
+  const [date, setDate] = useState<string>(getLocalDateYYYYMMDD(new Date()));
   const [series, setSeries] = useState<string>('T');
   const [billNo, setBillNo] = useState<string>('1');
   const [cash, setCash] = useState<'Y' | 'N'>('N');
