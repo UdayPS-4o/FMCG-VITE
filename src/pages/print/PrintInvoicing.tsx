@@ -438,7 +438,7 @@ const PrintInvoicing: React.FC = () => {
                             <p className="font-bold print:text-black">BUDHWARI BAZAR,GN ROAD SEONI,</p>
                           </div>
                           <div className="w-1/3 text-right">
-                            <p className="print:font-bold print:text-black">Ph : {data.company.phone}</p>
+                            <p className="print:font-bold print:text-black">{data.company.phone}</p>
                             <p className="print:font-bold print:text-black">Office No: {data.company.officeNo}</p>
                             <p className="print:font-bold print:text-black">State Code: {data.company.stateCode}</p>
                             <p className="text-[10px] mt-1 print:text-black text-right">Bill Made By: {data.billMadeBy}</p>
@@ -462,23 +462,24 @@ const PrintInvoicing: React.FC = () => {
                           <div className="w-2/3 border-r border-black pr-2">
                             <p><span className="font-bold text-blue-800 print:text-black">Party</span> {data.party.name}</p>
                             <p><span className="font-bold text-blue-800 print:text-black">Address</span> {data.party.address}</p>
-                            <p>
-                              <span className="font-bold text-blue-800 print:text-black">GSTIN</span> {data.party.gstin || 'N/A'}
-                              <span className="ml-4 font-bold text-blue-800 print:text-black">State Code :</span> {data.party.stateCode}
-                            </p>
-                            <p>
-                              <span className="font-bold text-blue-800 print:text-black">Mobile No.</span> {data.party.mobileNo}
-                              <span className="ml-4 font-bold text-blue-800 print:text-black">Balance</span> {data.party.balanceBf ? `${data.party.balanceBf}` : 'N/A'}
-                            </p>
+                            <div className="grid grid-cols-2">
+                              <div className="col-span-1">
+                                <p><span className="font-bold text-blue-800 print:text-black">GSTIN</span> {data.party.gstin || 'N/A'}</p>
+                                <p><span className="font-bold text-blue-800 print:text-black">Mobile No.</span> {data.party.mobileNo}</p>
+                              </div>
+                              <div className="col-span-1">
+                                <p><span className="font-bold text-blue-800 print:text-black">State Code :</span> {data.party.stateCode}</p>
+                                <p><span className="font-bold text-blue-800 print:text-black">Balance</span> {data.party.balanceBf ? `${data.party.balanceBf}` : 'N/A'}</p>
+                              </div>
+                            </div>
                           </div>
                           <div className="w-1/3 pl-2">
-                            <div className="flex justify-between">
-                              <p><span className="font-bold text-blue-800 print:text-black">Inv. No :</span> {data.invoice.displayNo || data.invoice.no}</p>
-                            </div>
+                            <p><span className="font-bold text-blue-800 print:text-black">Inv. No :</span> {data.invoice.displayNo || data.invoice.no}</p>
                             <p><span className="font-bold text-blue-800 print:text-black">Date:</span> {data.invoice.time}</p>
                             {data.invoice.dueDate && (
-                              <p><span className="font-bold text-blue-800 print:text-black">Due Date</span> {data.invoice.dueDate}</p>
+                              <p><span className="font-bold text-blue-800 print:text-black">Due Date:</span> {data.invoice.dueDate}</p>
                             )}
+                            <p><span className="font-bold text-blue-800 print:text-black">Mode:</span> {data.invoice.mode}</p>
                           </div>
                         </div>
                       </td>

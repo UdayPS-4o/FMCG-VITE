@@ -57,8 +57,17 @@ const GodownTransfer: React.FC = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+  
+  // Helper function to format local date as YYYY-MM-DD
+  const getLocalDateYYYYMMDD = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Add 1 because months are 0-indexed
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
   const [formValues, setFormValues] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateYYYYMMDD(new Date()), // Prefill with local date
     series: 'T',
     fromGodown: '',
     toGodown: '',
