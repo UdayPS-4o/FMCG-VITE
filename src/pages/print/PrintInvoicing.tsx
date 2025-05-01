@@ -434,19 +434,23 @@ const PrintInvoicing: React.FC = () => {
                           </div>
                           <div className="w-1/3 text-center">
                             <p className="font-bold print:text-black">Tax Invoice</p>
-                            <p className="text-xl font-bold print:text-black">{data.company.name}</p>
-                            <p className="font-bold print:text-black">{data.company.address}</p>
+                            <p className="text-xl font-bold print:text-black">EKTA ENTERPRISES</p>
+                            <p className="font-bold print:text-black">BUDHWARI BAZAR,GN ROAD SEONI,</p>
                           </div>
                           <div className="w-1/3 text-right">
-                            <p className="print:font-bold print:text-black">{data.company.phone}</p>
+                            <p className="print:font-bold print:text-black">Ph : {data.company.phone}</p>
                             <p className="print:font-bold print:text-black">Office No: {data.company.officeNo}</p>
                             <p className="print:font-bold print:text-black">State Code: {data.company.stateCode}</p>
+                            <p className="text-[10px] mt-1 print:text-black text-right">Bill Made By: {data.billMadeBy}</p>
                           </div>
                         </div>
                       </td>
                       <td colSpan={3} className="border border-black p-2 align-middle">
                         <div className="text-center">
-                          <p className="text-xl font-bold print:text-black">BILL MADE BY: {data.billMadeBy || 'SHUBHAM'}</p>
+                          <p className="font-bold print:text-black">Tax Invoice</p>
+                          <p className="text-xl font-bold print:text-black">EKTA ENTERPRISES</p>
+                          <p className="font-bold print:text-black">BUDHWARI BAZAR,GN ROAD SEONI,</p>
+                          {/* <p className="text-[10px] mt-1 print:text-black text-right">Bill Made By: {data.billMadeBy}</p> */}
                         </div>
                       </td>
                     </tr>
@@ -470,7 +474,6 @@ const PrintInvoicing: React.FC = () => {
                           <div className="w-1/3 pl-2">
                             <div className="flex justify-between">
                               <p><span className="font-bold text-blue-800 print:text-black">Inv. No :</span> {data.invoice.displayNo || data.invoice.no}</p>
-                              <p><span className="font-bold text-blue-800 print:text-black">Mode:</span> {data.invoice.mode}</p>
                             </div>
                             <p><span className="font-bold text-blue-800 print:text-black">Date:</span> {data.invoice.time}</p>
                             {data.invoice.dueDate && (
@@ -481,10 +484,17 @@ const PrintInvoicing: React.FC = () => {
                       </td>
                       <td colSpan={3} className="border border-black p-2">
                         <div>
-                          <p><span className="font-bold text-blue-800 print:text-black">Invoice No :</span> {data.invoice.displayNo || data.invoice.no}</p>
-                          <p><span className="font-bold text-blue-800 print:text-black">Date:</span> {data.invoice.date}</p>
-                          <p><span className="font-bold text-blue-800 print:text-black">Party</span> {data.party.name}</p>
-                          <p><span className="font-bold text-blue-800 print:text-black">Mode:</span> {data.invoice.mode}</p>
+                          {/* Line 1: Invoice No and Mode (Always) */}
+                          <div className="flex justify-between items-center">
+                            <p className="mb-0"><span className="font-bold text-blue-800 print:text-black">Invoice No :</span> {data.invoice.displayNo || data.invoice.no}</p>
+                            <p className="mb-0"><span className="font-bold text-blue-800 print:text-black">Mode:</span> {data.invoice.mode}</p>
+                          </div>
+
+                          {/* Line 2: Date */}
+                          <p className="mb-0"><span className="font-bold text-blue-800 print:text-black">Date:</span> {data.invoice.date}</p>
+
+                          {/* Line 3: Party Name */}
+                          <p className="mt-1 mb-0"><span className="font-bold text-blue-800 print:text-black">Party</span> {data.party.name}</p>
                         </div>
                       </td>
                     </tr>
@@ -735,11 +745,20 @@ const PrintInvoicing: React.FC = () => {
                         </tr>
                         <tr>
                           <td colSpan={11} className="border border-black p-1 text-center text-xs print:font-bold print:text-black">
-                            This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
-                            <div className={`float-right w-fit text-right font-bold print:text-black ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                            <div className="flex justify-between items-center">
+                              <span>
+                                This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
+                              </span>
+                              <span className="font-bold print:text-black">
+                                Page {chunkIndex + 1}/{chunksArray.length}
+                              </span>
+                            </div>
                           </td>
-                          <td colSpan={3} className="border border-black p-1 text-right text-xs">
-                            <div className={`font-bold print:text-black ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                          <td colSpan={3} className="border border-black p-1 text-xs">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] print:text-black">bill made by: {data.billMadeBy}</span>
+                              <span className="font-bold print:text-black">Page {chunkIndex + 1}/{chunksArray.length}</span>
+                            </div>
                           </td>
                         </tr>
                       </>
@@ -749,11 +768,20 @@ const PrintInvoicing: React.FC = () => {
                     {chunkIndex !== chunksArray.length - 1 && (
                       <tr>
                         <td colSpan={11} className="border border-black p-1 text-center text-xs print:font-bold print:text-black">
-                            This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
-                            <div className={`float-right w-fit text-right font-bold print:text-black ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                          <div className="flex justify-between items-center">
+                            <span>
+                              This is computer generated Bill, No signature required. Bank:PUNJAB NATIONAL BANK SEONI 0490008700003292 PUNB0049000
+                            </span>
+                            <span className="font-bold print:text-black">
+                              Page {chunkIndex + 1}/{chunksArray.length}
+                            </span>
+                          </div>
                         </td>
-                        <td colSpan={3} className="border border-black p-1 text-right text-xs">
-                            <div className={`font-bold print:text-black ${chunksArray.length === 1 ? 'invisible' : ''}`}>Page {chunkIndex + 1}/{chunksArray.length}</div>
+                        <td colSpan={3} className="border border-black p-1 text-xs">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] print:text-black">bill made by: {data.billMadeBy}</span>
+                            <span className="font-bold print:text-black">Page {chunkIndex + 1}/{chunksArray.length}</span>
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -777,11 +805,17 @@ const PrintInvoicing: React.FC = () => {
       {/* Print-specific styles */}
       <style>{`
         @media print {
+          .p-4.mx-auto.max-w-6xl {
+            max-width: none !important; /* Remove max-width for print */
+            padding: 0 !important; /* Remove padding for print */
+            margin: 0 !important; /* Remove margin for print */
+          }
+          
           body {
             background-color: white;
             color: black;
             margin: 0;
-            padding: 0;
+            padding: 10px !important; /* Add padding for breathing room */
           }
           
           .print\\:hidden {
@@ -829,7 +863,7 @@ const PrintInvoicing: React.FC = () => {
           
           @page {
             size: A4 landscape;
-            margin: 10mm;
+            margin: 8mm; /* Slightly reduced margin */
           }
         }
         
