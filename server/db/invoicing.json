@@ -105,9 +105,9 @@
     "billNo": "11",
     "cash": "N",
     "party": "CT001",
-    "partyName": "MEENASANKAR MATCH IND. PVT LTD",
-    "sm": "SM002",
-    "smName": "GANESH BAGHEL",
+    "partyName": "MEENASANKAR MATCH IND. PVT LTD | CT001",
+    "sm": "SM007",
+    "smName": "KEOLARI SHOP | SM007",
     "ref": "",
     "dueDays": "7",
     "items": [
@@ -122,11 +122,18 @@
         "sch": "",
         "cd": "",
         "amount": "3000.00",
-        "netAmount": "3000.00"
+        "netAmount": "3000.00",
+        "stock": "1896 (Total: 1656)",
+        "stockLimit": 79,
+        "pack": "421G(P)",
+        "gst": 5,
+        "pcBx": 24,
+        "mrp": 83
       }
     ],
     "id": "13",
-    "createdAt": "2025-04-14T23:30:49.757Z"
+    "createdAt": "2025-04-14T23:30:49.757Z",
+    "lastUpdated": "2025-05-02T23:04:04.966Z"
   },
   {
     "date": "2025-04-14",

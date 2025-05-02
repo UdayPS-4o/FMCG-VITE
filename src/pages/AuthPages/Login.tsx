@@ -28,18 +28,22 @@ const Login: React.FC = () => {
           const data = await response.json();
           console.log(data);
 
-          if (data.authenticated) {
+          if (data.authenticated && data.user) {
+            // Store user details in localStorage
+            localStorage.setItem('user', JSON.stringify(data.user));
             // If user is authenticated, redirect to /account-master
             window.location.href = '/account-master';
           }
         } else {
-          // If token is invalid, remove it
+          // If token is invalid, remove it and user details
           localStorage.removeItem('token');
+          localStorage.removeItem('user');
           console.error('Failed to authenticate user.');
         }
       } catch (error) {
         // Handle error if the user is not authenticated
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         console.error('Authentication check failed:', error);
       }
     };
@@ -69,6 +73,35 @@ const Login: React.FC = () => {
           // Store the JWT token in localStorage
           localStorage.setItem('token', data.token);
           
+          // Fetch user details after successful login
+          try {
+            const authResponse = await fetch(constants.baseURL + '/api/checkIsAuth', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${data.token}`
+              }
+            });
+
+            if (authResponse.ok) {
+              const authData = await authResponse.json();
+              if (authData.authenticated && authData.user) {
+                // Store user details in localStorage
+                localStorage.setItem('user', JSON.stringify(authData.user));
+              } else {
+                 // Clear potentially stale user data if auth check fails after login
+                 localStorage.removeItem('user');
+              }
+            } else {
+               // Clear potentially stale user data if auth check fails after login
+               localStorage.removeItem('user');
+               console.error('Failed to fetch user details after login.');
+            }
+          } catch (authErr) {
+            // Clear potentially stale user data if auth check fails after login
+            localStorage.removeItem('user');
+            console.error('Error fetching user details after login:', authErr);
+          }
+
           // If login is successful, redirect to /account-master
           navigate('/account-master');
         } else {

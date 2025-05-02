@@ -11,7 +11,6 @@ import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
-import useAuth from '../../hooks/useAuth';
 
 interface Option {
   value: string;
@@ -19,9 +18,42 @@ interface Option {
   stockLimit?: number;
 }
 
+// Define a type for the User object expected from localStorage
+interface User {
+  id: number;
+  name: string;
+  username: string;
+  routeAccess: string[];
+  powers: string[];
+  subgroups: string[];
+  smCode?: string; // smCode might be optional
+  defaultSeries?: { billing?: string };
+  godownAccess: string[];
+  canSelectSeries?: boolean;
+}
+
 const InvoicingContent: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  // Get user data from localStorage
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error("Failed to parse user data from localStorage", e);
+        // Handle potential corrupt data: clear storage and redirect to login?
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        navigate('/login'); 
+      }
+    }
+    // If no user data, potentially redirect to login or show an error
+    // else { navigate('/login'); } // Uncomment if redirect is desired
+  }, [navigate]);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [searchItems, setSearchItems] = useState<string>('');
   const [showValidationErrors, setShowValidationErrors] = useState<boolean>(false);
@@ -72,10 +104,15 @@ const InvoicingContent: React.FC = () => {
 
   // Apply default series from user settings
   useEffect(() => {
-    if (user && user.defaultSeries && user.defaultSeries.billing) {
+    // Check if user exists and has defaultSeries with billing property
+    if (user && user.defaultSeries && typeof user.defaultSeries.billing === 'string') {
       setSeries(user.defaultSeries.billing);
     }
-  }, [user]);
+    // Set a default series 'T' if no user preference or billing series is found
+    // else {
+    //   setSeries('T'); // Keep default or adjust as needed
+    // }
+  }, [user]); // Dependency is now the user state derived from localStorage
 
   // Filter SM options based on user's role and assigned SM code
   const filteredSmOptions = useMemo(() => {
@@ -105,9 +142,7 @@ const InvoicingContent: React.FC = () => {
 
   // Auto-select SM based on user's smCode
   useEffect(() => {
-    // Only proceed if we have user data and SM options loaded
     if (user && smOptions && smOptions.length > 0) {
-      // If user has smCode and is not admin, auto-select their SM
       const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
       
       if (user.smCode && !isAdmin) {
