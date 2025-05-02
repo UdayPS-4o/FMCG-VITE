@@ -5,7 +5,6 @@ import { toast } from 'react-toastify';
 import './scrollbar.css'; // Import the scrollbar styles
 import DeleteConfirmation from '../ui/DeleteConfirmation';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
 import { TableSkeletonLoader } from '../ui/skeleton/SkeletonLoader';
 
 // Add formatItemsDisplay helper function
@@ -22,6 +21,20 @@ const formatItemsDisplay = (items: any): string => {
   return '0';
 };
 
+// Define User interface (same as in Invoicing.tsx)
+interface User {
+  id: number;
+  name: string;
+  username: string;
+  routeAccess: string[];
+  powers: string[];
+  subgroups: string[];
+  smCode?: string; // smCode might be optional
+  defaultSeries?: { billing?: string };
+  godownAccess: string[];
+  canSelectSeries?: boolean;
+}
+
 interface DatabaseTableProps {
   endpoint?: string;
   tableId?: string; // Add a unique identifier for the table
@@ -29,11 +42,12 @@ interface DatabaseTableProps {
   hideButtons?: string[]; // Add prop to hide specific buttons
   hideApproveButton?: boolean; // Add prop to hide the approve button
   ref?: React.Ref<{ refreshData: () => Promise<void> }>; // Add a ref to access the refreshData method
+  onApproveSuccess?: () => void; // Add callback for when items are successfully approved
 }
 
 // Convert to forwardRef to expose refreshData method
 const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseTableProps>(
-  ({ endpoint: propEndpoint, tableId, onSelectionChange, hideButtons = [], hideApproveButton = false }, ref) => {
+  ({ endpoint: propEndpoint, tableId, onSelectionChange, hideButtons = [], hideApproveButton = false, onApproveSuccess }, ref) => {
   const [endpoint, setEndpoint] = useState<string>('');
   const [rows, setRows] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -116,71 +130,110 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   // Add state for table loading
   const [isTableLoading, setIsTableLoading] = useState<boolean>(true);
 
-  // Add useAuth hook
-  const { user, hasPower } = useAuth();
+  // Get user state from localStorage
+  const [user, setUser] = useState<User | null>(null);
 
   const navigate = useNavigate();
 
+  // Fetch user data from localStorage
   useEffect(() => {
-    const fetchData = async () => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
       try {
-        let point = propEndpoint || '';
-        
-        if (!point) {
-          const path = window.location.pathname;
-          const pathSegments = path.split('/');
-          point = pathSegments[pathSegments.length - 1].toLowerCase();
-        }
-        
-        setEndpoint(point);
-        
-        // Check if user has permission to view this database section
-        const endpointAccessMap: Record<string, string> = {
-          'account-master': 'Account Master',
-          'invoicing': 'Invoicing',
-          'godown-transfer': 'Godown Transfer',
-          'godown': 'Godown Transfer',
-          'cash-receipts': 'Cash Receipts',
-          'cash-payments': 'Cash Payments'
-        };
-        
-        // For users other than admins, check if they have access to this endpoint
-        if (user && !user.routeAccess.includes('Admin')) {
-          const requiredAccess = endpointAccessMap[point];
-          if (requiredAccess && !user.routeAccess.includes(requiredAccess)) {
-            toast.error(`You don't have permission to access this database section`);
-            // Redirect to first accessible route
-            navigate('/');
-            return;
-          }
-        }
-        
-        const data = await fetchProducts(point);
-        setRows(data);
-        
-        if (data.length > 0) {
-          const dataHeaders = Object.keys(data[0]);
-          setHeaders(dataHeaders);
-          // Set initial sorting to be by 'id' in descending order if the id field exists
-          if (dataHeaders.includes('id')) {
-            setOrderBy('id');
-          } else {
-            setOrderBy(dataHeaders[0]);
-          }
-          
-          // We'll load hidden columns in a separate useEffect
-        }
-        // Set loading to false once data is loaded
-        setIsTableLoading(false);
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-        toast.error('Failed to load data');
-        setIsTableLoading(false);
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error("Failed to parse user data from localStorage", e);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        navigate('/login'); 
       }
-    };
+    } else {
+      // Redirect to login if no user data
+      navigate('/login'); 
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    // Fetch data only when user is loaded
+    if (user) {
+      fetchData();
+    }
+  }, [propEndpoint, tableId, user, navigate]); // Add user to dependency array
+
+  const fetchData = async () => {
+    // Ensure user is available before proceeding
+    if (!user) return;
     
-    fetchData();
-  }, [propEndpoint, tableId, user, navigate]);
+    setIsTableLoading(true); // Set loading state
+    try {
+      let point = propEndpoint || '';
+      
+      if (!point) {
+        const path = window.location.pathname;
+        const pathSegments = path.split('/');
+        point = pathSegments[pathSegments.length - 1].toLowerCase();
+      }
+      
+      setEndpoint(point);
+      
+      // Check if user has permission to view this database section
+      const endpointAccessMap: Record<string, string> = {
+        'account-master': 'Account Master',
+        'invoicing': 'Invoicing',
+        'godown-transfer': 'Godown Transfer',
+        'godown': 'Godown Transfer', // Keep both for flexibility?
+        'cash-receipts': 'Cash Receipts',
+        'cash-payments': 'Cash Payments'
+      };
+      
+      const isAdmin = user.routeAccess.includes('Admin');
+      const requiredAccess = endpointAccessMap[point];
+      
+      if (!isAdmin && requiredAccess && !user.routeAccess.includes(requiredAccess)) {
+        toast.error(`You don't have permission to access the ${requiredAccess} database section`);
+        navigate('/'); // Redirect to a default/dashboard page
+        setIsTableLoading(false);
+        return;
+      }
+      
+      const data = await fetchProducts(point); // Fetch all data
+      
+      // Filter data based on user role and smCode
+      let filteredData = data;
+      if (!isAdmin && user.smCode) {
+        // Filter only if the endpoint is 'invoicing' and the 'sm' column exists
+        if (point === 'invoicing' && data.length > 0 && data[0].hasOwnProperty('sm')) {
+           filteredData = data.filter(row => row.sm === user.smCode);
+           console.log(`Filtered invoice data for SM: ${user.smCode}`, filteredData);
+        } else {
+           // If not invoicing or sm column missing, non-admins might see nothing or all?
+           // Decide behavior - for now, keep all if not invoicing specific filtering
+           console.log(`SM filtering not applied for endpoint: ${point} or 'sm' column missing`);
+        }
+      }
+      
+      setRows(filteredData);
+      
+      if (filteredData.length > 0) {
+        const dataHeaders = Object.keys(filteredData[0]);
+        setHeaders(dataHeaders);
+        // Set initial sorting to be by 'id' in descending order if the id field exists
+        if (dataHeaders.includes('id')) {
+          setOrderBy('id');
+        } else {
+          setOrderBy(dataHeaders[0]);
+        }
+        
+        // We'll load hidden columns in a separate useEffect
+      }
+      // Set loading to false once data is loaded
+      setIsTableLoading(false);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+      toast.error('Failed to load data');
+      setIsTableLoading(false);
+    }
+  };
 
   // Save hidden columns to localStorage when they change
   useEffect(() => {
@@ -223,26 +276,6 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   }, [endpoint, tableId]);
 
   const fetchProducts = async (endpoint: string) => {
-    // Check if user has access to the endpoint
-    if (!user) return [];
-    
-    const endpointAccessMap: Record<string, string> = {
-      'account-master': 'Account Master',
-      'invoicing': 'Invoicing',
-      'godown': 'Godown Transfer',
-      'cash-receipts': 'Cash Receipts',
-      'cash-payments': 'Cash Payments'
-    };
-    
-    // For users other than admins, check if they have access to this endpoint
-    if (!user.routeAccess.includes('Admin')) {
-      const requiredAccess = endpointAccessMap[endpoint];
-      if (requiredAccess && !user.routeAccess.includes(requiredAccess)) {
-        toast.error(`You don't have access to the ${endpoint} database`);
-        return [];
-      }
-    }
-    
     // Get token from localStorage
     const token = localStorage.getItem('token');
     if (!token) {
@@ -357,7 +390,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     }
     
     // Only check for Write power if user is not Admin
-    if (!hasPower('Write')) {
+    if (!user?.powers.includes('Write')) {
       toast.error('You do not have permission to edit items');
       return;
     }
@@ -384,7 +417,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
 
   const handleDelete = (id: string, event?: React.MouseEvent) => {
     // Only check for Delete power if user is not Admin
-    if (!hasPower('Delete')) {
+    if (!user?.powers.includes('Delete')) {
       toast.error('You do not have permission to delete items');
       return;
     }
@@ -555,6 +588,11 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
         const data = await fetchProducts(endpoint);
         setRows(data);
         setSelectedItems([]);
+        
+        // Call the onApproveSuccess callback if provided
+        if (onApproveSuccess) {
+          onApproveSuccess();
+        }
       } else {
         toast.error('Failed to approve items');
       }
@@ -805,6 +843,44 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
                   </svg>
                   Columns {hiddenColumns.length > 0 && <span className="ml-1 text-xs bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded-full">{hiddenColumns.length}</span>}
                 </button>
+                
+                {/* Column Selector Dropdown */}
+                {showColumnSelector && (
+                  <div className="absolute z-20 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none right-0">
+                    <div className="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+                      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-600">
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Visible Columns</h3>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto px-4 py-2 custom-scrollbar">
+                        {headers.map((header) => (
+                          <div key={header} className="flex items-center mb-2">
+                            <input
+                              id={`column-${header}`}
+                              type="checkbox"
+                              checked={!hiddenColumns.includes(header)}
+                              onChange={() => toggleColumnVisibility(header)}
+                              className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:focus:ring-brand-400"
+                            />
+                            <label 
+                              htmlFor={`column-${header}`} 
+                              className="ml-2 block text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none"
+                            >
+                              {header.charAt(0).toUpperCase() + header.slice(1).replace(/_/g, ' ')}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-600">
+                        <button 
+                          onClick={showAllColumns}
+                          className="w-full text-left text-sm text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-200"
+                        >
+                          Show All Columns
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* Only show Approve button to Admin users and if not hidden */}
@@ -932,7 +1008,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
                           <TableCell className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
                               {/* Only show print button if endpoint is not account-master and not hidden */}
-                              {endpoint !== 'account-master' && hasPower('Read') && !hideButtons.includes('print') && (
+                              {endpoint !== 'account-master' && user?.powers.includes('Read') && !hideButtons.includes('print') && (
                                 <button
                                   onClick={() => handlePrint(getRowId(row))}
                                   className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -947,32 +1023,24 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
                               )}
                               
                               {/* Only show edit button if not hidden */}
-                              {hasPower('Write') && !hideButtons.includes('edit') && (
+                              {user?.powers.includes('Write') && !hideButtons.includes('edit') && (
                                 <button
-                                  onClick={() => handleEdit(row)}
-                                  className="p-1 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                                  title="Edit"
+                                  className="p-1 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
+                                  disabled={!user?.powers.includes('Write')}
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                  </svg>
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-file-pen-line"><path d="m18 5-3-3H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2"/><path d="M8 18h1"/><path d="M18.4 9.6a2 2 0 1 1 3 3L17 17l-4 1 1-4Z"/></svg>
                                 </button>
                               )}
                               
                               {/* Only show delete button if not hidden */}
-                              {hasPower('Delete') && !hideButtons.includes('delete') && (
+                              {user?.powers.includes('Delete') && !hideButtons.includes('delete') && (
                                 <button
+                                  className="p-1 text-red-500 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                   onClick={(e) => handleDelete(getRowId(row), e)}
-                                  className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                                  title="Delete (Hold Alt+Shift to delete without confirmation)"
+                                  disabled={!user?.powers.includes('Delete')}
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M3 6h18"></path>
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                    <line x1="10" y1="11" x2="10" y2="17"></line>
-                                    <line x1="14" y1="11" x2="14" y2="17"></line>
-                                  </svg>
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
                                 </button>
                               )}
                             </div>

@@ -526,7 +526,7 @@ async function getNextInvoiceId(req, res) {
     // Get current file modification times
     const currentFileModTimes = {};
     for (const file of invoiceFilePaths) {
-      try {
+      try { 
         const stats = await fs.stat(file);
         currentFileModTimes[file] = stats.mtime.getTime();
       } catch (error) {
@@ -659,6 +659,174 @@ async function getNextInvoiceId(req, res) {
     res.json(responseData);
   } catch (error) {
     console.error('Failed to process invoice data:', error);
+    res.status(500).send('Server error');
+  }
+}
+
+// Add these at the top with other global variables
+let cachedCashReceiptIdData = null;
+let cachedCashReceiptIdHash = null;
+let lastCashReceiptFileModTimes = {};
+
+async function getNextCashReceiptId(req, res) {
+  try {
+    const clientHash = req.headers['if-none-match'] || req.query.hash;
+
+    // Define file paths to check for modifications
+    const cashReceiptFilePaths = [
+      path.join(__dirname, '..', 'db', 'cash-receipts.json'),
+      path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CASH.json')
+    ];
+
+    // Get current file modification times
+    const currentFileModTimes = {};
+    for (const file of cashReceiptFilePaths) {
+      try { 
+        const stats = await fs.stat(file);
+        currentFileModTimes[file] = stats.mtime.getTime();
+      } catch (error) {
+        console.error(`Error getting modification time for ${file}:`, error);
+        currentFileModTimes[file] = Date.now(); // Force recalculation on error
+      }
+    }
+    
+    // Check if files have changed compared to last known times
+    let filesHaveChanged = false;
+    if (Object.keys(lastCashReceiptFileModTimes).length !== cashReceiptFilePaths.length) {
+       filesHaveChanged = true; // If file count differs, assume change
+    } else {
+        for (const file of cashReceiptFilePaths) {
+            if (!lastCashReceiptFileModTimes[file] || lastCashReceiptFileModTimes[file] !== currentFileModTimes[file]) {
+                filesHaveChanged = true;
+                break;
+            }
+        }
+    }
+
+    // If we have cached data and no file has changed
+    if (cachedCashReceiptIdData && cachedCashReceiptIdHash && !filesHaveChanged) {
+      console.log('Cash Receipt source files unchanged, using cached cash receipt ID data');
+      
+      // If client hash matches cached hash, return 304
+      if (clientHash && (clientHash === cachedCashReceiptIdHash || clientHash === `"${cachedCashReceiptIdHash}"`)) {
+        console.log('Cash Receipt ID data cache hit with 304');
+        return res.status(304).set({
+          'ETag': `"${cachedCashReceiptIdHash}"`,
+          'Cache-Control': 'private, max-age=0',
+          'Access-Control-Expose-Headers': 'ETag'
+        }).send('Not Modified');
+      }
+      
+      // Otherwise return cached data
+      console.log('Cash Receipt ID data cache hit with new data');
+      res.set({
+        'ETag': `"${cachedCashReceiptIdHash}"`,
+        'Cache-Control': 'private, max-age=0',
+        'Access-Control-Expose-Headers': 'ETag'
+      });
+      return res.json(cachedCashReceiptIdData);
+    }
+    
+    // If we get here, files have changed or cache doesn't exist
+    console.log('Files changed or no cache, recalculating cash receipt ID data');
+    
+    // 1. Get data from cash-receipts.json (local database)
+    const cashReceiptsPath = path.join(__dirname, '..', 'db', 'cash-receipts.json');
+    const cashReceiptsData = await fs.readFile(cashReceiptsPath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        if (error.code !== 'ENOENT') throw error; // Ignore file not found errors
+        return [];
+      },
+    );
+    
+    // 2. Read CASH.json for transactions with BOOK="BR" (bank receipts)
+    const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CASH.json');
+    const cashDbfData = await fs.readFile(cashDbfPath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        console.error('Error reading CASH.json:', error);
+        return [];
+      }
+    );
+    
+    // Filter CASH.json entries for bank receipts
+    const brEntries = cashDbfData.filter(entry => entry.BOOK === "BR" && !entry._deleted);
+    
+    // Calculate the next receipt number for each series considering BOTH sources
+    const seriesMap = {};
+    
+    // Process receipts from CASH.json (DBF)
+    brEntries.forEach(entry => {
+      const series = entry.SERIES?.toUpperCase(); // Ensure consistent casing
+      const receiptNumber = Number(entry.R_NO);
+      if (series !== undefined && !isNaN(receiptNumber)) {
+        if (!seriesMap[series] || receiptNumber > seriesMap[series]) {
+          seriesMap[series] = receiptNumber;
+        }
+      }
+    });
+
+    // Process receipts from cash-receipts.json (local database)
+    cashReceiptsData.forEach(entry => {
+      const series = entry.series?.toUpperCase(); // Ensure consistent casing
+      const receiptNumber = Number(entry.receiptNo);
+      if (series !== undefined && !isNaN(receiptNumber)) {
+        if (!seriesMap[series] || receiptNumber > seriesMap[series]) {
+          seriesMap[series] = receiptNumber;
+        }
+      }
+    });
+    
+    // Calculate next local receipt number (ignoring series)
+    const maxLocalId = cashReceiptsData.length > 0 
+      ? Math.max(...cashReceiptsData.map(entry => Number(entry.receiptNo) || 0))
+      : 0;
+    const nextReceiptNo = maxLocalId + 1;
+    
+    // Increment each max receipt number by 1 to get the next receipt number
+    const nextSeries = {};
+    for (const series in seriesMap) {
+      nextSeries[series] = seriesMap[series] + 1;
+    }
+    
+    // Prepare the response data
+    const responseData = { 
+      nextReceiptNo,
+      nextSeries
+    };
+    
+    // Generate a hash for the cash receipt ID data
+    const currentHash = require('crypto')
+      .createHash('md5')
+      .update(JSON.stringify(responseData))
+      .digest('hex');
+    
+    // Update cache and file mod times
+    cachedCashReceiptIdData = responseData;
+    cachedCashReceiptIdHash = currentHash;
+    lastCashReceiptFileModTimes = { ...currentFileModTimes }; // Update last known mod times
+    
+    // Set ETag header with proper quotes
+    const etagValue = `"${currentHash}"`;
+    res.set({
+      'ETag': etagValue,
+      'Cache-Control': 'private, max-age=0',
+      'Access-Control-Expose-Headers': 'ETag'
+    });
+    
+    console.log(`Cash Receipt ID API: Generated hash: ${currentHash}, client hash: ${clientHash || 'none'}`);
+    
+    // Compare again after calculation in case hashes match
+    if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
+      console.log('Cash Receipt ID data matches after recalculation, sending 304');
+      return res.status(304).send('Not Modified');
+    }
+    
+    console.log('Sending full cash receipt ID data');
+    res.json(responseData);
+  } catch (error) {
+    console.error('Failed to process cash receipt data:', error);
     res.status(500).send('Server error');
   }
 }
@@ -1035,6 +1203,7 @@ app.post('/editUser', EditUser);
 app.get('/printGodown', verifyToken, printGodown);
 app.get('/godownId', getNextGodownId);
 app.get('/invoiceId', getNextInvoiceId);
+app.get('/cashReceiptId', getNextCashReceiptId);
 
 app.get('/printPage', verifyToken, async (req, res) => {
   console.log('printPage');

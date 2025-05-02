@@ -47,11 +47,19 @@ interface FormValues {
   party?: string;
 }
 
+interface ReceiptIdInfo {
+  nextReceiptNo: number;
+  nextSeries: {
+    [key: string]: number;
+  };
+}
+
 const CashReceipt: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [party, setParty] = useState<PartyOption | null>(null);
   const [partyOptions, setPartyOptions] = useState<PartyOption[]>([]);
   const [receiptNo, setReceiptNo] = useState<string | null>(null);
+  const [receiptIdInfo, setReceiptIdInfo] = useState<ReceiptIdInfo | null>(null);
   const [formValues, setFormValues] = useState<FormValues>({
     date: getTodayFormatted(),
     series: '',
@@ -140,49 +148,126 @@ const CashReceipt: React.FC = () => {
     }
   }, [user, isEditMode]);
 
-  // Handle fetch next receipt number
+  // Fetch receipt ID information (next receipt number for each series)
   useEffect(() => {
-    const fetchNextReceiptNo = async () => {
-      try {
-        const response = await fetch(`${constants.baseURL}/cash-receipts`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        const data = await response.json();
-        
-        setReceiptNo(data.nextReceiptNo.toString());
-        
-        // Apply default series if available
-        if (user?.defaultSeries?.cashReceipt && !isEditMode) {
-          const updatedValues = {
-            ...formValues,
-            series: user.defaultSeries.cashReceipt,
-            receiptNo: data.nextReceiptNo.toString()
-          };
-          setFormValues(updatedValues);
-          
-          // Generate narration based on receipt number and series
-          setTimeout(() => updateNarration(updatedValues), 0);
-        } else {
-          const updatedValues = {
-            ...formValues,
-            receiptNo: data.nextReceiptNo.toString()
-          };
-          setFormValues(updatedValues);
-          
-          // Generate narration based on receipt number
-          setTimeout(() => updateNarration(updatedValues), 0);
-        }
-      } catch (error) {
-        console.error('Error fetching next receipt number:', error);
-      }
-    };
-
     if (!isEditMode) {
-      fetchNextReceiptNo();
+      const fetchNextReceiptInfo = async () => {
+        try {
+          const response = await fetch(`${constants.baseURL}/slink/cashReceiptId`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          
+          // If the response is 304 Not Modified, we don't need to update state
+          if (response.status === 304) {
+            console.log('Receipt ID info unchanged, using cached data');
+            return;
+          }
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          setReceiptIdInfo(data);
+          
+          // Set the next receipt number
+          setReceiptNo(data.nextReceiptNo.toString());
+          
+          // Apply default series if available and get its next number
+          if (user?.defaultSeries?.cashReceipt) {
+            const series = user.defaultSeries.cashReceipt.toUpperCase();
+            const seriesNextNumber = data.nextSeries && data.nextSeries[series] 
+              ? data.nextSeries[series] 
+              : 1;
+            
+            const updatedValues = {
+              ...formValues,
+              series: series,
+              receiptNo: seriesNextNumber.toString()
+            };
+            
+            setFormValues(updatedValues);
+            
+            // Generate narration based on receipt number and series
+            setTimeout(() => updateNarration(updatedValues), 0);
+          } else {
+            const updatedValues = {
+              ...formValues,
+              receiptNo: data.nextReceiptNo.toString()
+            };
+            
+            setFormValues(updatedValues);
+            
+            // Generate narration based on receipt number
+            setTimeout(() => updateNarration(updatedValues), 0);
+          }
+        } catch (error) {
+          console.error('Error fetching next receipt ID info:', error);
+          // Fallback to the old approach
+          fallbackFetchNextReceiptNo();
+        }
+      };
+      
+      fetchNextReceiptInfo();
     }
   }, [isEditMode, user]);
+
+  // Update receipt number when series changes (if we have receipt ID info)
+  useEffect(() => {
+    if (!isEditMode && receiptIdInfo && formValues.series) {
+      // Only auto-update receipt number if it hasn't been manually edited
+      // or when the series changes
+      const series = formValues.series.toUpperCase();
+      const seriesNextNumber = receiptIdInfo.nextSeries && receiptIdInfo.nextSeries[series] 
+        ? receiptIdInfo.nextSeries[series] 
+        : 1; // Start with 1 for new series
+      
+      setFormValues(prev => ({
+        ...prev,
+        receiptNo: seriesNextNumber.toString()
+      }));
+    }
+  }, [formValues.series, receiptIdInfo, isEditMode]);
+
+  // Fallback method to get next receipt number (old implementation)
+  const fallbackFetchNextReceiptNo = async () => {
+    try {
+      const response = await fetch(`${constants.baseURL}/cash-receipts`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await response.json();
+      
+      setReceiptNo(data.nextReceiptNo.toString());
+      
+      // Apply default series if available
+      if (user?.defaultSeries?.cashReceipt && !isEditMode) {
+        const updatedValues = {
+          ...formValues,
+          series: user.defaultSeries.cashReceipt,
+          receiptNo: data.nextReceiptNo.toString()
+        };
+        setFormValues(updatedValues);
+        
+        // Generate narration based on receipt number and series
+        setTimeout(() => updateNarration(updatedValues), 0);
+      } else {
+        const updatedValues = {
+          ...formValues,
+          receiptNo: data.nextReceiptNo.toString()
+        };
+        setFormValues(updatedValues);
+        
+        // Generate narration based on receipt number
+        setTimeout(() => updateNarration(updatedValues), 0);
+      }
+    } catch (error) {
+      console.error('Error fetching next receipt number:', error);
+    }
+  };
 
   useEffect(() => {
     const fetchEditData = async () => {
@@ -287,13 +372,7 @@ const CashReceipt: React.FC = () => {
 
     const fetchNewData = async () => {
       try {
-        const resReceipt = await fetch(constants.baseURL + '/slink/cash-receipts', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        const dataReceipt = await resReceipt.json();
-        setReceiptNo(dataReceipt.nextReceiptNo);
+        // Fetch receipt ID info is handled in the other useEffect
 
         // Use apiCache for CMPL data
         const dataParty = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
@@ -400,20 +479,38 @@ const CashReceipt: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Simply set the value directly, Input component's seriesMode will handle capitalization
-    setFormValues(prev => {
-      const updated = {
-        ...prev,
-        [name]: value
-      };
+    if (name === 'receiptNo') {
+      // Only allow numeric values, max 6 digits
+      const numericValue = value.replace(/\D/g, '');
+      const truncatedValue = numericValue.slice(0, 6);
       
-      // Update narration when amount or receiptNo changes
-      if (name === 'amount' || name === 'receiptNo') {
+      setFormValues(prev => {
+        const updated = {
+          ...prev,
+          [name]: truncatedValue
+        };
+        
+        // Update narration when receiptNo changes
         updateNarration(updated);
-      }
-      
-      return updated;
-    });
+        
+        return updated;
+      });
+    } else {
+      // Handle other fields normally
+      setFormValues(prev => {
+        const updated = {
+          ...prev,
+          [name]: value
+        };
+        
+        // Update narration when amount changes
+        if (name === 'amount') {
+          updateNarration(updated);
+        }
+        
+        return updated;
+      });
+    }
   };
   
   // Function to automatically generate narration
@@ -535,9 +632,12 @@ const CashReceipt: React.FC = () => {
                       name="receiptNo"
                       label="Receipt No."
                       type="text"
-                      value={receiptNo || formValues.receiptNo || ''}
+                      value={formValues.receiptNo || ''} 
                       onChange={handleInputChange}
                       className="w-full"
+                      placeholder="Enter receipt number"
+                      maxLength={6}
+                      inputMode="numeric"
                     />
                   </div>
                 </div>

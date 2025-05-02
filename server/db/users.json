@@ -37,7 +37,9 @@
     "number": "A",
     "password": "A",
     "routeAccess": [
-      "Admin"
+      "Invoicing",
+      "Account Master",
+      "Cash Receipts"
     ],
     "powers": [
       "Write",
@@ -48,7 +50,8 @@
     "subgroup": null,
     "defaultSeries": {},
     "canSelectSeries": true,
-    "godownAccess": []
+    "godownAccess": [],
+    "smCode": "SM002"
   },
   {
     "id": 3,
