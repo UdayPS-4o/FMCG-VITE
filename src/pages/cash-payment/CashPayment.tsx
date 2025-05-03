@@ -199,7 +199,7 @@ const CashPayment: React.FC = () => {
           let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
           
           if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-            console.log(`Filtering parties by user's assigned subgroups`);
+            console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
             
             // Get all subgroup prefixes from user's assigned subgroups
             const subgroupPrefixes = user.subgroups.map((sg: any) => 
@@ -208,13 +208,18 @@ const CashPayment: React.FC = () => {
             
             console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
             
-            // Filter parties where C_CODE starts with any of the user's subgroup prefixes
+            // Filter parties: include if EE prefix OR if C_CODE starts with any of the user's subgroup prefixes
             filteredPartyData = filteredPartyData.filter((party: any) => {
               const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+              // Always include if prefix is EE
+              if (partyPrefix === 'EE') {
+                return true;
+              }
+              // Otherwise, include if it matches one of the user's subgroup prefixes
               return subgroupPrefixes.includes(partyPrefix);
             });
             
-            console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
+            console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups and EE inclusion`);
           } else if (isAdmin) {
             console.log('User is admin - showing all parties without filtering');
           }
@@ -268,7 +273,7 @@ const CashPayment: React.FC = () => {
           let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
           
           if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-            console.log(`Filtering parties by user's assigned subgroups`);
+            console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
             
             // Get all subgroup prefixes from user's assigned subgroups
             const subgroupPrefixes = user.subgroups.map((sg: any) => 
@@ -277,13 +282,18 @@ const CashPayment: React.FC = () => {
             
             console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
             
-            // Filter parties where C_CODE starts with any of the user's subgroup prefixes
+            // Filter parties: include if EE prefix OR if C_CODE starts with any of the user's subgroup prefixes
             filteredPartyData = filteredPartyData.filter((party: any) => {
               const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+              // Always include if prefix is EE
+              if (partyPrefix === 'EE') {
+                return true;
+              }
+              // Otherwise, include if it matches one of the user's subgroup prefixes
               return subgroupPrefixes.includes(partyPrefix);
             });
             
-            console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
+            console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups and EE inclusion`);
           } else if (isAdmin) {
             console.log('User is admin - showing all parties without filtering');
           }
