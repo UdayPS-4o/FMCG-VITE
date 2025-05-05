@@ -209,5 +209,55 @@
     "narration": "111100",
     "createdAt": "2025-03-30T07:41:55.368Z",
     "lastUpdated": "2025-03-30T07:43:05.865Z"
+  },
+  {
+    "date": "2025-05-03",
+    "series": "V",
+    "amount": "23",
+    "discount": "345678",
+    "receiptNo": "55",
+    "narration": "BY CASH ON R/NO.V-55",
+    "party": "CT008",
+    "createdAt": "2025-05-03T10:04:57.891Z"
+  },
+  {
+    "date": "2025-05-03",
+    "series": "V",
+    "amount": "23",
+    "discount": "132",
+    "receiptNo": "56",
+    "narration": "BY CASH ON R/NO.V-56",
+    "party": "CT001",
+    "createdAt": "2025-05-03T10:05:10.956Z"
+  },
+  {
+    "date": "2025-05-03",
+    "series": "V",
+    "amount": "23",
+    "discount": "345678",
+    "receiptNo": "57",
+    "narration": "BY CASH ON R/NO.V-57",
+    "party": "CT002",
+    "createdAt": "2025-05-03T10:07:02.057Z"
+  },
+  {
+    "date": "2025-05-04",
+    "series": "V",
+    "amount": "213",
+    "discount": "",
+    "receiptNo": "58",
+    "narration": "BY CASH ON R/NO.V-58",
+    "party": "CT002",
+    "createdAt": "2025-05-04T01:26:16.585Z"
+  },
+  {
+    "date": "2025-05-04",
+    "series": "V",
+    "amount": "123",
+    "discount": "",
+    "receiptNo": "59",
+    "narration": "BY CASH ON R/NO.V-59",
+    "party": "AA001",
+    "createdAt": "2025-05-04T01:27:13.998Z"
   }
 ]

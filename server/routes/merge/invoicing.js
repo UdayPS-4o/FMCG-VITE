@@ -13,6 +13,7 @@ const cmplDbfPath = path.join(dbfFolderPath, 'data', 'CMPL.DBF'); // Customer Ma
 
 // Source JSON data
 const invoicingJsonPath = path.resolve(__dirname, '..', '..', 'db', 'approved', 'invoicing.json');
+const usersJsonPath = path.resolve(__dirname, '..', '..', 'db', 'users.json'); // Path to users.json
 
 // --- Mapping Functions ---
 
@@ -252,11 +253,35 @@ router.post('/sync', async (req, res) => {
   const cmplDbf = new DbfORM(cmplDbfPath);
 
   try {
+    console.log('[Invoicing Handler] Request received. req.user:', JSON.stringify(req.user));
     // Get authenticated user ID from middleware
     const userId = req.user?.id;
-    if (!userId) {
+    console.log({yo: req.user})
+    // Check if userId is explicitly undefined or null, allowing 0
+    if (userId === undefined || userId === null) { 
+      console.error('[Invoicing Handler] User ID check failed! userId is undefined or null.');
       return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
     }
+    console.log(`[Invoicing Handler] User ID check passed. userId: ${userId}`);
+
+    // --- Load Users Data ---
+    let userMapBySmCode = {};
+    try {
+      const usersJsonData = await fs.readFile(usersJsonPath, 'utf-8');
+      const users = JSON.parse(usersJsonData);
+      userMapBySmCode = users.reduce((map, user) => {
+        if (user.smCode) { // Only map users with an smCode
+          map[user.smCode] = user.id;
+        }
+        return map;
+      }, {});
+      console.log(`Loaded ${Object.keys(userMapBySmCode).length} users with smCode.`);
+    } catch (readError) {
+      console.error(`Error reading users JSON file at ${usersJsonPath}:`, readError);
+      // Continue without the map, or return an error depending on requirements
+      // return res.status(500).json({ success: false, message: 'Failed to read users data file.', error: readError.message });
+    }
+    // --- End Load Users Data ---
 
     // 1. Read invoicing.json
     let invoicesData;
@@ -378,9 +403,19 @@ router.post('/sync', async (req, res) => {
       const roundOff = safeParseFloat(netAmountRounded - totalNetAmountExact, 2);
       const calculatedTotals = { netAmountRounded, roundOff };
 
+      // --- Determine User ID based on SM Code ---
+      const invoiceSmCode = invoice.sm;
+      let recordUserId = userMapBySmCode[invoiceSmCode]; // Look up user ID by smCode
+      if (recordUserId === undefined) {
+          console.warn(`User ID not found for SM Code: ${invoiceSmCode} in bill ${billKey}. Defaulting to merging user ID: ${userId}`);
+          recordUserId = userId; // Fallback to the merging user's ID
+      } else {
+          console.log(`Using User ID: ${recordUserId} for SM Code: ${invoiceSmCode} in bill ${billKey}.`);
+      }
+      // --- End Determine User ID ---
 
-      // Map BILL record using calculated totals and userId
-      const billRecord = mapToBillDbfFormat(invoice, customerData, calculatedTotals, userId);
+      // Map BILL record using calculated totals and determined userId
+      const billRecord = mapToBillDbfFormat(invoice, customerData, calculatedTotals, recordUserId); // Pass recordUserId
       billRecordsToInsert.push(billRecord);
 
       // Add the processed details to the main list

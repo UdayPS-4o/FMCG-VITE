@@ -3,6 +3,7 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Input from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
+import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
 import Toast from '../../components/ui/toast/Toast';
 import constants from "../../constants";
@@ -229,6 +230,10 @@ const GodownTransfer: React.FC = () => {
       // For other fields, simply set the value directly
       setFormValues(prev => ({ ...prev, [name]: value }));
     }
+  };
+
+  const handleDateChange = (dateString: string) => {
+    setFormValues(prev => ({ ...prev, date: dateString }));
   };
 
   const handleFromGodownChange = (value: string) => {
@@ -462,14 +467,13 @@ const GodownTransfer: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div>
-              <Input
+              <DatePicker
                 id="date"
                 label="Date"
-                type="date"
                 name="date"
                 value={formValues.date}
-                onChange={handleChange}
-                variant="outlined"
+                onChange={handleDateChange}
+                dateFormatType="yyyy-mm-dd"
                 required
               />
             </div>

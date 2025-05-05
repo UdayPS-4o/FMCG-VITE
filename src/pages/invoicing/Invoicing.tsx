@@ -4,6 +4,7 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Input from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
+import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import CollapsibleItemSection from './CollapsibleItemSection';
@@ -159,8 +160,8 @@ const InvoicingContent: React.FC = () => {
   };
 
   // Form handlers
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDate(e.target.value);
+  const handleDateChange = (selectedDate: string) => {
+    setDate(selectedDate);
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -453,14 +454,12 @@ const InvoicingContent: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div>
-              <Input
+              <DatePicker
                 id="date"
                 label="Date"
-                type="date"
                 value={date}
                 onChange={handleDateChange}
-                variant="outlined"
-                autoComplete="off"
+                dateFormatType="yyyy-mm-dd"
                 required
               />
             </div>

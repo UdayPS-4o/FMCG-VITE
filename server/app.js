@@ -61,6 +61,11 @@ app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x
 const loginRoutes = require('./routes/login');
 app.use(loginRoutes);
 
+// set middleware to check if user is logged in
+// Apply this BEFORE routes that need authentication
+const middleware = require('./routes/middleware');
+app.use(middleware);
+
 const slinkRoutes = require('./routes/slink');
 const orcusRoutes = require('./routes/orcusRoutes');
 app.use(express.static(path.join(__dirname, '.', 'dist')));
@@ -78,10 +83,6 @@ app.use('/api/merge/invoicing', invoicingMergeRoutes);
 // Register godown transfer merge routes
 const godownTransferMergeRoutes = require('./routes/merge/godown-transfer');
 app.use('/api/merge/godown-transfer', godownTransferMergeRoutes);
-
-// set middleware to check if user is logged in
-const middleware = require('./routes/middleware');
-app.use(middleware);
 
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);

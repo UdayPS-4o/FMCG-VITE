@@ -7,31 +7,11 @@ import constants from "../../constants";
 
 const GodownTransfer: React.FC = () => {
   const navigate = useNavigate();
-  const [hasApprovedItems, setHasApprovedItems] = useState<boolean>(false);
 
   useEffect(() => {
-    checkApprovedItems();
+    // Remove checkApprovedItems call
+    // checkApprovedItems();
   }, []);
-
-  const checkApprovedItems = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch(`${constants.baseURL}/approved/json/godown?timestamp=${new Date().getTime()}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setHasApprovedItems(Array.isArray(data) && data.length > 0);
-      }
-    } catch (error) {
-      console.error('Error checking approved items:', error);
-    }
-  };
 
   const handleSyncToDbf = () => {
     navigate('/approved/godown-transfer');
@@ -49,21 +29,23 @@ const GodownTransfer: React.FC = () => {
         <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Godown Transfer Database</h2>
-            {hasApprovedItems && (
+            {/* Remove Sync to DBF button logic */}
+            {/* {hasApprovedItems && (
               <button
                 onClick={handleSyncToDbf}
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md"
               >
                 Sync to DBF
               </button>
-            )}
+            )} */}
           </div>
           <DatabaseTable 
             endpoint="godown" 
             tableId="godown-transfer-db"
-            onApproveSuccess={() => {
-              setHasApprovedItems(true);
-            }} 
+            // Remove onApproveSuccess prop
+            // onApproveSuccess={() => {
+            //   setHasApprovedItems(true);
+            // }} 
           />
         </div>
       </div>
