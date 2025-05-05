@@ -84,6 +84,14 @@ app.use('/api/merge/invoicing', invoicingMergeRoutes);
 const godownTransferMergeRoutes = require('./routes/merge/godown-transfer');
 app.use('/api/merge/godown-transfer', godownTransferMergeRoutes);
 
+// Register cash payments merge routes
+const cashPaymentsMergeRoutes = require('./routes/merge/cash-payments');
+app.use('/api/merge/cash-payments', cashPaymentsMergeRoutes);
+
+// Register cash receipts merge routes
+const cashReceiptsMergeRoutes = require('./routes/merge/cash-receipts');
+app.use('/api/merge/cash-receipts', cashReceiptsMergeRoutes);
+
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);
 

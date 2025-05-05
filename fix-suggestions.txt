@@ -1,0 +1,15 @@
+To fix the server-side route issue, you need to register the cash-payments and cash-receipts merge routes in app.js. 
+
+Add these lines after the existing godownTransferMergeRoutes registration in server/app.js:
+
+```javascript
+// Register cash payments merge routes
+const cashPaymentsMergeRoutes = require('./routes/merge/cash-payments');
+app.use('/api/merge/cash-payments', cashPaymentsMergeRoutes);
+
+// Register cash receipts merge routes
+const cashReceiptsMergeRoutes = require('./routes/merge/cash-receipts');
+app.use('/api/merge/cash-receipts', cashReceiptsMergeRoutes);
+```
+
+This will properly register the routes so they can be accessed at the expected endpoints. 
