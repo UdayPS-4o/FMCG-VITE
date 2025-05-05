@@ -4,6 +4,7 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Input from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
+import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
@@ -375,7 +376,7 @@ const CashPayment: React.FC = () => {
     setParty(selectedParty || null);
   };
 
-  // New handler for input changes
+  // New handler for input changes (excluding date)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
@@ -393,6 +394,16 @@ const CashPayment: React.FC = () => {
       
       return updated;
     });
+  };
+
+  // Specific handler for DatePicker
+  const handleDateChange = (dateString: string) => {
+      setFormValues(prev => {
+          const updated = { ...prev, date: dateString };
+          // Optionally update narration if needed when date changes
+          // updateNarration(updated);
+          return updated;
+      });
   };
 
   // Add a simple function to ensure uppercase series input
@@ -428,19 +439,45 @@ const CashPayment: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  // Refactored handleSubmit to use state directly
+  const handleSubmit = async () => {
+    // No e.preventDefault() needed as it's not triggered by form onSubmit
+
+    // Validation for Party field
+    if (!party) {
+      setToastMessage('Party selection is required.');
+      setToastType('error');
+      setShowToast(true);
+      return; // Stop submission if party is not selected
+    }
+
+    // Validate other required fields if necessary
+    if (!formValues.amount || parseFloat(formValues.amount) <= 0) {
+        setToastMessage('Amount is required and must be positive.');
+        setToastType('error');
+        setShowToast(true);
+        return;
+    }
+     if (!formValues.date) {
+        setToastMessage('Date is required.');
+        setToastType('error');
+        setShowToast(true);
+        return;
+    }
+    if (!formValues.voucherNo) {
+        setToastMessage('Voucher No. is required.');
+        setToastType('error');
+        setShowToast(true);
+        return;
+    }
+
     setIsSubmitting(true);
-    
-    const formData = new FormData(e.currentTarget);
-    const formValues: FormValues = {
-      date: formatDateForAPI(formData.get('date') as string),
-      series: formData.get('series') as string,
-      amount: formData.get('amount') as string,
-      discount: formData.get('discount') as string,
-      voucherNo: formData.get('voucherNo') as string,
-      narration: formData.get('narration') as string,
-      party: party?.value
+
+    // Prepare data directly from state
+    const submissionData = {
+      ...formValues,
+      date: formatDateForAPI(formValues.date), // Ensure date is formatted correctly
+      party: party?.value, // Get party value from state
     };
 
     try {
@@ -451,7 +488,7 @@ const CashPayment: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(formValues)
+        body: JSON.stringify(submissionData) // Use data from state
       });
 
       if (!response.ok) {
@@ -459,20 +496,43 @@ const CashPayment: React.FC = () => {
         setToastMessage(`Error: ${errorMessage}`);
         setToastType('error');
         setShowToast(true);
+        setIsSubmitting(false); // Reset on error before timeout
         return;
       }
+
+      const responseData = await response.json();
+      const savedVoucherNo = submissionData.voucherNo; // Use voucher number from submission data
 
       setToastMessage('Data saved successfully!');
       setToastType('success');
       setShowToast(true);
-      navigate('/db/cash-payments');
+
+      // Check flag immediately before timeout
+      const shouldRedirectToPrint = localStorage.getItem('redirectToPrint') === 'true';
+
+      setTimeout(() => {
+        try {
+          if (shouldRedirectToPrint && savedVoucherNo) {
+            localStorage.removeItem('redirectToPrint'); // Clean up flag
+            console.log(`Redirecting to print page: /print?VoucherNo=${savedVoucherNo}`);
+            navigate(`/print?VoucherNo=${savedVoucherNo}`);
+          } else {
+            console.log('Redirecting to list page: /db/cash-payments');
+            navigate('/db/cash-payments');
+          }
+        } catch (navError) {
+          console.error("Navigation failed:", navError);
+        } finally {
+          setIsSubmitting(false);
+        }
+      }, 1500);
+
     } catch (error) {
-      console.error('Network error:', error);
-      setToastMessage('Network error. Please try again later.');
+      console.error('Submit error:', error);
+      setToastMessage('Network error or submission failed. Please try again later.');
       setToastType('error');
       setShowToast(true);
-    } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false); // Reset on submit error
     }
   };
 
@@ -485,28 +545,28 @@ const CashPayment: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">Cash Payment Form</h2>
           
-          <FormComponent onSubmit={handleSubmit}>
+          <FormComponent onSubmit={(e) => e.preventDefault()}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="col-span-1">
-                <Autocomplete
-                  id="party-select"
-                  label="Party"
-                  options={partyOptions}
-                  onChange={handlePartyChange}
-                  defaultValue={party?.value}
+                <DatePicker
+                  id="date"
+                  name="date"
+                  label="Date"
+                  value={formValues.date}
+                  onChange={handleDateChange}
+                  dateFormatType="dd-mm-yyyy"
+                  placeholderText="DD-MM-YYYY"
+                  required
+                  className="w-full"
                 />
-                
+
                 <div className="mt-4">
-                  <Input
-                    id="date"
-                    name="date"
-                    type="text"
-                    label="Date (dd-mm-yyyy)"
-                    value={formValues.date}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full"
-                    placeholder="DD-MM-YYYY"
+                  <Autocomplete
+                    id="party-select"
+                    label="Party"
+                    options={partyOptions}
+                    onChange={handlePartyChange}
+                    defaultValue={party?.value}
                   />
                 </div>
               </div>
@@ -592,11 +652,31 @@ const CashPayment: React.FC = () => {
                 Cancel
               </button>
               <button
-                type="submit"
+                type="button"
                 className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
                 disabled={isSubmitting}
+                onClick={() => {
+                  localStorage.removeItem('redirectToPrint'); // Clear flag first
+                  handleSubmit(); // Then call submit handler
+                }}
               >
                 {isSubmitting ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 flex items-center gap-2"
+                disabled={isSubmitting}
+                onClick={() => {
+                  localStorage.setItem('redirectToPrint', 'true'); // Set flag first
+                  handleSubmit(); // Then call submit handler
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                {isSubmitting ? 'Saving...' : 'Save & Print'}
               </button>
             </div>
           </FormComponent>

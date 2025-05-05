@@ -81,5 +81,25 @@
     "party": "OT069",
     "createdAt": "2025-03-30T02:14:52.882Z",
     "lastUpdated": "2025-03-30T07:43:35.888Z"
+  },
+  {
+    "date": "2025-05-03",
+    "series": "A",
+    "amount": "234",
+    "discount": "345678",
+    "voucherNo": "1233",
+    "narration": "TO CASH AS PER VR.No.A-1233",
+    "party": "CT001",
+    "createdAt": "2025-05-03T10:06:26.795Z"
+  },
+  {
+    "date": "2025-05-04",
+    "series": "V",
+    "amount": "2433",
+    "discount": "345678",
+    "voucherNo": "12255",
+    "narration": "TO CASH AS PER VR.No.V-1225",
+    "party": "CT002",
+    "createdAt": "2025-05-03T23:16:24.916Z"
   }
 ]

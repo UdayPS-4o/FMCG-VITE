@@ -134,47 +134,5 @@
     "id": "13",
     "createdAt": "2025-04-14T23:30:49.757Z",
     "lastUpdated": "2025-05-02T23:04:04.966Z"
-  },
-  {
-    "date": "2025-04-14",
-    "series": "T",
-    "billNo": "12",
-    "cash": "N",
-    "party": "CT001",
-    "partyName": "MEENASANKAR MATCH IND. PVT LTD",
-    "sm": "SM002",
-    "smName": "GANESH BAGHEL",
-    "ref": "",
-    "dueDays": "7",
-    "items": [
-      {
-        "item": "MK001",
-        "godown": "02",
-        "unit": "Box",
-        "rate": "3000",
-        "qty": "1",
-        "cess": "",
-        "schRs": "7.5",
-        "sch": "5",
-        "cd": "5",
-        "amount": "3000.00",
-        "netAmount": "2700.73"
-      },
-      {
-        "item": "MK005",
-        "godown": "02",
-        "unit": "BOX",
-        "rate": "1000",
-        "qty": "2",
-        "cess": "",
-        "schRs": "",
-        "sch": "",
-        "cd": "",
-        "amount": "2000.00",
-        "netAmount": "2000.00"
-      }
-    ],
-    "id": "14",
-    "createdAt": "2025-04-14T23:51:03.649Z"
   }
 ]

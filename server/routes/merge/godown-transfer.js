@@ -80,7 +80,8 @@ router.post('/sync', async (req, res) => {
   try {
     // Get authenticated user ID from middleware
     const userId = req.user?.id;
-    if (!userId) {
+    // Check if userId is explicitly undefined or null, allowing 0
+    if (userId === undefined || userId === null) { 
       return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
     }
 
