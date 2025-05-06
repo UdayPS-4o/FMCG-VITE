@@ -57,6 +57,32 @@ interface ReceiptIdInfo {
   };
 }
 
+interface CashReceiptEntry {
+  receiptNo: string; // Note: The find condition uses ==, so it might be number or string
+  date: string;
+  series: string;
+  amount: string;
+  discount: string;
+  narration: string;
+  party: string; // Assuming party is a string ID/code
+  sm?: string; // Salesman code might be optional
+}
+
+interface CmplEntry {
+  C_CODE: string;
+  C_NAME: string;
+  // Add other properties from /cmpl if needed
+}
+
+interface BalanceEntry {
+  partycode: string;
+  result: string | number; // or a more specific type if known
+}
+
+interface BalanceResponse {
+  data: BalanceEntry[];
+}
+
 const CashReceipt: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [party, setParty] = useState<PartyOption | null>(null);
@@ -320,12 +346,14 @@ const CashReceipt: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        const data = await res.json();
+        const rawReceiptData = await res.json();
+        // Ensure rawReceiptData is an array before calling find
+        const data: CashReceiptEntry[] = Array.isArray(rawReceiptData) ? rawReceiptData : [];
         console.log('data', data);
 
         const receipt = id;
 
-        const receiptToEdit = data.find((rec: any) => rec.receiptNo == receipt);
+        const receiptToEdit = data.find((rec) => rec.receiptNo == receipt); // Consider strict equality if types are certain
 
         if (!receiptToEdit) {
           setToastMessage('Receipt record not found');
@@ -348,15 +376,15 @@ const CashReceipt: React.FC = () => {
         setFormValues(updatedValues);
 
         // Use apiCache for CMPL data
-        const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
+        const partyData = await apiCache.fetchWithCache<CmplEntry[]>(`${constants.baseURL}/cmpl`);
         
         // Use balance API directly from the specified endpoint
-        const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
+        const balanceData = await apiCache.fetchWithCache<BalanceResponse>(`${constants.baseURL}/json/balance`);
         
         // Create a balance lookup map
-        const balanceMap = new Map();
+        const balanceMap = new Map<string, string | number>();
         if (balanceData && Array.isArray(balanceData.data)) {
-          balanceData.data.forEach((item: any) => {
+          balanceData.data.forEach((item) => {
             balanceMap.set(item.partycode, item.result);
           });
         }
@@ -365,7 +393,7 @@ const CashReceipt: React.FC = () => {
         const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
 
         // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
-        let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
+        let filteredPartyData = partyData ? partyData.filter((party) => !party.C_CODE.endsWith('000')) : [];
         
         if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
           console.log(`Filtering parties by user's assigned subgroups`);
@@ -378,7 +406,7 @@ const CashReceipt: React.FC = () => {
           console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
           
           // Filter parties where C_CODE starts with any of the user's subgroup prefixes
-          filteredPartyData = filteredPartyData.filter((party: any) => {
+          filteredPartyData = filteredPartyData.filter((party) => {
             const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
             return subgroupPrefixes.includes(partyPrefix);
           });
@@ -388,12 +416,12 @@ const CashReceipt: React.FC = () => {
           console.log('User is admin - showing all parties without filtering');
         }
 
-        const partyList = filteredPartyData.map((party: any) => {
+        const partyList = filteredPartyData.map((party) => {
           // Get balance for this party
           const balance = balanceMap.get(party.C_CODE);
           
           // Check if balance is non-zero (either greater or in negative)
-          const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
+          const hasNonZeroBalance = balance && balance.toString().trim() !== '0 CR' && balance.toString().trim() !== '0 DR';
           
           return {
             value: party.C_CODE,
@@ -443,18 +471,15 @@ const CashReceipt: React.FC = () => {
 
     const fetchNewData = async () => {
       try {
-        // Fetch receipt ID info is handled in the other useEffect
+        // CMPL data for party and SM options
+        const cmplData = await apiCache.fetchWithCache<CmplEntry[]>(`${constants.baseURL}/cmpl`);
+        // Balance data
+        const balanceData = await apiCache.fetchWithCache<BalanceResponse>(`${constants.baseURL}/json/balance`);
 
-        // Use apiCache for CMPL data (for both parties and S/M)
-        const cmplData = await apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`);
-        
-        // Use balance API directly from the specified endpoint
-        const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
-        
         // Create a balance lookup map
-        const balanceMap = new Map();
+        const balanceMap = new Map<string, string | number>();
         if (balanceData && Array.isArray(balanceData.data)) {
-          balanceData.data.forEach((item: any) => {
+          balanceData.data.forEach((item) => {
             balanceMap.set(item.partycode, item.result);
           });
         }
@@ -462,70 +487,58 @@ const CashReceipt: React.FC = () => {
         // Check if user is admin
         const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
 
-        // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
-        let filteredPartyData = cmplData.filter((party: any) => !party.C_CODE.endsWith('000'));
-        
+        // Filter parties (exclude C_CODE ending with "000")
+        let filteredParties = cmplData ? cmplData.filter(p => !p.C_CODE.endsWith('000')) : [];
+
         if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
           console.log(`Filtering parties by user's assigned subgroups`);
-          
-          // Get all subgroup prefixes from user's assigned subgroups
           const subgroupPrefixes = user.subgroups.map((sg: any) => 
             sg.subgroupCode.substring(0, 2).toUpperCase()
           );
-          
           console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
-          
-          // Filter parties where C_CODE starts with any of the user's subgroup prefixes
-          filteredPartyData = filteredPartyData.filter((party: any) => {
-            const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+          filteredParties = filteredParties.filter(p => {
+            const partyPrefix = p.C_CODE.substring(0, 2).toUpperCase();
             return subgroupPrefixes.includes(partyPrefix);
           });
-          
-          console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups`);
+          console.log(`Filtered to ${filteredParties.length} parties based on user's subgroups`);
         } else if (isAdmin) {
-          console.log('User is admin - showing all parties without filtering');
+          console.log('User is admin - showing all parties without filtering for new entry');
         }
 
-        const partyList = filteredPartyData.map((party: any) => {
-          // Get balance for this party
-          const balance = balanceMap.get(party.C_CODE);
-          
-          // Check if balance is non-zero (either greater or in negative)
-          const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
-          
+        const partyApiOptions = filteredParties.map((p) => {
+          const balance = balanceMap.get(p.C_CODE);
+          const hasNonZeroBalance = balance && balance.toString().trim() !== '0 CR' && balance.toString().trim() !== '0 DR';
           return {
-            value: party.C_CODE,
+            value: p.C_CODE,
             label: hasNonZeroBalance
-              ? `${party.C_NAME} | ${party.C_CODE} / ${balance}`
-              : `${party.C_NAME} | ${party.C_CODE}`,
+              ? `${p.C_NAME} | ${p.C_CODE} / ${balance}`
+              : `${p.C_NAME} | ${p.C_CODE}`,
           };
         });
+        setPartyOptions(partyApiOptions);
 
-        setPartyOptions(partyList);
+        // Filter S/M options (start with 'SM' and not ending with '000')
+        const smList = cmplData ? cmplData.filter(item => 
+          item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
+        ) : [];
         
-        // Process S/M options from the same CMPL data
-        if (Array.isArray(cmplData)) {
-          const smList = cmplData.filter(item => 
-            item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
-          );
-          const smApiOptions = smList.map((item: any) => ({
-            value: item.C_CODE, // Assuming C_CODE is the SM_CODE
-            label: `${item.C_NAME} | ${item.C_CODE}`, // Assuming C_NAME is the SM_NAME
-          }));
-          setSmOptions(smApiOptions);
-          // Auto-selection for new data is handled by a separate useEffect
-        } else {
-          console.warn('CMPL data for S/M is not an array:', cmplData);
-          setSmOptions([]);
-          setToastMessage('Failed to fetch S/M options (CMPL data invalid)');
-          setToastType('error');
-          setShowToast(true);
+        const smApiOptions = smList.map(item => ({
+          value: item.C_CODE,
+          label: `${item.C_NAME} | ${item.C_CODE}`,
+        }));
+        setSmOptions(smApiOptions);
+
+        // Auto-select SM if applicable
+        if (user && user.smCode && !isAdmin) {
+          const userSm = smApiOptions.find(option => option.value === user.smCode);
+          if (userSm) {
+            setSm(userSm);
+          }
         }
 
-        // Clear expired cache entries
-        apiCache.clearExpiredCache();
       } catch (error) {
-        setToastMessage('Failed to fetch data for new entry');
+        console.error('Error fetching data for new receipt:', error);
+        setToastMessage('Failed to load initial data');
         setToastType('error');
         setShowToast(true);
       }

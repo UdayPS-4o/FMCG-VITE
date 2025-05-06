@@ -50,6 +50,33 @@ interface FormValues {
   smName?: string;
 }
 
+interface CashPaymentEntry {
+  voucherNo: string;
+  date: string;
+  series: string;
+  amount: string;
+  discount: string;
+  narration: string;
+  party: string; // Assuming party is a string ID/code
+  sm?: string; // Add missing sm property
+  // Add other properties if they exist in the cash payment objects
+}
+
+interface CmplEntry {
+  C_CODE: string;
+  C_NAME: string;
+  // Add other properties from /cmpl if needed
+}
+
+interface BalanceEntry {
+  partycode: string;
+  result: string | number; // or a more specific type if known
+}
+
+interface BalanceResponse {
+  data: BalanceEntry[];
+}
+
 const CashPayment: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [party, setParty] = useState<PartyOption | null>(null);
@@ -157,12 +184,14 @@ const CashPayment: React.FC = () => {
               'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
           });
-          const data = await res.json();
+          const rawData = await res.json();
+          // It's good practice to validate or ensure rawData is an array before calling find
+          const data: CashPaymentEntry[] = Array.isArray(rawData) ? rawData : [];
           console.log('data', data);
 
           const voucher = id;
 
-          const paymentToEdit = data.find((payment: any) => payment.voucherNo === voucher);
+          const paymentToEdit = data.find((payment) => payment.voucherNo === voucher);
 
           if (!paymentToEdit) {
             setToastMessage('Payment record not found');
@@ -185,15 +214,15 @@ const CashPayment: React.FC = () => {
           setFormValues(updatedValues);
 
           // Use apiCache for CMPL data
-          const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
+          const partyData = await apiCache.fetchWithCache<CmplEntry[]>(`${constants.baseURL}/cmpl`);
           
           // Use apiCache for balance data
-          const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
+          const balanceData = await apiCache.fetchWithCache<BalanceResponse>(`${constants.baseURL}/json/balance`);
 
           // Create a balance lookup map
-          const balanceMap = new Map();
+          const balanceMap = new Map<string, string | number>();
           if (balanceData && Array.isArray(balanceData.data)) {
-            balanceData.data.forEach((item: any) => {
+            balanceData.data.forEach((item) => {
               balanceMap.set(item.partycode, item.result);
             });
           }
@@ -202,7 +231,7 @@ const CashPayment: React.FC = () => {
           const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
 
           // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
-          let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
+          let filteredPartyData = partyData ? partyData.filter((party) => !party.C_CODE.endsWith('000')) : [];
           
           if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
             console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
@@ -215,7 +244,7 @@ const CashPayment: React.FC = () => {
             console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
             
             // Filter parties: include if EE prefix OR if C_CODE starts with any of the user's subgroup prefixes
-            filteredPartyData = filteredPartyData.filter((party: any) => {
+            filteredPartyData = filteredPartyData.filter((party) => {
               const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
               // Always include if prefix is EE
               if (partyPrefix === 'EE') {
@@ -230,12 +259,12 @@ const CashPayment: React.FC = () => {
             console.log('User is admin - showing all parties without filtering');
           }
 
-          const partyList = filteredPartyData.map((party: any) => {
+          const partyList = filteredPartyData.map((party) => {
             // Get balance for this party
             const balance = balanceMap.get(party.C_CODE);
             
             // Check if balance is non-zero (either greater or in negative)
-            const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
+            const hasNonZeroBalance = balance && balance.toString().trim() !== '0 CR' && balance.toString().trim() !== '0 DR';
             
             return {
               value: party.C_CODE,
@@ -286,25 +315,26 @@ const CashPayment: React.FC = () => {
       // Fetch party data and S/M data for new payment
       const fetchDataForNewEntry = async () => {
         try {
-          // Use apiCache for CMPL data (for both parties and S/M)
-          const cmplData = await apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`);
+          // Use apiCache for CMPL data
+          const partyData = await apiCache.fetchWithCache<CmplEntry[]>(`${constants.baseURL}/cmpl`);
+          const cmplData = partyData; // Define cmplData variable to fix reference errors
           
           // Use apiCache for balance data
-          const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
+          const balanceData = await apiCache.fetchWithCache<BalanceResponse>(`${constants.baseURL}/json/balance`);
 
           // Create a balance lookup map
-          const balanceMap = new Map();
+          const balanceMap = new Map<string, string | number>();
           if (balanceData && Array.isArray(balanceData.data)) {
-            balanceData.data.forEach((item: any) => {
+            balanceData.data.forEach((item) => {
               balanceMap.set(item.partycode, item.result);
             });
           }
 
           // Check if user is admin
           const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
-
+          
           // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
-          let filteredPartyData = cmplData.filter((party: any) => !party.C_CODE.endsWith('000'));
+          let filteredPartyData = partyData ? partyData.filter((party) => !party.C_CODE.endsWith('000')) : [];
           
           if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
             console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
@@ -317,7 +347,7 @@ const CashPayment: React.FC = () => {
             console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
             
             // Filter parties: include if EE prefix OR if C_CODE starts with any of the user's subgroup prefixes
-            filteredPartyData = filteredPartyData.filter((party: any) => {
+            filteredPartyData = filteredPartyData.filter((party) => {
               const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
               // Always include if prefix is EE
               if (partyPrefix === 'EE') {
@@ -332,12 +362,12 @@ const CashPayment: React.FC = () => {
             console.log('User is admin - showing all parties without filtering');
           }
 
-          const partyList = filteredPartyData.map((party: any) => {
+          const partyList = filteredPartyData.map((party) => {
             // Get balance for this party
             const balance = balanceMap.get(party.C_CODE);
             
             // Check if balance is non-zero (either greater or in negative)
-            const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
+            const hasNonZeroBalance = balance && balance.toString().trim() !== '0 CR' && balance.toString().trim() !== '0 DR';
             
             return {
               value: party.C_CODE,

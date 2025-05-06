@@ -137,7 +137,7 @@ const EditGodownTransfer: React.FC = () => {
         const [godownData, pmplDatas, stockDatas] = await Promise.all([
           apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`),
           apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`),
-          apiCache.fetchWithCache(`${baseURL}/api/stock`)
+          apiCache.fetchWithCache<StockData>(`${baseURL}/api/stock`)
         ]);
         
         if (Array.isArray(godownData)) {

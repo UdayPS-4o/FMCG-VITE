@@ -11,6 +11,37 @@ export interface Option {
   gst?: string;
 }
 
+interface Account {
+  AC_CODE?: string;
+  C_CODE?: string;
+  id?: string;
+  AC_HEAD?: string;
+  C_NAME?: string;
+  name?: string;
+  GST?: string;
+  GSTNO?: string;
+}
+
+interface PmplItem {
+  // Define properties for PMPL items if known, otherwise use any
+  [key: string]: any;
+}
+
+interface Godown {
+  GDN_CODE: string;
+  GDN_NAME: string;
+}
+
+interface BalanceEntry {
+  partycode?: string;
+  C_CODE?: string;
+  result?: string | number;
+}
+
+interface BalanceResponse {
+  data: BalanceEntry[];
+}
+
 export const useInvoiceData = () => {
   const [partyOptions, setPartyOptions] = useState<Option[]>([]);
   const [smOptions, setSmOptions] = useState<Option[]>([]);
@@ -37,15 +68,15 @@ export const useInvoiceData = () => {
         // Fetch all data in parallel for better performance
         const [accountData, pmplRes, stockRes, godownRes, balanceRes] = await Promise.all([
           // Fetch account data with fallback
-          apiCache.fetchWithCache(`${constants.baseURL}/cmpl`),
+          apiCache.fetchWithCache<Account[]>(`${constants.baseURL}/cmpl`),
           // Fetch PMPL data
-          apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/pmpl.json`),
+          apiCache.fetchWithCache<PmplItem[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
           // Fetch stock data
-          apiCache.fetchWithCache(`${constants.baseURL}/api/stock`),
+          apiCache.fetchWithCache<Record<string, any>>(`${constants.baseURL}/api/stock`),
           // Fetch godown data
-          apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/godown.json`),
+          apiCache.fetchWithCache<Godown[]>(`${constants.baseURL}/api/dbf/godown.json`),
           // Fetch balance data
-          apiCache.fetchWithCache(`${constants.baseURL}/json/balance`)
+          apiCache.fetchWithCache<BalanceResponse>(`${constants.baseURL}/json/balance`)
         ]);
 
         // Helper function to get balance for a party code
@@ -108,7 +139,7 @@ export const useInvoiceData = () => {
         setSmOptions(sms);
         setPmplData(pmplRes);
         setStockList(stockRes);
-        setGodownOptions(godownRes.map((gdn: any) => ({ 
+        setGodownOptions(godownRes.map((gdn: Godown) => ({ 
           value: gdn.GDN_CODE, 
           label: gdn.GDN_NAME 
         })));
