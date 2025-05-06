@@ -63,6 +63,29 @@ interface InputProps {
   onFocus?: () => void;
 }
 
+interface AccountMasterEntry {
+  subgroup: string;
+  achead?: string;
+  addressline1?: string;
+  addressline2?: string;
+  place?: string;
+  pincode?: string;
+  mobile?: string;
+  pan?: string;
+  aadhar?: string;
+  gst?: string;
+  dlno?: string;
+  fssaino?: string;
+  email?: string;
+  statecode?: string;
+  businessName?: string;
+}
+
+interface StateEntry {
+  ST_CODE: string;
+  ST_NAME: string;
+}
+
 const EditAccountMaster: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -159,11 +182,11 @@ const EditAccountMaster: React.FC = () => {
         console.log('Fetching account data for subgroup:', subgroupParam);
 
         // Fetch account data with caching
-        const data = await apiCache.fetchWithCache(`${constants.baseURL}/json/account-master`);
+        const data = await apiCache.fetchWithCache<AccountMasterEntry[]>(`${constants.baseURL}/json/account-master`);
         console.log('Account data:', data);
 
         // Find the account with matching subgroup
-        const account = data.find((account: any) => account.subgroup === subgroupParam);
+        const account = data.find((account) => account.subgroup === subgroupParam);
         
         if (account) {
           console.log('Found account:', account);
@@ -197,9 +220,9 @@ const EditAccountMaster: React.FC = () => {
         }
 
         // Fetch state data with caching
-        const stateData = await apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/state.json`);
+        const stateData = await apiCache.fetchWithCache<StateEntry[]>(`${constants.baseURL}/api/dbf/state.json`);
         
-        const stateList = stateData.map((state: any) => ({
+        const stateList = stateData.map((state) => ({
           value: state.ST_CODE,
           label: state.ST_NAME,
         }));

@@ -142,7 +142,7 @@ const GodownTransfer: React.FC = () => {
         const [godownData, pmplResponse, stockResponse, cmplData] = await Promise.all([
           apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`),
           apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`),
-          apiCache.fetchWithCache(`${baseURL}/api/stock`),
+          apiCache.fetchWithCache<StockData>(`${baseURL}/api/stock`),
           apiCache.fetchWithCache<any[]>(`${baseURL}/cmpl`) // Add CMPL data for S/M
         ]);
         

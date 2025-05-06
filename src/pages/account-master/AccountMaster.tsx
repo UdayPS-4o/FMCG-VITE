@@ -59,6 +59,34 @@ interface InputProps {
   hint?: string;
 }
 
+interface AccountMasterEntry {
+  subgroup: string;
+  achead?: string;
+  addressline1?: string;
+  addressline2?: string;
+  place?: string;
+  pincode?: string;
+  mobile?: string;
+  pan?: string;
+  aadhar?: string;
+  gst?: string;
+  dlno?: string;
+  fssaino?: string;
+  email?: string;
+  statecode?: string;
+  businessName?: string;
+}
+
+interface SubgroupEntry {
+  title: string;
+  subgroupCode: string;
+}
+
+interface StateEntry {
+  ST_CODE: string;
+  ST_NAME: string;
+}
+
 const AccountMaster: React.FC = () => {
   const [group, setGroup] = useState<Option[]>([]);
   const [subgroup, setSubgroup] = useState<Option[]>([]);
@@ -183,10 +211,10 @@ const AccountMaster: React.FC = () => {
           console.log('Fetching account data for subgroup:', subgroup);
 
           // Use apiCache for account-master data
-          const data = await apiCache.fetchWithCache(`${constants.baseURL}/json/account-master`);
+          const data = await apiCache.fetchWithCache<AccountMasterEntry[]>(`${constants.baseURL}/json/account-master`);
           console.log('Account data:', data);
 
-          const account = data.find((account: any) => account.subgroup === subgroup);
+          const account = data.find((account) => account.subgroup === subgroup);
           if (account) {
             console.log('Found account:', account);
             setGroup([{ label: account.subgroup, value: account.subgroup }]);
@@ -223,10 +251,10 @@ const AccountMaster: React.FC = () => {
           if (!response.ok) {
             throw new Error('Failed to fetch subgroup data');
           }
-          const data = await response.json();
+          const data = await response.json() as SubgroupEntry[];
           
           // Get all available subgroups
-          const allSubgroups = data.map((party: any) => ({
+          const allSubgroups = data.map((party) => ({
             label: party.title,
             value: party.subgroupCode,
           }));
@@ -275,9 +303,9 @@ const AccountMaster: React.FC = () => {
         }
 
         // Fetch state data with caching
-        const stateData = await apiCache.fetchWithCache(`${constants.baseURL}/api/dbf/state.json`);
+        const stateData = await apiCache.fetchWithCache<StateEntry[]>(`${constants.baseURL}/api/dbf/state.json`);
         
-        const stateList = stateData.map((state: any) => ({
+        const stateList = stateData.map((state) => ({
           value: state.ST_CODE,
           label: state.ST_NAME,
         }));
