@@ -17,6 +17,10 @@ const CashPayment: React.FC = () => {
     navigate('/approved/cash-payments');
   };
 
+  const handleApproveSuccess = () => {
+    navigate('/approved/cash-payments');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <PageMeta
@@ -42,10 +46,7 @@ const CashPayment: React.FC = () => {
           <DatabaseTable 
             endpoint="cash-payments" 
             tableId="cash-payments-db"
-            // Remove onApproveSuccess prop
-            // onApproveSuccess={() => {
-            //   setHasApprovedItems(true);
-            // }} 
+            onApproveSuccess={handleApproveSuccess}
           />
         </div>
       </div>

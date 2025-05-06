@@ -67,6 +67,8 @@ function mapToTransferDbfFormat(transfer, item, sno, productData, isNegative = f
     EXP_C: "",
     REF_NO: "",
     TRF_TO: transfer.toGodown,
+    SM_CODE: transfer.sm || "SM001",
+    SM_NAME: transfer.smName || "",
     USER_ID: userId || 0,
     USER_TIME: new Date(),
   };
@@ -91,6 +93,13 @@ router.post('/sync', async (req, res) => {
     if (!records || !Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ success: false, message: 'No records provided' });
     }
+
+    // Add S/M validation to ensure it exists on each record, default if not
+    records.forEach(record => {
+      if (!record.sm) {
+        record.sm = "SM001"; // Default S/M code if not provided
+      }
+    });
 
     // 1. Open the DBFs
     console.log('Opening DBF files...');

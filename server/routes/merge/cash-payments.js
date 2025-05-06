@@ -39,11 +39,11 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
     C_CODE: record.party || "",
     CR: 0.00,
     DR: amount,
-    REMARK: `TO CASH V/NO ${record.voucherNo || ''}`, // Example remark
+    REMARK: record.narration || "",
     CD: discount, // Cash Discount
     QCR: 0.000,
     QDR: 0.000,
-    R_NO: record.voucherNo || "", // Voucher Number
+    R_NO: record.voucherNo || "", 
     SERIES: record.series || "",
     BILL: "",
     DT_BILL: null,
@@ -60,7 +60,7 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
     PBILL: 0,
     PSERIES: "",
     JB_ENO: 0,
-    BR_CODE: "SM001", // Default branch code?
+    BR_CODE: record.sm || "SM001", // Use provided S/M code or default to SM001
     BILL1: "",
     REC_VR: "",
     SMPSER: "",
@@ -85,7 +85,7 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
     TAX: 0.00,
     TRAN_TYPE: "",
     CODE_ORG: record.party || "",
-    SM_ORG: "SM001",
+    SM_ORG: record.sm || "SM001", // Use provided S/M code or default to SM001
     BANK: "",
     ST_CODE: customerData?.C_STATE || "",
     ST_NAME: customerData?.STATE_NAME || "", // Need to confirm CMPL structure
@@ -146,10 +146,28 @@ router.post('/sync', async (req, res) => {
       return res.status(400).json({ success: false, message: 'No records selected for sync' });
     }
 
+    // Ensure S/M field exists on each record, default if not
+    recordsToSync.forEach(record => {
+      if (!record.sm) {
+        record.sm = "SM001"; // Default S/M code if not provided
+      }
+    });
+
     // Using voucherNo and party for identification
     const selectedApprovedRecords = approvedRecords.filter(appRec =>
         recordsToSync.some(selRec => selRec.voucherNo === appRec.voucherNo && selRec.party === appRec.party && selRec.date === appRec.date)
     );
+
+    // Also ensure sm field on selectedApprovedRecords
+    selectedApprovedRecords.forEach(record => {
+      if (!record.sm) {
+        // Find matching record in recordsToSync to get its sm
+        const matchingRecord = recordsToSync.find(
+          rec => rec.voucherNo === record.voucherNo && rec.party === record.party && rec.date === record.date
+        );
+        record.sm = matchingRecord?.sm || "SM001";
+      }
+    });
 
     if (selectedApprovedRecords.length === 0) {
       return res.status(400).json({ success: false, message: 'Selected records not found in approved list.' });

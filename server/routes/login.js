@@ -16,6 +16,7 @@ const { cp } = require('fs');
 const { id } = require('date-fns/locale');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+console.log('Login JWT_SECRET:', JWT_SECRET);
 const JWT_EXPIRY = '10d'; 
 
 // Middleware to extract JWT token from Authorization header
@@ -120,7 +121,6 @@ app.get('/logout', (req, res) => {
   res.status(200).redirect('/login');
 });
 
-4
 let cachedStock = null;
 let cachedStockHash = null;
 let lastFileModTimes = {}; // Store last modification times of files
@@ -316,15 +316,18 @@ app.get('/api/stock', async (req, res) => {
     
     // Compare again after calculation in case hashes match
     if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
-      console.log('Stock data matches after recalculation');
-      return res.status(304).send('Not Modified');
+      console.log('Stock data cache hit with 304');
+      return res.status(304).set({
+        'ETag': `"${currentHash}"`,
+        'Cache-Control': 'private, max-age=0',
+        'Access-Control-Expose-Headers': 'ETag'
+      }).send('Not Modified');
     }
     
-    console.log('Sending full stock data');
-    res.json(stock);
-  } catch (error) {
-    console.error('Error generating stock data:', error);
-    res.status(500).send('Server error');
+    return res.json(stock);
+  } catch (err) {
+    console.error('Error calculating stock:', err);
+    res.status(500).json({ error: 'Failed to calculate stock' });
   }
 });
 

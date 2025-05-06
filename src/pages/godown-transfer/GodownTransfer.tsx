@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Input from "../../components/form/input/Input";
@@ -45,12 +45,19 @@ interface GodownIdData {
   };
 }
 
+interface SmOption {
+  value: string;
+  label: string;
+}
+
 const GodownTransfer: React.FC = () => {
   const [id, setId] = useState(0);
   const [partyOptions, setPartyOptions] = useState<any[]>([]);
   const [allGodowns, setAllGodowns] = useState<any[]>([]); // Store all godowns
   const [fromGodown, setFromGodown] = useState<any>(null);
   const [toGodown, setToGodown] = useState<any>(null);
+  const [sm, setSm] = useState<SmOption | null>(null); // S/M state
+  const [smOptions, setSmOptions] = useState<SmOption[]>([]); // S/M options state
   const [pmplData, setPmplData] = useState<any[]>([]); // Hold product data from pmpl.json
   const [stockData, setStockData] = useState<StockData>({});
   const [searchItems, setSearchItems] = useState('');
@@ -72,6 +79,7 @@ const GodownTransfer: React.FC = () => {
     series: 'T',
     fromGodown: '',
     toGodown: '',
+    sm: '', // Add S/M field
     items: [] as ItemData[],
   });
   const [expanded, setExpanded] = useState<number | false>(0);
@@ -131,10 +139,11 @@ const GodownTransfer: React.FC = () => {
         }
         
         // Fetch all data in parallel using Promise.all
-        const [godownData, pmplResponse, stockResponse] = await Promise.all([
+        const [godownData, pmplResponse, stockResponse, cmplData] = await Promise.all([
           apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`),
           apiCache.fetchWithCache(`${baseURL}/api/dbf/pmpl.json`),
-          apiCache.fetchWithCache(`${baseURL}/api/stock`)
+          apiCache.fetchWithCache(`${baseURL}/api/stock`),
+          apiCache.fetchWithCache<any[]>(`${baseURL}/cmpl`) // Add CMPL data for S/M
         ]);
         
         // Store all godowns for the To Godown dropdown
@@ -163,6 +172,22 @@ const GodownTransfer: React.FC = () => {
           console.error('PMPL data is not an array:', pmplResponse);
         }
 
+        // Process S/M options from CMPL data
+        if (Array.isArray(cmplData)) {
+          const smList = cmplData.filter(item => 
+            item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
+          );
+          const smApiOptions = smList.map((item: any) => ({
+            value: item.C_CODE, // Assuming C_CODE is the SM_CODE
+            label: `${item.C_NAME} | ${item.C_CODE}`, // Assuming C_NAME is the SM_NAME
+          }));
+          setSmOptions(smApiOptions);
+        } else {
+          console.warn('CMPL data for S/M is not an array:', cmplData);
+          setSmOptions([]);
+          showToast('Failed to fetch S/M options (CMPL data invalid)', 'error');
+        }
+
         // Process stock data
         setStockData(stockResponse || {});
         setStockDataLoaded(true);
@@ -183,6 +208,47 @@ const GodownTransfer: React.FC = () => {
       console.error('Error clearing cache:', error);
     }
   }, []); // Empty dependency array prevents infinite re-renders
+
+  // Filter SM options based on user's role and assigned SM code
+  const filteredSmOptions = useMemo(() => {
+    if (!user || !smOptions) return [];
+    
+    const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+    
+    // If user is not admin and has an assigned SM code, only show that option
+    if (!isAdmin && user.smCode) {
+      const userSm = smOptions.find(option => option.value === user.smCode);
+      return userSm ? [userSm] : [];
+    }
+    
+    // Otherwise, show all options
+    return smOptions;
+  }, [user, smOptions]);
+
+  // Determine if S/M field should be disabled
+  const isSmDisabled = useMemo(() => {
+    if (!user) return false;
+    const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+    return !!(!isAdmin && user.smCode);
+  }, [user]);
+
+  // Auto-select SM based on user's smCode
+  useEffect(() => {
+    if (user && smOptions && smOptions.length > 0) {
+      const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+      
+      if (user.smCode && !isAdmin) {
+        const userSm = smOptions.find(option => option.value === user.smCode);
+        if (userSm) {
+          setSm(userSm);
+          setFormValues(prev => ({
+            ...prev,
+            sm: userSm.value
+          }));
+        }
+      }
+    }
+  }, [user, smOptions]);
 
   // Apply default series if present in user settings
   useEffect(() => {
@@ -234,6 +300,15 @@ const GodownTransfer: React.FC = () => {
 
   const handleDateChange = (dateString: string) => {
     setFormValues(prev => ({ ...prev, date: dateString }));
+  };
+
+  const handleSmChange = (value: string) => {
+    const selected = smOptions.find(option => option.value === value);
+    setSm(selected || null);
+    setFormValues(prev => ({
+      ...prev,
+      sm: value
+    }));
   };
 
   const handleFromGodownChange = (value: string) => {
@@ -368,11 +443,20 @@ const GodownTransfer: React.FC = () => {
       return;
     }
 
+    // S/M validation
+    if (!formValues.sm && !isSmDisabled) {
+      showToast('Please select a Salesman', 'error');
+      setClicked(false);
+      return;
+    }
+
     const payload = {
       date: formValues.date,
       series: formValues.series,
       fromGodown: formValues.fromGodown,
       toGodown: formValues.toGodown,
+      sm: formValues.sm || (user?.smCode || 'SM001'), // Use user's smCode or SM001 as default
+      smName: sm?.label ? sm.label.split('|')[0].trim() : '', // Extract SM name
       id: id.toString(),
       items: items.map((el) => ({
         code: el.item,
@@ -527,6 +611,21 @@ const GodownTransfer: React.FC = () => {
                 defaultValue=""
               />
             </div>
+          </div>
+
+          <div className="mb-6">
+            <Autocomplete
+              id="sm-select"
+              label="S/M"
+              options={filteredSmOptions}
+              onChange={handleSmChange}
+              value={sm?.value || ''}
+              defaultValue={sm?.value || ''}
+              disabled={isSmDisabled}
+            />
+            {isSmDisabled && (
+              <p className="mt-1 text-xs text-gray-500">S/M is locked to your assigned salesman code</p>
+            )}
           </div>
         </div>
 

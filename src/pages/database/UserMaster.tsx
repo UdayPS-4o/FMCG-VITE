@@ -28,6 +28,12 @@ const UserMaster: React.FC = () => {
       window.removeEventListener('itemsApproved', handleItemsApproved);
     };
   }, []);
+  
+  const handleApproveSuccess = () => {
+    // Since there's no specific approved page for users,
+    // we'll just show a notification and stay on the same page
+    toast.success('Users approved successfully');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -54,12 +60,7 @@ const UserMaster: React.FC = () => {
           <DatabaseTable 
             endpoint="users" 
             tableId="users-master-db" 
-            // Remove onApproveSuccess prop and related event dispatch
-            // onApproveSuccess={() => {
-            //   setHasApprovedItems(true);
-            //   // Dispatch a custom event that can be listened to by other components
-            //   window.dispatchEvent(new Event('itemsApproved'));
-            // }}
+            onApproveSuccess={handleApproveSuccess}
           />
         </div>
       </div>
