@@ -17,6 +17,10 @@ const AccountMaster: React.FC = () => {
     navigate('/approved/account-master');
   };
 
+  const handleApproveSuccess = () => {
+    navigate('/approved/account-master');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <PageMeta
@@ -42,10 +46,7 @@ const AccountMaster: React.FC = () => {
           <DatabaseTable 
             endpoint="account-master" 
             tableId="account-master-db" 
-            // Remove onApproveSuccess prop
-            // onApproveSuccess={() => {
-            //   setHasApprovedItems(true);
-            // }}
+            onApproveSuccess={handleApproveSuccess}
           />
         </div>
       </div>

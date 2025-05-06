@@ -16,6 +16,10 @@ const CashReceipt: React.FC = () => {
   const handleSyncToDbf = () => {
     navigate('/approved/cash-receipts');
   };
+  
+  const handleApproveSuccess = () => {
+    navigate('/approved/cash-receipts');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -42,10 +46,7 @@ const CashReceipt: React.FC = () => {
           <DatabaseTable 
             endpoint="cash-receipts" 
             tableId="cash-receipts-db"
-            // Remove onApproveSuccess prop
-            // onApproveSuccess={() => {
-            //   setHasApprovedItems(true);
-            // }} 
+            onApproveSuccess={handleApproveSuccess}
           />
         </div>
       </div>

@@ -21,6 +21,36 @@ const formatItemsDisplay = (items: any): string => {
   return '0';
 };
 
+// Add formatDate function for dd-mm-yyyy formatting
+const formatDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  
+  try {
+    // Check if the string is already in DD-MM-YYYY format
+    if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
+      return dateStr;
+    }
+    
+    // Parse the date string to a Date object
+    const date = new Date(dateStr);
+    
+    // Check if the date is valid
+    if (isNaN(date.getTime())) {
+      return dateStr; // Return original if invalid
+    }
+    
+    // Format to DD-MM-YYYY
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    
+    return `${day}-${month}-${year}`;
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return dateStr; // Return original string if any error occurs
+  }
+};
+
 // Define User interface (same as in Invoicing.tsx)
 interface User {
   id: number;
@@ -59,6 +89,12 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   // Add tooltip state
   const [tooltipContent, setTooltipContent] = useState<{ content: any; position: { x: number; y: number } } | null>(null);
+  // Add party mapping state
+  const [partyMap, setPartyMap] = useState<Record<string, string>>({});
+  // Add state for tracking CMPL data loading
+  const [isLoadingPartyData, setIsLoadingPartyData] = useState<boolean>(false);
+  // Define blacklisted fields that should always be hidden
+  const blacklistedFields = ['PartyName', 'partyName', 'partyname'];
   // Add hidden columns state with initial loading from localStorage
   const [hiddenColumns, setHiddenColumns] = useState<string[]>(() => {
     try {
@@ -364,8 +400,22 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     return a[orderBy] > b[orderBy] ? -1 : 1;
   });
 
-  // Get visible headers (excluding hidden columns)
-  const visibleHeaders = headers.filter(header => !hiddenColumns.includes(header));
+  // Get visible headers (excluding hidden columns and blacklisted fields)
+  // Also, conditionally remove 'series' and 'smName' based on the endpoint for merging
+  const visibleHeaders = headers.filter(header => {
+    if (hiddenColumns.includes(header) || blacklistedFields.includes(header)) {
+      return false;
+    }
+    // Remove 'series' if endpoint is cash-receipts or cash-payments, as it will be merged
+    if ((endpoint === 'cash-receipts' || endpoint === 'cash-payments') && header.toLowerCase() === 'series') {
+      return false;
+    }
+    // Remove 'smName' as it will be merged into 'sm'
+    if (header.toLowerCase() === 'smname') {
+      return false;
+    }
+    return true;
+  });
 
   const handlePrint = (id: string) => {
     if (!endpoint) {
@@ -795,6 +845,90 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     refreshData
   }));
 
+  // Add a new function after fetchData to fetch party information from CMPL
+  const fetchPartyData = async () => {
+    if (isLoadingPartyData) return; // Prevent duplicate fetches
+    
+    setIsLoadingPartyData(true);
+    try {
+      const apiUrl = `${constants.baseURL}/cmpl`;
+      
+      // Try to get from localStorage first for immediate display
+      const cacheKey = 'api_cache_' + apiUrl;
+      try {
+        const cachedDataStr = localStorage.getItem(cacheKey);
+        if (cachedDataStr) {
+          const cachedData = JSON.parse(cachedDataStr);
+          if (cachedData.data && Array.isArray(cachedData.data)) {
+            // Build party mapping
+            const newPartyMap: Record<string, string> = {};
+            cachedData.data.forEach((party: any) => {
+              if (party.C_CODE && party.C_NAME) {
+                newPartyMap[party.C_CODE] = party.C_NAME;
+              }
+            });
+            setPartyMap(newPartyMap);
+          }
+        }
+      } catch (e) {
+        console.error('Error reading cached party data:', e);
+      }
+      
+      // Fetch fresh data from API
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No auth token found');
+      }
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch CMPL data: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('CMPL data is not an array');
+      }
+      
+      // Build party mapping
+      const newPartyMap: Record<string, string> = {};
+      data.forEach((party: any) => {
+        if (party.C_CODE && party.C_NAME) {
+          newPartyMap[party.C_CODE] = party.C_NAME;
+        }
+      });
+      
+      setPartyMap(newPartyMap);
+      
+      // Save to localStorage for future use
+      try {
+        const cacheItem = {
+          data,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheItem));
+      } catch (e) {
+        console.error('Error caching party data:', e);
+      }
+    } catch (error) {
+      console.error('Error fetching party data:', error);
+    } finally {
+      setIsLoadingPartyData(false);
+    }
+  };
+
+  // Call fetchPartyData after fetching table data
+  useEffect(() => {
+    if (rows.length > 0) {
+      fetchPartyData();
+    }
+  }, [rows]); // Trigger when rows data changes
+
   // Main render
   return (
     <>
@@ -995,6 +1129,73 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
                               );
                             }
                             
+                            // Format date fields
+                            if (header === 'date' || header.endsWith('Date') || header.endsWith('_date')) {
+                              return (
+                                <TableCell 
+                                  key={`${rowIndex}-${header}`}
+                                  className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
+                                >
+                                  {formatDate(row[header])}
+                                </TableCell>
+                              );
+                            }
+
+                            // Merge Series with ReceiptNo for cash-receipts endpoint
+                            if (endpoint === 'cash-receipts' && (header.toLowerCase() === 'receiptno')) {
+                              const series = row['series'] || row['Series'];
+                              const receiptNoValue = row[header];
+                              return (
+                                <TableCell 
+                                  key={`${rowIndex}-${header}`}
+                                  className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
+                                >
+                                  {series ? `${series}-${receiptNoValue}` : receiptNoValue}
+                                </TableCell>
+                              );
+                            }
+
+                            // Merge Series with VoucherNo for cash-payments endpoint
+                            if (endpoint === 'cash-payments' && (header.toLowerCase() === 'voucherno')) {
+                              const series = row['series'] || row['Series'];
+                              const voucherNoValue = row[header];
+                              return (
+                                <TableCell 
+                                  key={`${rowIndex}-${header}`}
+                                  className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
+                                >
+                                  {series ? `${series}-${voucherNoValue}` : voucherNoValue}
+                                </TableCell>
+                              );
+                            }
+                            
+                            // Merge SM with SMName
+                            if (header.toLowerCase() === 'sm') {
+                              const smValue = row[header];
+                              const smNameValue = row['smName'] || row['SmName'] || row['smname'];
+                              return (
+                                <TableCell 
+                                  key={`${rowIndex}-${header}`}
+                                  className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
+                                >
+                                  {smNameValue ? `${smValue} (${smNameValue})` : smValue}
+                                </TableCell>
+                              );
+                            }
+                            
+                            // Replace party codes with names
+                            if ((header === 'party' || header === 'partycode') && row[header] && partyMap[row[header]]) {
+                              return (
+                                <TableCell 
+                                  key={`${rowIndex}-${header}`}
+                                  className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
+                                >
+                                  {partyMap[row[header]]} ({row[header]})
+                                </TableCell>
+                              );
+                            }
+                            
+                            // Default rendering for other fields
                             return (
                               <TableCell 
                                 key={`${rowIndex}-${header}`}

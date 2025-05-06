@@ -39,7 +39,9 @@
     "routeAccess": [
       "Invoicing",
       "Account Master",
-      "Cash Receipts"
+      "Cash Receipts",
+      "Godown Transfer",
+      "Cash Payments"
     ],
     "powers": [
       "Write",

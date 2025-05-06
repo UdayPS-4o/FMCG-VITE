@@ -16,6 +16,10 @@ const GodownTransfer: React.FC = () => {
   const handleSyncToDbf = () => {
     navigate('/approved/godown-transfer');
   };
+  
+  const handleApproveSuccess = () => {
+    navigate('/approved/godown-transfer');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -42,10 +46,7 @@ const GodownTransfer: React.FC = () => {
           <DatabaseTable 
             endpoint="godown" 
             tableId="godown-transfer-db"
-            // Remove onApproveSuccess prop
-            // onApproveSuccess={() => {
-            //   setHasApprovedItems(true);
-            // }} 
+            onApproveSuccess={handleApproveSuccess}
           />
         </div>
       </div>

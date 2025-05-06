@@ -579,7 +579,7 @@ const AppSidebar: React.FC = () => {
       </div>
       
       {/* Logout button with adjusted positioning */}
-      <div className="mt-auto mb-24 lg:mb-8">
+      <div className="mt-auto mb-4 lg:mb-4">
         <button
           onClick={handleLogout}
           className="menu-item group menu-item-inactive w-full"

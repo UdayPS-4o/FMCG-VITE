@@ -18,6 +18,10 @@ const Invoicing: React.FC = () => {
     
     return () => clearTimeout(timer);
   }, []);
+  
+  const handleApproveSuccess = () => {
+    navigate('/approved/invoicing');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -35,6 +39,7 @@ const Invoicing: React.FC = () => {
           <DatabaseTable 
             endpoint="invoicing" 
             tableId="invoicing-db"
+            onApproveSuccess={handleApproveSuccess}
           />
         </div>
       </div>

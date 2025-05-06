@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -46,12 +46,16 @@ interface FormValues {
   voucherNo: string;
   narration: string;
   party?: string;
+  sm?: string;
+  smName?: string;
 }
 
 const CashPayment: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [party, setParty] = useState<PartyOption | null>(null);
   const [partyOptions, setPartyOptions] = useState<PartyOption[]>([]);
+  const [sm, setSm] = useState<PartyOption | null>(null);
+  const [smOptions, setSmOptions] = useState<PartyOption[]>([]);
   const [voucherNo, setVoucherNo] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<FormValues>({
     date: getTodayFormatted(),
@@ -73,6 +77,7 @@ const CashPayment: React.FC = () => {
   // Define field order for Enter key navigation
   const fieldOrder = [
     'party-select',
+    'sm-select',
     'date',
     'series',
     'voucherNo',
@@ -241,6 +246,34 @@ const CashPayment: React.FC = () => {
           setPartyOptions(partyList);
           
           setParty(partyList.find((p: PartyOption) => p.value === paymentToEdit.party));
+
+          // Fetch S/M options from /cmpl and filter
+          const cmplData = await apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`);
+          if (Array.isArray(cmplData)) {
+            const smList = cmplData.filter(item => 
+              item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
+            );
+            const smApiOptions = smList.map((item: any) => ({
+              value: item.C_CODE, // Assuming C_CODE is the SM_CODE
+              label: `${item.C_NAME} | ${item.C_CODE}`, // Assuming C_NAME is the SM_NAME
+            }));
+            setSmOptions(smApiOptions);
+
+            // Set S/M if editing and S/M code exists on payment
+            if (paymentToEdit.sm) { 
+              const currentSm = smApiOptions.find((s: PartyOption) => s.value === paymentToEdit.sm);
+              if (currentSm) {
+                setSm(currentSm);
+              }
+            }
+          } else {
+            console.warn('CMPL data for S/M is not an array:', cmplData);
+            setSmOptions([]);
+             setToastMessage('Failed to fetch S/M options (CMPL data invalid)');
+             setToastType('error');
+             setShowToast(true);
+          }
+
         } catch (error) {
           console.error('Error fetching edit data:', error);
           setToastMessage('Failed to load payment details');
@@ -250,11 +283,11 @@ const CashPayment: React.FC = () => {
       };
       fetchEditData();
     } else {
-      // Fetch party data for new payment
-      const fetchPartyData = async () => {
+      // Fetch party data and S/M data for new payment
+      const fetchDataForNewEntry = async () => {
         try {
-          // Use apiCache for CMPL data
-          const partyData = await apiCache.fetchWithCache(`${constants.baseURL}/cmpl`);
+          // Use apiCache for CMPL data (for both parties and S/M)
+          const cmplData = await apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`);
           
           // Use apiCache for balance data
           const balanceData = await apiCache.fetchWithCache(`${constants.baseURL}/json/balance`);
@@ -271,7 +304,7 @@ const CashPayment: React.FC = () => {
           const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
 
           // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
-          let filteredPartyData = partyData.filter((party: any) => !party.C_CODE.endsWith('000'));
+          let filteredPartyData = cmplData.filter((party: any) => !party.C_CODE.endsWith('000'));
           
           if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
             console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
@@ -314,6 +347,25 @@ const CashPayment: React.FC = () => {
 
           setPartyOptions(partyList);
           
+          // Process S/M options from the same CMPL data
+          if (Array.isArray(cmplData)) {
+            const smList = cmplData.filter(item => 
+              item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
+            );
+            const smApiOptions = smList.map((item: any) => ({
+              value: item.C_CODE, // Assuming C_CODE is the SM_CODE
+              label: `${item.C_NAME} | ${item.C_CODE}`, // Assuming C_NAME is the SM_NAME
+            }));
+            setSmOptions(smApiOptions);
+            // Auto-selection for new data is handled by a separate useEffect below
+          } else {
+            console.warn('CMPL data for S/M is not an array:', cmplData);
+            setSmOptions([]);
+            setToastMessage('Failed to fetch S/M options (CMPL data invalid)');
+            setToastType('error');
+            setShowToast(true);
+          }
+          
           // Clear expired cache entries
           apiCache.clearExpiredCache();
         } catch (error) {
@@ -323,9 +375,43 @@ const CashPayment: React.FC = () => {
         }
       };
       
-      fetchPartyData();
+      fetchDataForNewEntry(); // Renamed from fetchPartyData
     }
   }, [id, user]);
+
+  // Filter SM options based on user's role and assigned SM code
+  const filteredSmOptions = useMemo(() => {
+    if (!user || !smOptions) return [];
+    
+    const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+    
+    if (!isAdmin && user.smCode) {
+      const userSm = smOptions.find(option => option.value === user.smCode);
+      return userSm ? [userSm] : [];
+    }
+    return smOptions;
+  }, [user, smOptions]);
+
+  // Determine if S/M field should be disabled
+  const isSmDisabled = useMemo(() => {
+    if (!user) return false;
+    const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+    return !!(!isAdmin && user.smCode);
+  }, [user]);
+
+  // Auto-select SM based on user's smCode (only for new entries)
+  useEffect(() => {
+    if (user && smOptions && smOptions.length > 0 && !isEditMode) {
+      const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+      
+      if (user.smCode && !isAdmin) {
+        const userSm = smOptions.find(option => option.value === user.smCode);
+        if (userSm) {
+          setSm(userSm);
+        }
+      }
+    }
+  }, [user, smOptions, isEditMode]);
 
   // Handle fetch next voucher number
   useEffect(() => {
@@ -374,6 +460,11 @@ const CashPayment: React.FC = () => {
   const handlePartyChange = (value: string) => {
     const selectedParty = partyOptions.find(p => p.value === value);
     setParty(selectedParty || null);
+  };
+
+  const handleSmChange = (value: string) => {
+    const selected = smOptions.find(option => option.value === value);
+    setSm(selected || null);
   };
 
   // New handler for input changes (excluding date)
@@ -451,6 +542,14 @@ const CashPayment: React.FC = () => {
       return; // Stop submission if party is not selected
     }
 
+    // Validation for S/M field (if not disabled/auto-selected)
+    if (!sm && !isSmDisabled) {
+        setToastMessage('S/M selection is required.');
+        setToastType('error');
+        setShowToast(true);
+        return;
+    }
+
     // Validate other required fields if necessary
     if (!formValues.amount || parseFloat(formValues.amount) <= 0) {
         setToastMessage('Amount is required and must be positive.');
@@ -478,6 +577,8 @@ const CashPayment: React.FC = () => {
       ...formValues,
       date: formatDateForAPI(formValues.date), // Ensure date is formatted correctly
       party: party?.value, // Get party value from state
+      sm: sm?.value || '', // Add S/M value
+      smName: sm?.label?.split('|')[0]?.trim() || '', // Add S/M name (extract from label)
     };
 
     try {
@@ -568,6 +669,21 @@ const CashPayment: React.FC = () => {
                     onChange={handlePartyChange}
                     defaultValue={party?.value}
                   />
+                </div>
+
+                <div className="mt-4">
+                  <Autocomplete
+                    id="sm-select"
+                    label="S/M"
+                    options={filteredSmOptions}
+                    onChange={handleSmChange}
+                    value={sm?.value || ''}
+                    defaultValue={sm?.value || ''}
+                    disabled={isSmDisabled}
+                  />
+                  {isSmDisabled && (
+                    <p className="mt-1 text-xs text-gray-500">S/M is locked to your assigned salesman code</p>
+                  )}
                 </div>
               </div>
               

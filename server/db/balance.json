@@ -1,5 +1,5 @@
 {
-  "lastModifiedTime": 1745961351741.665,
+  "lastModifiedTime": 1746440533901.4617,
   "data": [
     {
       "partycode": "BB009",
@@ -4388,6 +4388,10 @@
     {
       "partycode": "OT069",
       "result": "17168 DR"
+    },
+    {
+      "partycode": "CT001",
+      "result": "1234 DR"
     }
   ]
 }
