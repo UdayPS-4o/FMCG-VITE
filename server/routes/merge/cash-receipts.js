@@ -28,12 +28,33 @@ async function getNextCrVrNumber(dbfOrm) {
 
 // Map JSON record to CASH.DBF format for Cash Receipt
 async function mapToCashDbfFormat(record, vr, userId, customerData) {
-  const dateFormatted = record.date ? new Date(record.date) : null; // DBF Date object
+  // Parse date components from the date field
+  let dateFormatted = null;
+  if (record.date) {
+    const dateParts = record.date.split('-'); // Assuming MM-DD-YYYY format
+    const month = parseInt(dateParts[0], 10) - 1; // JavaScript months are 0-indexed
+    const day = parseInt(dateParts[1], 10);
+    const year = parseInt(dateParts[2], 10);
+    
+    // Get time components from createdAt if available
+    let hours = 0, minutes = 0, seconds = 0;
+    if (record.createdAt) {
+      const createdDate = new Date(record.createdAt);
+      hours = createdDate.getUTCHours();
+      minutes = createdDate.getUTCMinutes();
+      seconds = createdDate.getUTCSeconds();
+    }
+    
+    // Create a UTC date object with the specified date and time
+    dateFormatted = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+    console.log(`Parsed date: ${record.date}, createdAt: ${record.createdAt || 'N/A'}, result: ${dateFormatted.toISOString()}`);
+  }
+
   const amount = parseFloat(record.amount) || 0;
   const discount = parseFloat(record.discount) || 0;
 
   return {
-    DATE: dateFormatted, // Date object
+    DATE: dateFormatted,
     VR: vr,
     M_GROUP1: "DT", // Debtor group for Cash Receipt
     C_CODE: record.party || "",

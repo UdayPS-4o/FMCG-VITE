@@ -31,7 +31,7 @@ function padBillNumber(series, billNo) {
   return paddedString;
 }
 
-function mapToBillDbfFormat(invoice, customerData, calculatedTotals, userId) {
+function mapToBillDbfFormat(parsedUtcDate, invoice, customerData, calculatedTotals, userId) {
   console.log("Mapping BILL for:", invoice.billNo, "Customer:", customerData?.C_NAME);
   const { netAmountRounded, roundOff } = calculatedTotals;
 
@@ -39,7 +39,7 @@ function mapToBillDbfFormat(invoice, customerData, calculatedTotals, userId) {
     SERIES: invoice.series,
     BILL: parseInt(invoice.billNo, 10),
     CASH: invoice.cash || 'N',
-    DATE: new Date(invoice.date),
+    DATE: parsedUtcDate,
     DUE_DAYS: parseInt(invoice.dueDays, 10) || 0,
     RECD: "",
     C_CODE: invoice.party,
@@ -102,7 +102,7 @@ function mapToBillDbfFormat(invoice, customerData, calculatedTotals, userId) {
   };
 }
 
-function mapToBillDtlDbfFormat(invoice, item, sno, productData, customerData) {
+function mapToBillDtlDbfFormat(parsedUtcDate, invoice, item, sno, productData, customerData) {
   console.log("Mapping BILLDTL for:", invoice.billNo, "Item:", item.item, "Product:", productData?.PRODUCT);
 
   const qty = safeParseFloat(item.qty, 3);
@@ -147,7 +147,7 @@ function mapToBillDtlDbfFormat(invoice, item, sno, productData, customerData) {
   const result = {
     SERIES: invoice.series,
     BILL: parseInt(invoice.billNo, 10),
-    DATE: new Date(invoice.date),
+    DATE: parsedUtcDate,
     CODE: item.item,
     GDN_CODE: item.godown,
     UNIT: item.unit,
@@ -283,19 +283,13 @@ router.post('/sync', async (req, res) => {
     }
     // --- End Load Users Data ---
 
-    // 1. Read invoicing.json
-    let invoicesData;
-    try {
-      const jsonData = await fs.readFile(invoicingJsonPath, 'utf-8');
-      invoicesData = JSON.parse(jsonData);
-    } catch (readError) {
-      console.error(`Error reading invoicing JSON file at ${invoicingJsonPath}:`, readError);
-      return res.status(500).json({ success: false, message: 'Failed to read invoicing data file.', error: readError.message });
+    // 1. Check if records are provided in the request
+    if (!req.body.records || !Array.isArray(req.body.records) || req.body.records.length === 0) {
+      return res.status(400).json({ success: false, message: 'No invoice records provided in the request.' });
     }
 
-    if (!Array.isArray(invoicesData) || invoicesData.length === 0) {
-      return res.status(400).json({ success: false, message: 'No invoice data found in the JSON file.' });
-    }
+    // Use the records from the request body instead of reading from file
+    const invoicesData = req.body.records;
 
     // 2. Open DBFs
     await Promise.all([
@@ -322,7 +316,6 @@ router.post('/sync', async (req, res) => {
              throw new Error(`Failed to open required DBF files (PMPL/CMPL might be missing): ${openError.message}`);
         }
     });
-
 
     // 3. Load PMPL, CMPL into maps
     console.log('Loading PMPL data...');
@@ -363,6 +356,27 @@ router.post('/sync', async (req, res) => {
         continue;
       }
 
+      // Parse date components from the date field (MM-DD-YYYY)
+      const dateParts = invoice.date.split('-'); 
+      const month = parseInt(dateParts[0], 10) - 1; // JavaScript months are 0-indexed
+      const day = parseInt(dateParts[1], 10);
+      const year = parseInt(dateParts[2], 10);
+      
+      // Get time components from createdAt if available
+      let hours = 0, minutes = 0, seconds = 0;
+      if (invoice.createdAt) {
+        const createdDate = new Date(invoice.createdAt);
+        hours = createdDate.getUTCHours();
+        minutes = createdDate.getUTCMinutes();
+        seconds = createdDate.getUTCSeconds();
+      }
+      
+      // Create a UTC date object with the exact date and time components
+      // This ensures the date remains as specified regardless of server timezone
+      const combinedDate = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+      
+      console.log(`Original date string: ${invoice.date}, Created at: ${invoice.createdAt || 'N/A'}, Combined date: ${combinedDate.toISOString()}`);
+
       // Look up customer data
       const customerData = cmplMap[invoice.party] || null;
       if (!customerData) {
@@ -386,7 +400,7 @@ router.post('/sync', async (req, res) => {
            // Decide if you want to skip the item or the whole bill
         }
         // Pass customerData to detail mapping for fields like PST9
-        const { record: billDtlRecord, net10 } = mapToBillDtlDbfFormat(invoice, item, sno, productData, customerData);
+        const { record: billDtlRecord, net10 } = mapToBillDtlDbfFormat(combinedDate, invoice, item, sno, productData, customerData);
         currentBillDetails.push(billDtlRecord);
         totalNetAmountExact += net10;
         sno++;
@@ -415,7 +429,7 @@ router.post('/sync', async (req, res) => {
       // --- End Determine User ID ---
 
       // Map BILL record using calculated totals and determined userId
-      const billRecord = mapToBillDbfFormat(invoice, customerData, calculatedTotals, recordUserId); // Pass recordUserId
+      const billRecord = mapToBillDbfFormat(combinedDate, invoice, customerData, calculatedTotals, recordUserId);
       billRecordsToInsert.push(billRecord);
 
       // Add the processed details to the main list

@@ -37,10 +37,34 @@ function mapToTransferDbfFormat(transfer, item, sno, productData, isNegative = f
   // Ensure BILL is numeric
   const billNo = parseInt(transfer.id, 10);
   
+  // Parse date components from the transfer date field
+  let dateFormatted = null;
+  if (transfer.date) {
+    const dateParts = transfer.date.split('-'); // Assuming MM-DD-YYYY format
+    const month = parseInt(dateParts[0], 10) - 1; // JavaScript months are 0-indexed
+    const day = parseInt(dateParts[1], 10);
+    const year = parseInt(dateParts[2], 10);
+    
+    // Get time components from createdAt if available
+    let hours = 0, minutes = 0, seconds = 0;
+    if (transfer.createdAt) {
+      const createdDate = new Date(transfer.createdAt);
+      hours = createdDate.getUTCHours();
+      minutes = createdDate.getUTCMinutes();
+      seconds = createdDate.getUTCSeconds();
+    }
+    
+    // Create a UTC date object with the specified date and time
+    dateFormatted = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+    console.log(`Transfer ${transfer.id} date: ${transfer.date}, createdAt: ${transfer.createdAt || 'N/A'}, result: ${dateFormatted.toISOString()}`);
+  } else {
+    dateFormatted = new Date(); // Fallback to current date
+  }
+  
   return {
     SERIES: transfer.series,
     BILL: billNo,
-    DATE: new Date(transfer.date),
+    DATE: dateFormatted,
     CODE: item.code,
     GDN_CODE: isNegative ? transfer.toGodown : transfer.fromGodown,
     UNIT: item.unit || productData?.UNIT_1 || "PCS",
