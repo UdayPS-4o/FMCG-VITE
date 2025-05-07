@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { createPortal } from "react-dom";
 
 interface Option {
@@ -16,6 +16,12 @@ interface AutocompleteProps {
   value?: string;
   autoComplete?: string;
   disabled?: boolean | object;
+  onEnter?: () => void;
+}
+
+// Define handle types for the ref
+export interface AutocompleteRefHandle {
+  focus: () => void;
 }
 
 const customScrollbarStyles = `
@@ -66,7 +72,7 @@ const customScrollbarStyles = `
   }
 `;
 
-const Autocomplete: React.FC<AutocompleteProps> = ({
+const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   id,
   label,
   options,
@@ -76,15 +82,24 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   value,
   autoComplete = "",
   disabled = false,
-}) => {
+  onEnter,
+}, ref) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
+  // Expose focus method via the ref
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      inputRef.current?.focus();
+    }
+  }));
+
   const isActive = isFocused || searchTerm;
 
   // Filter options based on search term
@@ -97,13 +112,31 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
     const searchWords = searchTermsLower.split(' ').filter(word => word.length > 0);
     
     // If no search words, show all options (or handle as needed)
-    if (searchWords.length === 0) {
-      return true; // Or false, depending on desired behavior for empty search
+    if (searchWords.length === 0 && !value) {
+      return true;
+    }
+    if (searchWords.length === 0 && value && selectedOption?.label === searchTerm) {
+        return option.value === value;
     }
     
     // Check if all search words are included in the label
     return searchWords.every(word => labelLower.includes(word));
   });
+
+  // Reset highlighted index when search term changes or dropdown opens/closes
+  useEffect(() => {
+    setHighlightedIndex(filteredOptions.length > 0 ? 0 : -1);
+  }, [searchTerm, isOpen, filteredOptions.length]);
+
+  // Scroll to highlighted item
+  useEffect(() => {
+    if (isOpen && highlightedIndex >= 0 && dropdownRef.current) {
+      const optionElement = dropdownRef.current.children[highlightedIndex] as HTMLElement;
+      if (optionElement) {
+        optionElement.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [highlightedIndex, isOpen]);
 
   // Set initial selected option based on defaultValue or value
   useEffect(() => {
@@ -135,6 +168,12 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
         !inputContainerRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
+        if (searchTerm && !selectedOption && !options.some(opt => opt.label === searchTerm)) {
+          setSearchTerm("");
+          onChange("");
+        } else if (selectedOption && searchTerm !== selectedOption.label) {
+          setSearchTerm(selectedOption.label);
+        }
       }
     };
 
@@ -210,6 +249,59 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
     setSearchTerm(option.label);
     setIsOpen(false);
     onChange(option.value);
+    if (onEnter) {
+      onEnter();
+    }
+  };
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
+
+    if (isOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev + 1) % filteredOptions.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev - 1 + filteredOptions.length) % filteredOptions.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
+          handleOptionSelect(filteredOptions[highlightedIndex]);
+        }
+        if (onEnter) {
+          onEnter();
+        }
+      } else if (e.key === 'Escape') {
+        setIsOpen(false);
+        if (selectedOption) {
+          setSearchTerm(selectedOption.label);
+        }
+      }
+    } else if (e.key === 'Enter' && !isOpen) {
+      if (onEnter) {
+        const exactMatch = options.find(opt => opt.label.toLowerCase() === searchTerm.toLowerCase() || opt.value.toLowerCase() === searchTerm.toLowerCase());
+        if (exactMatch && (!selectedOption || selectedOption.value !== exactMatch.value)) {
+          handleOptionSelect(exactMatch);
+        }
+        onEnter();
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!isOpen && searchTerm) {
+            setIsOpen(true);
+        } else if (!isOpen && !searchTerm && options.length > 0){
+            setIsOpen(true);
+        }
+    }
+
+    if (e.key === 'Tab' && isOpen) {
+      setIsOpen(false);
+      if (selectedOption) {
+        setSearchTerm(selectedOption.label);
+      } else if (searchTerm && !filteredOptions.some(opt => opt.label === searchTerm)) {
+      }
+    }
   };
 
   // Format option label - if it contains a pipe (|), make the first part bold
@@ -245,6 +337,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
             setIsOpen(true);
           }}
           onBlur={() => setIsFocused(false)}
+          onKeyDown={handleKeyDown}
           autoComplete={autoComplete}
           disabled={Boolean(disabled)}
         />
@@ -335,15 +428,20 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
           }}
         >
           {filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => (
+            filteredOptions.map((option, index) => (
               <div
                 key={option.value}
                 className={`px-4 py-3 text-sm cursor-pointer text-gray-700 dark:text-gray-200 transition-colors duration-150 hover:bg-brand-50 dark:hover:bg-brand-900/10 ${
-                  selectedOption?.value === option.value 
-                    ? 'bg-brand-100 dark:bg-brand-900/20' 
+                  selectedOption?.value === option.value
+                    ? 'bg-brand-100 dark:bg-brand-900/20'
+                    : ''
+                } ${
+                  highlightedIndex === index
+                    ? 'bg-brand-200 dark:bg-brand-700 ring-2 ring-brand-500' 
                     : ''
                 }`}
                 onClick={() => handleOptionSelect(option)}
+                onMouseEnter={() => setHighlightedIndex(index)}
               >
                 {formatOptionLabel(option.label)}
               </div>
@@ -358,6 +456,6 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default Autocomplete; 

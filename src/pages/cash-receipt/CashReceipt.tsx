@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
-import Input from "../../components/form/input/Input";
+import Input, { InputRefHandle } from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
 import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
@@ -10,6 +10,15 @@ import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
 import apiCache from '../../utils/apiCache';
 import useAuth from "../../hooks/useAuth";
+
+// Utility function to center an element in the viewport
+const centerElementInViewport = (element: HTMLElement) => {
+  if (!element) return;
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center' 
+  });
+};
 
 // Helper functions for date formatting
 const formatDateForDisplay = (isoDate: string): string => {
@@ -108,6 +117,9 @@ const CashReceipt: React.FC = () => {
 
   const navigate = useNavigate();
 
+  // Ref for the Series input field
+  const seriesInputRef = useRef<InputRefHandle>(null);
+
   // Define field order for Enter key navigation
   const fieldOrder = [
     'party-select',
@@ -120,28 +132,24 @@ const CashReceipt: React.FC = () => {
     'narration'
   ];
 
-  // Handle Enter key for field navigation
+  // Handle Enter key for field navigation - ENHANCED WITH SCROLLING
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
-        // Get the active element's ID
         const activeElement = document.activeElement as HTMLElement;
         if (!activeElement || !activeElement.id) return;
         
-        // Prevent form submission
         e.preventDefault();
         
-        // Find the current field index in our order
         const currentIndex = fieldOrder.indexOf(activeElement.id);
         
-        // If found and not the last field, move to the next one
         if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
           const nextFieldId = fieldOrder[currentIndex + 1];
-          const nextField = document.getElementById(nextFieldId);
+          const nextField = document.getElementById(nextFieldId) as HTMLElement | null; // Ensure it can be null
           if (nextField) {
             nextField.focus();
+            centerElementInViewport(nextField); // Center the newly focused field
             
-            // If it's an input, move cursor to the end
             if (nextField instanceof HTMLInputElement) {
               const inputLength = nextField.value.length;
               nextField.setSelectionRange(inputLength, inputLength);
@@ -151,7 +159,6 @@ const CashReceipt: React.FC = () => {
       }
     };
     
-    // Add event listener to each field
     fieldOrder.forEach(fieldId => {
       const element = document.getElementById(fieldId);
       if (element) {
@@ -159,7 +166,6 @@ const CashReceipt: React.FC = () => {
       }
     });
     
-    // Cleanup function
     return () => {
       fieldOrder.forEach(fieldId => {
         const element = document.getElementById(fieldId);
@@ -168,7 +174,42 @@ const CashReceipt: React.FC = () => {
         }
       });
     };
-  }, [fieldOrder]);
+  }, [fieldOrder]); // fieldOrder is stable, so this runs once
+
+  // useEffect for centering on focus (for Tab/Shift+Tab)
+  useEffect(() => {
+    const handleFocus = (event: FocusEvent) => {
+      if (event.target instanceof HTMLElement) {
+        centerElementInViewport(event.target);
+      }
+    };
+
+    const elements: HTMLElement[] = [];
+    fieldOrder.forEach(fieldId => {
+      const element = document.getElementById(fieldId);
+      if (element) {
+        element.addEventListener('focus', handleFocus);
+        elements.push(element); // Keep track for cleanup
+      }
+    });
+
+    return () => {
+      elements.forEach(element => {
+        element.removeEventListener('focus', handleFocus);
+      });
+    };
+  }, [fieldOrder]); // fieldOrder is stable, so this runs once
+
+  // useEffect to focus Series input on page load
+  useEffect(() => {
+    if (seriesInputRef.current) {
+      seriesInputRef.current.focus();
+      const seriesElement = document.getElementById('series'); // Assuming 'series' is the ID
+      if (seriesElement) {
+        centerElementInViewport(seriesElement);
+      }
+    }
+  }, []); // Empty dependency array ensures this runs once on mount
 
   // Apply default series from user settings
   useEffect(() => {
@@ -178,7 +219,7 @@ const CashReceipt: React.FC = () => {
         series: user.defaultSeries.cashReceipt
       }));
     }
-  }, [user, isEditMode]);
+  }, [user, isEditMode, formValues.series]); // formValues.series dependency ensures it runs if series is cleared then default applied
 
   // Fetch receipt ID information (next receipt number for each series)
   useEffect(() => {
@@ -256,10 +297,21 @@ const CashReceipt: React.FC = () => {
         ? receiptIdInfo.nextSeries[series] 
         : 1; // Start with 1 for new series
       
+      const newReceiptNo = seriesNextNumber.toString();
+      
       setFormValues(prev => ({
         ...prev,
-        receiptNo: seriesNextNumber.toString()
+        receiptNo: newReceiptNo
       }));
+      
+      // Update narration with the new receipt number and series
+      setTimeout(() => {
+        updateNarration({
+          ...formValues,
+          series: series,
+          receiptNo: newReceiptNo
+        });
+      }, 10);
     }
   }, [formValues.series, receiptIdInfo, isEditMode]);
 
@@ -578,7 +630,7 @@ const CashReceipt: React.FC = () => {
       };
       
       // Update narration when series changes
-      updateNarration(updated);
+      setTimeout(() => updateNarration(updated), 0);
       return updated;
     });
   };
@@ -598,8 +650,8 @@ const CashReceipt: React.FC = () => {
           [name]: truncatedValue
         };
         
-        // Update narration when receiptNo changes
-        updateNarration(updated);
+        // Update narration when receiptNo changes (even if empty)
+        setTimeout(() => updateNarration(updated), 0);
         
         return updated;
       });
@@ -613,7 +665,7 @@ const CashReceipt: React.FC = () => {
         
         // Update narration when amount changes
         if (name === 'amount') {
-          updateNarration(updated);
+          setTimeout(() => updateNarration(updated), 0);
         }
         
         return updated;
@@ -633,16 +685,14 @@ const CashReceipt: React.FC = () => {
 
   // Function to automatically generate narration
   const updateNarration = (values: FormValues) => {
-    if (values.receiptNo) {
-      const receiptText = values.series 
-        ? `R/NO.${values.series}-${values.receiptNo}`
-        : `R/NO.${values.receiptNo}`;
-      
-      setFormValues(prev => ({
-        ...prev,
-        narration: `BY CASH ON ${receiptText}`
-      }));
-    }
+    const receiptText = values.series 
+      ? `R/NO.${values.series}-${values.receiptNo || ""}`
+      : `R/NO.${values.receiptNo || ""}`;
+    
+    setFormValues(prev => ({
+      ...prev,
+      narration: `BY CASH ON ${receiptText}`
+    }));
   };
 
   // Refactored handleSubmit to use state directly
@@ -806,6 +856,7 @@ const CashReceipt: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-1">
                     <Input 
+                      ref={seriesInputRef}
                       id="series"
                       name="series" 
                       label="Series" 

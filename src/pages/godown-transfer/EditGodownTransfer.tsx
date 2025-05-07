@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
-import Input from "../../components/form/input/Input";
-import Autocomplete from "../../components/form/input/Autocomplete";
+import Input, { InputRefHandle } from "../../components/form/input/Input";
+import Autocomplete, { AutocompleteRefHandle } from "../../components/form/input/Autocomplete";
 import FormComponent from "../../components/form/Form";
 import Toast from '../../components/ui/toast/Toast';
 import constants from "../../constants";
-import CollapsibleItemSection from './CollapsibleItemSection';
+import CollapsibleItemSection, { CollapsibleItemSectionRefHandle } from './CollapsibleItemSection';
 import apiCache from '../../utils/apiCache';
 import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
 import useAuth from "../../hooks/useAuth";
@@ -54,6 +54,15 @@ interface GodownTransferData {
   createdAt: string;
 }
 
+// Utility function to center an element in the viewport
+const centerElementInViewport = (element: HTMLElement | null) => {
+  if (!element) return;
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center' 
+  });
+};
+
 const EditGodownTransfer: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -94,6 +103,28 @@ const EditGodownTransfer: React.FC = () => {
   const [expanded, setExpanded] = useState<number | false>(0);
   const baseURL = constants.baseURL;
   const formPrefilled = useRef(false);
+
+  // Refs for focus management
+  const seriesRef = useRef<InputRefHandle>(null);
+  const fromGodownRef = useRef<AutocompleteRefHandle>(null);
+  const toGodownRef = useRef<AutocompleteRefHandle>(null);
+  const searchItemsRef = useRef<InputRefHandle>(null);
+  const addAnotherItemButtonRef = useRef<HTMLButtonElement>(null);
+  const collapsibleItemRefs = useRef<Array<React.RefObject<CollapsibleItemSectionRefHandle>>>([]);
+  const [focusNewItemIndex, setFocusNewItemIndex] = useState<number | null>(null);
+
+  // Effect to manage collapsibleItemRefs based on formValues.items
+  useEffect(() => {
+    collapsibleItemRefs.current = formValues.items.map((_, i) => collapsibleItemRefs.current[i] ?? createRef<CollapsibleItemSectionRefHandle>());
+  }, [formValues.items]);
+
+  // Effect for initial focus on seriesRef when loading is complete
+  useEffect(() => {
+    if (!loading && seriesRef.current) {
+      seriesRef.current.focus();
+      // No need to scroll series into view typically as it's at the top
+    }
+  }, [loading]);
 
   // First effect: Fetch all required data
   useEffect(() => {
@@ -419,8 +450,9 @@ const EditGodownTransfer: React.FC = () => {
       ],
     }));
     
-    // Automatically expand the newly added accordion
-    setExpanded(formValues.items.length);
+    // Automatically expand the newly added accordion and set focus
+    setExpanded(formValues.items.length - 1);
+    setFocusNewItemIndex(formValues.items.length - 1);
   };
 
   const removeItem = (index: number) => {
@@ -435,6 +467,13 @@ const EditGodownTransfer: React.FC = () => {
 
   const handleAccordionChange = (panel: number) => (event: React.SyntheticEvent, isExpanded: boolean) => {
     setExpanded(isExpanded ? panel : false);
+    if (isExpanded) {
+      // Optional: Focus item name when expanding an existing section
+      // setTimeout(() => collapsibleItemRefs.current[panel]?.current?.focusItemName(), 50);
+    } else if (focusNewItemIndex === panel) {
+      // If the section being collapsed was the one intended for focus, clear it
+      setFocusNewItemIndex(null);
+    }
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -552,6 +591,59 @@ const EditGodownTransfer: React.FC = () => {
     ).length;
   };
 
+  // Navigation Handlers
+  const handleTabToNextItem = (currentIndex: number) => {
+    const nextItemIndex = currentIndex + 1;
+    if (nextItemIndex < formValues.items.length && collapsibleItemRefs.current[nextItemIndex]?.current) {
+      setExpanded(nextItemIndex); 
+      setTimeout(() => {
+        collapsibleItemRefs.current[nextItemIndex]?.current?.focusItemName();
+      }, 50); // Delay to allow section to expand
+    } else if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleShiftTabToPreviousItem = (currentIndex: number) => {
+    const prevItemIndex = currentIndex - 1;
+    if (prevItemIndex >= 0 && collapsibleItemRefs.current[prevItemIndex]?.current) {
+      setExpanded(prevItemIndex);       
+      setTimeout(() => {
+        collapsibleItemRefs.current[prevItemIndex]?.current?.focusQty(); // Focus Qty of previous item
+      }, 50); // Delay to allow section to expand
+    } else if (searchItemsRef.current) { 
+      searchItemsRef.current.focus();
+      centerElementInViewport(document.getElementById('searchItems'));
+    }
+  };
+
+  const handleQtyEnterNavigate = () => {
+    if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleSearchItemsEnter = () => {
+    if (formValues.items.length > 0 && collapsibleItemRefs.current[0]?.current) {
+      setExpanded(0);
+      setTimeout(() => {
+         collapsibleItemRefs.current[0]?.current?.focusItemName();
+      }, 50);
+    } else if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  // Reset focusNewItemIndex after it has been used or section changes
+  useEffect(() => {
+    if (focusNewItemIndex !== null && expanded !== focusNewItemIndex) {
+        setFocusNewItemIndex(null);
+    }
+  }, [expanded, focusNewItemIndex]);
+
   // Add condition to check loading state
   if (loading) {
     return (
@@ -615,6 +707,14 @@ const EditGodownTransfer: React.FC = () => {
                 onChange={handleChange}
                 variant="outlined"
                 disabled={user && user.canSelectSeries === false}
+                ref={seriesRef}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                    e.preventDefault();
+                    fromGodownRef.current?.focus();
+                    centerElementInViewport(document.getElementById('fromGodown'));
+                  }
+                }}
               />
             </div>
             <div>
@@ -639,6 +739,11 @@ const EditGodownTransfer: React.FC = () => {
                 }))}
                 onChange={handleFromGodownChange}
                 defaultValue={formValues.fromGodown}
+                ref={fromGodownRef}
+                onEnter={() => {
+                  toGodownRef.current?.focus();
+                  centerElementInViewport(document.getElementById('toGodown'));
+                }}
               />
             </div>
             <div>
@@ -654,6 +759,21 @@ const EditGodownTransfer: React.FC = () => {
                   }))}
                 onChange={handleToGodownChange}
                 defaultValue={formValues.toGodown}
+                ref={toGodownRef}
+                onEnter={() => {
+                  if (formValues.items.length > 0 && collapsibleItemRefs.current[0]?.current) {
+                    setExpanded(0);
+                    setTimeout(() => {
+                        collapsibleItemRefs.current[0]?.current?.focusItemName();
+                    }, 50);
+                  } else if (searchItemsRef.current) {
+                    searchItemsRef.current.focus();
+                    centerElementInViewport(document.getElementById('searchItems'));
+                  } else if (addAnotherItemButtonRef.current) {
+                    addAnotherItemButtonRef.current.focus();
+                    centerElementInViewport(addAnotherItemButtonRef.current);
+                  }
+                }}
               />
             </div>
           </div>
@@ -671,25 +791,37 @@ const EditGodownTransfer: React.FC = () => {
               variant="outlined"
               placeholder=""
               autoComplete="off"
+              ref={searchItemsRef}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                  e.preventDefault();
+                  handleSearchItemsEnter();
+                }
+              }}
             />
           </div>
         </div>
 
         <div className="mb-6">
-          {sortedFormValues().items.map((item, index) => (
+          {sortedFormValues().items.map((itemData, idx) => (
             <CollapsibleItemSection
-              key={index}
-              index={index}
-              itemData={item}
+              key={idx}
+              ref={collapsibleItemRefs.current[idx]}
+              index={idx}
+              itemData={itemData}
               handleChange={handleAccordionChange}
-              expanded={expanded}
+              expanded={expanded === idx ? idx : false} // Corrected: number | false
               updateItem={updateItem}
               removeItem={removeItem}
               pmplData={getAvailableItems()}
               pmpl={pmplData}
               stockData={stockData}
-              isOriginalItem={isOriginalItem(item.item)}
-              originalQty={getOriginalQuantity(item.item)}
+              isOriginalItem={isOriginalItem(itemData.item)}
+              originalQty={getOriginalQuantity(itemData.item)}
+              shouldFocusOnExpand={focusNewItemIndex === idx}
+              onQtyEnterNavigate={handleQtyEnterNavigate}
+              onTabToNextItem={handleTabToNextItem}
+              onShiftTabToPreviousItem={handleShiftTabToPreviousItem}
             />
           ))}
         </div>
@@ -699,7 +831,8 @@ const EditGodownTransfer: React.FC = () => {
             <button
               type="button"
               className="px-4 py-2 text-brand-500 border border-brand-500 rounded-md hover:bg-brand-50 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800"
-              onClick={() => addItem()}
+              onClick={() => addItem()} // addItem now handles focus
+              ref={addAnotherItemButtonRef}
             >
               Add Another Item
             </button>

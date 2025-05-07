@@ -60,7 +60,7 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
     PBILL: 0,
     PSERIES: "",
     JB_ENO: 0,
-    BR_CODE: record.sm || "SM001", // Use provided S/M code or default to SM001
+    BR_CODE: record.sm || "SM007", 
     BILL1: "",
     REC_VR: "",
     SMPSER: "",
@@ -85,7 +85,7 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
     TAX: 0.00,
     TRAN_TYPE: "",
     CODE_ORG: record.party || "",
-    SM_ORG: record.sm || "SM001", // Use provided S/M code or default to SM001
+    SM_ORG: record.sm || "SM007", 
     BANK: "",
     ST_CODE: customerData?.C_STATE || "",
     ST_NAME: customerData?.STATE_NAME || "", // Need to confirm CMPL structure
@@ -149,7 +149,7 @@ router.post('/sync', async (req, res) => {
     // Ensure S/M field exists on each record, default if not
     recordsToSync.forEach(record => {
       if (!record.sm) {
-        record.sm = "SM001"; // Default S/M code if not provided
+        record.sm = "SM007"; // Default S/M code if not provided
       }
     });
 
@@ -165,7 +165,7 @@ router.post('/sync', async (req, res) => {
         const matchingRecord = recordsToSync.find(
           rec => rec.voucherNo === record.voucherNo && rec.party === record.party && rec.date === record.date
         );
-        record.sm = matchingRecord?.sm || "SM001";
+        record.sm = matchingRecord?.sm || "SM007";
       }
     });
 

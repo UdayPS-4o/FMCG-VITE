@@ -153,8 +153,8 @@ const navItems: NavItem[] = [];
 
 const othersItems: NavItem[] = [];
 
-const AppSidebar: React.FC = () => {
-  const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+const AppSidebar = React.forwardRef<HTMLElement, {}>((props, ref) => {
+  const { isExpanded, isMobileOpen, isHovered, setIsHovered, toggleMobileSidebar } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -383,6 +383,13 @@ const AppSidebar: React.FC = () => {
     }
   };
 
+  // Close mobile sidebar on item click
+  const handleItemClick = () => {
+    if (isMobileOpen) {
+      toggleMobileSidebar();
+    }
+  };
+
   const renderMenuItems = (items: NavItem[], menuType: "main" | "others" | "fmcg") => (
     <ul className="flex flex-col gap-4">
       {items.map((nav, index) => (
@@ -427,6 +434,7 @@ const AppSidebar: React.FC = () => {
             nav.path && (
               <Link
                 to={nav.path}
+                onClick={handleItemClick}
                 className={`menu-item group ${
                   isActive(nav.path) ? "menu-item-active" : "menu-item-inactive"
                 }`}
@@ -508,6 +516,7 @@ const AppSidebar: React.FC = () => {
 
   return (
     <aside
+      ref={ref}
       className={`fixed flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 dark:border-gray-800 text-gray-900 h-screen transition-all duration-300 ease-in-out z-[999] border-r border-gray-200 
         ${
           isExpanded || isMobileOpen
@@ -594,6 +603,6 @@ const AppSidebar: React.FC = () => {
       </div>
     </aside>
   );
-};
+});
 
 export default AppSidebar;

@@ -12,6 +12,9 @@ interface InvoiceProviderProps {
   calculateTotal: () => string;
   expandedIndex: number;
   setExpandedIndex: (index: number) => void;
+  focusNewItemIndex: number | null;
+  setFocusNewItemIndex: React.Dispatch<React.SetStateAction<number | null>>;
+  setItems: React.Dispatch<React.SetStateAction<ItemData[]>>;
 }
 
 const InvoiceProvider: React.FC<InvoiceProviderProps> = ({ 
@@ -22,7 +25,10 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
   addItem,
   calculateTotal,
   expandedIndex,
-  setExpandedIndex
+  setExpandedIndex,
+  focusNewItemIndex,
+  setFocusNewItemIndex,
+  setItems
 }) => {
   const [pmplData, setPmplData] = useState<any[]>([]);
   const [stockList, setStockList] = useState<any>({});
@@ -245,7 +251,10 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
         calculateTotal,
         expandedIndex,
         setExpandedIndex,
-        invoiceIdInfo
+        invoiceIdInfo,
+        focusNewItemIndex,
+        setFocusNewItemIndex,
+        setItems
       }}
     >
       {children}

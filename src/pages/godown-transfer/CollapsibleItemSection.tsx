@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
-import Input from "../../components/form/input/Input";
-import Autocomplete from "../../components/form/input/Autocomplete";
+import React, { useState, useEffect, useRef, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
+import Input, { InputRefHandle } from "../../components/form/input/Input";
+import Autocomplete, { AutocompleteRefHandle } from "../../components/form/input/Autocomplete";
 
 // Simple icon components
 const ExpandMoreIcon = () => (
@@ -57,6 +57,10 @@ interface Props {
   stockData?: StockData;
   isOriginalItem?: boolean;
   originalQty?: string;
+  shouldFocusOnExpand?: boolean;
+  onQtyEnterNavigate?: () => void;
+  onTabToNextItem?: (currentIndex: number) => void;
+  onShiftTabToPreviousItem?: (currentIndex: number) => void;
 }
 
 interface StockItem {
@@ -64,7 +68,13 @@ interface StockItem {
   STOCK: number;
 }
 
-const CollapsibleItemSection: React.FC<Props> = ({
+// Define handle types for the ref exposed by CollapsibleItemSection
+export interface CollapsibleItemSectionRefHandle {
+  focusItemName: () => void;
+  focusQty: () => void;
+}
+
+const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Props>(({
   itemData,
   pmplData,
   pmpl,
@@ -75,12 +85,43 @@ const CollapsibleItemSection: React.FC<Props> = ({
   handleChange,
   stockData = {},
   isOriginalItem,
-  originalQty
-}) => {
+  originalQty,
+  shouldFocusOnExpand = false,
+  onQtyEnterNavigate,
+  onTabToNextItem,
+  onShiftTabToPreviousItem,
+}, ref) => {
   const [error, setError] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [shouldFocusQty, setShouldFocusQty] = useState<boolean>(false);
+  const [initialFocusHandled, setInitialFocusHandled] = useState<boolean>(false);
+
+  const itemNameAutocompleteRef = useRef<AutocompleteRefHandle>(null);
+  const qtyInputRef = useRef<InputRefHandle>(null);
+
+  // Helper to center element in viewport
+  const centerElementInViewport = (element: HTMLElement | null) => {
+    if (!element) return;
+    element.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+  };
+
+  useImperativeHandle(ref, () => ({
+    focusItemName: () => {
+      if (itemNameAutocompleteRef.current) {
+        itemNameAutocompleteRef.current.focus();
+        centerElementInViewport(document.getElementById(`item-${index}`));
+      }
+    },
+    focusQty: () => {
+      if (qtyInputRef.current) {
+        qtyInputRef.current.focus();
+        centerElementInViewport(document.getElementById(`qty-${index}`));
+      }
+    }
+  }));
   
   useEffect(() => {
     // If item and godown are set, update the stock value
@@ -133,61 +174,32 @@ const CollapsibleItemSection: React.FC<Props> = ({
     }
   }, [itemData.item, pmpl]);
 
-  // Focus qty field after item is selected
+  // Focus qty field after item is selected (and expanded)
   useEffect(() => {
-    if (shouldFocusQty && expanded === index && itemData.item) {
-      // Reset flag
-      setShouldFocusQty(false);
-      
-      // Use setTimeout to ensure DOM is ready
+    if (shouldFocusQty && expanded === index && itemData.item && qtyInputRef.current) {
+      setShouldFocusQty(false); // Consume the trigger
       setTimeout(() => {
-        const qtyInput = document.getElementById(`qty-${index}`);
-        if (qtyInput) {
-          qtyInput.focus();
-        }
-      }, 100);
+        qtyInputRef.current?.focus();
+        centerElementInViewport(document.getElementById(`qty-${index}`));
+      }, 100); 
     }
   }, [shouldFocusQty, expanded, itemData.item, index]);
 
-  // Handle Enter key for form field navigation
+  // Auto-focus Item Name when the section is expanded due to being newly added
   useEffect(() => {
-    // Add keyboard event listeners to the input fields
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        
-        const fieldOrder = ['qty', 'unit']; // Add more fields as needed
-        const currentId = (e.target as HTMLElement).id;
-        
-        // Extract the field name from the id (e.g., "qty-1" => "qty")
-        const currentField = currentId.split('-')[0];
-        
-        // Find current field index
-        const currentIndex = fieldOrder.indexOf(currentField);
-        
-        // If found and not the last field, move to the next one
-        if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
-          const nextFieldId = `${fieldOrder[currentIndex + 1]}-${index}`;
-          const nextField = document.getElementById(nextFieldId);
-          if (nextField) {
-            nextField.focus();
-          }
-        }
-      }
-    };
-
-    // Add event listeners to all the relevant inputs when the component is expanded
-    if (expanded === index) {
-      const qtyInput = document.getElementById(`qty-${index}`);
-      
-      if (qtyInput) qtyInput.addEventListener('keydown', handleKeyDown as any);
-      
-      // Cleanup function to remove event listeners
-      return () => {
-        if (qtyInput) qtyInput.removeEventListener('keydown', handleKeyDown as any);
-      };
+    if (expanded === index && shouldFocusOnExpand && !initialFocusHandled && itemNameAutocompleteRef.current) {
+      itemNameAutocompleteRef.current.focus();
+      centerElementInViewport(document.getElementById(`item-${index}`));
+      setInitialFocusHandled(true); // Mark as handled
     }
-  }, [expanded, index]);
+  }, [expanded, shouldFocusOnExpand, index, initialFocusHandled]);
+
+  // Reset initialFocusHandled if the item is collapsed or no longer the designated "new item"
+  useEffect(() => {
+    if (expanded !== index || !shouldFocusOnExpand) {
+      setInitialFocusHandled(false);
+    }
+  }, [expanded, shouldFocusOnExpand, index]);
 
   // Get stock for a specific item and godown
   const getStockForItemAndGodown = (itemCode: string, godownCode: string): number => {
@@ -497,14 +509,29 @@ const CollapsibleItemSection: React.FC<Props> = ({
       {isExpanded && (
         <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <div className="relative" style={{ zIndex: 1000 }}>
+            <div 
+              className="relative" style={{ zIndex: 1000 }}
+              onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+                if (e.key === 'Tab' && e.shiftKey) {
+                  if (onShiftTabToPreviousItem) {
+                    e.preventDefault();
+                    onShiftTabToPreviousItem(index);
+                  }
+                }
+              }}
+            >
               <Autocomplete
                 id={`item-${index}`}
                 label="Item Name"
                 options={getFilteredItems()}
                 onChange={handleItemChange}
                 defaultValue={itemData.item}
-                className="z-[1000]"
+                ref={itemNameAutocompleteRef}
+                onEnter={() => {
+                  if (itemData.item) {
+                    setShouldFocusQty(true);
+                  }
+                }}
               />
               {!itemData.godown && (
                 <p className="text-amber-600 text-xs mt-1">
@@ -609,7 +636,24 @@ const CollapsibleItemSection: React.FC<Props> = ({
                 value={itemData.qty}
                 onChange={handleQuantityChange}
                 variant="outlined"
-                type="number"
+                type="text"
+                inputMode="numeric"
+                ref={qtyInputRef}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (onQtyEnterNavigate) {
+                      onQtyEnterNavigate();
+                    }
+                  } else if (e.key === 'Tab' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (onTabToNextItem) {
+                      onTabToNextItem(index);
+                    } else if (onQtyEnterNavigate) {
+                      onQtyEnterNavigate();
+                    }
+                  }
+                }}
               />
               {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
             </div>
@@ -618,6 +662,6 @@ const CollapsibleItemSection: React.FC<Props> = ({
       )}
     </div>
   );
-};
+});
 
 export default CollapsibleItemSection; 

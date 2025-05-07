@@ -1,8 +1,20 @@
-import React, { useEffect, useState, useRef, KeyboardEvent } from 'react';
-import Autocomplete from '../../components/form/input/Autocomplete';
-import Input from '../../components/form/input/Input';
+import React, { useEffect, useState, useRef, KeyboardEvent, forwardRef, useImperativeHandle, useMemo } from 'react';
+import Autocomplete, { AutocompleteRefHandle } from '../../components/form/input/Autocomplete';
+import Input, { InputRefHandle } from '../../components/form/input/Input';
 import { useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
 import Toast from '../../components/ui/toast/Toast';
+
+// Replace scrollIntoViewIfNeeded with centerElementInViewport
+const centerElementInViewport = (element: HTMLElement) => {
+  if (!element) return;
+  
+  // Use the more powerful scrollIntoView with {block: 'center'} option
+  // This will center the element vertically in the viewport
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center' 
+  });
+};
 
 interface CollapsibleItemSectionProps {
   index: number;
@@ -12,9 +24,23 @@ interface CollapsibleItemSectionProps {
   updateItem: (index: number, data: ItemData) => void;
   removeItem: (index: number) => void;
   showValidationErrors?: boolean;
+  onCdPressNavigate?: () => void; // Callback to focus Add Another Item button
+  // Prop to indicate if this section should auto-focus its item name (e.g., when newly added)
+  shouldFocusOnExpand?: boolean; 
+  // Add new props for inter-item navigation
+  onTabToNextItem?: (currentIndex: number) => void;
+  onShiftTabToPreviousItem?: (currentIndex: number) => void;
 }
 
-const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
+// Define handle types for the ref exposed by CollapsibleItemSection
+export interface CollapsibleItemSectionRefHandle {
+  focusItemName: () => void;
+  focusGodown: () => void;
+  focusQty: () => void;
+  focusCdInput: () => void;
+}
+
+const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, CollapsibleItemSectionProps>(({
   index,
   item,
   expanded,
@@ -22,7 +48,12 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
   updateItem,
   removeItem,
   showValidationErrors = false,
-}) => {
+  onCdPressNavigate,
+  shouldFocusOnExpand = false,
+  // Add new props for inter-item navigation
+  onTabToNextItem,
+  onShiftTabToPreviousItem,
+}, ref) => {
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [initialInteraction, setInitialInteraction] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
@@ -36,9 +67,12 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     type: 'info',
   });
   
+  // State to track if initial focus (on expand) has been handled
+  const [initialFocusHandled, setInitialFocusHandled] = useState<boolean>(false);
+
   // Use DOM-based approach for focus control
-  const [shouldFocusGodown, setShouldFocusGodown] = useState<boolean>(false);
-  const [shouldFocusQty, setShouldFocusQty] = useState<boolean>(false);
+  const [shouldFocusGodownDOM, setShouldFocusGodownDOM] = useState<boolean>(false);
+  const [shouldFocusQtyDOM, setShouldFocusQtyDOM] = useState<boolean>(false);
   
   // Get shared data from context
   const { pmplData, stockList, godownOptions, items } = useInvoiceContext();
@@ -75,111 +109,150 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     }
   }, [item.selectedItem]);
 
+  // Ref to track if swap unit was focused by Enter on Godown
+  const swapUnitFocusedByEnter = useRef(false);
+
   // Focus qty field after godown selection
   useEffect(() => {
-    if (shouldFocusQty && expanded && item.godown) {
-      // Reset flag
-      setShouldFocusQty(false);
-      
-      // Use setTimeout to ensure DOM is ready
+    if (shouldFocusQtyDOM && expanded && item.godown && qtyInputRef.current) {
+      if (swapUnitFocusedByEnter.current) { // If swap unit was just focused by Enter on Godown
+        setShouldFocusQtyDOM(false);      // Consume the trigger but do not focus QTY
+        // swapUnitFocusedByEnter.current is reset in handleGodownEnter after a timeout
+        return;
+      }
+      setShouldFocusQtyDOM(false); // Consume the trigger
       setTimeout(() => {
-        const qtyInput = document.getElementById(`qty-${index}`);
-        if (qtyInput) {
-          qtyInput.focus();
+        qtyInputRef.current?.focus();
+        const inputElement = document.getElementById(`qty-${index}`);
+        if (inputElement) {
+          centerElementInViewport(inputElement);
         }
-      }, 100);
+      }, 100); 
     }
-  }, [shouldFocusQty, expanded, item.godown, index]);
+  }, [shouldFocusQtyDOM, expanded, item.godown, index]); // swapUnitFocusedByEnter.current is not a dependency here
 
-  // Handle Enter key for form field navigation
-  useEffect(() => {
-    // Add keyboard event listeners to the input fields
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        
-        const fieldOrder = ['qty', 'schRs', 'sch', 'cd'];
-        const currentId = (e.target as HTMLElement).id;
-        
-        // Extract the field name from the id (e.g., "qty-1" => "qty")
-        const currentField = currentId.split('-')[0];
-        
-        // Find current field index
-        const currentIndex = fieldOrder.indexOf(currentField);
-        
-        // If found and not the last field, move to the next one
-        if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
-          const nextFieldId = `${fieldOrder[currentIndex + 1]}-${index}`;
-          const nextField = document.getElementById(nextFieldId);
-          if (nextField) {
-            nextField.focus();
+  // Helper to force re-render
+  const [, forceUpdate] = useState({});
+
+  const handleGodownChange = (newValue: string | null) => {
+    const godownCode = newValue || '';
+    let currentGodownStock = 0;
+    if (item.item && godownCode && stockList[item.item] && stockList[item.item][godownCode]) {
+      currentGodownStock = parseInt(stockList[item.item][godownCode] as string, 10);
+      if (isNaN(currentGodownStock)) currentGodownStock = 0;
+    }
+
+    updateItem(index, { 
+      ...item, 
+      godown: godownCode,
+      // item.stock is for the "Total Stock" display field, which shows overall stock for the item
+      // item.stockLimit is the crucial one for QTY validation based on *selected* godown
+      stockLimit: currentGodownStock, // Set stockLimit to current godown's stock
+      // qty: '', // Optionally reset qty, or let user adjust
+    });
+    setInitialInteraction(false);
+    // If godown is selected, attempt to focus Qty
+    if (godownCode) {
+      setShouldFocusQtyDOM(true);
+    }
+  };
+
+  const handleSwapUnit = () => {
+    if (item.selectedItem && unitOptions.length > 1) {
+      const selectedItem = item.selectedItem;
+      const currentUnit = item.unit;
+      // Find the unit to switch to (the one that is not the current unit)
+      const newUnit = unitOptions.find(u => u !== currentUnit);
+
+      if (!newUnit) return; // Should ideally not happen if unitOptions.length > 1
+
+      let newRateString = item.rate; // Default to current rate string
+      const newPackString = selectedItem.PACK || ''; // Pack value is consistently from selectedItem.PACK
+
+      if (newUnit === selectedItem.UNIT_1) { // If switching to the primary unit (e.g., PCS)
+        newRateString = selectedItem.RATE1 || '0';
+      } else if (newUnit === selectedItem.UNIT_2) { // If switching to the secondary unit (e.g., BOX)
+        // Ensure RATE1 and MULT_F are available for calculation
+        if (selectedItem.RATE1 && selectedItem.MULT_F) {
+          const rate1 = parseFloat(selectedItem.RATE1);
+          const multF = parseFloat(selectedItem.MULT_F);
+          if (!isNaN(rate1) && !isNaN(multF) && multF !== 0) {
+            newRateString = (rate1 * multF).toFixed(2);
+          } else {
+            newRateString = '0'; // Fallback if conversion fails or multF is 0
           }
+        } else {
+          // If RATE1 or MULT_F is missing for UNIT_2 calculation, keep current rate or set to 0
+          // This case depends on whether pmplData might have a direct RATE_2. For now, stick to MULT_F logic.
+          newRateString = selectedItem.RATE2 || '0'; // Or keep item.rate if RATE_2 is not a field
         }
       }
+
+      updateItem(index, { ...item, unit: newUnit, rate: newRateString, pack: newPackString });
+    }
+  };
+
+  const calculateAmounts = (data: ItemData): ItemData => {
+    const rate = parseFloat(data.rate || '0');
+    const qty = parseFloat(data.qty || '0');
+    const schRs = parseFloat(data.schRs || '0');
+    const schP = parseFloat(data.sch || '0');
+    const cdP = parseFloat(data.cd || '0');
+
+    let amount = qty * rate;
+    let schemeValue = (qty * schRs) + (amount * schP / 100);
+    let netAmountBeforeCd = amount - schemeValue;
+    let cdValue = netAmountBeforeCd * cdP / 100;
+    let finalAmount = netAmountBeforeCd - cdValue;
+
+    return {
+      ...data,
+      amount: amount.toFixed(2),
+      netAmount: finalAmount.toFixed(2),
     };
+  };
 
-    // Add event listeners to all the relevant inputs when the component is expanded
-    if (expanded) {
-      const qtyInput = document.getElementById(`qty-${index}`);
-      const schRsInput = document.getElementById(`schRs-${index}`);
-      const schInput = document.getElementById(`sch-${index}`);
-      const cdInput = document.getElementById(`cd-${index}`);
-      
-      if (qtyInput) qtyInput.addEventListener('keydown', handleKeyDown as any);
-      if (schRsInput) schRsInput.addEventListener('keydown', handleKeyDown as any);
-      if (schInput) schInput.addEventListener('keydown', handleKeyDown as any);
-      if (cdInput) cdInput.addEventListener('keydown', handleKeyDown as any);
-      
-      // Cleanup function to remove event listeners
-      return () => {
-        if (qtyInput) qtyInput.removeEventListener('keydown', handleKeyDown as any);
-        if (schRsInput) schRsInput.removeEventListener('keydown', handleKeyDown as any);
-        if (schInput) schInput.removeEventListener('keydown', handleKeyDown as any);
-        if (cdInput) cdInput.removeEventListener('keydown', handleKeyDown as any);
-      };
+  const handleFieldChange = (name: string, newValue: string) => {
+    let updatedData = { ...item, [name]: newValue };
+    if (name === 'qty' || name === 'rate' || name === 'schRs' || name === 'sch' || name === 'cd') {
+      if (name === 'qty' && parseInt(newValue) > item.stockLimit) {
+        setError(`Quantity cannot exceed available stock of ${item.stockLimit}`);
+      } else {
+        setError('');
+      }
+      updatedData = calculateAmounts(updatedData);
     }
-  }, [expanded, index]);
+    updateItem(index, updatedData);
+    if (name === 'qty') setInitialInteraction(false);
+  };
 
-  // New approach: Focus godown field using DOM when triggered
+  // useEffect for focusing godown field (remains largely the same, ensure it doesn't conflict)
   useEffect(() => {
-    if (shouldFocusGodown && expanded && item.item) {
-      // Reset flag
-      setShouldFocusGodown(false);
-      
-      // Before trying to focus, check if there's only one godown with stock
-      // and auto-select it if that's the case
+    if (shouldFocusGodownDOM && expanded && item.item) {
+      setShouldFocusGodownDOM(false); 
+      let autoSelectedGodown = false;
       if (stockList[item.item]) {
-        // Get all godowns with stock for this item that user has access to
         const availableGodowns = Object.entries(stockList[item.item])
-          .filter(([gdnCode, stock]) => {
-            // Check if this godown is in user's accessible godowns
-            const isAccessible = godownOptions.some(g => g.value === gdnCode);
-            return isAccessible && gdnCode && parseInt(stock as string, 10) > 0;
-          });
-        
+          .filter(([gdnCode, stock]) => godownOptions.some(g => g.value === gdnCode) && gdnCode && parseInt(stock as string, 10) > 0);
         if (availableGodowns.length === 1) {
-          // If there's only one godown available, auto-select it
           const [gdnCode] = availableGodowns[0];
-          handleGodownChange(gdnCode);
-          // Set focus to qty field instead of godown
-          setShouldFocusQty(true);
-          return;
+          handleGodownChange(gdnCode); 
+          // handleGodownChange now sets setShouldFocusQtyDOM(true), which will trigger the QTY focus useEffect
+          autoSelectedGodown = true;
         }
       }
-      
-      // If multiple godowns available, focus the godown dropdown
-      setTimeout(() => {
-        // Find godown dropdown by ID and interact with it
-        const godownDropdown = document.getElementById(`godown-${index}`);
-        if (godownDropdown) {
-          godownDropdown.focus();
-          
-          // Simulate a click to open the dropdown
-          godownDropdown.click();
+
+      if (!autoSelectedGodown) {
+        const godownElementWrapper = document.getElementById(`godown-${index}`);
+        if (godownAutocompleteRef.current && godownElementWrapper) {
+          godownAutocompleteRef.current.focus();
+          setTimeout(() => {
+            centerElementInViewport(godownElementWrapper);
+          }, 50); 
         }
-      }, 100);
+      }
     }
-  }, [shouldFocusGodown, expanded, item.item, index, stockList, godownOptions]);
+  }, [shouldFocusGodownDOM, expanded, item.item, stockList, godownOptions, handleGodownChange, index, item.selectedItem]);
 
   const checkForDuplicateItem = (itemCode: string): { isDuplicate: boolean, existingItem?: ItemData, itemIndex?: number } => {
     // Skip check for empty items or self
@@ -198,361 +271,222 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
     return { isDuplicate: false };
   };
 
-  const handleItemChange = (newValue: any) => {
-    if (!newValue) {
-      // Reset all fields when item is cleared via the cross button in autocomplete
-      const resetData = {
+  const handleItemChange = (selectedPmplItem: any | null) => {
+    if (!selectedPmplItem) {
+      // Item deselected or cleared
+      updateItem(index, {
+        ...item,
         item: '',
-        godown: '', // Make sure godown is reset
+        selectedItem: null,
         unit: '',
-        stock: '',
         pack: '',
         gst: '',
         pcBx: '',
         mrp: '',
         rate: '',
-        qty: '',
         cess: '',
         schRs: '',
         sch: '',
         cd: '',
-        amount: '',
-        netAmount: '',
-        selectedItem: null,
-        stockLimit: 0,
-      };
-      updateItem(index, resetData);
-      
-      // Force re-render of the component by using a key
-      forceUpdate({});
+        amount: '0.00',
+        netAmount: '0.00',
+        stock: '', 
+        stockLimit: 0, 
+      });
+      setUnitOptions([]);
+      itemNameAutocompleteRef.current?.focus(); // Using correct ref name
       return;
     }
 
-    const selectedItem = newValue;
-    
-    // Check if this item is already added in another section
-    const { isDuplicate, existingItem, itemIndex } = checkForDuplicateItem(selectedItem.CODE);
-    
-    if (isDuplicate && existingItem) {
-      // Show toast notification
+    const { isDuplicate, existingItem, itemIndex: duplicateItemIndex } = checkForDuplicateItem(selectedPmplItem.CODE);
+    if (isDuplicate && existingItem && duplicateItemIndex !== undefined) {
       setToast({
         visible: true,
-        message: `Item ${selectedItem.CODE} is already added with unit ${existingItem.unit} and qty ${existingItem.qty || 'not set'}`,
+        message: `Item ${selectedPmplItem.PRODUCT} is already added at position ${duplicateItemIndex + 1}.`,
         type: 'warning',
       });
-      
-      // Clear the item selection
-      const resetData = {
-        item: '',
-        godown: '', // Make sure godown is reset
-        unit: '',
-        stock: '',
-        pack: '',
-        gst: '',
-        pcBx: '',
-        mrp: '',
-        rate: '',
-        qty: '',
-        cess: '',
-        schRs: '',
-        sch: '',
-        cd: '',
-        amount: '',
-        netAmount: '',
-        selectedItem: null,
-        stockLimit: 0,
-      };
-      updateItem(index, resetData);
+      updateItem(index, {
+        ...item, 
+        item: '', selectedItem: null, unit: '', pack: '', gst: '', pcBx: '', rate: '', stock: '', stockLimit: 0
+      });
+      setTimeout(() => itemNameAutocompleteRef.current?.focus(), 0); // Using correct ref name
       return;
     }
 
-    // Calculate total stock across all accessible godowns
-    let totalStock = 0;
-    if (stockList[selectedItem.CODE]) {
-      Object.entries(stockList[selectedItem.CODE]).forEach(([gdnCode, stock]) => {
-        // Only count stock from godowns the user has access to
-        const isAccessible = godownOptions.some(g => g.value === gdnCode);
-        if (isAccessible) {
-          totalStock += parseInt(stock as string, 10);
-        }
-      });
-    }
-
-    // Set the unit options
-    const units = [selectedItem.UNIT_1, selectedItem.UNIT_2].filter(Boolean);
-
-    // Set the initial unit (always use the code for UNIT_1 initially)
-    const initialUnit = selectedItem.UNIT_1 || '';
-
-    // Update state with the selected item data and dropdown options
-    const updatedData: ItemData = {
-      ...item,
-      item: selectedItem.CODE,
-      stock: totalStock > 0 ? totalStock.toString() : '', // Just show the total stock number
-      stockLimit: 0, // Will be updated when godown is selected
-      godown: '', // Reset godown when item changes
-      pack: selectedItem.PACK,
-      gst: selectedItem.GST,
-      pcBx: selectedItem.MULT_F,
-      mrp: selectedItem.MRP1,
-      rate: selectedItem.RATE1, // Initialize rate to piece rate (UNIT_1)
-      qty: '',
-      unit: initialUnit, // Auto-select the first unit option (UNIT_1 code)
-      amount: '',
-      netAmount: '',
-      selectedItem: selectedItem, // Store the selected item
-    };
-
-    // This is no longer an initial interaction once user has selected an item
-    setInitialInteraction(false);
-    
+    const units = [selectedPmplItem.UNIT_1, selectedPmplItem.UNIT_2].filter(Boolean);
     setUnitOptions(units);
-    updateItem(index, updatedData);
-    
-    // Trigger godown focus after item selection
-    setShouldFocusGodown(true);
-  };
+    const initialUnit = selectedPmplItem.UNIT_1 || '';
+    const initialRate = selectedPmplItem.RATE1 || '0';
+    const initialPack = selectedPmplItem.PACK || '';
 
-  // Helper to force re-render
-  const [, forceUpdate] = useState({});
-
-  const handleGodownChange = (newValue: string | null) => {
-    if (!newValue || !item.selectedItem) {
-      // If godown is cleared, clear stock as well as qty
-      const updatedData = {
-        ...item,
-        godown: '',
-        stock: '',
-        stockLimit: 0,
-        qty: '', // Reset qty when godown is cleared
-        amount: '', // Also reset calculated values
-        netAmount: ''
-      };
-      updateItem(index, updatedData);
-      return;
-    }
-    
-    // Get stock for selected godown
-    const godownStock = stockList[item.selectedItem.CODE]?.[newValue] || '0';
-    
-    // Calculate total stock across all accessible godowns
-    let totalStock = 0;
-    if (stockList[item.selectedItem.CODE]) {
-      Object.entries(stockList[item.selectedItem.CODE]).forEach(([gdnCode, stock]) => {
-        // Only count stock from godowns the user has access to
-        const isAccessible = godownOptions.some(g => g.value === gdnCode);
-        if (isAccessible) {
-          totalStock += parseInt(stock as string, 10);
+    // Calculate total stock (fixing TypeScript error)
+    let totalStockForItem = 0;
+    if (selectedPmplItem.CODE && stockList[selectedPmplItem.CODE]) {
+      const itemStockObject = stockList[selectedPmplItem.CODE];
+      if (typeof itemStockObject === 'object' && itemStockObject !== null) {
+        // Extract values as array first, then iterate through them
+        const stockValues = Object.values(itemStockObject);
+        for (let i = 0; i < stockValues.length; i++) {
+          const stockValue = stockValues[i] as string;
+          const stockNum = parseInt(stockValue, 10) || 0;
+          totalStockForItem += stockNum;
         }
-      });
+      }
     }
     
-    const stockValue = parseInt(godownStock, 10);
-
-    // Calculate stock limit based on selected unit and godown stock
-    let stockLimit;
-    if (item.unit === item.selectedItem.UNIT_2) {
-      // Unit is BOX
-      stockLimit = Math.floor(stockValue / parseInt(item.pcBx, 10));
-    } else {
-      // Unit is PCS
-      stockLimit = stockValue;
+    // Determine initial stockLimit based on currently selected godown (if any)
+    let currentGodownStock = 0;
+    if (item.godown && stockList[selectedPmplItem.CODE] && stockList[selectedPmplItem.CODE][item.godown]) {
+      currentGodownStock = parseInt(stockList[selectedPmplItem.CODE][item.godown] as string, 10);
+      if (isNaN(currentGodownStock)) currentGodownStock = 0;
     }
 
-    const updatedData = {
+    let updatedItemData = {
       ...item,
-      godown: newValue,
-      stock: totalStock > 0 ? `${totalStock}` : '', // Standardize format to just show the number
-      stockLimit: stockLimit,
+      item: selectedPmplItem.CODE,
+      selectedItem: selectedPmplItem,
+      unit: initialUnit,
+      pack: initialPack,
+      gst: selectedPmplItem.GST || '',
+      pcBx: selectedPmplItem.MULT_F || '',
+      mrp: selectedPmplItem.MRP1 || '',
+      rate: initialRate,
+      stock: totalStockForItem.toString(), // For "Total Stock" display field
+      stockLimit: currentGodownStock, // Initial stock limit based on current godown
+       // Do not reset qty here, allow user to input
     };
 
-    // Clear any previous errors
-    setError('');
-    
-    updateItem(index, updatedData);
+    updatedItemData = calculateAmounts(updatedItemData); // Recalculate amounts with new rate/item details
 
-    // Set focus to qty field after godown selection
-    setShouldFocusQty(true);
+    updateItem(index, updatedItemData);
+    setInitialInteraction(false);
+
+    // If no godown selected yet, or if godown auto-selection fails, focus godown. Otherwise, qty will be focused.
+    if (!item.godown) {
+      setShouldFocusGodownDOM(true);
+    } else if (currentGodownStock > 0) { // If there was a godown and it has stock
+        setShouldFocusQtyDOM(true);
+    } else { // If there was a godown but it has no stock for the new item
+        setShouldFocusGodownDOM(true); // Prompt to re-select godown
+    }
   };
 
-  const handleSwapUnit = () => {
-    if (unitOptions.length < 2 || !item.unit) return;
-    
-    // Find the other unit option that's not currently selected
-    const otherUnit = unitOptions.find(unit => unit !== item.unit);
-    if (!otherUnit || !item.selectedItem) return;
-    
-    const selectedItem = item.selectedItem;
-    let newRate = item.rate;
-    let newStockLimit = item.stockLimit;
-    let newUnitCode = item.unit; // Will hold the code (UNIT_1 or UNIT_2)
+  // Refs for focusable elements within the item section
+  const itemNameAutocompleteRef = useRef<AutocompleteRefHandle>(null);
+  const godownAutocompleteRef = useRef<AutocompleteRefHandle>(null);
+  const qtyInputRef = useRef<InputRefHandle>(null);
+  const schRsInputRef = useRef<InputRefHandle>(null);
+  const schInputRef = useRef<InputRefHandle>(null);
+  const cdInputRef = useRef<InputRefHandle>(null);
+  const swapUnitButtonRef = useRef<HTMLButtonElement>(null);
+  const rateInputRef = useRef<InputRefHandle>(null);
 
-    // Calculate new rate and stock limit based on the unit being switched to
-    if (otherUnit === selectedItem.UNIT_2) { // Switching to BOX (UNIT_2 code)
-      newUnitCode = selectedItem.UNIT_2; // Store the UNIT_2 code
-      const multF = selectedItem.MULT_F ? parseInt(selectedItem.MULT_F, 10) : 1;
-      const rate1 = selectedItem.RATE1 ? parseFloat(selectedItem.RATE1) : 0;
-      newRate = (rate1 * multF).toFixed(2); // Calculate box rate
-
-      // Calculate stock limit for BOX
-      if (item.godown) {
-        const godownStock = stockList[selectedItem.CODE]?.[item.godown] || '0';
-        const stockValue = parseInt(godownStock, 10);
-        newStockLimit = Math.floor(stockValue / multF);
-      } else {
-        newStockLimit = 0;
+  // Expose methods via the ref
+  useImperativeHandle(ref, () => ({
+    focusItemName: () => {
+      if (itemNameAutocompleteRef.current) {
+        itemNameAutocompleteRef.current.focus();
+        const el = document.getElementById(`item-${index}`);
+        if (el) centerElementInViewport(el);
       }
-
-    } else { // Switching to PCS (UNIT_1 code)
-      newUnitCode = selectedItem.UNIT_1; // Store the UNIT_1 code
-      newRate = selectedItem.RATE1 || '0'; // Use piece rate
-
-      // Calculate stock limit for PCS
-      if (item.godown) {
-        const godownStock = stockList[selectedItem.CODE]?.[item.godown] || '0';
-        newStockLimit = parseInt(godownStock, 10);
-      } else {
-        newStockLimit = 0;
+    },
+    focusGodown: () => {
+      if (godownAutocompleteRef.current) {
+        godownAutocompleteRef.current.focus();
+        const el = document.getElementById(`godown-${index}`);
+        if (el) centerElementInViewport(el);
       }
-    }
-
-    const updatedData = {
-      ...item,
-      unit: newUnitCode, // Store the actual unit code
-      rate: newRate, // Set the rate corresponding to the new unit
-      stockLimit: newStockLimit, // Update stock limit for the new unit
-    };
-
-    // Check if the existing quantity exceeds the new stockLimit
-    if (updatedData.qty && parseInt(updatedData.qty, 10) > newStockLimit) {
-      updatedData.qty = newStockLimit.toString(); // Adjust quantity
-      setError(`Quantity adjusted to maximum available: ${newStockLimit} ${otherUnit}`);
-    } else {
-      setError('');
-    }
-
-    // Update item state and recalculate amounts with the new rate and unit
-    updateItem(index, calculateAmounts(updatedData));
-  };
-
-  const handleFieldChange = (name: string, newValue: string) => {
-    if (name === 'qty') {
-      // Only accept numbers
-      if (newValue && !/^\d*$/.test(newValue)) {
-        setError('Only numbers are allowed for quantity');
-        return;
+    },
+    focusQty: () => {
+      if (qtyInputRef.current) {
+        qtyInputRef.current.focus();
+        const el = document.getElementById(`qty-${index}`);
+        if (el) centerElementInViewport(el);
       }
-
-      if (newValue === '') {
-        const updatedData = { ...item, qty: '', amount: '', netAmount: '' };
-        updateItem(index, updatedData);
-        setError('');
-        return;
-      }
-
-      const totalQty = parseInt(newValue, 10);
-      if (!isNaN(totalQty)) {
-        const stockLimit = item.stockLimit;
-        
-        // Special case: If unit is BOX and stockLimit is 0 (not enough items to make a box)
-        if (item.selectedItem && item.unit === item.selectedItem.UNIT_2 && stockLimit === 0) {
-          setError(`Not enough stock to make a complete box (need ${item.pcBx} pieces per box)`);
-          return;
+    },
+    focusCdInput: () => {
+      // Check if CD field is enabled, otherwise fallback to QTY
+      if (!cdInputRef.current || item.qty === '') {
+        if (qtyInputRef.current) {
+          qtyInputRef.current.focus();
+          const el = document.getElementById(`qty-${index}`);
+          if (el) centerElementInViewport(el);
         }
-        
-        // Enforce stock limit - don't allow values greater than stock limit
-        if (stockLimit > 0 && totalQty > stockLimit) {
-          // Don't update with a value beyond the stock limit
-          setError(`Quantity cannot exceed available stock (${stockLimit} ${item.unit})`);
-          return;
-        }
-        
-        // Valid quantity within stock limit - update and clear error
-        const updatedData = { ...item, qty: totalQty.toString() };
-        updateItem(index, calculateAmounts(updatedData));
-        setError('');
         return;
       }
-
-      // Handle NaN case
-      setError('Please enter a valid number');
-      return;
+      
+      // Focus CD field if it's enabled
+      cdInputRef.current.focus();
+      const el = document.getElementById(`cd-${index}`);
+      if (el) centerElementInViewport(el);
     }
+  }));
 
-    // For other fields (not qty)
-    let updatedData = { ...item, [name]: newValue };
-
-    // Recalculate amounts if rate, scheme, or discount changes
-    if (['rate', 'schRs', 'sch', 'cd'].includes(name)) {
-      updatedData = calculateAmounts(updatedData);
+  // Auto-focus Item Name when the section is expanded due to being newly added
+  useEffect(() => {
+    if (expanded && shouldFocusOnExpand && !initialFocusHandled && itemNameAutocompleteRef.current) {
+      itemNameAutocompleteRef.current.focus();
+      const inputElement = document.getElementById(`item-${index}`);
+      if (inputElement) {
+        centerElementInViewport(inputElement);
+      }
+      setInitialFocusHandled(true); // Mark as handled
     }
+  }, [expanded, shouldFocusOnExpand, index, initialFocusHandled]);
 
-    updateItem(index, updatedData);
+  // Reset initialFocusHandled if the item is collapsed or no longer the designated "new item"
+  useEffect(() => {
+    if (!expanded || !shouldFocusOnExpand) {
+      setInitialFocusHandled(false);
+    }
+  }, [expanded, shouldFocusOnExpand]);
+
+  // Action for Item Name Autocomplete Enter
+  const handleItemNameEnter = () => {
+    setInitialInteraction(false);
+    if (item.item && !item.godown) {
+      setShouldFocusGodownDOM(true); // Trigger godown auto-selection or focus
+    } else if (item.item && item.godown && qtyInputRef.current) {
+      qtyInputRef.current.focus(); // If godown already selected (e.g. auto-selected), focus QTY
+    }
+  };
+  
+  // Action for Godown Autocomplete Enter
+  const handleGodownEnter = () => {
+    setInitialInteraction(false);
+    if (unitOptions.length > 1 && item.selectedItem?.UNIT_2 && swapUnitButtonRef.current) {
+      swapUnitButtonRef.current.focus();
+      const unitButtonEl = swapUnitButtonRef.current;
+      if (unitButtonEl) centerElementInViewport(unitButtonEl);
+      swapUnitFocusedByEnter.current = true; // Signal that swap unit was focused by Enter
+      // Reset this signal after a short delay allowing the QTY focus useEffect to check it
+      setTimeout(() => { swapUnitFocusedByEnter.current = false; }, 60); // Slightly longer than godown focus timeout
+    }
   };
 
-  const calculateAmounts = (data: ItemData): ItemData => {
-    const qty = parseFloat(data.qty);
-    if (isNaN(qty) || qty <= 0) {
-      return {
-        ...data,
-        amount: '',
-        netAmount: '',
-      };
-    }
+  // Add a local key to force re-render of Autocomplete when item is cleared
+  const [itemAutocompleteKey, setItemAutocompleteKey] = useState(0);
 
-    let amount = 0; // Initialize amount
-    const rate = parseFloat(data.rate); // Rate is already for the selected unit
-
-    // Fix calculation issue by ensuring rate is properly used
-    if (isNaN(rate)) {
-      return {
-        ...data,
-        amount: '',
-        netAmount: '',
-      };
+  // Prepare godown options for Autocomplete based on current item
+  const availableGodownsForCurrentItem = useMemo(() => {
+    if (!item.item || !stockList[item.item]) {
+      return [];
     }
-
-    // The 'rate' field now holds the rate for the selected unit (PCS or BOX).
-    // So, the calculation is simply rate * quantity.
-    amount = rate * qty;
-
-    // Apply discounts in a compound manner: [(AMOUNT-SCHRS)-SCH%]-CD%
-    let remainingAmount = amount;
-    
-    // Step 1: First subtract the scheme amount (SCHRS)
-    if (data.schRs && !isNaN(parseFloat(data.schRs))) {
-      remainingAmount -= parseFloat(data.schRs);
-    }
-    
-    // Step 2: Then apply the scheme percentage discount (SCH%)
-    if (data.sch && !isNaN(parseFloat(data.sch))) {
-      remainingAmount -= remainingAmount * (parseFloat(data.sch) / 100);
-    }
-    
-    // Step 3: Finally apply the cash discount percentage (CD%)
-    let netAmount = remainingAmount;
-    if (data.cd && !isNaN(parseFloat(data.cd))) {
-      netAmount -= remainingAmount * (parseFloat(data.cd) / 100);
-    }
-
-    // Ensure we don't return NaN or invalid calculations
-    if (isNaN(amount) || isNaN(netAmount)) {
-      return {
-        ...data,
-        amount: '',
-        netAmount: '',
-      };
-    }
-
-    return {
-      ...data,
-      amount: amount.toFixed(2),
-      netAmount: netAmount.toFixed(2),
-    };
-  };
+    // Map over godownOptions (which are already filtered by user access)
+    return godownOptions
+      .map(gdnOption => {
+        const stockInGodown = parseInt(stockList[item.item][gdnOption.value] as string, 10) || 0;
+        return {
+          code: gdnOption.value,
+          name: gdnOption.label, // label from godownOptions is just the name
+          stockInGodown: stockInGodown,
+        };
+      })
+      .filter(gdn => gdn.stockInGodown > 0); // Only show godowns where current item has stock > 0
+  }, [item.item, stockList, godownOptions]);
 
   return (
-    <div className={`mb-4 border rounded-lg ${showRedOutline ? 'border-red-500' : expanded ? 'border-brand-500' : 'border-gray-200 dark:border-gray-700'}`}>
+    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm mb-3 transition-all duration-300 ${showRedOutline ? 'ring-2 ring-red-500' : 'ring-1 ring-gray-200 dark:ring-gray-700'}`}>
       <Toast         
         message={toast.message}
         type={toast.type}
@@ -561,10 +495,10 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       />
       
       <div 
-        className={`p-4 cursor-pointer flex justify-between items-center ${expanded ? 'bg-brand-50 dark:bg-gray-800' : showRedOutline ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-900'}`}
+        className={`flex justify-between items-center p-4 cursor-pointer ${expanded ? 'bg-brand-50 dark:bg-gray-800' : showRedOutline ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-900'}`}
         onClick={(e) => handleAccordionChange(index)(e, !expanded)}
       >
-        <h3 className={`text-lg font-medium dark:text-white ${item.item ? 'text-brand-600 dark:text-brand-400' : ''} ${showRedOutline ? 'text-red-600 dark:text-red-400' : ''} truncate flex-1 pr-4`} title={item.item ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}` : 'Select an item'}>
+        <h3 className={`text-md font-medium text-gray-800 dark:text-gray-100 ${item.item ? 'text-brand-600 dark:text-brand-400' : ''} ${showRedOutline ? 'text-red-600 dark:text-red-400' : ''} truncate flex-1 pr-4`} title={item.item ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}` : 'Select an item'}>
           {item.item
             ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}`
             : 'Select an item'}
@@ -602,10 +536,21 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       </div>
       
       {expanded && (
-        <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 relative">
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 relative">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <div className="relative" style={{ zIndex: 100 }}>
+            <div 
+              onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+                if (e.key === 'Tab' && e.shiftKey) {
+                  if (onShiftTabToPreviousItem) {
+                    e.preventDefault();
+                    onShiftTabToPreviousItem(index);
+                  }
+                }
+              }}
+              className="relative" style={{ zIndex: 100 }}
+            >
               <Autocomplete
+                key={itemAutocompleteKey}
                 id={`item-${index}`}
                 label="Item Name"
                 options={pmplData
@@ -628,18 +573,22 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                     label: `${item.CODE} | ${item.PRODUCT || 'No Product Name'}`
                   }))}
                 onChange={(value) => {
-                  const selectedItem = pmplData.find(item => item.CODE === value);
-                  if (selectedItem) handleItemChange(selectedItem);
-                  else handleItemChange(null); // This handles the case when the clear button (x) is clicked
+                  const selectedPmplItem = pmplData.find(p => p.CODE === value);
+                  handleItemChange(selectedPmplItem || null);
                 }}
                 defaultValue={item.item}
+                onEnter={handleItemNameEnter}
+                ref={itemNameAutocompleteRef}
               />
             </div>
             <div>
               <Input
-                id={`stock-${index}`}
+                id={`total-stock-item-${index}`}
                 label="Total Stock"
-                value={item.stock}
+                value={item.godown && stockList[item.item]?.[item.godown] 
+                  ? `${stockList[item.item][item.godown]}`
+                  : "0"
+                }
                 disabled
                 variant="outlined"
               />
@@ -650,21 +599,14 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 label="Godown"
                 key={`godown-${index}-${item.item || 'empty'}`} 
                 className={shouldShowValidation && item.item && !item.godown ? "border-red-500" : ""}
-                options={Object.entries(stockList[item.item] || {})
-                  .filter(([gdnCode, stock]) => {
-                    // Check if this godown is in user's accessible godowns
-                    const isAccessible = godownOptions.some(g => g.value === gdnCode);
-                    return isAccessible && gdnCode && parseInt(stock as string, 10) > 0;
-                  })
-                  .map(([gdnCode, stock]) => {
-                    const godown = godownOptions.find((gdn) => gdn.value === gdnCode);
-                    return {
-                      value: gdnCode,
-                      label: `${godown?.label || ''} | ${stock}`
-                    };
-                  })}
-                onChange={handleGodownChange}
+                options={availableGodownsForCurrentItem.map(gdn => ({
+                  value: gdn.code,
+                  label: `${gdn.name} | ${gdn.stockInGodown}`
+                }))}
+                onChange={(val) => handleGodownChange(val)}
                 defaultValue={item.godown}
+                onEnter={handleGodownEnter}
+                ref={godownAutocompleteRef}
               />
               {shouldShowValidation && item.item && !item.godown && (
                 <p className="text-xs text-red-500 mt-1">Godown is required</p>
@@ -701,15 +643,20 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                   variant="outlined"
                   className="pr-10"
                 />
-                {unitOptions.length > 1 && (
+                {item.selectedItem && unitOptions.length > 1 && item.selectedItem.UNIT_2 && (
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleSwapUnit();
-                    }}
+                    onClick={handleSwapUnit}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-500 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 p-1"
                     title="Swap Unit"
+                    ref={swapUnitButtonRef}
+                    tabIndex={ (item.selectedItem && unitOptions.length > 1 && item.selectedItem.UNIT_2) ? 0 : -1 }
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSwapUnit();
+                      }
+                    }}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M7 16V4M7 4L3 8M7 4L11 8" />
@@ -744,6 +691,7 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 value={item.rate}
                 onChange={(e) => handleFieldChange('rate', e.target.value)}
                 variant="outlined"
+                ref={rateInputRef}
               />
             </div>
             <div>
@@ -752,21 +700,25 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 label={`QTY (${item.unit || ''})`}
                 value={item.qty}
                 onChange={(e) => handleFieldChange('qty', e.target.value)}
+                disabled={!item.godown || !item.unit}
+                type="text"
+                inputMode="numeric"
                 variant="outlined"
-                type="number"
-                disabled={!item.godown} 
-                className={`${shouldShowValidation && item.item && !item.qty ? "border-red-500" : ""} ${error ? "border-red-500" : ""}`}
+                error={(shouldShowValidation && item.item && item.godown && (!item.qty || item.qty === '0')) || !!error}
+                hint={error ? error : (shouldShowValidation && item.item && item.godown && parseInt(item.qty) > item.stockLimit && item.stockLimit > 0 ? `Max: ${item.stockLimit}` : '' )}
+                ref={qtyInputRef}
+                onKeyDown={(e) => { 
+                  if (e.key === 'Enter') { 
+                    e.preventDefault(); 
+                    schRsInputRef.current?.focus();
+                    const inputElement = document.getElementById(`schRs-${index}`);
+                    if (inputElement) {
+                      centerElementInViewport(inputElement);
+                    }
+                  } 
+                  setInitialInteraction(false); 
+                }}
               />
-              {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-              {shouldShowValidation && item.item && !item.qty && !error && (
-                <p className="text-xs text-red-500 mt-1">Quantity is required</p>
-              )}
-              {!item.godown && item.item && item.qty && (
-                <p className="text-xs text-amber-500 mt-1">Select a godown first</p>
-              )}
-              {item.godown && item.stockLimit > 0 && (
-                <p className="text-xs text-gray-500 mt-1">Available: {item.stockLimit} {item.unit}</p>
-              )}
             </div>
           </div>
 
@@ -777,7 +729,20 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 label="SCH (RS)"
                 value={item.schRs}
                 onChange={(e) => handleFieldChange('schRs', e.target.value)}
+                disabled={!item.qty}
+                type="text" inputMode="decimal"
                 variant="outlined"
+                ref={schRsInputRef}
+                onKeyDown={(e) => { 
+                  if (e.key === 'Enter') { 
+                    e.preventDefault(); 
+                    schInputRef.current?.focus();
+                    const inputElement = document.getElementById(`sch-${index}`);
+                    if (inputElement) {
+                      centerElementInViewport(inputElement);
+                    }
+                  }
+                }}
               />
             </div>
             <div>
@@ -786,8 +751,20 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 label="Sch%"
                 value={item.sch}
                 onChange={(e) => handleFieldChange('sch', e.target.value)}
+                disabled={!item.qty}
+                type="text" inputMode="decimal"
                 variant="outlined"
-                type="number"
+                ref={schInputRef}
+                onKeyDown={(e) => { 
+                  if (e.key === 'Enter') { 
+                    e.preventDefault(); 
+                    cdInputRef.current?.focus();
+                    const inputElement = document.getElementById(`cd-${index}`);
+                    if (inputElement) {
+                      centerElementInViewport(inputElement);
+                    }
+                  }
+                }}
               />
             </div>
             <div>
@@ -796,7 +773,46 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
                 label="CD%"
                 value={item.cd}
                 onChange={(e) => handleFieldChange('cd', e.target.value)}
+                disabled={!item.qty}
+                type="text" inputMode="decimal"
                 variant="outlined"
+                ref={cdInputRef}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (onCdPressNavigate) {
+                      onCdPressNavigate();
+                      const addItemButtons = Array.from(document.querySelectorAll('button'));
+                      const addItemButton = addItemButtons.find(button => 
+                        button.textContent?.includes('Add Another Item')
+                      );
+                      if (addItemButton) {
+                        centerElementInViewport(addItemButton);
+                      }
+                    }
+                  } else if (e.key === 'Tab') {
+                    if (e.shiftKey) {
+                      // Don't intercept shift+tab - let browser handle the default navigation
+                      // to previous fields within the same section (e.g. back to Sch%)
+                      return;
+                    } else {
+                      // Tab (forward) from CD% field - go to next item's Item Name
+                      e.preventDefault(); 
+                      if (onTabToNextItem) {
+                        onTabToNextItem(index);
+                      } else if (onCdPressNavigate) { // Fallback if no next item
+                        onCdPressNavigate();
+                        const addItemButtons = Array.from(document.querySelectorAll('button'));
+                        const addItemButton = addItemButtons.find(button => 
+                          button.textContent?.includes('Add Another Item')
+                        );
+                        if (addItemButton) {
+                          centerElementInViewport(addItemButton);
+                        }
+                      }
+                    }
+                  }
+                }}
               />
             </div>
             <div>
@@ -822,6 +838,6 @@ const CollapsibleItemSection: React.FC<CollapsibleItemSectionProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default CollapsibleItemSection; 

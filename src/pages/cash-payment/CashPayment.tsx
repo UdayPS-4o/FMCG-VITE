@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
-import Input from "../../components/form/input/Input";
+import Input, { InputRefHandle } from "../../components/form/input/Input";
 import Autocomplete from "../../components/form/input/Autocomplete";
 import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
@@ -10,6 +10,15 @@ import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
 import apiCache from '../../utils/apiCache';
 import useAuth from "../../hooks/useAuth";
+
+// Utility function to center an element in the viewport
+const centerElementInViewport = (element: HTMLElement) => {
+  if (!element) return;
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center' 
+  });
+};
 
 // Helper functions for date formatting
 const formatDateForDisplay = (isoDate: string): string => {
@@ -50,6 +59,13 @@ interface FormValues {
   smName?: string;
 }
 
+interface VoucherIdInfo {
+  nextReceiptNo: number;
+  nextSeries: {
+    [key: string]: number;
+  };
+}
+
 interface CashPaymentEntry {
   voucherNo: string;
   date: string;
@@ -84,6 +100,7 @@ const CashPayment: React.FC = () => {
   const [sm, setSm] = useState<PartyOption | null>(null);
   const [smOptions, setSmOptions] = useState<PartyOption[]>([]);
   const [voucherNo, setVoucherNo] = useState<string | null>(null);
+  const [voucherIdInfo, setVoucherIdInfo] = useState<VoucherIdInfo | null>(null);
   const [formValues, setFormValues] = useState<FormValues>({
     date: getTodayFormatted(),
     series: '',
@@ -113,28 +130,27 @@ const CashPayment: React.FC = () => {
     'narration'
   ];
 
-  // Handle Enter key for field navigation
+  // Ref for the Series input field
+  const seriesInputRef = useRef<InputRefHandle>(null);
+
+  // Handle Enter key for field navigation - ENHANCED WITH SCROLLING
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
-        // Get the active element's ID
         const activeElement = document.activeElement as HTMLElement;
         if (!activeElement || !activeElement.id) return;
         
-        // Prevent form submission
         e.preventDefault();
         
-        // Find the current field index in our order
         const currentIndex = fieldOrder.indexOf(activeElement.id);
         
-        // If found and not the last field, move to the next one
         if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
           const nextFieldId = fieldOrder[currentIndex + 1];
-          const nextField = document.getElementById(nextFieldId);
+          const nextField = document.getElementById(nextFieldId) as HTMLElement | null; // Ensure it can be null
           if (nextField) {
             nextField.focus();
+            centerElementInViewport(nextField); // Center the newly focused field
             
-            // If it's an input, move cursor to the end
             if (nextField instanceof HTMLInputElement) {
               const inputLength = nextField.value.length;
               nextField.setSelectionRange(inputLength, inputLength);
@@ -144,7 +160,6 @@ const CashPayment: React.FC = () => {
       }
     };
     
-    // Add event listener to each field
     fieldOrder.forEach(fieldId => {
       const element = document.getElementById(fieldId);
       if (element) {
@@ -152,7 +167,6 @@ const CashPayment: React.FC = () => {
       }
     });
     
-    // Cleanup function
     return () => {
       fieldOrder.forEach(fieldId => {
         const element = document.getElementById(fieldId);
@@ -161,7 +175,45 @@ const CashPayment: React.FC = () => {
         }
       });
     };
-  }, [fieldOrder]);
+  }, [fieldOrder]); // fieldOrder is stable, so this runs once
+
+  // useEffect for centering on focus (for Tab/Shift+Tab)
+  useEffect(() => {
+    const handleFocus = (event: FocusEvent) => {
+      if (event.target instanceof HTMLElement) {
+        centerElementInViewport(event.target);
+      }
+    };
+
+    const elements: HTMLElement[] = [];
+    fieldOrder.forEach(fieldId => {
+      const element = document.getElementById(fieldId);
+      if (element) {
+        element.addEventListener('focus', handleFocus);
+        elements.push(element); // Keep track for cleanup
+      }
+    });
+
+    return () => {
+      elements.forEach(element => {
+        element.removeEventListener('focus', handleFocus);
+      });
+    };
+  }, [fieldOrder]); // fieldOrder is stable, so this runs once
+
+  // useEffect to focus Series input on page load
+  useEffect(() => {
+    // Consider if there's a loading state that needs to resolve before focusing.
+    // For now, assuming it can be focused on initial mount or after user/defaultSeries logic.
+    if (seriesInputRef.current) {
+      seriesInputRef.current.focus();
+      // Also center it
+      const seriesElement = document.getElementById('series'); // Assuming 'series' is the ID
+      if (seriesElement) {
+        centerElementInViewport(seriesElement);
+      }
+    }
+  }, []); // Empty dependency array ensures this runs once on mount
 
   // Apply default series from user settings
   useEffect(() => {
@@ -170,6 +222,8 @@ const CashPayment: React.FC = () => {
         ...prev,
         series: user.defaultSeries.cashPayment
       }));
+      // If seriesInputRef is already focused, this state update won't blur it.
+      // If focus hasn't happened yet, the focus useEffect will handle it.
     }
   }, [user, isEditMode, formValues.series]);
 
@@ -447,22 +501,41 @@ const CashPayment: React.FC = () => {
   useEffect(() => {
     const fetchNextVoucherNo = async () => {
       try {
-        const response = await fetch(`${constants.baseURL}/cash-payments`, {
+        const response = await fetch(`${constants.baseURL}/slink/cashPaymentId`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        const data = await response.json();
         
+        // If the response is 304 Not Modified, we don't need to update state
+        if (response.status === 304) {
+          console.log('Voucher ID info unchanged, using cached data');
+          return;
+        }
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setVoucherIdInfo(data);
+        
+        // Set the next voucher number
         setVoucherNo(data.nextReceiptNo.toString());
         
-        // Apply default series if available
-        if (user?.defaultSeries?.cashPayment && !isEditMode) {
+        // Apply default series if available and get its next number
+        if (user?.defaultSeries?.cashPayment) {
+          const series = user.defaultSeries.cashPayment.toUpperCase();
+          const seriesNextNumber = data.nextSeries && data.nextSeries[series] 
+            ? data.nextSeries[series] 
+            : 1;
+          
           const updatedValues = {
             ...formValues,
-            series: user.defaultSeries.cashPayment,
-            voucherNo: data.nextReceiptNo.toString()
+            series: series,
+            voucherNo: seriesNextNumber.toString()
           };
+          
           setFormValues(updatedValues);
           
           // Generate narration based on voucher number and series
@@ -472,13 +545,16 @@ const CashPayment: React.FC = () => {
             ...formValues,
             voucherNo: data.nextReceiptNo.toString()
           };
+          
           setFormValues(updatedValues);
           
           // Generate narration based on voucher number
           setTimeout(() => updateNarration(updatedValues), 0);
         }
       } catch (error) {
-        console.error('Error fetching next voucher number:', error);
+        console.error('Error fetching next voucher ID info:', error);
+        // Fallback to the old approach
+        fetchFallbackVoucherNo();
       }
     };
 
@@ -486,6 +562,72 @@ const CashPayment: React.FC = () => {
       fetchNextVoucherNo();
     }
   }, [isEditMode, user]);
+
+  // Update voucher number when series changes (if we have voucher ID info)
+  useEffect(() => {
+    if (!isEditMode && voucherIdInfo && formValues.series) {
+      // Only auto-update voucher number if it hasn't been manually edited
+      // or when the series changes
+      const series = formValues.series.toUpperCase();
+      const seriesNextNumber = voucherIdInfo.nextSeries && voucherIdInfo.nextSeries[series] 
+        ? voucherIdInfo.nextSeries[series] 
+        : 1; // Start with 1 for new series
+      
+      const newVoucherNo = seriesNextNumber.toString();
+      
+      setFormValues(prev => ({
+        ...prev,
+        voucherNo: newVoucherNo
+      }));
+      
+      // Update narration with the new voucher number and series
+      setTimeout(() => {
+        updateNarration({
+          ...formValues,
+          series: series,
+          voucherNo: newVoucherNo
+        });
+      }, 10);
+    }
+  }, [formValues.series, voucherIdInfo, isEditMode]);
+
+  // Fallback method to get next voucher number (old implementation)
+  const fetchFallbackVoucherNo = async () => {
+    try {
+      const response = await fetch(`${constants.baseURL}/cash-payments`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await response.json();
+      
+      setVoucherNo(data.nextReceiptNo.toString());
+      
+      // Apply default series if available
+      if (user?.defaultSeries?.cashPayment && !isEditMode) {
+        const updatedValues = {
+          ...formValues,
+          series: user.defaultSeries.cashPayment,
+          voucherNo: data.nextReceiptNo.toString()
+        };
+        setFormValues(updatedValues);
+        
+        // Generate narration based on voucher number and series
+        setTimeout(() => updateNarration(updatedValues), 0);
+      } else {
+        const updatedValues = {
+          ...formValues,
+          voucherNo: data.nextReceiptNo.toString()
+        };
+        setFormValues(updatedValues);
+        
+        // Generate narration based on voucher number
+        setTimeout(() => updateNarration(updatedValues), 0);
+      }
+    } catch (error) {
+      console.error('Error fetching next voucher number:', error);
+    }
+  };
 
   const handlePartyChange = (value: string) => {
     const selectedParty = partyOptions.find(p => p.value === value);
@@ -500,21 +642,39 @@ const CashPayment: React.FC = () => {
   // New handler for input changes (excluding date)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
-    // Simply set the value directly, Input component's seriesMode will handle capitalization
-    setFormValues(prev => {
-      const updated = {
-        ...prev,
-        [name]: value
-      };
+
+    if (name === 'voucherNo') {
+      // Only allow numeric values, max 6 digits
+      const numericValue = value.replace(/\D/g, '');
+      const truncatedValue = numericValue.slice(0, 6);
       
-      // Update narration when amount or voucherNo changes
-      if (name === 'amount' || name === 'voucherNo') {
-        updateNarration(updated);
-      }
-      
-      return updated;
-    });
+      setFormValues(prev => {
+        const updated = {
+          ...prev,
+          [name]: truncatedValue
+        };
+        
+        // Update narration when voucherNo changes (even if empty)
+        setTimeout(() => updateNarration(updated), 0);
+        
+        return updated;
+      });
+    } else {
+      // Handle other fields normally
+      setFormValues(prev => {
+        const updated = {
+          ...prev,
+          [name]: value
+        };
+        
+        // Update narration when amount changes
+        if (name === 'amount') {
+          setTimeout(() => updateNarration(updated), 0);
+        }
+        
+        return updated;
+      });
+    }
   };
 
   // Specific handler for DatePicker
@@ -527,7 +687,7 @@ const CashPayment: React.FC = () => {
       });
   };
 
-  // Add a simple function to ensure uppercase series input
+  // Update narration when series changes
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     // Only allow alphabetic characters and convert to uppercase
@@ -541,23 +701,21 @@ const CashPayment: React.FC = () => {
       };
       
       // Update narration when series changes
-      updateNarration(updated);
+      setTimeout(() => updateNarration(updated), 0);
       return updated;
     });
   };
   
   // Function to automatically generate narration
   const updateNarration = (values: FormValues) => {
-    if (values.voucherNo) {
-      const voucherText = values.series 
-        ? `VR.No.${values.series}-${values.voucherNo}`
-        : `VR.No.${values.voucherNo}`;
-      
-      setFormValues(prev => ({
-        ...prev,
-        narration: `TO CASH AS PER ${voucherText}`
-      }));
-    }
+    const voucherText = values.series 
+      ? `VR.No.${values.series}-${values.voucherNo || ""}`
+      : `VR.No.${values.voucherNo || ""}`;
+    
+    setFormValues(prev => ({
+      ...prev,
+      narration: `TO CASH AS PER ${voucherText}`
+    }));
   };
 
   // Refactored handleSubmit to use state directly
@@ -721,6 +879,7 @@ const CashPayment: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-1">
                     <Input 
+                      ref={seriesInputRef}
                       id="series"
                       name="series" 
                       label="Series" 
