@@ -1074,7 +1074,7 @@ async function printInvoicing(req, res) {
       },
       invoice: {
         no: `${invoice.id} - ${invoice.series || ''} - ${invoice.billNo || ''}`,
-        mode: 'CASH',
+        mode: invoice.cash == 'Y' ? 'CASH' : 'CREDIT',
         date: formatDate(invoice.date),
         time: getCurrentDateTime(),
         dueDate: calculateDueDate(invoice.date, invoice.dueDays),
