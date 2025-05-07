@@ -236,15 +236,26 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       
       // Filter data based on user role and smCode
       let filteredData = data;
-      if (!isAdmin && user.smCode) {
-        // Filter only if the endpoint is 'invoicing' and the 'sm' column exists
-        if (point === 'invoicing' && data.length > 0 && data[0].hasOwnProperty('sm')) {
-           filteredData = data.filter(row => row.sm === user.smCode);
-           console.log(`Filtered invoice data for SM: ${user.smCode}`, filteredData);
+      if (!isAdmin && user.smCode && data.length > 0 && data[0]) { // Ensure data and data[0] exist
+        // Define a list of possible SM code column names.
+        // hasOwnProperty is case-sensitive, so list common variations.
+        const smCodePossibleColumns = ['sm', 'SM', 'smcode', 'SMCODE', 'smCode', 'SmCode', 'salesmanCode', 'SalesmanCode', 'SM_CODE'];
+        let smColumnKey: string | undefined = undefined;
+
+        for (const col of smCodePossibleColumns) {
+          if (data[0].hasOwnProperty(col)) {
+            smColumnKey = col;
+            break;
+          }
+        }
+
+        if (smColumnKey) {
+          filteredData = data.filter(row => row[smColumnKey] === user.smCode);
+          console.log(`Filtered data for endpoint '${point}' using column '${smColumnKey}' for SM Code: '${user.smCode}'`, filteredData);
         } else {
-           // If not invoicing or sm column missing, non-admins might see nothing or all?
-           // Decide behavior - for now, keep all if not invoicing specific filtering
-           console.log(`SM filtering not applied for endpoint: ${point} or 'sm' column missing`);
+          // If no relevant SM column is found, data remains unfiltered by SM code.
+          // This means for endpoints without an SM column, non-admins will see all data (subject to other routeAccess checks).
+          console.log(`SM Code filtering not applied for endpoint '${point}': No suitable SM column found.`);
         }
       }
       
@@ -253,8 +264,19 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       if (filteredData.length > 0) {
         const dataHeaders = Object.keys(filteredData[0]);
         setHeaders(dataHeaders);
-        // Set initial sorting to be by 'id' in descending order if the id field exists
-        if (dataHeaders.includes('id')) {
+        // Set initial sorting to be by date in descending order
+        // Look for common date field naming patterns
+        const dateField = dataHeaders.find(header => 
+          header === 'date' || 
+          header === 'Date' || 
+          header.toLowerCase().endsWith('date') || 
+          header.toLowerCase().includes('_date')
+        );
+        
+        if (dateField) {
+          setOrderBy(dateField);
+          setOrder('desc');
+        } else if (dataHeaders.includes('id')) {
           setOrderBy('id');
         } else {
           setOrderBy(dataHeaders[0]);

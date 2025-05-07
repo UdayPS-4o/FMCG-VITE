@@ -1,13 +1,16 @@
 import { SidebarProvider, useSidebar } from "../context/SidebarContext";
-import { Outlet } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
 import AppHeader from "./AppHeader";
 import AppSidebar from "./AppSidebar";
 import BottomNav from "../components/navigation/BottomNav";
 
 const LayoutContent: React.FC = () => {
-  const { isExpanded, isHovered, isMobileOpen } = useSidebar();
+  const { isExpanded, isHovered, isMobileOpen, toggleMobileSidebar } = useSidebar();
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const location = useLocation();
+  const prevPathnameRef = useRef(location.pathname);
 
   useEffect(() => {
     const handleResize = () => {
@@ -18,10 +21,41 @@ const LayoutContent: React.FC = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isMobileOpen &&
+        sidebarRef.current &&
+        !sidebarRef.current.contains(event.target as Node)
+      ) {
+        toggleMobileSidebar();
+      }
+    };
+
+    if (isMobileOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isMobileOpen, toggleMobileSidebar]);
+
+  useEffect(() => {
+    if (prevPathnameRef.current !== location.pathname) {
+      if (isMobileOpen) {
+        toggleMobileSidebar();
+      }
+    }
+    prevPathnameRef.current = location.pathname;
+  }, [location.pathname, isMobileOpen, toggleMobileSidebar]);
+
   return (
     <div className="min-h-screen xl:flex bg-gray-50 dark:bg-gray-900">
       <div>
-        <AppSidebar />
+        <AppSidebar ref={sidebarRef} />
       </div>
       <div
         className={`flex-1 transition-all duration-300 ease-in-out flex flex-col ${

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 
 interface InputProps {
   id?: string;
@@ -21,32 +21,53 @@ interface InputProps {
   maxLength?: number;
   inputMode?: 'search' | 'text' | 'email' | 'tel' | 'numeric' | 'url' | 'none' | 'decimal';
   fieldType?: 'pan' | 'gstin' | 'default';
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
-const Input: React.FC<InputProps> = ({
-  id,
-  label = '',
-  value = '',
-  type = 'text',
-  placeholder = ' ',
-  onChange = () => {},
-  onBlur,
-  onFocus,
-  required = false,
-  className = '',
-  variant = 'outlined',
-  error = false,
-  success = false,
-  disabled = false,
-  hint = '',
-  name,
-  autoComplete,
-  maxLength,
-  inputMode,
-  fieldType = 'default',
-}) => {
+// Define handle types for the ref
+export interface InputRefHandle {
+  focus: () => void;
+  blur: () => void;
+}
+
+const Input = forwardRef<InputRefHandle, InputProps>((
+  {
+    id,
+    label = '',
+    value = '',
+    type = 'text',
+    placeholder = ' ',
+    onChange = () => {},
+    onBlur,
+    onFocus,
+    required = false,
+    className = '',
+    variant = 'outlined',
+    error = false,
+    success = false,
+    disabled = false,
+    hint = '',
+    name,
+    autoComplete,
+    maxLength,
+    inputMode,
+    fieldType = 'default',
+    onKeyDown,
+  }, 
+  ref
+) => {
   const [isFocused, setIsFocused] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const internalInputRef = useRef<HTMLInputElement>(null);
+  
+  // Expose focus and blur methods via the ref
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      internalInputRef.current?.focus();
+    },
+    blur: () => {
+      internalInputRef.current?.blur();
+    }
+  }));
   
   const isActive = isFocused || value;
   
@@ -171,7 +192,7 @@ const Input: React.FC<InputProps> = ({
     <div className="flex flex-col">
       <div className={`${getContainerClasses()} ${className}`}>
         <input
-          ref={inputRef}
+          ref={internalInputRef}
           id={id}
           type={type}
           value={value}
@@ -186,6 +207,7 @@ const Input: React.FC<InputProps> = ({
           name={name}
           maxLength={maxLength}
           inputMode={getInputMode()}
+          onKeyDown={onKeyDown}
         />
         {label && (
           <label 
@@ -212,6 +234,6 @@ const Input: React.FC<InputProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default Input; 

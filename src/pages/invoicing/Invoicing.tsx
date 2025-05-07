@@ -1,17 +1,29 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, createRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
-import Input from "../../components/form/input/Input";
-import Autocomplete from "../../components/form/input/Autocomplete";
+import Input, { InputRefHandle } from "../../components/form/input/Input";
+import Autocomplete, { AutocompleteRefHandle } from "../../components/form/input/Autocomplete";
 import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
-import CollapsibleItemSection from './CollapsibleItemSection';
+import CollapsibleItemSection, { CollapsibleItemSectionRefHandle } from './CollapsibleItemSection';
 import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
+
+// Utility function to center an element in the viewport
+const centerElementInViewport = (element: HTMLElement) => {
+  if (!element) return;
+  
+  // Use the built-in scrollIntoView with {block: 'center'} option
+  // This will center the element vertically in the viewport
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center' 
+  });
+};
 
 interface Option {
   value: string;
@@ -33,10 +45,35 @@ interface User {
   canSelectSeries?: boolean;
 }
 
+// Define a type for the invoice draft
+interface InvoiceDraft {
+  date: string;
+  series: string;
+  billNo: string;
+  cash: 'Y' | 'N';
+  party: Option | null;
+  sm: Option | null;
+  ref: string;
+  dueDays: string;
+  items: ItemData[];
+}
+
 const InvoicingContent: React.FC = () => {
   const navigate = useNavigate();
-  // Get user data from localStorage
   const [user, setUser] = useState<User | null>(null);
+  const [draftExistsInStorage, setDraftExistsInStorage] = useState<boolean>(false);
+  const [showLoadDraftButton, setShowLoadDraftButton] = useState<boolean>(false);
+
+  // Refs for input elements (local to InvoicingContent)
+  const partyAutocompleteRef = useRef<AutocompleteRefHandle>(null);
+  const smAutocompleteRef = useRef<AutocompleteRefHandle>(null);
+  const refRef = useRef<InputRefHandle>(null);
+  const dueDaysRef = useRef<InputRefHandle>(null);
+  const searchItemsRef = useRef<InputRefHandle>(null);
+  const seriesRef = useRef<InputRefHandle>(null);
+  const billNoRef = useRef<InputRefHandle>(null);
+  const addAnotherItemButtonRef = useRef<HTMLButtonElement>(null); // This is local
+  const collapsibleItemRefs = useRef<Array<React.RefObject<CollapsibleItemSectionRefHandle>>>([]); // This is local
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -59,7 +96,6 @@ const InvoicingContent: React.FC = () => {
   const [searchItems, setSearchItems] = useState<string>('');
   const [showValidationErrors, setShowValidationErrors] = useState<boolean>(false);
   
-  // Get shared invoice data from context
   const { 
     partyOptions, 
     smOptions, 
@@ -68,23 +104,26 @@ const InvoicingContent: React.FC = () => {
     items,
     updateItem,
     removeItem,
-    addItem,
+    addItem: contextAddItem,
     calculateTotal,
     expandedIndex,
     setExpandedIndex,
-    invoiceIdInfo
+    invoiceIdInfo,
+    focusNewItemIndex,
+    setFocusNewItemIndex,
+    setItems: contextSetItems
   } = useInvoiceContext();
   
-  // Helper function to format local date as YYYY-MM-DD
-  const getLocalDateYYYYMMDD = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Add 1 because months are 0-indexed
+  // Helper function to format local date as DD-MM-YYYY
+  const getLocalDateDDMMYYYY = (date: Date): string => {
     const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Add 1 because months are 0-indexed
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
   };
   
   // Form state - Use local date for default
-  const [date, setDate] = useState<string>(getLocalDateYYYYMMDD(new Date()));
+  const [date, setDate] = useState<string>(getLocalDateDDMMYYYY(new Date()));
   const [series, setSeries] = useState<string>('T');
   const [billNo, setBillNo] = useState<string>('1');
   const [cash, setCash] = useState<'Y' | 'N'>('N');
@@ -102,6 +141,157 @@ const InvoicingContent: React.FC = () => {
     message: '', 
     type: 'info' 
   });
+
+  // Check for existing draft on component mount and set initial button visibility
+  useEffect(() => {
+    const storedDraftString = localStorage.getItem('invoicingDraft');
+    if (storedDraftString) {
+      setDraftExistsInStorage(true);
+      // Initial check for button visibility will be handled by the comparison effect below
+    } else {
+      setDraftExistsInStorage(false);
+      setShowLoadDraftButton(false);
+    }
+  }, []);
+
+  // Effect to save draft to localStorage
+  useEffect(() => {
+    // This effect should run when form data changes to save it
+    const currentDraftData: InvoiceDraft = {
+      date,
+      series,
+      billNo,
+      cash,
+      party,
+      sm,
+      ref,
+      dueDays,
+      items,
+    };
+
+    if (items.length >= 2) {
+      localStorage.setItem('invoicingDraft', JSON.stringify(currentDraftData));
+      if (!draftExistsInStorage) {
+        setDraftExistsInStorage(true); // Update if it wasn't set before
+      }
+    } else {
+      // Optional: If you want to remove the draft if items < 2
+      // if (draftExistsInStorage) {
+      //   localStorage.removeItem('invoicingDraft');
+      //   setDraftExistsInStorage(false);
+      // }
+    }
+    // Note: The comparison effect will handle setShowLoadDraftButton update
+  }, [date, series, billNo, cash, party, sm, ref, dueDays, items, draftExistsInStorage]);
+
+  // Effect to compare current form with stored draft and set button visibility
+  useEffect(() => {
+    if (!draftExistsInStorage) {
+      setShowLoadDraftButton(false);
+      return;
+    }
+
+    const storedDraftString = localStorage.getItem('invoicingDraft');
+    if (!storedDraftString) { // Should not happen if draftExistsInStorage is true
+      setDraftExistsInStorage(false);
+      setShowLoadDraftButton(false);
+      return;
+    }
+
+    try {
+      // Parse the stored draft
+      const storedDraft = JSON.parse(storedDraftString);
+      
+      // Create comparable version of current form state
+      const currentState = {
+        date,
+        series,
+        billNo,
+        cash,
+        party: party ? { value: party.value, label: party.label } : null,
+        sm: sm ? { value: sm.value, label: sm.label } : null,
+        ref,
+        dueDays,
+        // Only include key properties for comparison
+        items: items.map(item => ({
+          item: item.item,
+          godown: item.godown,
+          qty: item.qty,
+          rate: item.rate,
+          amount: item.amount,
+          netAmount: item.netAmount
+        }))
+      };
+
+      // Compare only essential properties
+      let isDifferent = false;
+      
+      // Basic properties
+      if (storedDraft.date !== currentState.date || 
+          storedDraft.series !== currentState.series ||
+          storedDraft.billNo !== currentState.billNo ||
+          storedDraft.cash !== currentState.cash ||
+          storedDraft.ref !== currentState.ref ||
+          storedDraft.dueDays !== currentState.dueDays) {
+        isDifferent = true;
+      }
+      
+      // Compare party
+      if ((storedDraft.party === null && currentState.party !== null) ||
+          (storedDraft.party !== null && currentState.party === null) ||
+          (storedDraft.party !== null && currentState.party !== null && 
+           storedDraft.party.value !== currentState.party.value)) {
+        isDifferent = true;
+      }
+      
+      // Compare SM
+      if ((storedDraft.sm === null && currentState.sm !== null) ||
+          (storedDraft.sm !== null && currentState.sm === null) ||
+          (storedDraft.sm !== null && currentState.sm !== null && 
+           storedDraft.sm.value !== currentState.sm.value)) {
+        isDifferent = true;
+      }
+      
+      // Compare items (length and key properties)
+      if (!isDifferent) {
+        if (storedDraft.items.length !== currentState.items.length) {
+          isDifferent = true;
+        } else {
+          // Check each item for differences
+          for (let i = 0; i < storedDraft.items.length; i++) {
+            const storedItem = storedDraft.items[i];
+            const currentItem = currentState.items[i];
+            
+            if (storedItem.item !== currentItem.item ||
+                storedItem.godown !== currentItem.godown ||
+                storedItem.qty !== currentItem.qty ||
+                storedItem.rate !== currentItem.rate) {
+              isDifferent = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      setShowLoadDraftButton(isDifferent);
+    } catch (e) {
+      console.error("Error comparing current form with stored draft:", e);
+      // Default to showing button if comparison fails
+      setShowLoadDraftButton(true); 
+    }
+  }, [date, series, billNo, cash, party, sm, ref, dueDays, items, draftExistsInStorage]);
+
+  // useEffect for collapsibleItemRefs.current (this was correct locally)
+  useEffect(() => {
+    collapsibleItemRefs.current = items.map((_, i) => collapsibleItemRefs.current[i] ?? createRef<CollapsibleItemSectionRefHandle>());
+  }, [items, items.length]); // Added items.length for robustness, though items itself should suffice
+
+  // Focus series input on initial load, after loading is complete
+  useEffect(() => {
+    if (!loading && seriesRef.current) {
+      seriesRef.current.focus();
+    }
+  }, [loading]); // Depend on the loading state
 
   // Apply default series from user settings
   useEffect(() => {
@@ -165,10 +355,12 @@ const InvoicingContent: React.FC = () => {
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Only allow alphabetic characters and convert to uppercase
     const value = e.target.value;
     const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
-    const newValue = alphabeticValue.length > 0 ? alphabeticValue.charAt(alphabeticValue.length - 1).toUpperCase() : '';
+    // Always take the last typed alphabetic character and make it uppercase.
+    // If the result is an empty string (e.g., if a non-alphabetic char was typed), 
+    // it will effectively clear the input or keep it empty if it was already empty.
+    const newValue = alphabeticValue.length > 0 ? alphabeticValue.slice(-1).toUpperCase() : '';
     setSeries(newValue);
   };
 
@@ -203,9 +395,76 @@ const InvoicingContent: React.FC = () => {
     setParty(selected || null);
   };
 
+  const handlePartyEnter = () => {
+    const isAdmin = user?.routeAccess?.includes('Admin');
+    const smIsDisabled = !!(user && !isAdmin && user.smCode);
+    if (!smIsDisabled && smAutocompleteRef.current) {
+      smAutocompleteRef.current.focus();
+      const smEl = document.getElementById('sm');
+      if (smEl) centerElementInViewport(smEl);
+    } else if (refRef.current) {
+      refRef.current.focus();
+      const refEl = document.getElementById('ref');
+      if (refEl) centerElementInViewport(refEl);
+    }
+  };
+
   const handleSmChange = (value: string) => {
     const selected = smOptions.find(option => option.value === value);
     setSm(selected || null);
+  };
+
+  const handleSmEnter = () => {
+    if (refRef.current) {
+      refRef.current.focus();
+      const refEl = document.getElementById('ref');
+      if (refEl) centerElementInViewport(refEl);
+    }
+  };
+
+  const handleSearchItemsEnter = () => {
+    if (items.length > 0 && collapsibleItemRefs.current[0]?.current) {
+      collapsibleItemRefs.current[0].current.focusItemName();
+      const itemEl = document.getElementById(`item-0`);
+      if (itemEl) centerElementInViewport(itemEl);
+    } else if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleDueDaysEnter = () => {
+    if (searchItemsRef.current) {
+        searchItemsRef.current.focus();
+        const searchEl = document.getElementById('searchItems');
+        if (searchEl) centerElementInViewport(searchEl);
+    }
+  };
+
+  const handleRefEnter = () => {
+    if (cash === 'N' && dueDaysRef.current) {
+      dueDaysRef.current.focus();
+      const dueDaysEl = document.getElementById('dueDays');
+      if (dueDaysEl) centerElementInViewport(dueDaysEl);
+    } else if (searchItemsRef.current) {
+        searchItemsRef.current.focus();
+        const searchEl = document.getElementById('searchItems');
+        if (searchEl) centerElementInViewport(searchEl);
+    } else if (items.length > 0 && collapsibleItemRefs.current[0]?.current) {
+        collapsibleItemRefs.current[0].current.focusItemName();
+        const itemEl = document.getElementById(`item-0`);
+        if (itemEl) centerElementInViewport(itemEl);
+    } else if (addAnotherItemButtonRef.current) { 
+        addAnotherItemButtonRef.current.focus();
+        centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleCdPressNavigateFromItem = () => {
+    if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
   };
 
   const handleSearchItemsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,6 +623,11 @@ const InvoicingContent: React.FC = () => {
       const responseData = await response.json();
       const invoiceId = responseData.id || responseData._id;
       
+      // Delete the draft from localStorage after successful submission
+      localStorage.removeItem('invoicingDraft');
+      setDraftExistsInStorage(false);
+      setShowLoadDraftButton(false);
+      
       setToast({
         visible: true,
         message: 'Invoice created successfully!',
@@ -414,6 +678,114 @@ const InvoicingContent: React.FC = () => {
     });
   };
 
+  const handleTabToNextItem = (currentIndex: number) => {
+    const nextItemIndex = currentIndex + 1;
+    if (nextItemIndex < items.length && collapsibleItemRefs.current[nextItemIndex]?.current) {
+      setExpandedIndex(nextItemIndex); 
+      
+      // Ensure focus happens after the section has been expanded
+      setTimeout(() => {
+        collapsibleItemRefs.current[nextItemIndex]?.current?.focusItemName();
+      }, 50);
+    } else if (addAnotherItemButtonRef.current) {
+      // Last item remains expanded
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleShiftTabToPreviousItem = (currentIndex: number) => {
+    const prevItemIndex = currentIndex - 1;
+    if (prevItemIndex >= 0 && collapsibleItemRefs.current[prevItemIndex]?.current) {
+      setExpandedIndex(prevItemIndex); 
+      
+      // Ensure focus happens after the section has been expanded
+      setTimeout(() => {
+        collapsibleItemRefs.current[prevItemIndex]?.current?.focusCdInput();
+      }, 50);
+    } else if (currentIndex === 0 && searchItemsRef.current) { 
+      // First item remains expanded
+      searchItemsRef.current.focus();
+      const searchEl = document.getElementById('searchItems');
+      if (searchEl) centerElementInViewport(searchEl);
+    }
+  };
+
+  // Function to load draft from localStorage
+  const loadDraft = () => {
+    const storedDraft = localStorage.getItem('invoicingDraft');
+    if (storedDraft) {
+      try {
+        const draft: InvoiceDraft = JSON.parse(storedDraft);
+        setDate(draft.date);
+        setSeries(draft.series);
+        setBillNo(draft.billNo);
+        setCash(draft.cash);
+        
+        // For party and SM, match with current options to ensure proper references
+        if (draft.party && draft.party.value) {
+          // Find matching party in current options
+          const matchedParty = partyOptions.find(p => p.value == draft.party.value);
+          if (matchedParty) {
+            setParty(matchedParty);
+          } else {
+            console.warn(`Party with value ${draft.party.value} not found in current options`);
+            setParty(draft.party); // Fallback to saved party
+          }
+        } else {
+          setParty(null);
+        }
+        
+        // Similar approach for SM
+        if (draft.sm && draft.sm.value) {
+          const matchedSm = smOptions.find(s => s.value === draft.sm.value);
+          if (matchedSm) {
+            setSm(matchedSm);
+          } else {
+            console.warn(`SM with value ${draft.sm.value} not found in current options`);
+            setSm(draft.sm); // Fallback to saved SM
+          }
+        } else {
+          setSm(null);
+        }
+        
+        setRef(draft.ref);
+        setDueDays(draft.dueDays);
+        
+        if (contextSetItems) {
+          contextSetItems(draft.items);
+        }
+
+        setToast({
+          visible: true,
+          message: 'Draft loaded successfully!',
+          type: 'success'
+        });
+        
+        // The comparison effect will handle updating showLoadDraftButton
+        // But let's set it explicitly here to ensure it happens immediately
+        setShowLoadDraftButton(false);
+
+      } catch (e) {
+        console.error("Failed to parse draft data from localStorage", e);
+        setToast({
+          visible: true,
+          message: 'Failed to load draft. The data might be corrupted.',
+          type: 'error'
+        });
+        localStorage.removeItem('invoicingDraft');
+        setDraftExistsInStorage(false);
+        setShowLoadDraftButton(false);
+      }
+    } else {
+      setToast({
+        visible: true,
+        message: 'No draft found to load.',
+        type: 'info'
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div>
@@ -441,7 +813,11 @@ const InvoicingContent: React.FC = () => {
         title="Invoicing | FMCG Vite Admin Template"
         description="Create Invoice in FMCG Vite Admin Template"
       />
-      <PageBreadcrumb pageTitle="Invoicing" />
+      <PageBreadcrumb 
+        pageTitle="Invoicing" 
+        showDraftIcon={showLoadDraftButton}
+        onDraftIconClick={loadDraft} 
+      />
       
       <Toast         
         message={toast.message}
@@ -459,8 +835,9 @@ const InvoicingContent: React.FC = () => {
                 label="Date"
                 value={date}
                 onChange={handleDateChange}
-                dateFormatType="yyyy-mm-dd"
+                dateFormatType="dd-mm-yyyy"
                 required
+                // ref={dateRef} // Add if direct focus needed
               />
             </div>
             <div>
@@ -475,6 +852,7 @@ const InvoicingContent: React.FC = () => {
                 required
                 className="uppercase"
                 disabled={user && user.canSelectSeries === false}
+                ref={seriesRef}
               />
             </div>
             <div>
@@ -486,6 +864,7 @@ const InvoicingContent: React.FC = () => {
                 variant="outlined"
                 autoComplete="off"
                 required
+                ref={billNoRef}
               />
             </div>
             <div>
@@ -517,6 +896,8 @@ const InvoicingContent: React.FC = () => {
                 options={partyOptions}
                 onChange={handlePartyChange}
                 autoComplete="off"
+                onEnter={handlePartyEnter}
+                ref={partyAutocompleteRef}
               />
               {errors.party && (
                 <p className="mt-1 text-sm text-red-500">{errors.party}</p>
@@ -545,6 +926,8 @@ const InvoicingContent: React.FC = () => {
                 value={sm?.value || ''}
                 disabled={!!(user && !user.routeAccess.includes('Admin') && user.smCode)}
                 autoComplete="off"
+                onEnter={handleSmEnter}
+                ref={smAutocompleteRef}
               />
               {user && !user.routeAccess.includes('Admin') && user.smCode && (
                 <p className="mt-1 text-xs text-gray-500">S/M is locked to your assigned salesman code</p>
@@ -561,6 +944,8 @@ const InvoicingContent: React.FC = () => {
                 onChange={handleRefChange}
                 variant="outlined"
                 autoComplete="off"
+                ref={refRef}
+                onKeyDown={(e) => e.key === 'Enter' && handleRefEnter()}
               />
             </div>
           </div>
@@ -575,6 +960,8 @@ const InvoicingContent: React.FC = () => {
                   onChange={handleDueDaysChange}
                   variant="outlined"
                   autoComplete="off"
+                  ref={dueDaysRef}
+                  onKeyDown={(e) => {if (e.key === 'Enter') {e.preventDefault(); handleDueDaysEnter();}}}
                 />
               </div>
             </div>
@@ -592,21 +979,28 @@ const InvoicingContent: React.FC = () => {
               onChange={handleSearchItemsChange}
               variant="outlined"
               autoComplete="off"
+              ref={searchItemsRef}
+              onKeyDown={(e) => {if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {e.preventDefault(); handleSearchItemsEnter();}}}
             />
           </div>
         </div>
 
         <div className="mb-6">
-          {filteredItems().map((item, index) => (
+          {filteredItems().map((itemData, index) => (
             <CollapsibleItemSection
               key={index}
+              ref={collapsibleItemRefs.current[index]}
               index={index}
-              item={item}
+              item={itemData}
               handleAccordionChange={handleAccordionChange}
               expanded={expandedIndex === index}
               updateItem={updateItem}
               removeItem={removeItem}
               showValidationErrors={showValidationErrors}
+              onCdPressNavigate={handleCdPressNavigateFromItem}
+              shouldFocusOnExpand={focusNewItemIndex === index}
+              onTabToNextItem={handleTabToNextItem}
+              onShiftTabToPreviousItem={handleShiftTabToPreviousItem}
             />
           ))}
         </div>
@@ -629,8 +1023,9 @@ const InvoicingContent: React.FC = () => {
                 setShowValidationErrors(false);
               }
               // Always add a new item regardless of validation state
-              addItem();
+              contextAddItem();
             }}
+            ref={addAnotherItemButtonRef}
           >
             Add Another Item
           </button>
@@ -687,17 +1082,28 @@ const Invoicing: React.FC = () => {
     cd: '', amount: '', netAmount: '', selectedItem: null, stockLimit: 0 
   }]);
   const [expandedIndex, setExpandedIndex] = useState<number>(0);
+  const [focusNewItemIndex, setFocusNewItemIndex] = useState<number | null>(null);
+
+  // Expose setItems to be callable from InvoicingContent for draft loading
+  // useEffect(() => {
+  //   (window as any).setInvoiceItems = setItems;
+  //   return () => {
+  //     delete (window as any).setInvoiceItems; // Clean up
+  //   };
+  // }, [setItems]);
 
   // Item management functions
   const addItem = () => {
-    const newItems = [...items, { 
+    const newItem: ItemData = { 
       item: '', godown: '', unit: '', stock: '', pack: '', gst: '', 
       pcBx: '', mrp: '', rate: '', qty: '', cess: '', schRs: '', sch: '', 
-      cd: '', amount: '', netAmount: '', selectedItem: null, stockLimit: 0 
-    }];
+      cd: '', amount: '', netAmount: '', selectedItem: null, stockLimit: 0 // Initial stockLimit is 0
+    };
+    const newItems = [...items, newItem];
     setItems(newItems);
     // Set the expanded index to the new item
     setExpandedIndex(newItems.length - 1);
+    setFocusNewItemIndex(newItems.length - 1);
   };
 
   const removeItem = (index: number) => {
@@ -708,7 +1114,7 @@ const Invoicing: React.FC = () => {
 
   const updateItem = (index: number, newData: ItemData) => {
     const newItems = [...items];
-    newItems[index] = newData;
+    newItems[index] = newData; // newData from CollapsibleItemSection should now have the correct stockLimit
     setItems(newItems);
   };
 
@@ -717,6 +1123,18 @@ const Invoicing: React.FC = () => {
       .reduce((sum, item) => sum + parseFloat(item.netAmount || '0'), 0)
       .toFixed(2);
   };
+
+  // Reset focusNewItemIndex after it has been used
+  // This might need to be coordinated with CollapsibleItemSection if it signals back after focusing.
+  // For simplicity, reset it after a short delay or when expandedIndex changes away from it.
+  useEffect(() => {
+    if (focusNewItemIndex !== null) {
+        // Simple reset, assuming CollapsibleItemSection will pick up shouldFocusOnExpand once.
+        // A more robust way might involve a callback from CollapsibleItemSection after it focuses.
+        const timer = setTimeout(() => setFocusNewItemIndex(null), 100);
+        return () => clearTimeout(timer);
+    }
+  }, [focusNewItemIndex]);
 
   return (
     <InvoiceProvider
@@ -727,6 +1145,9 @@ const Invoicing: React.FC = () => {
       calculateTotal={calculateTotal}
       expandedIndex={expandedIndex}
       setExpandedIndex={setExpandedIndex}
+      focusNewItemIndex={focusNewItemIndex}
+      setFocusNewItemIndex={setFocusNewItemIndex}
+      setItems={setItems}
     >
       <InvoicingContent />
     </InvoiceProvider>

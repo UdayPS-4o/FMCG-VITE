@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, createRef } from 'react';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
-import Input from "../../components/form/input/Input";
-import Autocomplete from "../../components/form/input/Autocomplete";
+import Input, { InputRefHandle } from "../../components/form/input/Input";
+import Autocomplete, { AutocompleteRefHandle } from "../../components/form/input/Autocomplete";
 import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
 import Toast from '../../components/ui/toast/Toast';
 import constants from "../../constants";
-import CollapsibleItemSection from './CollapsibleItemSection';
+import CollapsibleItemSection, { CollapsibleItemSectionRefHandle } from './CollapsibleItemSection';
 import apiCache from '../../utils/apiCache';
 import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
 import useAuth from "../../hooks/useAuth";
@@ -50,6 +50,15 @@ interface SmOption {
   label: string;
 }
 
+// Utility function to center an element in the viewport
+const centerElementInViewport = (element: HTMLElement | null) => {
+  if (!element) return;
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center' 
+  });
+};
+
 const GodownTransfer: React.FC = () => {
   const [id, setId] = useState(0);
   const [partyOptions, setPartyOptions] = useState<any[]>([]);
@@ -66,16 +75,16 @@ const GodownTransfer: React.FC = () => {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   
-  // Helper function to format local date as YYYY-MM-DD
-  const getLocalDateYYYYMMDD = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Add 1 because months are 0-indexed
+  // Helper function to format local date as DD-MM-YYYY
+  const getLocalDateDDMMYYYY = (date: Date): string => {
     const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Add 1 because months are 0-indexed
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
   };
   
   const [formValues, setFormValues] = useState({
-    date: getLocalDateYYYYMMDD(new Date()), // Prefill with local date
+    date: getLocalDateDDMMYYYY(new Date()), // Prefill with local date
     series: 'T',
     fromGodown: '',
     toGodown: '',
@@ -89,6 +98,26 @@ const GodownTransfer: React.FC = () => {
   const { user } = useAuth();
   const [godownIdInfo, setGodownIdInfo] = useState<GodownIdData | null>(null);
   const [godownIdHash, setGodownIdHash] = useState<string | null>(null);
+
+  // Refs for focus management
+  const seriesRef = useRef<InputRefHandle>(null);
+  const fromGodownRef = useRef<AutocompleteRefHandle>(null);
+  const toGodownRef = useRef<AutocompleteRefHandle>(null);
+  const smSelectRef = useRef<AutocompleteRefHandle>(null);
+  const searchItemsRef = useRef<InputRefHandle>(null);
+  const addAnotherItemButtonRef = useRef<HTMLButtonElement>(null);
+  const collapsibleItemRefs = useRef<Array<React.RefObject<CollapsibleItemSectionRefHandle>>>([]);
+  const [focusNewItemIndex, setFocusNewItemIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    collapsibleItemRefs.current = formValues.items.map((_, i) => collapsibleItemRefs.current[i] ?? createRef<CollapsibleItemSectionRefHandle>());
+  }, [formValues.items]);
+
+  useEffect(() => {
+    if (!loading && seriesRef.current) {
+      seriesRef.current.focus();
+    }
+  }, [loading]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -362,33 +391,33 @@ const GodownTransfer: React.FC = () => {
   const addItem = (newToGodown?: string) => {
     const toGodownValue = newToGodown || formValues.toGodown;
     
+    const newItem: ItemData = {
+      item: '',
+      stock: '',
+      pack: '',
+      gst: '',
+      unit: '',
+      pcBx: '',
+      mrp: '',
+      rate: '',
+      qty: '',
+      cess: '0',
+      cd: '0',
+      sch: '0',
+      amount: '',
+      netAmount: '',
+      godown: formValues.fromGodown, // Set the godown to the form's fromGodown
+    };
+
+    const newItems = [...formValues.items, newItem];
     setFormValues(prevState => ({
       ...prevState,
       toGodown: toGodownValue,
-      items: [
-        ...prevState.items,
-        {
-          item: '',
-          stock: '',
-          pack: '',
-          gst: '',
-          unit: '',
-          pcBx: '',
-          mrp: '',
-          rate: '',
-          qty: '',
-          cess: '0',
-          cd: '0',
-          sch: '0',
-          amount: '',
-          netAmount: '',
-          godown: prevState.fromGodown, // Set the godown to the form's fromGodown
-        },
-      ],
+      items: newItems,
     }));
     
-    // Automatically expand the newly added accordion
-    setExpanded(formValues.items.length);
+    setExpanded(newItems.length - 1);
+    setFocusNewItemIndex(newItems.length - 1); // Set focus to the new item
   };
 
   const removeItem = (index: number) => {
@@ -403,6 +432,13 @@ const GodownTransfer: React.FC = () => {
 
   const handleAccordionChange = (panel: number) => (event: React.SyntheticEvent, isExpanded: boolean) => {
     setExpanded(isExpanded ? panel : false);
+    if (isExpanded) {
+      // Potentially focus item name when expanding an existing section, if desired
+      // setTimeout(() => collapsibleItemRefs.current[panel]?.current?.focusItemName(), 50);
+    } else if (focusNewItemIndex === panel) {
+      // If the section being collapsed was the one intended for focus, clear it
+      setFocusNewItemIndex(null);
+    }
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -516,6 +552,60 @@ const GodownTransfer: React.FC = () => {
     ).length;
   };
 
+  // Navigation Handlers
+  const handleTabToNextItem = (currentIndex: number) => {
+    const nextItemIndex = currentIndex + 1;
+    if (nextItemIndex < formValues.items.length && collapsibleItemRefs.current[nextItemIndex]?.current) {
+      setExpanded(nextItemIndex); 
+      setTimeout(() => {
+        collapsibleItemRefs.current[nextItemIndex]?.current?.focusItemName();
+      }, 50); // Delay to allow section to expand
+    } else if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleShiftTabToPreviousItem = (currentIndex: number) => {
+    const prevItemIndex = currentIndex - 1;
+    if (prevItemIndex >= 0 && collapsibleItemRefs.current[prevItemIndex]?.current) {
+      setExpanded(prevItemIndex);       
+      setTimeout(() => {
+        collapsibleItemRefs.current[prevItemIndex]?.current?.focusQty(); // Focus Qty of previous item
+      }, 50); // Delay to allow section to expand
+    } else if (searchItemsRef.current) { 
+      searchItemsRef.current.focus();
+      centerElementInViewport(document.getElementById('searchItems'));
+    }
+  };
+
+  const handleQtyEnterNavigate = () => {
+    if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleSearchItemsEnter = () => {
+    if (formValues.items.length > 0 && collapsibleItemRefs.current[0]?.current) {
+      setExpanded(0);
+      setTimeout(() => {
+         collapsibleItemRefs.current[0]?.current?.focusItemName();
+      }, 50);
+    } else if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  // Reset focusNewItemIndex after it has been used or section changes
+  useEffect(() => {
+    if (focusNewItemIndex !== null && expanded !== focusNewItemIndex) {
+        // If a new item was added, but then the user expanded a different section, clear the focus intent
+        setFocusNewItemIndex(null);
+    }
+  }, [expanded, focusNewItemIndex]);
+
   // Add loading state check to render the skeleton loader
   if (loading) {
     return (
@@ -549,7 +639,7 @@ const GodownTransfer: React.FC = () => {
 
       <FormComponent onSubmit={handleSubmit} autoComplete="off">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div>
               <DatePicker
                 id="date"
@@ -557,7 +647,7 @@ const GodownTransfer: React.FC = () => {
                 name="date"
                 value={formValues.date}
                 onChange={handleDateChange}
-                dateFormatType="yyyy-mm-dd"
+                dateFormatType="dd-mm-yyyy"
                 required
               />
             </div>
@@ -570,6 +660,14 @@ const GodownTransfer: React.FC = () => {
                 onChange={handleChange}
                 variant="outlined"
                 disabled={Boolean(user && ((user.defaultSeries?.godown) || user.canSelectSeries === false))}
+                ref={seriesRef}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                    e.preventDefault();
+                    fromGodownRef.current?.focus();
+                    centerElementInViewport(document.getElementById('fromGodown'));
+                  }
+                }}
               />
             </div>
             <div>
@@ -580,6 +678,25 @@ const GodownTransfer: React.FC = () => {
                 variant="outlined"
                 disabled
               />
+            </div>
+            <div>
+              <Autocomplete
+                id="sm-select"
+                label="S/M"
+                options={filteredSmOptions}
+                onChange={handleSmChange}
+                value={sm?.value || ''}
+                defaultValue={sm?.value || ''}
+                disabled={isSmDisabled}
+                ref={smSelectRef}
+                onEnter={() => { // Assuming S/M is last before From Godown or not critical for immediate item entry focus
+                  fromGodownRef.current?.focus();
+                  centerElementInViewport(document.getElementById('fromGodown'));
+                }}
+              />
+              {isSmDisabled && (
+                <p className="mt-1 text-xs text-gray-500">S/M is locked to your assigned salesman code</p>
+              )}
             </div>
           </div>
 
@@ -593,7 +710,12 @@ const GodownTransfer: React.FC = () => {
                   label: option.GDN_NAME
                 }))}
                 onChange={handleFromGodownChange}
-                defaultValue=""
+                defaultValue={formValues.fromGodown || ""} // Ensure defaultValue is string
+                ref={fromGodownRef}
+                onEnter={() => {
+                  toGodownRef.current?.focus();
+                  centerElementInViewport(document.getElementById('toGodown'));
+                }}
               />
             </div>
             <div>
@@ -608,24 +730,25 @@ const GodownTransfer: React.FC = () => {
                     label: option.GDN_NAME
                   }))}
                 onChange={handleToGodownChange}
-                defaultValue=""
+                defaultValue={formValues.toGodown || ""} // Ensure defaultValue is string
+                ref={toGodownRef}
+                onEnter={() => {
+                  // If items exist, focus the first one, otherwise focus search/add button
+                  if (formValues.items.length > 0 && collapsibleItemRefs.current[0]?.current) {
+                    setExpanded(0);
+                    setTimeout(() => {
+                        collapsibleItemRefs.current[0]?.current?.focusItemName();
+                    }, 50);
+                  } else if (searchItemsRef.current) {
+                    searchItemsRef.current.focus();
+                    centerElementInViewport(document.getElementById('searchItems'));
+                  } else if (addAnotherItemButtonRef.current) {
+                    addAnotherItemButtonRef.current.focus();
+                    centerElementInViewport(addAnotherItemButtonRef.current);
+                  }
+                }}
               />
             </div>
-          </div>
-
-          <div className="mb-6">
-            <Autocomplete
-              id="sm-select"
-              label="S/M"
-              options={filteredSmOptions}
-              onChange={handleSmChange}
-              value={sm?.value || ''}
-              defaultValue={sm?.value || ''}
-              disabled={isSmDisabled}
-            />
-            {isSmDisabled && (
-              <p className="mt-1 text-xs text-gray-500">S/M is locked to your assigned salesman code</p>
-            )}
           </div>
         </div>
 
@@ -641,23 +764,36 @@ const GodownTransfer: React.FC = () => {
               variant="outlined"
               placeholder=""
               autoComplete="off"
+              ref={searchItemsRef}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                  e.preventDefault();
+                  handleSearchItemsEnter();
+                }
+                // Shift+Tab will be handled by browser default or previous field
+              }}
             />
           </div>
         </div>
 
         <div className="mb-6">
-          {sortedFormValues().items.map((item, index) => (
+          {sortedFormValues().items.map((itemData, idx) => (
             <CollapsibleItemSection
-              key={index}
-              index={index}
-              itemData={item}
+              key={idx} // Changed from index to idx to avoid conflict with outer scope
+              ref={collapsibleItemRefs.current[idx]}
+              index={idx} // Changed from index to idx
+              itemData={itemData}
               handleChange={handleAccordionChange}
-              expanded={expanded}
+              expanded={expanded === idx ? idx : false} // Ensure expanded is number | false
               updateItem={updateItem}
               removeItem={removeItem}
               pmplData={getAvailableItems()}
               pmpl={pmplData}
               stockData={stockData}
+              shouldFocusOnExpand={focusNewItemIndex === idx}
+              onQtyEnterNavigate={handleQtyEnterNavigate}
+              onTabToNextItem={handleTabToNextItem}
+              onShiftTabToPreviousItem={handleShiftTabToPreviousItem}
             />
           ))}
         </div>
@@ -667,8 +803,9 @@ const GodownTransfer: React.FC = () => {
             <button
               type="button"
               className="px-4 py-2 text-brand-500 border border-brand-500 rounded-md hover:bg-brand-50 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800"
-              onClick={() => addItem()}
+              onClick={() => addItem()} // addItem now handles focus
               disabled={!stockDataLoaded}
+              ref={addAnotherItemButtonRef}
             >
               {!stockDataLoaded ? 'Loading Stock Data...' : 'Add Another Item'}
             </button>

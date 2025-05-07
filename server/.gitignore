@@ -9,3 +9,5 @@ FOXUSER.FPT
 try.js
 public
 db/CASH.json
+
+server/db

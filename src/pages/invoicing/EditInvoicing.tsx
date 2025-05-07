@@ -1,17 +1,35 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
-import Input from "../../components/form/input/Input";
+import Input, { InputRefHandle } from "../../components/form/input/Input";
+import DatePicker from '../../components/form/input/DatePicker';
 import Autocomplete from "../../components/form/input/Autocomplete";
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
-import CollapsibleItemSection from './CollapsibleItemSection';
+import CollapsibleItemSection, { CollapsibleItemSectionRefHandle } from './CollapsibleItemSection';
 import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type Option, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
 import useAuth from "../../hooks/useAuth";
+
+// Utility function to center an element in the viewport
+const centerElementInViewport = (element: HTMLElement) => {
+  if (!element) return;
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center' 
+  });
+};
+
+// Helper function to format Date object to DD-MM-YYYY string
+const convertDateToDDMMYYYY = (date: Date): string => {
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+};
 
 const EditInvoicingContent: React.FC<{
   invoiceItemsRef: React.RefObject<ItemData[]>;
@@ -37,7 +55,8 @@ const EditInvoicingContent: React.FC<{
     addItem,
     expandedIndex,
     setExpandedIndex,
-    invoiceIdInfo
+    invoiceIdInfo,
+    focusNewItemIndex
   } = useInvoiceContext();
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -47,7 +66,7 @@ const EditInvoicingContent: React.FC<{
   const [showValidationErrors, setShowValidationErrors] = useState<boolean>(false);
   
   // Form state
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(convertDateToDDMMYYYY(new Date()));
   const [series, setSeries] = useState<string>('');
   const [billNo, setBillNo] = useState<string>('1');
   const [cash, setCash] = useState<string>('Y');
@@ -67,6 +86,11 @@ const EditInvoicingContent: React.FC<{
     type: 'info',
   });
 
+  // Refs for focus management (similar to Invoicing.tsx)
+  const searchItemsRef = useRef<InputRefHandle>(null);
+  const addAnotherItemButtonRef = useRef<HTMLButtonElement>(null);
+  const collapsibleItemRefs = useRef<Array<React.RefObject<CollapsibleItemSectionRefHandle>>>([]);
+
   // Update bill number when series changes (unless editing an existing invoice)
   useEffect(() => {
     if (!id && series && invoiceIdInfo?.nextSeries) {
@@ -74,6 +98,13 @@ const EditInvoicingContent: React.FC<{
       setBillNo(nextNumber.toString());
     }
   }, [series, invoiceIdInfo, id]);
+
+  // Initialize/Update collapsibleItemRefs when items change
+  useEffect(() => {
+    collapsibleItemRefs.current = items.map((_, i) => 
+      collapsibleItemRefs.current[i] ?? createRef<CollapsibleItemSectionRefHandle>()
+    );
+  }, [items]); // Depends on the items array from context
 
   // Step 1: Fetch invoice data
   useEffect(() => {
@@ -192,29 +223,44 @@ const EditInvoicingContent: React.FC<{
     // Format and set date
     if (invoiceData.date) {
       try {
-        const dateParts = invoiceData.date.split(/[-/]/);
-        let formattedDate;
-        
-        if (dateParts.length === 3) {
-          if (dateParts[0].length === 4) {
-            formattedDate = invoiceData.date;
-          } else if (dateParts[2].length === 4) {
-            formattedDate = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
-          } else {
-            formattedDate = new Date().toISOString().slice(0, 10);
-          }
+        const dateStr = String(invoiceData.date);
+        let day: string | undefined, parsedMonth: string | undefined, parsedYear: string | undefined;
+
+        // Regex for YYYY-MM-DD or YYYY/MM/DD
+        let parts = dateStr.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+        if (parts) {
+          parsedYear = parts[1];
+          parsedMonth = parts[2];
+          day = parts[3];
         } else {
-          const dateObj = new Date(invoiceData.date);
-          formattedDate = !isNaN(dateObj.getTime()) 
-            ? dateObj.toISOString().slice(0, 10)
-            : new Date().toISOString().slice(0, 10);
+          // Regex for DD-MM-YYYY or DD/MM/YYYY
+          parts = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (parts) {
+            day = parts[1];
+            parsedMonth = parts[2];
+            parsedYear = parts[3];
+          }
         }
-        
-        setDate(formattedDate);
+
+        if (day && parsedMonth && parsedYear) {
+          setDate(`${day.padStart(2, '0')}-${parsedMonth.padStart(2, '0')}-${parsedYear}`);
+        } else {
+          // Fallback: try parsing with Date constructor
+          const parsedDateObj = new Date(dateStr);
+          if (!isNaN(parsedDateObj.getTime())) {
+            setDate(convertDateToDDMMYYYY(parsedDateObj));
+          } else {
+            // If all parsing fails, default to today's date
+            setDate(convertDateToDDMMYYYY(new Date()));
+          }
+        }
       } catch (err) {
-        console.error('Error formatting date:', err);
-        setDate(new Date().toISOString().slice(0, 10));
+        console.error('Error formatting date from API:', err);
+        setDate(convertDateToDDMMYYYY(new Date()));
       }
+    } else {
+      // If invoiceData.date is not present, default to today
+      setDate(convertDateToDDMMYYYY(new Date()));
     }
 
     // Set party when party options are available
@@ -269,24 +315,32 @@ const EditInvoicingContent: React.FC<{
           const pmplItem = pmplData.find(p => p.CODE === item.item);
           
           // Calculate stock
-          let totalStock = 0;
-          if (stockList[item.item]) {
-            Object.values(stockList[item.item]).forEach(stock => {
-              totalStock += parseInt(stock as string, 10);
-            });
+          let totalStockForItem = 0;
+          if (item.item && stockList[item.item]) {
+            const itemStockObject = stockList[item.item];
+            if (typeof itemStockObject === 'object' && itemStockObject !== null) {
+              // Extract values as array first, then iterate through them
+              const stockValues = Object.values(itemStockObject);
+              for (let i = 0; i < stockValues.length; i++) {
+                const stockValue = stockValues[i] as string;
+                const stockNum = parseInt(stockValue, 10) || 0;
+                totalStockForItem += stockNum;
+              }
+            }
           }
 
-          // Calculate stock limit
-          const godownStock = stockList[item.item]?.[item.godown] || '0';
-          const stockValue = parseInt(godownStock, 10);
-          const stockLimit = item.unit === pmplItem?.UNIT_2
-            ? Math.floor(stockValue / parseInt(pmplItem.MULT_F, 10))
-            : stockValue;
+          // Calculate stockLimit based on the specific godown for this item
+          let currentGodownStock = 0;
+          if (item.item && item.godown && stockList[item.item] && stockList[item.item][item.godown]) {
+            currentGodownStock = parseInt(stockList[item.item][item.godown] as string, 10);
+            if (isNaN(currentGodownStock)) currentGodownStock = 0;
+          }
+          const stockLimit = currentGodownStock; // stockLimit is the stock in the selected godown
 
           return {
             ...item,
-            stock: `${godownStock} (Total: ${totalStock})`,
-            stockLimit,
+            stock: totalStockForItem.toString(), // For the "Total Stock" display field
+            stockLimit, // stockLimit for QTY validation against selected godown's stock
             selectedItem: pmplItem || null,
             // Ensure all required fields exist
             unit: item.unit || pmplItem?.UNIT_1 || '',
@@ -325,8 +379,8 @@ const EditInvoicingContent: React.FC<{
   };
 
   // Form handlers
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDate(e.target.value);
+  const handleDateChange = (selectedDate: string) => {
+    setDate(selectedDate);
   };
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -567,6 +621,43 @@ const EditInvoicingContent: React.FC<{
       .sort((a, b) => a.item.localeCompare(b.item));
   };
 
+  // Navigation Handlers (similar to Invoicing.tsx)
+  const handleCdPressNavigateFromItem = () => {
+    if (addAnotherItemButtonRef.current) {
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleTabToNextItem = (currentIndex: number) => {
+    const nextItemIndex = currentIndex + 1;
+    if (nextItemIndex < items.length && collapsibleItemRefs.current[nextItemIndex]?.current) {
+      setExpandedIndex(nextItemIndex);
+      setTimeout(() => {
+        collapsibleItemRefs.current[nextItemIndex]?.current?.focusItemName();
+      }, 50); // Delay to ensure section is expanded before focus
+    } else if (addAnotherItemButtonRef.current) {
+      // Last item remains expanded
+      addAnotherItemButtonRef.current.focus();
+      centerElementInViewport(addAnotherItemButtonRef.current);
+    }
+  };
+
+  const handleShiftTabToPreviousItem = (currentIndex: number) => {
+    const prevItemIndex = currentIndex - 1;
+    if (prevItemIndex >= 0 && collapsibleItemRefs.current[prevItemIndex]?.current) {
+      setExpandedIndex(prevItemIndex);
+      setTimeout(() => {
+        collapsibleItemRefs.current[prevItemIndex]?.current?.focusCdInput();
+      }, 50); // Delay to ensure section is expanded before focus
+    } else if (currentIndex === 0 && searchItemsRef.current) {
+      // First item remains expanded
+      searchItemsRef.current.focus();
+      const searchEl = document.getElementById('searchItems'); // Assuming 'searchItems' is the ID of the input
+      if (searchEl) centerElementInViewport(searchEl);
+    }
+  };
+
   if (dataLoading || loading || !formReady) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -607,13 +698,13 @@ const EditInvoicingContent: React.FC<{
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div>
-              <Input
+              <DatePicker
                 id="date"
                 label="Date"
-                type="date"
                 value={date}
                 onChange={handleDateChange}
-                variant="outlined"
+                dateFormatType="dd-mm-yyyy"
+                required
                 autoComplete="off"
               />
             </div>
@@ -737,6 +828,7 @@ const EditInvoicingContent: React.FC<{
           
           <div className="relative max-w-md mb-4">
             <Input
+              ref={searchItemsRef}
               id="searchItems"
               label="Search Items"
               value={searchItems}
@@ -749,26 +841,31 @@ const EditInvoicingContent: React.FC<{
         </div>
 
         <div className="w-full mb-6 pr-2">
-          {filteredItems().map((item, index) => (
+          {filteredItems().map((itemData, index) => (
             <CollapsibleItemSection
-              key={index}
+              key={itemData.item ? `item-${itemData.item}-${index}` : `item-section-${index}`}
+              ref={collapsibleItemRefs.current[index]}
               index={index}
-              item={item}
+              item={itemData}
               handleAccordionChange={handleAccordionChange}
               expanded={expandedIndex === index}
               updateItem={updateItem}
               removeItem={removeItem}
               showValidationErrors={showValidationErrors}
+              onCdPressNavigate={handleCdPressNavigateFromItem}
+              onTabToNextItem={handleTabToNextItem}
+              onShiftTabToPreviousItem={handleShiftTabToPreviousItem}
+              shouldFocusOnExpand={focusNewItemIndex === index}
             />
           ))}
         </div>
 
         <div className="mb-6">
           <button
+            ref={addAnotherItemButtonRef}
             type="button"
             className="px-5 py-3 text-brand-500 border-2 border-brand-500 font-medium rounded-md hover:bg-brand-50 hover:text-brand-600 dark:text-brand-400 dark:border-brand-400 dark:hover:bg-gray-800 flex items-center gap-2 transition-all duration-200"
             onClick={() => {
-              // Check if there are any incomplete items
               const hasIncompleteItems = items.some(item => item.item && (!item.godown || !item.qty));
               if (hasIncompleteItems) {
                 setShowValidationErrors(true);
@@ -780,7 +877,6 @@ const EditInvoicingContent: React.FC<{
               } else {
                 setShowValidationErrors(false);
               }
-              // Always add a new item regardless of validation state
               addItem();
             }}
           >
@@ -869,6 +965,7 @@ const EditInvoicing: React.FC = () => {
   }]);
   const [expandedIndex, setExpandedIndex] = useState<number>(0);
   const invoiceItemsRef = useRef<ItemData[]>([]);
+  const [focusNewItemIndex, setFocusNewItemIndex] = useState<number | null>(null);
 
   // Item management functions
   const addItem = () => {
@@ -985,6 +1082,9 @@ const EditInvoicing: React.FC = () => {
       calculateTotal={calculateTotal}
       expandedIndex={expandedIndex}
       setExpandedIndex={setExpandedIndex}
+      focusNewItemIndex={focusNewItemIndex}
+      setFocusNewItemIndex={setFocusNewItemIndex}
+      setItems={setItems}
     >
       <EditInvoicingContent invoiceItemsRef={invoiceItemsRef} setAllItems={setItems} />
     </InvoiceProvider>

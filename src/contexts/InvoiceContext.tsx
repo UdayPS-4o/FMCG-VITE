@@ -49,6 +49,9 @@ export interface InvoiceContextType {
     nextInvoiceId: number;
     nextSeries: Record<string, number>;
   };
+  focusNewItemIndex?: number | null;
+  setFocusNewItemIndex?: React.Dispatch<React.SetStateAction<number | null>>;
+  setItems?: React.Dispatch<React.SetStateAction<ItemData[]>>;
 }
 
 export const InvoiceContext = createContext<InvoiceContextType>({
@@ -69,7 +72,10 @@ export const InvoiceContext = createContext<InvoiceContextType>({
   invoiceIdInfo: {
     nextInvoiceId: 1,
     nextSeries: {},
-  }
+  },
+  focusNewItemIndex: null,
+  setFocusNewItemIndex: () => {},
+  setItems: () => {},
 });
 
 export const useInvoiceContext = () => useContext(InvoiceContext); 
