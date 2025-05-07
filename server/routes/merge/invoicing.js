@@ -151,7 +151,7 @@ function mapToBillDtlDbfFormat(parsedUtcDate, invoice, item, sno, productData, c
     CODE: item.item,
     GDN_CODE: item.godown,
     UNIT: item.unit,
-    MULT_F: multFactor,
+    MULT_F: item.unit.toUpperCase() === (productData?.UNIT_2 || '').toUpperCase() ? multFactor : 1,
     TRADE: adjustedTrade,
     R_OPT: "",
     MRP: safeParseFloat(productData?.MRP1 || 0, 2),
@@ -356,10 +356,10 @@ router.post('/sync', async (req, res) => {
         continue;
       }
 
-      // Parse date components from the date field (MM-DD-YYYY)
+      // Parse date components from the date field (DD-MM-YYYY)
       const dateParts = invoice.date.split('-'); 
-      const month = parseInt(dateParts[0], 10) - 1; // JavaScript months are 0-indexed
-      const day = parseInt(dateParts[1], 10);
+      const day = parseInt(dateParts[0], 10);
+      const month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
       const year = parseInt(dateParts[2], 10);
       
       // Get time components from createdAt if available

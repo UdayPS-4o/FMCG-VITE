@@ -31,9 +31,9 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
   // Parse date components from the date field
   let dateFormatted = null;
   if (record.date) {
-    const dateParts = record.date.split('-'); // Assuming MM-DD-YYYY format
-    const month = parseInt(dateParts[0], 10) - 1; // JavaScript months are 0-indexed
-    const day = parseInt(dateParts[1], 10);
+    const dateParts = record.date.split('-'); // Assuming DD-MM-YYYY format
+    const day = parseInt(dateParts[0], 10);
+    const month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
     const year = parseInt(dateParts[2], 10);
     
     // Get time components from createdAt if available
