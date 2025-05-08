@@ -26,10 +26,22 @@ function safeParseFloat(value, decimals = 2) {
 // Helper to pad bill number
 function padBillNumber(series, billNo) {
   // Format as "X-    Y" where X is series and Y is billNo with left padding to total 5 chars
-  const combinedString = `${series}-${billNo}`;
-  const paddedString = combinedString.padEnd(5, ' ');
-  return paddedString;
+  const combinedString = `${series}-${" ".repeat(5-`${billNo}`.length)}${billNo}`;
+  return combinedString;
 }
+
+// --- Helper function to format date and time ---
+function formatUserTime(date) {
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+}
+// --- End Helper function ---
 
 function mapToBillDbfFormat(parsedUtcDate, invoice, customerData, calculatedTotals, userId) {
   console.log("Mapping BILL for:", invoice.billNo, "Customer:", customerData?.C_NAME);
@@ -86,7 +98,7 @@ function mapToBillDbfFormat(parsedUtcDate, invoice, customerData, calculatedTota
     CODE_ORG: invoice.party,
     SM_ORG: invoice.sm,
     USER_ID: userId || 0,
-    USER_TIME: new Date(),
+    USER_TIME: formatUserTime(new Date()),
     ORG_AMT: netAmountRounded,
     EWAYDOC: "",
     BILTYNO: "",
