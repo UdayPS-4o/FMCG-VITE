@@ -370,9 +370,16 @@ router.post('/sync', async (req, res) => {
 
       // Parse date components from the date field (DD-MM-YYYY)
       const dateParts = invoice.date.split('-'); 
-      const day = parseInt(dateParts[0], 10);
-      const month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
-      const year = parseInt(dateParts[2], 10);
+      let day, month, year;
+      if (dateParts[0].length === 4) { // YYYY-MM-DD format
+        year = parseInt(dateParts[0], 10);
+        month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
+        day = parseInt(dateParts[2], 10);
+      } else { // DD-MM-YYYY format
+        day = parseInt(dateParts[0], 10);
+        month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
+        year = parseInt(dateParts[2], 10);
+      }
       
       // Get time components from createdAt if available
       let hours = 0, minutes = 0, seconds = 0;
