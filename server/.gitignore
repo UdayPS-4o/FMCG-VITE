@@ -11,3 +11,5 @@ public
 db/CASH.json
 
 server/db
+
+.env
