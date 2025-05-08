@@ -64,6 +64,7 @@ interface VoucherIdInfo {
   nextSeries: {
     [key: string]: number;
   };
+  hash?: string;
 }
 
 interface CashPaymentEntry {
@@ -503,7 +504,9 @@ const CashPayment: React.FC = () => {
       try {
         const response = await fetch(`${constants.baseURL}/slink/cashPaymentId`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            // Add If-None-Match header if we have a cached hash for voucherIdInfo
+            ...(voucherIdInfo && voucherIdInfo.hash && { 'If-None-Match': voucherIdInfo.hash })
           }
         });
         
@@ -518,9 +521,11 @@ const CashPayment: React.FC = () => {
         }
         
         const data = await response.json();
-        setVoucherIdInfo(data);
+        const etag = response.headers.get('ETag');
         
-        // Set the next voucher number
+        setVoucherIdInfo({ ...data, hash: etag }); // Store data and etag
+        
+        // Set the next voucher number (using nextReceiptNo from API response)
         setVoucherNo(data.nextReceiptNo.toString());
         
         // Apply default series if available and get its next number
@@ -543,7 +548,7 @@ const CashPayment: React.FC = () => {
         } else {
           const updatedValues = {
             ...formValues,
-            voucherNo: data.nextReceiptNo.toString()
+            voucherNo: data.nextReceiptNo.toString() // Fallback to general next number
           };
           
           setFormValues(updatedValues);
@@ -553,7 +558,7 @@ const CashPayment: React.FC = () => {
         }
       } catch (error) {
         console.error('Error fetching next voucher ID info:', error);
-        // Fallback to the old approach
+        // Fallback to the old approach if new one fails
         fetchFallbackVoucherNo();
       }
     };
@@ -561,7 +566,7 @@ const CashPayment: React.FC = () => {
     if (!isEditMode) {
       fetchNextVoucherNo();
     }
-  }, [isEditMode, user]);
+  }, [isEditMode, user]); // Removed formValues from dependencies to avoid re-fetching on every form change
 
   // Update voucher number when series changes (if we have voucher ID info)
   useEffect(() => {
@@ -898,7 +903,7 @@ const CashPayment: React.FC = () => {
                       name="voucherNo"
                       label="Voucher No."
                       type="text"
-                      value={voucherNo || formValues.voucherNo || ''}
+                      value={formValues.voucherNo || ''}
                       onChange={handleInputChange}
                       className="w-full"
                     />

@@ -834,6 +834,177 @@ async function getNextCashReceiptId(req, res) {
   }
 }
 
+// Add these at the top with other global variables for Cash Payments
+let cachedCashPaymentIdData = null;
+let cachedCashPaymentIdHash = null;
+let lastCashPaymentFileModTimes = {};
+
+async function getNextCashPaymentId(req, res) {
+  try {
+    const clientHash = req.headers['if-none-match'] || req.query.hash;
+
+    // Define file paths to check for modifications
+    const cashPaymentFilePaths = [
+      path.join(__dirname, '..', 'db', 'cash-payments.json'), // Assuming cash-payments.json for local data
+      path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CASH.json')
+    ];
+
+    // Get current file modification times
+    const currentFileModTimes = {};
+    for (const file of cashPaymentFilePaths) {
+      try {
+        const stats = await fs.stat(file);
+        currentFileModTimes[file] = stats.mtime.getTime();
+      } catch (error) {
+        console.error(`Error getting modification time for ${file}:`, error);
+        currentFileModTimes[file] = Date.now(); // Force recalculation on error
+      }
+    }
+
+    // Check if files have changed compared to last known times
+    let filesHaveChanged = false;
+    if (Object.keys(lastCashPaymentFileModTimes).length !== cashPaymentFilePaths.length) {
+       filesHaveChanged = true; // If file count differs, assume change
+    } else {
+        for (const file of cashPaymentFilePaths) {
+            if (!lastCashPaymentFileModTimes[file] || lastCashPaymentFileModTimes[file] !== currentFileModTimes[file]) {
+                filesHaveChanged = true;
+                break;
+            }
+        }
+    }
+
+    // If we have cached data and no file has changed
+    if (cachedCashPaymentIdData && cachedCashPaymentIdHash && !filesHaveChanged) {
+      console.log('Cash Payment source files unchanged, using cached cash payment ID data');
+
+      // If client hash matches cached hash, return 304
+      if (clientHash && (clientHash === cachedCashPaymentIdHash || clientHash === `"${cachedCashPaymentIdHash}"`)) {
+        console.log('Cash Payment ID data cache hit with 304');
+        return res.status(304).set({
+          'ETag': `"${cachedCashPaymentIdHash}"`,
+          'Cache-Control': 'private, max-age=0',
+          'Access-Control-Expose-Headers': 'ETag'
+        }).send('Not Modified');
+      }
+
+      // Otherwise return cached data
+      console.log('Cash Payment ID data cache hit with new data');
+      res.set({
+        'ETag': `"${cachedCashPaymentIdHash}"`,
+        'Cache-Control': 'private, max-age=0',
+        'Access-Control-Expose-Headers': 'ETag'
+      });
+      return res.json(cachedCashPaymentIdData);
+    }
+
+    // If we get here, files have changed or cache doesn't exist
+    console.log('Files changed or no cache, recalculating cash payment ID data');
+
+    // 1. Get data from cash-payments.json (local database)
+    const cashPaymentsPath = path.join(__dirname, '..', 'db', 'cash-payments.json');
+    const cashPaymentsData = await fs.readFile(cashPaymentsPath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        if (error.code !== 'ENOENT') throw error; // Ignore file not found errors
+        return [];
+      },
+    );
+
+    // 2. Read CASH.json for transactions
+    const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CASH.json');
+    const cashDbfData = await fs.readFile(cashDbfPath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        console.error('Error reading CASH.json:', error);
+        return [];
+      }
+    );
+
+    // Filter CASH.json entries for cash payments ("CP")
+    const cpEntries = cashDbfData.filter(entry =>
+      entry.VR && entry.VR.substring(0, 2) === "CP" // Ensure VR exists
+      && !entry._deleted);
+
+    // Calculate the next voucher number for each series considering BOTH sources
+    const seriesMap = {};
+
+    // Process payments from CASH.json (DBF)
+    cpEntries.forEach(entry => {
+      const series = entry.SERIES?.toUpperCase(); // Ensure consistent casing
+      const voucherNumber = Number(entry.R_NO); // Assuming R_NO holds the voucher number
+      if (series !== undefined && !isNaN(voucherNumber)) {
+        if (!seriesMap[series] || voucherNumber > seriesMap[series]) {
+          seriesMap[series] = voucherNumber;
+        }
+      }
+    });
+
+    // Process payments from cash-payments.json (local database)
+    cashPaymentsData.forEach(entry => {
+      const series = entry.series?.toUpperCase(); // Ensure consistent casing
+      // Assuming voucherNo in local DB corresponds to R_NO in DBF
+      const voucherNumber = Number(entry.voucherNo);
+      if (series !== undefined && !isNaN(voucherNumber)) {
+        if (!seriesMap[series] || voucherNumber > seriesMap[series]) {
+          seriesMap[series] = voucherNumber;
+        }
+      }
+    });
+
+    // Calculate next local voucher number (ignoring series, for fallback or general next ID)
+    const maxLocalId = cashPaymentsData.length > 0
+      ? Math.max(...cashPaymentsData.map(entry => Number(entry.voucherNo) || 0))
+      : 0;
+    const nextVoucherNo = maxLocalId + 1; // This will be the general nextReceiptNo equivalent
+
+    // Increment each max voucher number by 1 to get the next voucher number for that series
+    const nextSeries = {};
+    for (const series in seriesMap) {
+      nextSeries[series] = seriesMap[series] + 1;
+    }
+
+    // Prepare the response data
+    const responseData = {
+      nextReceiptNo: nextVoucherNo, // Keep consistent naming with cash-receipts for frontend
+      nextSeries
+    };
+
+    // Generate a hash for the cash payment ID data
+    const currentHash = require('crypto')
+      .createHash('md5')
+      .update(JSON.stringify(responseData))
+      .digest('hex');
+
+    // Update cache and file mod times
+    cachedCashPaymentIdData = responseData;
+    cachedCashPaymentIdHash = currentHash;
+    lastCashPaymentFileModTimes = { ...currentFileModTimes }; // Update last known mod times
+
+    // Set ETag header with proper quotes
+    const etagValue = `"${currentHash}"`;
+    res.set({
+      'ETag': etagValue,
+      'Cache-Control': 'private, max-age=0',
+      'Access-Control-Expose-Headers': 'ETag'
+    });
+
+    console.log(`Cash Payment ID API: Generated hash: ${currentHash}, client hash: ${clientHash || 'none'}`);
+
+    // Compare again after calculation in case hashes match
+    if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
+      console.log('Cash Payment ID data matches after recalculation, sending 304');
+      return res.status(304).send('Not Modified');
+    }
+
+    console.log('Sending full cash payment ID data');
+    res.json(responseData);
+  } catch (error) {
+    console.error('Failed to process cash payment data:', error);
+    res.status(500).send('Server error');
+  }
+}
+
 async function printGodown(req, res) {
   try {
     const { retreat } = req.query;
@@ -1207,6 +1378,7 @@ app.get('/printGodown', verifyToken, printGodown);
 app.get('/godownId', getNextGodownId);
 app.get('/invoiceId', getNextInvoiceId);
 app.get('/cashReceiptId', getNextCashReceiptId);
+app.get('/cashPaymentId', getNextCashPaymentId);
 
 app.get('/printPage', verifyToken, async (req, res) => {
   console.log('printPage');
