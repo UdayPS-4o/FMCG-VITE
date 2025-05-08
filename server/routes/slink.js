@@ -751,7 +751,10 @@ async function getNextCashReceiptId(req, res) {
     );
     
     // Filter CASH.json entries for bank receipts
-    const brEntries = cashDbfData.filter(entry => entry.BOOK === "BR" && !entry._deleted);
+    const brEntries = cashDbfData.filter(entry => 
+      // first 2 characters are CR
+      entry.VR.substring(0, 2) === "CR"
+      && !entry._deleted);
     
     // Calculate the next receipt number for each series considering BOTH sources
     const seriesMap = {};
