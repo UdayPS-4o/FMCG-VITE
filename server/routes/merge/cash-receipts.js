@@ -5,6 +5,19 @@ const fs = require('fs').promises;
 const { DbfORM, DataTypes } = require('../../dbf-orm'); // Assuming dbf-orm is correctly set up
 const { format } = require('date-fns'); // For date formatting
 
+// --- Helper function to format date and time ---
+function formatUserTime(date) {
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+}
+// --- End Helper function ---
+
 // Paths
 const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CASH.dbf');
 const cmplDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CMPL.dbf');
@@ -126,7 +139,7 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
     CESS_TOTAL: 0.00,
     DUMMY: "",
     USER_ID: userId || 0, // User ID from request
-    USER_TIME: new Date(), // Current time
+    USER_TIME: formatUserTime(new Date()), // Current time
     USER_ID2: 0,
     USER_TIME2: null,
     SPID: "",
