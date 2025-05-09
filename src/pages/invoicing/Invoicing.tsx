@@ -992,6 +992,7 @@ const InvoicingContent: React.FC = () => {
               ref={collapsibleItemRefs.current[index]}
               index={index}
               item={itemData}
+              partyCode={party?.value || null}
               handleAccordionChange={handleAccordionChange}
               expanded={expandedIndex === index}
               updateItem={updateItem}

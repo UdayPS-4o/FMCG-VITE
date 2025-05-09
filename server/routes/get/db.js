@@ -264,4 +264,42 @@ app.get('/dbf', async (req, res) => {
   }
 });
 
+app.get('/tooltip/:CODE/:C_CODE', verifyToken, async (req, res) => {
+  const { CODE, C_CODE } = req.params;
+  const filePath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
+
+  try {
+    const fileData = await fs.readFile(filePath, 'utf8');
+    const jsonData = JSON.parse(fileData);
+
+    if (!Array.isArray(jsonData)) {
+      console.error('BILLDTL.json is not an array');
+      return res.status(500).json({ error: 'Invalid data format' });
+    }
+
+    const filteredData = jsonData.filter(entry => entry.CODE === CODE && entry.C_CODE === C_CODE);
+
+    if (filteredData.length === 0) {
+      return res.status(404).json({ message: 'No matching data found' });
+    }
+
+    // Sort by date in descending order to get the latest entry
+    const sortedData = filteredData.sort((a, b) => {
+      const dateA = new Date(a.DATE);
+      const dateB = new Date(b.DATE);
+      return dateB - dateA; // For descending order
+    });
+
+    res.json(sortedData[0]); // Return the latest entry
+
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.error(`File not found: ${filePath}`, error);
+      return res.status(404).json({ error: 'Tooltip data file not found' });
+    }
+    console.error(`Error processing tooltip request for CODE: ${CODE}, C_CODE: ${C_CODE}:`, error);
+    res.status(500).json({ error: 'Server error while fetching tooltip data' });
+  }
+});
+
 module.exports = app;

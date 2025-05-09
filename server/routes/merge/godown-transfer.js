@@ -66,19 +66,20 @@ function mapToTransferDbfFormat(transfer, item, sno, productData, isNegative = f
     }
     
     // Get time components from createdAt if available
-    let hours = 0, minutes = 0, seconds = 0;
+    let hours = 0, minutes = 0, seconds = 0; // Default to midnight
     if (transfer.createdAt) {
       const createdDate = new Date(transfer.createdAt);
+      // Time components are available if needed, but for DATE field, use midnight UTC.
       hours = createdDate.getUTCHours();
       minutes = createdDate.getUTCMinutes();
       seconds = createdDate.getUTCSeconds();
     }
     
     // Create a UTC date object with the specified date and time
-    dateFormatted = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
-    console.log(`Transfer ${transfer.id} date: ${transfer.date}, createdAt: ${transfer.createdAt || 'N/A'}, result: ${dateFormatted.toISOString()}`);
+    dateFormatted = new Date(Date.UTC(year, month, day, 0, 0, 0));
+    console.log(`Transfer ${transfer.id} date: ${transfer.date} (using midnight UTC for DBF DATE field), createdAt: ${transfer.createdAt || 'N/A'}, result: ${dateFormatted.toISOString()}`);
   } else {
-    dateFormatted = new Date(); // Fallback to current date
+    dateFormatted = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate(), 0, 0, 0)); // Fallback to current date at midnight UTC
   }
   
   return {

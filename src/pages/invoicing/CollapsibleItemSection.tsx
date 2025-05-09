@@ -3,6 +3,7 @@ import Autocomplete, { AutocompleteRefHandle } from '../../components/form/input
 import Input, { InputRefHandle } from '../../components/form/input/Input';
 import { useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
 import Toast from '../../components/ui/toast/Toast';
+import constants from '../../constants'; // Added import for constants
 
 // Replace scrollIntoViewIfNeeded with centerElementInViewport
 const centerElementInViewport = (element: HTMLElement) => {
@@ -20,6 +21,7 @@ interface CollapsibleItemSectionProps {
   index: number;
   item: ItemData;
   expanded: boolean;
+  partyCode: string | null; // Added partyCode prop
   handleAccordionChange: (panel: number) => (event: React.SyntheticEvent, isExpanded: boolean) => void;
   updateItem: (index: number, data: ItemData) => void;
   removeItem: (index: number) => void;
@@ -44,6 +46,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   index,
   item,
   expanded,
+  partyCode, // Destructure partyCode from props
   handleAccordionChange,
   updateItem,
   removeItem,
@@ -66,6 +69,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
     message: '',
     type: 'info',
   });
+  const [tooltipData, setTooltipData] = useState<any>(null); // State for tooltip data
+  const [activeTooltipField, setActiveTooltipField] = useState<string | null>(null); // State for active tooltip
   
   // State to track if initial focus (on expand) has been handled
   const [initialFocusHandled, setInitialFocusHandled] = useState<boolean>(false);
@@ -298,7 +303,9 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
       return;
     }
 
-    const { isDuplicate, existingItem, itemIndex: duplicateItemIndex } = checkForDuplicateItem(selectedPmplItem.CODE);
+    const productCode = selectedPmplItem.CODE;
+
+    const { isDuplicate, existingItem, itemIndex: duplicateItemIndex } = checkForDuplicateItem(productCode);
     if (isDuplicate && existingItem && duplicateItemIndex !== undefined) {
       setToast({
         visible: true,
@@ -360,6 +367,43 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
 
     updateItem(index, updatedItemData);
     setInitialInteraction(false);
+
+    // Fetch tooltip data if productCode and partyCode are available
+    if (productCode && partyCode) {
+      const url = `${constants.baseURL}/tooltip/${productCode}/${partyCode}`;
+      const token = localStorage.getItem('token');
+
+      console.log(`Fetching tooltip data from: ${url} with partyCode: ${partyCode} and productCode: ${productCode}`);
+
+      fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => {
+        if (!response.ok) {
+          // Log more details on error
+          response.json().then(errData => {
+            console.error('Tooltip API response error data:', errData);
+          }).catch(() => {
+            // If response body is not JSON or empty
+            console.error('Tooltip API response was not OK and body could not be parsed as JSON or was empty. Status:', response.status);
+          });
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        console.log('Tooltip data received:', data);
+        setTooltipData(data); // Store fetched data
+      })
+      .catch(error => {
+        console.error('Error fetching tooltip data:', error);
+        setTooltipData(null); // Clear data on error
+      });
+    }
 
     // If no godown selected yet, or if godown auto-selection fails, focus godown. Otherwise, qty will be focused.
     if (!item.godown) {
@@ -484,6 +528,182 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
       })
       .filter(gdn => gdn.stockInGodown > 0); // Only show godowns where current item has stock > 0
   }, [item.item, stockList, godownOptions]);
+
+  const formatDateForTooltip = (isoDateString: string | undefined): string => {
+    if (!isoDateString) return 'N/A';
+    try {
+      const date = new Date(isoDateString);
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = date.toLocaleString('default', { month: 'short' }).toUpperCase();
+      return `${day} ${month}`;
+    } catch (e) {
+      console.error("Error formatting date for tooltip:", e);
+      return 'N/A';
+    }
+  };
+
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipPositionStyle, setTooltipPositionStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
+
+  // Renamed from renderTooltip to renderTooltipContent
+  // This function now ONLY returns the inner content of the tooltip
+  const renderTooltipContent = (fieldType: 'schRs' | 'schP' | 'rate') => {
+    if (!tooltipData) return null;
+
+    if (fieldType === 'schRs') {
+      return (
+        <>
+          <div>Last Scheme (Rs): {tooltipData.SCHEME !== undefined ? tooltipData.SCHEME : 'N/A'}</div>
+          <div>Last Qty: {tooltipData.QTY !== undefined ? tooltipData.QTY : 'N/A'}</div>
+          <div>Last Rate: {tooltipData.RATE !== undefined ? tooltipData.RATE : 'N/A'}</div>
+        </>
+      );
+    } else if (fieldType === 'schP') {
+      return (
+        <>
+          <div>Last Discount (%): {tooltipData.DISCOUNT !== undefined ? tooltipData.DISCOUNT : 'N/A'}</div>
+          <div>Last Qty: {tooltipData.QTY !== undefined ? tooltipData.QTY : 'N/A'}</div>
+          <div>Last Rate: {tooltipData.RATE !== undefined ? tooltipData.RATE : 'N/A'}</div>
+        </>
+      );
+    } else if (fieldType === 'rate') {
+      const billNo = tooltipData.BILL_BB || 'N/A';
+      const date = formatDateForTooltip(tooltipData.DATE);
+      const rateVal = tooltipData.RATE !== undefined ? tooltipData.RATE : 'N/A'; // Renamed to avoid conflict
+      const qty = tooltipData.QTY !== undefined ? tooltipData.QTY : 'N/A';
+      const schRs = tooltipData.SCHEME !== undefined ? tooltipData.SCHEME : '0';
+      const schP = tooltipData.DISCOUNT !== undefined ? tooltipData.DISCOUNT : '0';
+      const cdP = tooltipData.CASH_DIS !== undefined ? tooltipData.CASH_DIS : '0';
+
+      return (
+        <div 
+          onClick={() => {
+            console.log('[Tooltip Click Debug] Tooltip div clicked.');
+            console.log('[Tooltip Click Debug] Current tooltipData:', tooltipData);
+            if (tooltipData) {
+              console.log('[Tooltip Click Debug] tooltipData is valid. Constructing new item data.');
+              
+              const updatedItemFields: ItemData = {
+                ...item,
+                rate: (tooltipData.RATE !== undefined ? tooltipData.RATE : '0').toString(),
+                schRs: (tooltipData.SCHEME !== undefined ? tooltipData.SCHEME : '0').toString(),
+                sch: (tooltipData.DISCOUNT !== undefined ? tooltipData.DISCOUNT : '0').toString(),
+                cd: (tooltipData.CASH_DIS !== undefined ? tooltipData.CASH_DIS : '0').toString(),
+              };
+
+              console.log('[Tooltip Click Debug] New item data before calculation:', updatedItemFields);
+              const finalData = calculateAmounts(updatedItemFields);
+              console.log('[Tooltip Click Debug] Data after calculation:', finalData);
+              updateItem(index, finalData);
+              console.log('[Tooltip Click Debug] Item updated via updateItem.');
+              setInitialInteraction(false);
+              setActiveTooltipField(null);
+            } else {
+              console.log('[Tooltip Click Debug] tooltipData is null or undefined. Not updating fields.');
+            }
+          }}
+          className="cursor-pointer"
+        >
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr>
+                <th className="border border-gray-600 px-2 py-1 bg-black">Bill No</th>
+                <th className="border border-gray-600 px-2 py-1 bg-black">Date</th>
+                <th className="border border-gray-600 px-2 py-1 bg-black">Rate</th>
+                <th className="border border-gray-600 px-2 py-1 bg-black">Qty</th>
+                <th className="border border-gray-600 px-2 py-1 bg-black">Sch(Rs)</th>
+                <th className="border border-gray-600 px-2 py-1 bg-black">Sch(%)</th>
+                <th className="border border-gray-600 px-2 py-1 bg-black">CD(%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border border-gray-600 px-2 py-1 bg-black">{billNo}</td>
+                <td className="border border-gray-600 px-2 py-1 bg-black">{date}</td>
+                <td className="border border-gray-600 px-2 py-1 bg-black">{rateVal}</td>
+                <td className="border border-gray-600 px-2 py-1 bg-black">{qty}</td>
+                <td className="border border-gray-600 px-2 py-1 bg-black">{schRs}</td>
+                <td className="border border-gray-600 px-2 py-1 bg-black">{schP}</td>
+                <td className="border border-gray-600 px-2 py-1 bg-black">{cdP}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    return null; // Fallback if fieldType is not matched
+  };
+
+  useEffect(() => {
+    if (activeTooltipField && tooltipRef.current) {
+      let fieldType: 'schRs' | 'schP' | 'rate' | null = null;
+      let triggerInputId: string | null = null;
+
+      if (activeTooltipField.startsWith('schRs-')) {
+        fieldType = 'schRs';
+        triggerInputId = activeTooltipField;
+      } else if (activeTooltipField.startsWith('schP-')) {
+        fieldType = 'schP';
+        triggerInputId = activeTooltipField.replace('schP-', 'sch-'); // Map state key to actual DOM ID
+      } else if (activeTooltipField.startsWith('rate-')) {
+        fieldType = 'rate';
+        triggerInputId = activeTooltipField;
+      }
+
+      const triggerElement = triggerInputId ? document.getElementById(triggerInputId) : null;
+
+      if (triggerElement) {
+        const tooltipEl = tooltipRef.current;
+        // Temporarily make it visible to measure, then hide until position is set
+        tooltipEl.style.visibility = 'hidden';
+        tooltipEl.style.display = 'block'; // Ensure it's rendered for measurement
+        const tooltipRect = tooltipEl.getBoundingClientRect();
+        tooltipEl.style.display = ''; // Reset display
+
+        const triggerRect = triggerElement.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight; // For potential vertical adjustments later
+
+        // Position tooltip above the trigger
+        let top = triggerRect.top - tooltipRect.height - 8; // 8px spacing
+        let left = triggerRect.left + (triggerRect.width / 2) - (tooltipRect.width / 2);
+
+        // Edge detection and adjustment
+        const PADDING = 8; // 8px padding from viewport edges
+
+        // Adjust left position if overflowing
+        if (left < PADDING) {
+          left = PADDING;
+        } else if (left + tooltipRect.width > viewportWidth - PADDING) {
+          left = viewportWidth - tooltipRect.width - PADDING;
+        }
+
+        // Adjust top position if overflowing (e.g., trigger is at the very top of the screen)
+        if (top < PADDING) {
+          top = triggerRect.bottom + 8; // Position below trigger if no space above
+          // Here you might also want to adjust the arrow to point upwards
+        }
+        
+        // Ensure it doesn't go off bottom if positioned below
+        if (top + tooltipRect.height > viewportHeight - PADDING) {
+            top = viewportHeight - tooltipRect.height - PADDING;
+        }
+
+
+        setTooltipPositionStyle({
+          position: 'fixed', // Use fixed positioning to break out of parent containers
+          top: `${top}px`,
+          left: `${left}px`,
+          visibility: 'visible',
+        });
+      } else {
+        setTooltipPositionStyle({ visibility: 'hidden' });
+      }
+    } else {
+      setTooltipPositionStyle({ visibility: 'hidden' });
+    }
+  // Add tooltipData to dependencies, as its content change can affect tooltipRect.width
+  }, [activeTooltipField, tooltipData]);
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm mb-3 transition-all duration-300 ${showRedOutline ? 'ring-2 ring-red-500' : 'ring-1 ring-gray-200 dark:ring-gray-700'}`}>
@@ -684,7 +904,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 variant="outlined"
               />
             </div>
-            <div>
+            <div className="relative">
               <Input
                 id={`rate-${index}`}
                 label="Rate"
@@ -692,6 +912,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 onChange={(e) => handleFieldChange('rate', e.target.value)}
                 variant="outlined"
                 ref={rateInputRef}
+                onFocus={() => setActiveTooltipField(`rate-${index}`)}
+                onBlur={() => setTimeout(() => setActiveTooltipField(null), 150)}
               />
             </div>
             <div>
@@ -723,7 +945,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            <div>
+            <div className="relative">
               <Input
                 id={`schRs-${index}`}
                 label="SCH (RS)"
@@ -733,6 +955,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 type="text" inputMode="decimal"
                 variant="outlined"
                 ref={schRsInputRef}
+                onFocus={() => setActiveTooltipField(`schRs-${index}`)}
+                onBlur={() => setTimeout(() => setActiveTooltipField(null), 150)}
                 onKeyDown={(e) => { 
                   if (e.key === 'Enter') { 
                     e.preventDefault(); 
@@ -745,7 +969,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 }}
               />
             </div>
-            <div>
+            <div className="relative">
               <Input
                 id={`sch-${index}`}
                 label="Sch%"
@@ -755,6 +979,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 type="text" inputMode="decimal"
                 variant="outlined"
                 ref={schInputRef}
+                onFocus={() => setActiveTooltipField(`schP-${index}`)}
+                onBlur={() => setTimeout(() => setActiveTooltipField(null), 150)}
                 onKeyDown={(e) => { 
                   if (e.key === 'Enter') { 
                     e.preventDefault(); 
@@ -834,6 +1060,24 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
               />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Tooltip main container - moved here for dynamic positioning via JS */}
+      {activeTooltipField && (
+        <div
+          ref={tooltipRef}
+          style={tooltipPositionStyle}
+          className="w-max max-w-xs bg-black opacity-100 text-white text-xs rounded py-1 px-2 z-[200] shadow-lg break-words whitespace-normal"
+        >
+          {renderTooltipContent(
+            activeTooltipField.startsWith('schRs-') ? 'schRs' :
+            activeTooltipField.startsWith('schP-') ? 'schP' :
+            activeTooltipField.startsWith('rate-') ? 'rate' : 'rate' // Fallback, should be determined correctly
+          )}
+          <div 
+            className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-black opacity-100 z-[200] rotate-45"
+          ></div>
         </div>
       )}
     </div>

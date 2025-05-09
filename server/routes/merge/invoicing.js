@@ -392,9 +392,9 @@ router.post('/sync', async (req, res) => {
       
       // Create a UTC date object with the exact date and time components
       // This ensures the date remains as specified regardless of server timezone
-      const combinedDate = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+      const combinedDate = new Date(Date.UTC(year, month, day, 0, 0, 0)); // Use midnight UTC for the date part
       
-      console.log(`Original date string: ${invoice.date}, Created at: ${invoice.createdAt || 'N/A'}, Combined date: ${combinedDate.toISOString()}`);
+      console.log(`Original date string: ${invoice.date}, Created at: ${invoice.createdAt || 'N/A'} (using midnight UTC for DBF DATE field), Combined date: ${combinedDate.toISOString()}`);
 
       // Look up customer data
       const customerData = cmplMap[invoice.party] || null;
