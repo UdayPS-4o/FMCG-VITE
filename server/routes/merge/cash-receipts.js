@@ -57,17 +57,20 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
     }
     
     // Get time components from createdAt if available
-    let hours = 0, minutes = 0, seconds = 0;
+    let hours = 0, minutes = 0, seconds = 0; // Default to midnight
     if (record.createdAt) {
       const createdDate = new Date(record.createdAt);
-      hours = createdDate.getUTCHours();
+      // These time components are available if needed elsewhere, 
+      // but for the main DATE field, we'll use midnight UTC to avoid timezone shifts.
+      hours = createdDate.getUTCHours(); 
       minutes = createdDate.getUTCMinutes();
       seconds = createdDate.getUTCSeconds();
     }
     
-    // Create a UTC date object with the specified date and time
-    dateFormatted = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
-    console.log(`Parsed date: ${record.date}, createdAt: ${record.createdAt || 'N/A'}, result: ${dateFormatted.toISOString()}`);
+    // Create a UTC date object, ensuring it's midnight UTC for the given year, month, day.
+    // This helps prevent date shifts due to timezones when storing in a date-only DBF field.
+    dateFormatted = new Date(Date.UTC(year, month, day, 0, 0, 0)); 
+    console.log(`Parsed date: ${record.date} (using midnight UTC for DBF DATE field), createdAt: ${record.createdAt || 'N/A'}, result: ${dateFormatted.toISOString()}`);
   }
 
   const amount = parseFloat(record.amount) || 0;
