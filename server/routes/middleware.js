@@ -7,6 +7,11 @@ const {redirect} = require("./utilities");
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
 
+const PUBLIC_API_PATHS = [
+  '/api/generate-pdf/', 
+  '/api/internal/invoice-data/'
+];
+
 // Extract JWT token from Authorization header
 const extractToken = (req) => {
   if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
@@ -18,12 +23,25 @@ const extractToken = (req) => {
 // Make the middleware function async
 const middleware = async (req, res, next) => {
   console.log(`[Middleware] Request Path: ${req.path}`); // Log entry
+
+  // Check if the path starts with any of the public API paths
+  const isPublicApiRequest = PUBLIC_API_PATHS.some(publicPath => req.path.startsWith(publicPath));
+
+  if (isPublicApiRequest) {
+    console.log(`[Middleware] Public API path accessed: ${req.path}. Skipping auth.`);
+    return next(); // Skip authentication for these specific API paths
+  }
+
   const isApiRequest = req.path.startsWith('/api/') || 
                        req.xhr || 
                        req.headers.accept && req.headers.accept.includes('application/json');
-
+  const isPdfRequest = req.path.startsWith('/api/generate-pdf/') || 
+                       req.headers.accept && req.headers.accept.includes('application/pdf');
   const token = extractToken(req);
   if (!token) {
+    if (isPdfRequest){
+      return next();  
+    }
     if (isApiRequest) {
       return res.status(401).json({ 
         error: 'Unauthorized', 

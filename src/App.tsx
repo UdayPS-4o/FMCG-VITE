@@ -33,6 +33,7 @@ import CashPaymentApproved from "./pages/approved/CashPaymentApproved";
 import PrintCashReceipt from "./pages/print/PrintCashReceipt";
 import AddUser from "./pages/add-user/AddUser";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import PdfInvoicePrintPage from './pages/print/PdfInvoicePrintPage';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -240,6 +241,9 @@ const AppRoutes = () => (
     <Route path="/printGodown" element={<PrintGodown />} />
     <Route path="/print" element={<PrintCashReceipt />} />
     <Route path="/printInvoice" element={<PrintInvoicing />} />
+
+    {/* Internal route for PDF generation - NO LOGIN REQUIRED */}
+    <Route path="/internal/print/invoice/:id" element={<PdfInvoicePrintPage />} />
 
     {/* Fallback Route */}
     <Route path="*" element={<NotFound />} />

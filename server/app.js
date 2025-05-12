@@ -48,14 +48,22 @@ app.use(
 
 
 
-
-
 app.use(morgan('dev'));
 app.use(cookieParser());
 
 const spawn = require('child_process').spawn;// app.use(express.static(80/public'));
 app.use(bodyParser.json()); // for parsing application/json
 app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
+
+// Serve PDFs statically from the db/pdfs directory
+app.use('/db/pdfs', express.static(path.join(__dirname, 'db', 'pdfs')));
+
+const pdfRoutes = require('./routes/get/pdf');
+app.use("/api/generate-pdf", pdfRoutes);
+
+// Add the internal data route BEFORE the main middleware
+const internalInvoiceDataRoutes = require('./routes/get/internalInvoiceData');
+app.use("/api/internal/invoice-data", internalInvoiceDataRoutes);
 
 // use external routes from ./routes/login.js
 const loginRoutes = require('./routes/login');

@@ -790,7 +790,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                   })
                   .map((item) => ({
                     value: item.CODE,
-                    label: `${item.CODE} | ${item.PRODUCT || 'No Product Name'}`
+                    label: `${item.CODE} | ${item.PRODUCT || 'No Product Name'} [${item.MRP1 !== null && item.MRP1 !== undefined ? item.MRP1 : 'N/A'}]`
                   }))}
                 onChange={(value) => {
                   const selectedPmplItem = pmplData.find(p => p.CODE === value);
