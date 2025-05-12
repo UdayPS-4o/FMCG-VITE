@@ -560,8 +560,7 @@ const InvoicingContent: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // For non-admin users with an assigned smCode, the SM field is locked to their code
-      // This is handled in the UI by making the field disabled and auto-selecting their SM
+
       const apiData = {
         date,
         series,

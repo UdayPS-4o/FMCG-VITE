@@ -84,8 +84,41 @@ const getInvoiceDataById = async (invoiceId) => {
         
         const formatDate = (dateString) => {
             if (!dateString) return '';
-            const date = new Date(dateString);
-            return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+            const parts = dateString.split(/[-/]/); // Split by '-' or '/'
+
+            let date;
+            if (parts.length === 3) {
+                const part1 = parts[0];
+                const part2 = parts[1];
+                const part3 = parts[2];
+
+                if (part1.length === 4 && /^\d{4}$/.test(part1) && part3.length <= 2) { // YYYY-MM-DD or YYYY/MM/DD
+                    // Assume YYYY-MM-DD format (adjust month index for Date constructor)
+                     date = new Date(Date.UTC(parseInt(part1), parseInt(part2) - 1, parseInt(part3)));
+                     console.log(`[InternalInvoiceData] Parsed as YYYY-MM-DD: ${dateString}`);
+                } else if (part3.length === 4 && /^\d{4}$/.test(part3) && part1.length <= 2) { // DD-MM-YYYY or DD/MM/YYYY
+                    // Assume DD-MM-YYYY format (adjust month index for Date constructor)
+                     date = new Date(Date.UTC(parseInt(part3), parseInt(part2) - 1, parseInt(part1)));
+                     console.log(`[InternalInvoiceData] Parsed as DD-MM-YYYY: ${dateString}`);
+                } else {
+                    // Fallback: Try direct parsing (might handle MM/DD/YYYY etc. depending on locale/JS engine)
+                    console.warn(`[InternalInvoiceData] Ambiguous or unexpected date format: ${dateString}. Attempting direct parse.`);
+                    date = new Date(dateString);
+                }
+            } else {
+                 // Fallback: Try direct parsing for non-3-part strings
+                 console.warn(`[InternalInvoiceData] Unexpected date format (not 3 parts): ${dateString}. Attempting direct parse.`);
+                 date = new Date(dateString);
+            }
+
+            // Check for invalid date
+            if (isNaN(date.getTime())) {
+                console.error(`[InternalInvoiceData] Failed to parse date: ${dateString}`);
+                return ''; // Return empty string for invalid dates
+            }
+
+            // Return in consistent DD-MM-YYYY format using UTC methods to avoid timezone shifts
+            return `${String(date.getUTCDate()).padStart(2, '0')}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${date.getUTCFullYear()}`;
         };
         
         const getCurrentDateTime = () => {
@@ -97,16 +130,41 @@ const getInvoiceDataById = async (invoiceId) => {
 
         const calculateDueDate = (dateString, dueDays) => {
             if (!dueDays || !dateString) return '';
-            const parts = dateString.split('-');
+
+            const parts = dateString.split(/[-/]/);
             let date;
-            if (parts.length === 3 && parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) { // DD-MM-YYYY
-                 date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-            } else { // Assume YYYY-MM-DD or other parsable
-                 date = new Date(dateString);
+
+            if (parts.length === 3) {
+                 const part1 = parts[0];
+                 const part2 = parts[1];
+                 const part3 = parts[2];
+
+                if (part1.length === 4 && /^\d{4}$/.test(part1) && part3.length <= 2) { // YYYY-MM-DD
+                     date = new Date(Date.UTC(parseInt(part1), parseInt(part2) - 1, parseInt(part3)));
+                     console.log(`[InternalInvoiceData - DueDate] Parsed as YYYY-MM-DD: ${dateString}`);
+                } else if (part3.length === 4 && /^\d{4}$/.test(part3) && part1.length <= 2) { // DD-MM-YYYY
+                     date = new Date(Date.UTC(parseInt(part3), parseInt(part2) - 1, parseInt(part1)));
+                     console.log(`[InternalInvoiceData - DueDate] Parsed as DD-MM-YYYY: ${dateString}`);
+                } else {
+                     console.warn(`[InternalInvoiceData - DueDate] Ambiguous or unexpected date format: ${dateString}. Attempting direct parse.`);
+                     date = new Date(dateString); // Fallback
+                }
+            } else {
+                 console.warn(`[InternalInvoiceData - DueDate] Unexpected date format (not 3 parts): ${dateString}. Attempting direct parse.`);
+                 date = new Date(dateString); // Fallback
             }
-            if (isNaN(date.getTime())) return '';
-            date.setDate(date.getDate() + parseInt(dueDays));
-            return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+
+
+            if (isNaN(date.getTime())) {
+                 console.error(`[InternalInvoiceData - DueDate] Failed to parse date: ${dateString}`);
+                 return '';
+            }
+
+            // Add due days (using UTC methods)
+            date.setUTCDate(date.getUTCDate() + parseInt(dueDays));
+
+            // Format the due date as DD-MM-YYYY
+            return `${String(date.getUTCDate()).padStart(2, '0')}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${date.getUTCFullYear()}`;
         };
         
         const countBoxesAndLooseItems = (items) => {
@@ -132,7 +190,7 @@ const getInvoiceDataById = async (invoiceId) => {
 
         const originalDate = invoice.date;
         const formattedDate = formatDate(originalDate);
-        const currentDateTime = getCurrentDateTime();
+        const currentDateTime = formatDate(originalDate);
 
         const ModifiedInv = {
             company: {
