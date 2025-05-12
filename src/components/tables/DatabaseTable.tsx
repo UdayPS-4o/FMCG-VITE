@@ -84,7 +84,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [orderBy, setOrderBy] = useState<string>('');
   const [page, setPage] = useState<number>(0);
-  const [rowsPerPage, setRowsPerPage] = useState<number>(10);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(100);
   const [search, setSearch] = useState<string>('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   // Add tooltip state
@@ -1294,7 +1294,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
                 onChange={handleChangeRowsPerPage}
                 className="border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 dark:focus:ring-brand-400"
               >
-                {[5, 10, 25, 50].map((option) => (
+                {[5, 10, 25, 50, 100].map((option) => (
                   <option key={option} value={option} className="bg-white dark:bg-gray-700">
                     {option}
                   </option>

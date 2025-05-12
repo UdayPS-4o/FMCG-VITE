@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeToggleButton } from "../components/common/ThemeToggleButton";
 import UserDropdown from "../components/header/UserDropdown";
@@ -9,6 +9,8 @@ import constants from "../constants";
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const navigate = useNavigate();
+  const applicationMenuRef = useRef<HTMLDivElement>(null);
 
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
 
@@ -83,6 +85,74 @@ const AppHeader: React.FC = () => {
   
   const avatarColor = getRandomColor();
 
+  // Add LogoutIcon component
+  const LogoutIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+      />
+    </svg>
+  );
+
+  // Add handleLogout function
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${constants.baseURL}/api/logout`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        // Clear any locally stored data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        // Redirect to login page
+        navigate('/login');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Still try to clear data and redirect even if API call fails
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      navigate('/login');
+    }
+    setApplicationMenuOpen(false); // Close dropdown after logout
+  };
+
+  // Effect to close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        applicationMenuRef.current &&
+        !applicationMenuRef.current.contains(event.target as Node)
+      ) {
+        setApplicationMenuOpen(false);
+      }
+    };
+
+    if (isApplicationMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isApplicationMenuOpen]);
+
   return (
     <header className="sticky top-0 flex w-full bg-white border-gray-200 z-99999 dark:border-gray-800 dark:bg-gray-900 lg:border-b">
       <div className="flex flex-col items-center justify-between grow lg:flex-row lg:px-6">
@@ -139,25 +209,77 @@ const AppHeader: React.FC = () => {
             />
           </Link>
 
-          <button
-            onClick={toggleApplicationMenu}
-            className="flex items-center justify-center w-10 h-10 text-gray-700 rounded-lg z-99999 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 lg:hidden"
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
+          {/* Mobile Application Menu Trigger (Triple Dots) */}
+          <div className="relative lg:hidden"> {/* Container for positioning */} 
+            <button
+              onClick={toggleApplicationMenu}
+              className="flex items-center justify-center w-10 h-10 text-gray-700 rounded-lg z-99999 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
             >
-              <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M5.99902 10.4951C6.82745 10.4951 7.49902 11.1667 7.49902 11.9951V12.0051C7.49902 12.8335 6.82745 13.5051 5.99902 13.5051C5.1706 13.5051 4.49902 12.8335 4.49902 12.0051V11.9951C4.49902 11.1667 5.1706 10.4951 5.99902 10.4951ZM17.999 10.4951C18.8275 10.4951 19.499 11.1667 19.499 11.9951V12.0051C19.499 12.8335 18.8275 13.5051 17.999 13.5051C17.1706 13.5051 16.499 12.8335 16.499 12.0051V11.9951C16.499 11.1667 17.1706 10.4951 17.999 10.4951ZM13.499 11.9951C13.499 11.1667 12.8275 10.4951 11.999 10.4951C11.1706 10.4951 10.499 11.1667 10.499 11.9951V12.0051C10.499 12.8335 11.1706 13.5051 11.999 13.5051C12.8275 13.5051 13.499 12.8335 13.499 12.0051V11.9951Z"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M5.99902 10.4951C6.82745 10.4951 7.49902 11.1667 7.49902 11.9951V12.0051C7.49902 12.8335 6.82745 13.5051 5.99902 13.5051C5.1706 13.5051 4.49902 12.8335 4.49902 12.0051V11.9951C4.49902 11.1667 5.1706 10.4951 5.99902 10.4951ZM17.999 10.4951C18.8275 10.4951 19.499 11.1667 19.499 11.9951V12.0051C19.499 12.8335 18.8275 13.5051 17.999 13.5051C17.1706 13.5051 16.499 12.8335 16.499 12.0051V11.9951C16.499 11.1667 17.1706 10.4951 17.999 10.4951ZM13.499 11.9951C13.499 11.1667 12.8275 10.4951 11.999 10.4951C11.1706 10.4951 10.499 11.1667 10.499 11.9951V12.0051C10.499 12.8335 11.1706 13.5051 11.999 13.5051C12.8275 13.5051 13.499 12.8335 13.499 12.0051V11.9951Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+
+            {/* Mobile Application Dropdown Menu */}
+            <div
+              ref={applicationMenuRef}
+              className={`absolute top-full right-0 mt-2 w-56 origin-top-right rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none transform transition ease-out duration-100 
+                ${isApplicationMenuOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0 pointer-events-none'}`}
+              role="menu"
+              aria-orientation="vertical"
+              aria-labelledby="menu-button"
+              tabIndex={-1}
+            >
+              <div className="py-1" role="none">
+                {/* User Info in Dropdown */}
+                {user && (
+                  <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-full ${avatarColor} flex items-center justify-center text-sm`}>
+                        {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                      </div>
+                      <div className="flex flex-col items-start">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {user.name}
+                        </span>
+                        {user.routeAccess && !user.routeAccess.includes('Admin') && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {user.subgroup?.title || "No subgroup"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* Theme Toggle in Dropdown */} 
+                <div className="px-4 py-2 flex items-center justify-between">
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Theme</span>
+                  <ThemeToggleButton />
+                </div>
+                {/* Logout Button in Dropdown */} 
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  role="menuitem"
+                  tabIndex={-1}
+                >
+                  <LogoutIcon className="w-5 h-5 mr-2" />
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div> 
 
           <div className="hidden lg:block">
             <form>
@@ -195,17 +317,10 @@ const AppHeader: React.FC = () => {
           </div>
         </div>
         <div
-          className={`${
-            isApplicationMenuOpen ? "flex" : "hidden"
-          } items-center justify-between w-full gap-4 px-5 py-4 lg:flex shadow-theme-md lg:justify-end lg:px-0 lg:shadow-none`}
+          className={`hidden lg:flex items-center justify-end gap-3 2xsm:gap-4 px-6 py-4`}
         >
-          <div className="flex items-center gap-2 2xsm:gap-3">
-            {/* <!-- Dark Mode Toggler --> */}
-            <ThemeToggleButton />
-            {/* Notification dropdown removed */}
-          </div>
+          <ThemeToggleButton />
           
-          {/* User Area - replaced with custom user details */}
           {user ? (
             <div className="flex items-center space-x-4">
               <div className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center`}>
@@ -221,10 +336,9 @@ const AppHeader: React.FC = () => {
                   </span>
                 )}
               </div>
-              
             </div>
           ) : (
-            <UserDropdown />
+            <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
           )}
         </div>
       </div>

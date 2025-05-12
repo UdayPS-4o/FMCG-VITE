@@ -104,6 +104,7 @@ const getPMPLData = async () => {
         UNIT_1: entry.UNIT_1,
         UNIT_2: entry.UNIT_2,
         MULT_F: entry.MULT_F,
+        H_CODE: entry.H_CODE,
       };
     });
     return jsonData;
@@ -1135,20 +1136,48 @@ app.post('/addUser', async (req, res) => {
 async function printInvoicing(req, res) {
   try {
     const { id } = req.query;
-    console.log(id);
+    console.log(`[slink/printInvoice] Requested ID: ${id}`);
 
+    // Read invoice data
     let invoiceData = await fs.readFile(path.join(__dirname, '..', 'db', 'invoicing.json'), 'utf8');
     invoiceData = JSON.parse(invoiceData);
-
-    // console.log(invoiceData)
     const invoice = invoiceData.find((inv) => inv.id == (id));
-    console.log('THe invoice we found is', invoice);
+
+    if (!invoice) {
+      console.error(`[slink/printInvoice] Invoice not found for ID: ${id}`);
+      return res.status(404).send('Invoice not found');
+    }
+    console.log(`[slink/printInvoice] Found invoice:`, invoice.id, `SM Code: ${invoice.sm || 'N/A'}`);
+
+    // Read users data to find the salesperson
+    let users = [];
+    try {
+        const usersData = await fs.readFile(path.join(__dirname, '..', 'db', 'users.json'), 'utf8');
+        users = JSON.parse(usersData);
+    } catch (userError) {
+        console.error(`[slink/printInvoice] Error reading users.json:`, userError);
+        // Continue without salesperson name if users file is missing/corrupt
+    }
+
+    // Find user by smCode from the invoice record
+    let billMadeByName = 'Unknown User'; // Default if not found
+    if (invoice.sm && users.length > 0) {
+        const salesperson = users.find(user => user.smCode === invoice.sm);
+        if (salesperson) {
+            billMadeByName = salesperson.name;
+            console.log(`[slink/printInvoice] Found salesperson: ${billMadeByName} for SM Code: ${invoice.sm}`);
+        } else {
+            console.warn(`[slink/printInvoice] Salesperson with SM Code ${invoice.sm} not found in users.json.`);
+            // Keep default 'Unknown User'
+        }
+    } else if (!invoice.sm) {
+        console.warn(`[slink/printInvoice] Invoice ID ${id} does not have an smCode field.`);
+        billMadeByName = req.user ? req.user.name : 'System'; // Fallback to logged-in user or System if no smCode
+    }
+
     const pmplData = await getPMPLData();
-    
-    // Read balance.json to get the party's balance
     let balanceData = await fs.readFile(path.join(__dirname, '..', 'db', 'balance.json'), 'utf8');
     balanceData = JSON.parse(balanceData);
-    
     let cmpl = await completeCmplData(invoice.party);
     console.log('complete cmpl data', cmpl);
     
@@ -1158,6 +1187,7 @@ async function printInvoicing(req, res) {
     
     // Format date in DD-MM-YYYY format
     const formatDate = (dateString) => {
+      if (!dateString) return '';
       const date = new Date(dateString);
       return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
@@ -1172,32 +1202,22 @@ async function printInvoicing(req, res) {
 
     // Calculate due date
     const calculateDueDate = (dateString, dueDays) => {
-      if (!dueDays) return '';
-      
-      // Parse the input date correctly
+      if (!dueDays || !dateString) return '';
       const parts = dateString.split('-');
-      // If date is already in DD-MM-YYYY format
       let date;
-      if (parts.length === 3 && parts[0].length === 2) {
-        // Input is already DD-MM-YYYY
-        date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      } else {
-        // Assume ISO format or other standard format
-        date = new Date(dateString);
+      if (parts.length === 3 && parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) { // DD-MM-YYYY
+           date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      } else { // Assume YYYY-MM-DD or other parsable
+           date = new Date(dateString);
       }
-      
-      // Add the due days
+      if (isNaN(date.getTime())) return ''; // Invalid date
       date.setDate(date.getDate() + parseInt(dueDays));
-      
-      // Return in DD-MM-YYYY format
       return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     
     // Count boxes (cases) vs loose items (PCS)
     const countBoxesAndLooseItems = (items) => {
-      // Find PMPL data for the items in the invoice
       const pmplDataForInvoice = items.map(item => pmplData.find(p => p.CODE === item.item)).filter(Boolean);
-
       const boxes = items.reduce((acc, item) => {
         // Find the corresponding PMPL item to get UNIT_2
         const pmplItem = pmplDataForInvoice.find(p => p.CODE === item.item);
@@ -1249,8 +1269,8 @@ async function printInvoicing(req, res) {
       invoice: {
         no: `${invoice.id} - ${invoice.series || ''} - ${invoice.billNo || ''}`,
         mode: invoice.cash == 'Y' ? 'CASH' : 'CREDIT',
-        date: formatDate(invoice.date),
-        time: getCurrentDateTime(),
+        date: (invoice.date),
+        time: (invoice.date),
         dueDate: calculateDueDate(invoice.date, invoice.dueDays),
         displayNo: `${invoice.series || ''} - ${invoice.billNo || ''}`
       },
@@ -1259,7 +1279,7 @@ async function printInvoicing(req, res) {
         date: "",
       },
       irn: '',
-      billMadeBy: req.user ? req.user.name : 'ADMIN',
+      billMadeBy: billMadeByName,
       items: [
         ...invoice.items.map((item) => {
           const pmplItem = pmplData.find((pmplItemData) => pmplItemData.CODE === item.item);
@@ -1279,6 +1299,7 @@ async function printInvoicing(req, res) {
             pcBx: pmplItem ? pmplItem.MULT_F : undefined, // Add pcBx (MULT_F)
             unit1: pmplItem ? pmplItem.UNIT_1 : undefined, // Add UNIT_1
             unit2: pmplItem ? pmplItem.UNIT_2 : undefined, // Add UNIT_2
+            hsn: pmplItem ? pmplItem.H_CODE : undefined, // Add HSN
           };
         }),
       ],

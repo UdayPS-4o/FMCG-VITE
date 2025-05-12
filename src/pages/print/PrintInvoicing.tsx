@@ -58,6 +58,7 @@ interface InvoiceItem {
   pcBx?: string;
   unit1?: string;
   unit2?: string;
+  hsn?: string;
 }
 
 interface Summary {
@@ -101,6 +102,7 @@ const PrintInvoicing: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<InvoiceData | null>(null);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
@@ -181,6 +183,54 @@ const PrintInvoicing: React.FC = () => {
 
   const handleBack = () => {
     navigate('/db/invoicing');
+  };
+
+  // New function to handle PDF generation request
+  const handleGeneratePdf = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      showToast('Authentication required to generate PDF', 'error');
+      return;
+    }
+
+    // Optionally show a loading indicator here
+    setIsPdfLoading(true);
+
+    try {
+      const response = await fetch(`${constants.baseURL}/api/generate-pdf/invoice/${invoiceId}?redirect=false`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to generate PDF. Server returned an error.' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.pdfPath) {
+        // Construct the full URL for the PDF
+        // Assuming constants.baseURL is like 'http://localhost:8080/api'
+        // We need the base part 'http://localhost:8080'
+        const backendBaseUrl = constants.baseURL.replace('/api', ''); // Adjust if your baseURL structure is different
+        // window.open(backendBaseUrl + result.pdfPath, '_blank'); // Open in new tab (old behavior)
+        // window.location.href = backendBaseUrl + result.pdfPath; // Redirect current tab (old behavior)
+        window.location.replace(backendBaseUrl + result.pdfPath); // Replace current history entry
+        // showToast('PDF opened in a new tab.', 'success'); // No need for toast if redirecting
+      } else {
+        throw new Error('PDF path not found in server response.');
+      }
+
+    } catch (err: any) {
+      console.error('Error generating PDF:', err);
+      showToast(`Error generating PDF: ${err.message}`, 'error');
+    } finally {
+      // Optionally hide loading indicator here
+      setIsPdfLoading(false);
+    }
   };
 
   // Loading state
@@ -370,7 +420,8 @@ const PrintInvoicing: React.FC = () => {
           particular: '',
           pack: '',
           gst: 0,
-          mrp: 0
+          mrp: 0,
+          hsn: ''
         });
         
         return [...chunk, ...blankRows];
@@ -401,12 +452,21 @@ const PrintInvoicing: React.FC = () => {
         >
           Back
         </button>
-        <button
-          onClick={handlePrint}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-        >
-          Print
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={handlePrint}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            Print
+          </button>
+          <button
+            onClick={handleGeneratePdf}
+            className={`px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors ${isPdfLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={isPdfLoading}
+          >
+            {isPdfLoading ? 'Loading PDF...' : 'PDF'}
+          </button>
+        </div>
       </div>
       
       {/* Invoice Content */}
@@ -548,19 +608,11 @@ const PrintInvoicing: React.FC = () => {
                       const { text: particular, needsSmallerFont } = handleTextWrapping(item.particular);
                       const isBlankRow = !item.particular && !item.rate && !item.qty;
                       
-                      // --- DEBUG LOG --- START
+                      // --- DEBUG LOG --- Add this log
                       if (!isBlankRow) {
-                        console.log(`PrintItem ${index} Data:`, {
-                          item: item.item,
-                          particular: item.particular,
-                          unit: item.unit,
-                          unit1: item.unit1,
-                          unit2: item.unit2,
-                          pcBx: item.pcBx,
-                          rate: item.rate
-                        });
+                        console.log(`[PrintInvoicing] Item ${index} Data:`, item);
                       }
-                      // --- DEBUG LOG --- END
+                      // --- END DEBUG LOG ---
 
                       // Determine if the current unit matches the UNIT_2 from PMPL data
                       // Make comparison case-insensitive and handle potential null/undefined values
@@ -590,8 +642,9 @@ const PrintInvoicing: React.FC = () => {
 
                       return (
                         <tr key={index} className={isBlankRow ? "blank-row h-10" : ""}>
-                          <td className={`border border-black p-1 text-left text-blue-800 print:text-black ${needsSmallerFont ? 'text-[smaller]' : ''}`}>
+                          <td className={`border border-black p-1 text-left text-blue-800 print:text-black align-top ${needsSmallerFont ? 'text-[smaller]' : ''}`}>
                             {particular}
+                            {!isBlankRow && item.hsn && <div className="text-[9px] print:text-black">HSN: {item.hsn}</div>}
                             {isBlankRow && <span className="invisible">Placeholder for consistent spacing</span>}
                           </td>
                           <td className="border border-black p-1 text-center print:text-black">{!isBlankRow ? item.pack : ""}</td>
@@ -605,16 +658,33 @@ const PrintInvoicing: React.FC = () => {
                           <td className="border border-black p-1 text-center print:text-black">
                             {!isBlankRow ? (
                               <>
-                                <div>{item.sch}{item.sch? "%" : ""}</div>
-                                <div>{item.cd}{item.cd? "%" : ""}</div>
+                                {item.sch && item.cd ? (
+                                  <>
+                                    <div>{item.sch}{item.sch ? "%" : ""}</div>
+                                    <div>{item.cd}{item.cd ? "%" : ""}</div>
+                                  </>
+                                ) : item.sch ? (
+                                  <>
+                                    <div>{item.sch}{item.sch ? "%" : ""}</div>
+                                    <div>&nbsp;</div> {/* Placeholder to push sch up */}
+                                  </>
+                                ) : item.cd ? (
+                                  <>
+                                    <div>&nbsp;</div> {/* Placeholder to push cd down */}
+                                    <div>{item.cd}{item.cd ? "%" : ""}</div>
+                                  </>
+                                ) : (
+                                  "" /* Neither is present */
+                                )}
                               </>
                             ) : ""}
                           </td>
                           <td className="border border-black p-1 text-center text-blue-800 print:text-black">{!isBlankRow ? item.netAmount : ""}</td>
-                          <td className={`border border-black p-1 text-left`}>
+                          <td className={`border border-black p-1 text-left align-top`}>
                             {!isBlankRow ? (
                               <>
                                 <span className={`text-blue-800 print:text-black ${needsSmallerFont ? 'text-[smaller]' : ''}`}>{particular}</span>
+                                {/* {!isBlankRow && item.hsn && <div className="text-[9px] print:text-black">HSN: {item.hsn}</div>} */}
                                 <div className="flex justify-between print:text-black">
                                   <span className="text-[smaller] print:text-black">{unitDisplay}</span>
                                   <span className="print:text-black">{item.mrp ? Number(item.mrp).toFixed(2) : ""}</span>
