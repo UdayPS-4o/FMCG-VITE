@@ -13,7 +13,7 @@ try {
 
 // --- Configuration --- 
 // Detect if running in development (e.g., using Vite dev server) or production
-const isDevelopment = process.env.NODE_ENV !== 'production';
+const isDevelopment = process.env.print !== 'print';
 // Adjust the base URL based on environment. You might need to use environment variables.
 // For dev, typically http://localhost:5173 (or your Vite port)
 // For prod, the URL where your frontend is served.
