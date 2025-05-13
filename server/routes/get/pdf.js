@@ -28,7 +28,8 @@ router.get('/invoice/:id', async (req, res) => {
     return res.status(400).json({ message: 'Invoice ID is required' });
   }
 
-  const pdfUrl = `${FRONTEND_BASE_URL}/internal/print/invoice/${id}`;
+//   const pdfUrl = `${FRONTEND_BASE_URL}/internal/print/invoice/${id}`;
+  const pdfUrl = `${FRONTEND_BASE_URL}/printInvoice?id=${id}`;
   const pdfDir = path.join(__dirname, '..', '..', 'db', 'pdfs');
   const pdfPath = path.join(pdfDir, `invoice_${id}.pdf`);
 
@@ -61,9 +62,9 @@ router.get('/invoice/:id', async (req, res) => {
       console.error(`[PDF Generation] Page rendered with error: ${errorMessage}`);
       throw new Error(`PDF generation failed: Page rendered with error: ${errorMessage}`);
     }
-    const loadingElement = await page.$('[data-status="loading"]');
+    const loadingElement = await page.$('.animate-spin');
     if (loadingElement) {
-      console.warn('[PDF Generation] Warning: Page has a [data-status="loading"] element present.');
+      console.warn('[PDF Generation] Warning: Page has a .animate-spin element present.');
       await new Promise(resolve => setTimeout(resolve, 3000)); // Extra wait if loading element found
     }
     console.log('[PDF Generation] Page status checks passed (no explicit errors found on page).');

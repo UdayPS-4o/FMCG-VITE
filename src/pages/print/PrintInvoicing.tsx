@@ -135,15 +135,15 @@ const PrintInvoicing: React.FC = () => {
 
       try {
         // Get token from localStorage
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Authentication required');
-        }
+        // const token = localStorage.getItem('token');
+        // if (!token) {
+        //   throw new Error('Authentication required');
+        // }
         
         const response = await fetch(`${constants.baseURL}/slink/printInvoice?id=${invoiceId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          // headers: {
+          //   'Authorization': `Bearer ${token}`
+          // }
         });
         if (!response.ok) {
           throw new Error('Failed to fetch invoice data');
@@ -188,10 +188,10 @@ const PrintInvoicing: React.FC = () => {
   // New function to handle PDF generation request
   const handleGeneratePdf = async () => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      showToast('Authentication required to generate PDF', 'error');
-      return;
-    }
+    // if (!token) {
+    //   showToast('Authentication required to generate PDF', 'error');
+    //   return;
+    // }
 
     // Optionally show a loading indicator here
     setIsPdfLoading(true);
@@ -369,7 +369,7 @@ const PrintInvoicing: React.FC = () => {
   const chunkItems = (items: InvoiceItem[]): InvoiceItem[][] => {
     const chunks: InvoiceItem[][] = [];
     const totalItems = items.length;
-    const itemsPerNormalPage = 11; // Regular pages have 11 items
+    const itemsPerNormalPage = 12; // Regular pages have 11 items
     const itemsPerEndPage = 9; // End page can have 7 items
     
     // If we have more than 7 items, we need at least one normal page + one end page
@@ -934,7 +934,7 @@ const PrintInvoicing: React.FC = () => {
           
           @page {
             size: A4 landscape;
-            margin: 8mm; /* Slightly reduced margin */
+            margin: 1mm; /* Slightly reduced margin */
           }
         }
         
