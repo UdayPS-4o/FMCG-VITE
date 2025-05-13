@@ -36,10 +36,12 @@ const middleware = async (req, res, next) => {
                        req.xhr || 
                        req.headers.accept && req.headers.accept.includes('application/json');
   const isPdfRequest = req.path.startsWith('/api/generate-pdf/') || 
-                       req.headers.accept && req.headers.accept.includes('application/pdf');
+                       req.headers.accept && req.headers.accept.includes('application/pdf') ||
+                       req.path == ('/slink/printInvoice');
   const token = extractToken(req);
   if (!token) {
     if (isPdfRequest){
+      console.log(`[Middleware] Public API path accessed: ${req.path}. Skipping auth.`);
       return next();  
     }
     if (isApiRequest) {

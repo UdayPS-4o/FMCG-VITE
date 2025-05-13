@@ -1360,7 +1360,7 @@ app.get('/invocingPage', async (req, res) => {
   // console.log(encodedData);
 });
 
-app.get('/printInvoice', verifyToken, printInvoicing);
+app.get('/printInvoice', printInvoicing);
 
 const DeleteUser = async (req, res) => {
   // const { id } = req.params; // Get user ID from the URL parameters
