@@ -11,6 +11,7 @@ const pmplDbfPath = path.join(dbfFolderPath, 'data', 'PMPL.DBF'); // Product Mas
 
 // Source JSON data
 const godownTransferJsonPath = path.resolve(__dirname, '..', '..', 'db', 'approved', 'godown.json');
+const usersJsonPath = path.resolve(__dirname, '..', '..', 'db', 'users.json'); // Path to users.json
 
 // Helper to safely parse float and round
 function safeParseFloat(value, decimals = 2) {
@@ -114,7 +115,7 @@ function mapToTransferDbfFormat(transfer, item, sno, productData, isNegative = f
     TRF_TO: transfer.toGodown,
     SM_CODE: transfer.sm || "SM001",
     SM_NAME: transfer.smName || "",
-    USER_ID: userId || 0,
+    USER_ID: userId,
     USER_TIME: formatUserTime(new Date()),
   };
 }
@@ -126,11 +127,42 @@ router.post('/sync', async (req, res) => {
 
   try {
     // Get authenticated user ID from middleware
-    const userId = req.user?.id;
-    // Check if userId is explicitly undefined or null, allowing 0
-    if (userId === undefined || userId === null) { 
-      return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
+    // const mergingUserId = req.user?.id; // Old way
+    // Check if mergingUserId is explicitly undefined or null, allowing 0
+    // if (mergingUserId === undefined || mergingUserId === null) { 
+    // return res.status(401).json({ success: false, message: 'User not authenticated or ID missing for godown-transfer.' });
+    // }
+
+    // --- Load Users Data for smCode to ID mapping ---
+    let userMapBySmCode = {};
+    try {
+      const usersJsonData = await fs.readFile(usersJsonPath, 'utf-8');
+      const users = JSON.parse(usersJsonData);
+      userMapBySmCode = users.reduce((map, user) => {
+        if (user.smCode) {
+          map[user.smCode] = user.id;
+        }
+        return map;
+      }, {});
+      console.log(`Loaded ${Object.keys(userMapBySmCode).length} users with smCode for godown-transfer.`);
+    } catch (readError) {
+      console.error(`Error reading users JSON file at ${usersJsonPath} for godown-transfer:`, readError);
+      // Proceeding, errors will show in USER_ID if smCode lookup fails and mergingUserId is used.
     }
+    // --- End Load Users Data ---
+
+    // --- Determine Merging User ID using smCode ---
+    let mergingUserId = null; // Default to null (blank) instead of undefined
+    const authenticatedUserSmCode = req.user?.smCode;
+    if (authenticatedUserSmCode && userMapBySmCode[authenticatedUserSmCode] !== undefined) {
+        mergingUserId = userMapBySmCode[authenticatedUserSmCode];
+        console.log(`Godown Transfer: Authenticated user ID resolved to ${mergingUserId} via smCode: ${authenticatedUserSmCode}`);
+    } else {
+        // Modified: Now this is just a warning, not an error that prevents execution
+        console.warn(`Godown Transfer: Authenticated user's smCode ('${authenticatedUserSmCode}') not found or smCode missing from req.user. Will proceed with sync but USER_ID for audit trail may be blank. req.user: ${JSON.stringify(req.user)}`);
+        // mergingUserId remains null
+    }
+    // --- End Determine Merging User ID ---
 
     // Get the selected records from the request
     const { records } = req.body;
@@ -221,12 +253,24 @@ router.post('/sync', async (req, res) => {
       for (const item of transfer.items) {
         const productData = pmplMap[item.code];
         
+        // --- Determine User ID based on SM Code ---
+        // Note: mergingUserId is already validated (results in 401 if not resolved)
+        const smCode = transfer.sm; // Default SM is already applied to transfer records
+        let userIdToUse = null; // Default to null (blank)
+        if (smCode && userMapBySmCode[smCode] !== undefined) {
+          userIdToUse = userMapBySmCode[smCode];
+        } else {
+          console.warn(`Godown Transfer Sync: User ID not found for SM Code: '${smCode}' on transfer record. USER_ID will be blank (null).`);
+          // userIdToUse remains null
+        }
+        // --- End Determine User ID ---
+
         // Create FROM godown record (positive quantity)
-        const fromRecord = mapToTransferDbfFormat(transfer, item, sno, productData, false, userId);
+        const fromRecord = mapToTransferDbfFormat(transfer, item, sno, productData, false, userIdToUse);
         transferRecordsToInsert.push(fromRecord);
         
         // Create TO godown record (negative quantity)
-        const toRecord = mapToTransferDbfFormat(transfer, item, sno, productData, true, userId);
+        const toRecord = mapToTransferDbfFormat(transfer, item, sno, productData, true, userIdToUse);
         transferRecordsToInsert.push(toRecord);
         
         sno++;

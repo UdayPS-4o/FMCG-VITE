@@ -55,6 +55,12 @@ const CashReceiptApproved: React.FC = () => {
         if (response.status === 401) {
           throw new Error(`Authentication error: ${errorData?.message || 'User not authenticated'}`);
         }
+
+        // Custom error for duplicate records
+        if (response.status === 400 && errorData && errorData.duplicateRecords && Array.isArray(errorData.duplicateRecords)) {
+          const duplicates = errorData.duplicateRecords.map(rec => `${rec.series}-${rec.receiptNo}`).join(', ');
+          throw new Error(`${errorData.message} Duplicates: ${duplicates}`);
+        }
         
         throw new Error(`Server error: ${response.status} - ${errorText}`);
       }

@@ -2,6 +2,7 @@ const fs = require("fs").promises;
 const path = require("path");
 const { DbfORM } = require("../dbf-orm");
 const crypto = require('crypto');
+require('dotenv').config();
 
 let redirect = (url, time) => {
     return `<script>
@@ -36,16 +37,7 @@ const getCmplData = async (req, res) => {
     let jsonData = await fs.readFile(path.resolve(process.env.DBF_FOLDER_PATH, "data/json", "CMPL.json"), 'utf8');
     console.log(path.resolve(process.env.DBF_FOLDER_PATH, "data/json", "CMPL.json"));
     
-    // Parse the JSON string into an array
     jsonData = JSON.parse(jsonData);
-    
-    /*just keep these keys
-    "M_GROUP": "CT",
-    "M_NAME": "Sundry Creditors",
-    "PARTY_MAP": "",
-    "C_CODE": "OB001",
-    "C_NAME": "OPENING BALANCE",
-    */
     jsonData = jsonData.map((entry) => {
       const obj = {
         M_GROUP: entry.M_GROUP,
@@ -61,7 +53,6 @@ const getCmplData = async (req, res) => {
 
     jsonData = jsonData.filter(entry => !entry.C_NAME.includes('OPENING'));
 
-    // Fix the conditional logic
     if (req === "99") {
       return jsonData; // Just return the data when req is "99"
     } else if (res && typeof res.json === 'function') {
@@ -99,6 +90,19 @@ const getCmplData = async (req, res) => {
     }
   }
 };
+
+const getCMPLData = async () => {
+  const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, "data", "json", "CMPL.json");
+  const data = await fs.readFile(dbfFilePath, "utf8");
+  return JSON.parse(data);
+}
+
+const getPartyByCode = async (code) => {
+  const cmplData = await getCMPLData();
+  const party = cmplData.find(party => party.C_CODE == code);
+  return party;
+}
+
 
 // Function to ensure directory exists
 const ensureDirectoryExistence = async (filePath) => {
@@ -146,4 +150,4 @@ async function getSTOCKFILE(vvv) {
     .then((data) => JSON.parse(data));
 }
 
-module.exports = {redirect, getDbfData, getCmplData, ensureDirectoryExistence, saveDataToJsonFile, generateHash, getSTOCKFILE};
+module.exports = {redirect, getDbfData, getCmplData, getPartyByCode, ensureDirectoryExistence, saveDataToJsonFile, generateHash, getSTOCKFILE};

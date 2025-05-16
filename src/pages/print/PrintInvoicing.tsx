@@ -23,6 +23,8 @@ interface PartyInfo {
   stateCode: string;
   mobileNo: string;
   balanceBf: number;
+  fssaiNo?: string;
+  dlNo?: string;
 }
 
 interface InvoiceInfo {
@@ -519,43 +521,111 @@ const PrintInvoicing: React.FC = () => {
                     <tr>
                       <td colSpan={11} className="border border-black p-2">
                         <div className="flex">
-                          <div className="w-2/3 border-r border-black pr-2">
-                            <p><span className="font-bold text-blue-800 print:text-black">Party</span> {data.party.name}</p>
-                            <p><span className="font-bold text-blue-800 print:text-black">Address</span> {data.party.address}</p>
-                            <div className="grid grid-cols-2">
+                          <div className="w-3/4 border-r border-black pr-2">
+                            <div className="flex items-start">
+                              <span className="font-bold text-blue-800 print:text-black w-15">Party</span>
+                              <span className="mx-1 print:text-black">:</span>
+                              <span className="flex-1">{data.party.name}</span>
+                            </div>
+                            <div className="flex items-start">
+                              <span className="font-bold text-blue-800 print:text-black w-15">Address</span>
+                              <span className="mx-1 print:text-black">:</span>
+                              <span className="flex-1">{data.party.address}</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-x-2">
                               <div className="col-span-1">
-                                <p><span className="font-bold text-blue-800 print:text-black">GSTIN</span> {data.party.gstin || 'N/A'}</p>
-                                <p><span className="font-bold text-blue-800 print:text-black">Mobile No.</span> {data.party.mobileNo}</p>
+                                <div className="flex items-start">
+                                  <span className="font-bold text-blue-800 print:text-black w-16">GSTIN</span>
+                                  <span className="mr-1 print:text-black">:</span>
+                                  <span className="flex-1">{data.party.gstin || 'N/A'}</span>
+                                </div>
+                                  <div className="flex items-start">
+                                    <span className="font-bold text-blue-800 print:text-black w-16">Mobile No.</span>
+                                    <span className="mr-1 print:text-black">:</span>
+                                    <span className="flex-1">{data.party.mobileNo}</span>
+                                  </div>
                               </div>
                               <div className="col-span-1">
-                                <p><span className="font-bold text-blue-800 print:text-black">State Code :</span> {data.party.stateCode}</p>
-                                <p><span className="font-bold text-blue-800 print:text-black">Balance</span> {data.party.balanceBf ? `${data.party.balanceBf}` : 'N/A'}</p>
+                                {data.party.stateCode && (
+                                  <div className="flex items-start">
+                                    <span className="font-bold text-blue-800 print:text-black w-16">State Code</span>
+                                    <span className="mr-1 print:text-black">:</span>
+                                    <span className="flex-1">{data.party.stateCode}</span>
+                                  </div>
+                                )}
+                                {data.party.balanceBf && (
+                                  <div className="flex items-start">
+                                    <span className="font-bold text-blue-800 print:text-black w-16">Balance</span>
+                                    <span className="mr-1 print:text-black">:</span>
+                                    <span className="flex-1">{`${data.party.balanceBf}`}</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="col-span-1">
+                                {data.party.fssaiNo && (
+                                  <div className="flex items-start">
+                                    <span className="font-bold text-blue-800 print:text-black w-16">FSSAI No.</span>
+                                    <span className="mr-1 print:text-black">:</span>
+                                    <span className="flex-1">{data.party.fssaiNo}</span>
+                                  </div>
+                                )}
+                                {data.party.dlNo && (
+                                  <div className="flex items-start">
+                                    <span className="font-bold text-blue-800 print:text-black w-16">DL. No.</span>
+                                    <span className="mr-1 print:text-black">:</span>
+                                    <span className="flex-1">{data.party.dlNo}</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
-                          <div className="w-1/3 pl-2">
-                            <p><span className="font-bold text-blue-800 print:text-black">Inv. No :</span> {data.invoice.displayNo || data.invoice.no}</p>
-                            <p><span className="font-bold text-blue-800 print:text-black">Date:</span> {data.invoice.time}</p>
+                          <div className="w-1/4 pl-2">
+                            <div className="flex items-start">
+                              <span className="font-bold text-blue-800 print:text-black w-14">Inv. No</span>
+                              <span className="mx-1 print:text-black">:</span>
+                              <span className="flex-1">{data.invoice.displayNo || data.invoice.no}</span>
+                            </div>
+                            <div className="flex items-start">
+                              <span className="font-bold text-blue-800 print:text-black w-14">Date</span>
+                              <span className="mx-1 print:text-black">:</span>
+                              <span className="flex-1">{data.invoice.date}</span>
+                            </div>
                             {data.invoice.dueDate && (
-                              <p><span className="font-bold text-blue-800 print:text-black">Due Date:</span> {data.invoice.dueDate}</p>
+                              <div className="flex items-start">
+                                <span className="font-bold text-blue-800 print:text-black w-14">Due Date</span>
+                                <span className="mx-1 print:text-black">:</span>
+                                <span className="flex-1">{data.invoice.dueDate}</span>
+                              </div>
                             )}
-                            <p><span className="font-bold text-blue-800 print:text-black">Mode:</span> {data.invoice.mode}</p>
+                            <div className="flex items-start">
+                              <span className="font-bold text-blue-800 print:text-black w-14">Mode</span>
+                              <span className="mx-1 print:text-black">:</span>
+                              <span className="flex-1">{data.invoice.mode}</span>
+                            </div>
                           </div>
                         </div>
                       </td>
                       <td colSpan={3} className="border border-black p-2">
                         <div>
-                          {/* Line 1: Invoice No and Mode (Always) */}
-                          <div className="flex justify-between items-center">
-                            <p className="mb-0"><span className="font-bold text-blue-800 print:text-black">Invoice No :</span> {data.invoice.displayNo || data.invoice.no}</p>
-                            <p className="mb-0"><span className="font-bold text-blue-800 print:text-black">Mode:</span> {data.invoice.mode}</p>
+                          <div className="flex items-start">
+                            <span className="font-bold text-blue-800 print:text-black w-16">Invoice No</span>
+                            <span className="mx-1 print:text-black">:</span>
+                            <span className="flex-1">{data.invoice.displayNo || data.invoice.no}</span>
+                          <div className="">
+                            <span className="font-bold text-blue-800 print:text-black w-16">Mode</span>
+                            &nbsp; : {data.invoice.mode} &nbsp;  &nbsp;  &nbsp; 
                           </div>
-
-                          {/* Line 2: Date */}
-                          <p className="mb-0"><span className="font-bold text-blue-800 print:text-black">Date:</span> {data.invoice.date}</p>
-
-                          {/* Line 3: Party Name */}
-                          <p className="mt-1 mb-0"><span className="font-bold text-blue-800 print:text-black">Party</span> {data.party.name}</p>
+                          </div>
+                          <div className="flex items-start">
+                            <span className="font-bold text-blue-800 print:text-black w-16">Date</span>
+                            <span className="mx-1 print:text-black">:</span>
+                            <span className="flex-1">{data.invoice.date}</span>
+                          </div>
+                          <div className="flex items-start mt-1">
+                            <span className="font-bold text-blue-800 print:text-black w-16">Party</span>
+                            <span className="mx-1 print:text-black">:</span>
+                            <span className="flex-1">{data.party.name}</span>
+                          </div>
                         </div>
                       </td>
                     </tr>
