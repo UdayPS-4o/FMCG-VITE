@@ -531,6 +531,56 @@ const InvoicingContent: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  // Function to generate PDF in background
+  const generatePdfInBackground = async (invoiceIdToPrint: string) => {
+    const token = localStorage.getItem('token');
+    // if (!token) {
+    //   setToast({
+    //     visible: true,
+    //     message: 'Authentication required to generate PDF',
+    //     type: 'error'
+    //   });
+    //   return;
+    // }
+
+    // No need for a separate PDF loading state here as it's background
+
+    try {
+      const response = await fetch(`${constants.baseURL}/api/generate-pdf/invoice/${invoiceIdToPrint}?redirect=false`, {
+        method: 'GET',
+        headers: {
+          // 'Authorization': `Bearer ${token}` // Uncomment if auth is needed
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to generate PDF. Server returned an error.' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.pdfPath) {
+        const backendBaseUrl = constants.baseURL.replace('/api', '');
+        setToast({
+          visible: true,
+          message: `PDF generated successfully.`,
+          type: 'success'
+        });
+      } else {
+        throw new Error('PDF path not found in server response.');
+      }
+
+    } catch (err: any) {
+      console.error('Error generating PDF in background:', err);
+      setToast({
+        visible: true,
+        message: `Error generating PDF: ${err.message}`,
+        type: 'error'
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
@@ -640,8 +690,10 @@ const InvoicingContent: React.FC = () => {
         if (shouldRedirectToPrint && invoiceId) {
           // Remove the flag from localStorage
           localStorage.removeItem('redirectToPrint');
-          // Redirect to print page with invoice ID
-          navigate(`/printInvoice?id=${invoiceId}`);
+          // Generate PDF in background instead of redirecting
+          generatePdfInBackground(invoiceId);
+          // Navigate to invoice list after attempting PDF generation
+          navigate('/db/invoicing');
         } else {
           // Regular redirect to invoice list
           navigate('/db/invoicing');
@@ -863,6 +915,7 @@ const InvoicingContent: React.FC = () => {
                 variant="outlined"
                 autoComplete="off"
                 required
+                disabled={user && !user.routeAccess.includes('Admin')}
                 ref={billNoRef}
               />
             </div>

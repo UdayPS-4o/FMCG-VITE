@@ -44,7 +44,19 @@ const InvoicingApproved: React.FC = () => {
       const data = await response.json();
 
       if (data.success) {
-        toast.success(`Successfully synced ${data.processed.length} invoices`);
+        let syncMessage = `Successfully synced ${data.processed.length} invoices.`;
+        if (data.messagesAttempted > 0) {
+          syncMessage += ` ${data.messagesSent} of ${data.messagesAttempted} PDF messages sent.`;
+        } else if (data.processed.length > 0) {
+          syncMessage += ` No PDF messages attempted.`;
+        }
+        if (data.messagesSkippedPdfNotFound > 0) {
+          syncMessage += ` ${data.messagesSkippedPdfNotFound} PDFs not found.`;
+        }
+        if (data.messagesSkippedNoMobile > 0) {
+          syncMessage += ` ${data.messagesSkippedNoMobile} entries lacked mobile numbers for PDF sending.`;
+        }
+        toast.success(syncMessage);
         
         if (data.skipped && data.skipped.length > 0) {
           toast.warning(`${data.skipped.length} invoices were skipped (possible duplicates)`);

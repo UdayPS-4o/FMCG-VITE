@@ -754,7 +754,7 @@ async function getNextCashReceiptId(req, res) {
     // Filter CASH.json entries for bank receipts
     const brEntries = cashDbfData.filter(entry => 
       // first 2 characters are CR
-      entry.VR.substring(0, 2) === "CR"
+      entry.VR.substring(0, 2) == "CR"
       && !entry._deleted);
     
     // Calculate the next receipt number for each series considering BOTH sources
@@ -1255,9 +1255,7 @@ async function printInvoicing(req, res) {
         officeNo: '07692-220897',
         stateCode: '23',
       },
-      dlNo:
-        invoice.party.dlno ||
-        ' 20B/807/54/2022 , 21B/808/54/2022 , 20/805/54/2022 , 21/806/54/2022',
+      dlNo: ' 20B/807/54/2022 , 21B/808/54/2022 , 20/805/54/2022 , 21/806/54/2022',
       party: {
         name: cmpl.C_NAME,
         address: cmpl.C_ADD1 || cmpl.C_ADD2,
@@ -1265,6 +1263,8 @@ async function printInvoicing(req, res) {
         stateCode: cmpl.C_STATE,
         mobileNo: cmpl.C_MOBILE,
         balanceBf: balanceValue,
+        fssaiNo: cmpl.FSAAINO,
+        dlNo: cmpl.C_DL_NO,
       },
       invoice: {
         no: `${invoice.id} - ${invoice.series || ''} - ${invoice.billNo || ''}`,

@@ -73,6 +73,7 @@ interface DatabaseTableProps {
   hideApproveButton?: boolean; // Add prop to hide the approve button
   ref?: React.Ref<{ refreshData: () => Promise<void> }>; // Add a ref to access the refreshData method
   onApproveSuccess?: () => void; // Add callback for when items are successfully approved
+  onBeforeApprove?: (itemId: string) => Promise<boolean>; // Add this line for pre-approval check
 }
 
 // Convert to forwardRef to expose refreshData method

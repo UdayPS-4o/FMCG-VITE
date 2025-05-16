@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs').promises; // To read the JSON file
+const crypto = require('crypto'); // Added for hashing
+const axios = require('axios'); // Added for API calls
 const { DbfORM } = require('../../dbf-orm');
+const { getPartyByCode } = require('../utilities');
 
 // Define DBF file paths using environment variable
 const dbfFolderPath = process.env.DBF_FOLDER_PATH;
@@ -14,6 +17,7 @@ const cmplDbfPath = path.join(dbfFolderPath, 'data', 'CMPL.DBF'); // Customer Ma
 // Source JSON data
 const invoicingJsonPath = path.resolve(__dirname, '..', '..', 'db', 'approved', 'invoicing.json');
 const usersJsonPath = path.resolve(__dirname, '..', '..', 'db', 'users.json'); // Path to users.json
+const pdfBaseDir = path.resolve(__dirname, '..', '..', 'db', 'pdfs'); // Base directory for PDFs
 
 // --- Mapping Functions ---
 
@@ -43,7 +47,7 @@ function formatUserTime(date) {
 }
 // --- End Helper function ---
 
-function mapToBillDbfFormat(parsedUtcDate, invoice, customerData, calculatedTotals, userId) {
+function mapToBillDbfFormat(parsedUtcDate, invoice, customerData, calculatedTotals, billCreatorUserId) {
   console.log("Mapping BILL for:", invoice.billNo, "Customer:", customerData?.C_NAME);
   const { netAmountRounded, roundOff } = calculatedTotals;
 
@@ -97,7 +101,7 @@ function mapToBillDbfFormat(parsedUtcDate, invoice, customerData, calculatedTota
     EWAYTRAN: "",
     CODE_ORG: invoice.party,
     SM_ORG: invoice.sm,
-    USER_ID: userId || 0,
+    USER_ID: billCreatorUserId,
     USER_TIME: formatUserTime(new Date()),
     ORG_AMT: netAmountRounded,
     EWAYDOC: "",
@@ -266,15 +270,6 @@ router.post('/sync', async (req, res) => {
 
   try {
     console.log('[Invoicing Handler] Request received. req.user:', JSON.stringify(req.user));
-    // Get authenticated user ID from middleware
-    const userId = req.user?.id;
-    console.log({yo: req.user})
-    // Check if userId is explicitly undefined or null, allowing 0
-    if (userId === undefined || userId === null) { 
-      console.error('[Invoicing Handler] User ID check failed! userId is undefined or null.');
-      return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
-    }
-    console.log(`[Invoicing Handler] User ID check passed. userId: ${userId}`);
 
     // --- Load Users Data ---
     let userMapBySmCode = {};
@@ -295,6 +290,19 @@ router.post('/sync', async (req, res) => {
     }
     // --- End Load Users Data ---
 
+    // --- Determine Merging User ID (called 'userId' in this file scope) using smCode ---
+    let userId = null; // This is the merging user's ID for this context (defaulting to null/blank)
+    const authenticatedUserSmCode = req.user?.smCode;
+    if (authenticatedUserSmCode && userMapBySmCode[authenticatedUserSmCode] !== undefined) {
+        userId = userMapBySmCode[authenticatedUserSmCode];
+        console.log(`Invoicing: Authenticated user ID (userId) resolved to ${userId} via smCode: ${authenticatedUserSmCode}`);
+    } else {
+        // Modified: Now this is just a warning, not an error that prevents execution
+        console.warn(`Invoicing: Authenticated user's smCode ('${authenticatedUserSmCode}') not found or smCode missing from req.user. Will proceed with sync but USER_ID for audit trail may be blank. req.user: ${JSON.stringify(req.user)}`);
+        // userId remains null
+    }
+    // --- End Determine Merging User ID ---
+
     // 1. Check if records are provided in the request
     if (!req.body.records || !Array.isArray(req.body.records) || req.body.records.length === 0) {
       return res.status(400).json({ success: false, message: 'No invoice records provided in the request.' });
@@ -310,13 +318,11 @@ router.post('/sync', async (req, res) => {
       pmplDbf.open(),
       cmplDbf.open()
     ]).catch(async (openError) => {
-        // Attempt to create BILL and BILLDTL if they don't exist
         if (openError.message.includes(path.basename(billDbfPath)) || openError.message.includes(path.basename(billDtlDbfPath))) {
             console.log('BILL.DBF or BILLDTL.DBF not found, attempting to create...');
             try {
                 await billDbf.create();
                 await billDtlDbf.create();
-                 // Re-attempt to open CMPL and PMPL if they failed initially due to folder issues, etc.
                 await pmplDbf.open();
                 await cmplDbf.open();
             } catch (createError) {
@@ -359,6 +365,10 @@ router.post('/sync', async (req, res) => {
     const billDtlRecordsToInsert = [];
     const skippedInvoices = [];
     const processedInvoices = [];
+    let messagesAttempted = 0;
+    let messagesSent = 0;
+    let messagesSkippedPdfNotFound = 0;
+    let messagesSkippedNoMobile = 0;
 
     for (const invoice of invoicesData) {
       const billKey = `${invoice.series}-${invoice.billNo}`;
@@ -436,24 +446,74 @@ router.post('/sync', async (req, res) => {
       const roundOff = safeParseFloat(netAmountRounded - totalNetAmountExact, 2);
       const calculatedTotals = { netAmountRounded, roundOff };
 
-      // --- Determine User ID based on SM Code ---
+      // --- Determine User ID for the specific invoice record ---
       const invoiceSmCode = invoice.sm;
-      let recordUserId = userMapBySmCode[invoiceSmCode]; // Look up user ID by smCode
-      if (recordUserId === undefined) {
-          console.warn(`User ID not found for SM Code: ${invoiceSmCode} in bill ${billKey}. Defaulting to merging user ID: ${userId}`);
-          recordUserId = userId; // Fallback to the merging user's ID
+      let recordUserId = null; // Default to null (blank)
+      if (invoiceSmCode && userMapBySmCode[invoiceSmCode] !== undefined) {
+          recordUserId = userMapBySmCode[invoiceSmCode];
       } else {
-          console.log(`Using User ID: ${recordUserId} for SM Code: ${invoiceSmCode} in bill ${billKey}.`);
+          console.warn(`Invoicing Sync: User ID not found for SM Code: '${invoiceSmCode}' in bill ${billKey}. Record's USER_ID will be blank (null).`);
+          // recordUserId remains null
       }
-      // --- End Determine User ID ---
+      // --- End Determine User ID for the specific invoice record ---
 
-      // Map BILL record using calculated totals and determined userId
+      // Map BILL record using calculated totals and the record-specific userId
       const billRecord = mapToBillDbfFormat(combinedDate, invoice, customerData, calculatedTotals, recordUserId);
       billRecordsToInsert.push(billRecord);
 
       // Add the processed details to the main list
       billDtlRecordsToInsert.push(...currentBillDetails);
 
+      // --- New logic for PDF hash, existence check, and API call ---
+      try {
+        const hash = crypto.createHash('md5').update(JSON.stringify(invoice)).digest('hex');
+        const PdfFilename = `${invoice.series}-${invoice.billNo}-${hash}.pdf`;
+        const pdfFullPath = path.join(pdfBaseDir, PdfFilename);
+
+        try {
+          await fs.access(pdfFullPath, fs.constants.F_OK); // Check if file exists
+          console.log(`[Invoicing Sync] PDF found for bill ${billKey}: ${pdfFullPath}`);
+
+          const mobileNumber = customerData?.C_MOBILE; // Using C_MOBILE from existing customerData
+
+          if (mobileNumber && mobileNumber.trim() !== "") {
+            const apiFilePath = `db/pdfs/${PdfFilename}`; // Path for the API as per user spec
+            const apiFileName = `${invoice.series}-${invoice.billNo}`;
+
+            console.log(`[Invoicing Sync] Attempting to send message for ${apiFileName} (Bill: ${billKey}), Mobile: ${mobileNumber}, PDF Path: ${apiFilePath}`);
+            messagesAttempted++;
+            try {
+              const sendMessageResponse = await axios.get('http://localhost:4292/sendMessage', {
+                params: {
+                  filePath: apiFilePath,
+                  fileName: apiFileName,
+                }
+              });
+              if (sendMessageResponse.status === 200) {
+                console.log(`[Invoicing Sync] Message sent successfully for ${apiFileName} (Bill: ${billKey}). Response: ${JSON.stringify(sendMessageResponse.data)}`);
+                messagesSent++;
+              } else {
+                console.warn(`[Invoicing Sync] API call for ${apiFileName} (Bill: ${billKey}) returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+              }
+            } catch (apiError) {
+              console.error(`[Invoicing Sync] Error calling sendMessage API for ${apiFileName} (Bill: ${billKey}):`, apiError.message || apiError);
+            }
+          } else {
+            console.log(`[Invoicing Sync] Mobile number not found or empty for party ${invoice.party} in bill ${billKey}. Skipping message send.`);
+            messagesSkippedNoMobile++;
+          }
+        } catch (fileError) {
+          if (fileError.code === 'ENOENT') {
+            console.log(`[Invoicing Sync] PDF not found for bill ${billKey}: ${pdfFullPath}. Skipping message send.`);
+            messagesSkippedPdfNotFound++;
+          } else {
+            console.warn(`[Invoicing Sync] Error checking PDF file ${pdfFullPath} for bill ${billKey}:`, fileError.message);
+          }
+        }
+      } catch (hashOrPdfError) {
+        console.error(`[Invoicing Sync] Error during hashing or PDF processing for bill ${billKey}:`, hashOrPdfError.message);
+      }
+      // --- End new logic ---
 
       processedInvoices.push(billKey);
       existingBillKeys.add(billKey); // Add to set to prevent duplicates within the same batch
@@ -475,7 +535,11 @@ router.post('/sync', async (req, res) => {
       success: true,
       message: `Sync completed. Processed: ${processedInvoices.length}, Skipped: ${skippedInvoices.length}`,
       processed: processedInvoices,
-      skipped: skippedInvoices // Now includes reason potentially
+      skipped: skippedInvoices, // Now includes reason potentially
+      messagesAttempted: messagesAttempted,
+      messagesSent: messagesSent,
+      messagesSkippedPdfNotFound: messagesSkippedPdfNotFound,
+      messagesSkippedNoMobile: messagesSkippedNoMobile
     });
 
 
