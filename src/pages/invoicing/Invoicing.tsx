@@ -690,10 +690,9 @@ const InvoicingContent: React.FC = () => {
         if (shouldRedirectToPrint && invoiceId) {
           // Remove the flag from localStorage
           localStorage.removeItem('redirectToPrint');
-          // Generate PDF in background instead of redirecting
-          generatePdfInBackground(invoiceId);
-          // Navigate to invoice list after attempting PDF generation
-          navigate('/db/invoicing');
+           // Generate PDF in background instead of redirecting
+           generatePdfInBackground(invoiceId);
+          navigate(`/printInvoice?id=${invoiceId}`);
         } else {
           // Regular redirect to invoice list
           navigate('/db/invoicing');
