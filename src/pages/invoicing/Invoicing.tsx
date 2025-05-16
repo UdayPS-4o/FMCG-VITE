@@ -687,7 +687,7 @@ const InvoicingContent: React.FC = () => {
       const shouldRedirectToPrint = localStorage.getItem('redirectToPrint') === 'true';
       
       setTimeout(() => {
-        if (shouldRedirectToPrint && invoiceId) {
+        if (invoiceId) {
           // Remove the flag from localStorage
           localStorage.removeItem('redirectToPrint');
            // Generate PDF in background instead of redirecting
