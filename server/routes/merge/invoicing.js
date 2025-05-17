@@ -402,7 +402,7 @@ router.post('/sync', async (req, res) => {
       
       // Create a UTC date object with the exact date and time components
       // This ensures the date remains as specified regardless of server timezone
-      const combinedDate = new Date(Date.UTC(year, month, day, 0, 0, 0)); // Use midnight UTC for the date part
+      const combinedDate = new Date(Date.UTC(year, month, day, 0, 0, 0)); 
       
       console.log(`Original date string: ${invoice.date}, Created at: ${invoice.createdAt || 'N/A'} (using midnight UTC for DBF DATE field), Combined date: ${combinedDate.toISOString()}`);
 
@@ -426,7 +426,6 @@ router.post('/sync', async (req, res) => {
         if (!productData) {
            console.warn(`Product data not found for item code: ${item.item} in bill ${billKey}. Proceeding with limited data.`);
            hasMissingProductData = true;
-           // Decide if you want to skip the item or the whole bill
         }
         // Pass customerData to detail mapping for fields like PST9
         const { record: billDtlRecord, net10 } = mapToBillDtlDbfFormat(combinedDate, invoice, item, sno, productData, customerData);
@@ -477,23 +476,59 @@ router.post('/sync', async (req, res) => {
           const mobileNumber = customerData?.C_MOBILE; // Using C_MOBILE from existing customerData
 
           if (mobileNumber && mobileNumber.trim() !== "") {
-            const apiFilePath = `db/pdfs/${PdfFilename}`; // Path for the API as per user spec
-            const apiFileName = `${invoice.series}-${invoice.billNo}`;
+            // const apiFilePath = `db/pdfs/${PdfFilename}`; // Path for the API as per user spec
+            const apiFilePath = path.join(pdfBaseDir, PdfFilename);
+            const apiFileName = `${invoice.series}-${invoice.billNo}.pdf`;
 
             console.log(`[Invoicing Sync] Attempting to send message for ${apiFileName} (Bill: ${billKey}), Mobile: ${mobileNumber}, PDF Path: ${apiFilePath}`);
+            console.log(`[Invoicing Sync] Mock URL: http://localhost:4292/sendMessage?filePath=${encodeURIComponent(apiFilePath)}&fileName=${encodeURIComponent(apiFileName)}`);
             messagesAttempted++;
             try {
+              // Send WhatsApp PDF message
               const sendMessageResponse = await axios.get('http://localhost:4292/sendMessage', {
                 params: {
                   filePath: apiFilePath,
                   fileName: apiFileName,
+                  phoneNumber: mobileNumber
                 }
               });
+
+              // console.log get query req params
+              console.log(`[Invoicing Sync] Get query req params: ${JSON.stringify(sendMessageResponse.config.params)}`);
               if (sendMessageResponse.status === 200) {
                 console.log(`[Invoicing Sync] Message sent successfully for ${apiFileName} (Bill: ${billKey}). Response: ${JSON.stringify(sendMessageResponse.data)}`);
                 messagesSent++;
               } else {
                 console.warn(`[Invoicing Sync] API call for ${apiFileName} (Bill: ${billKey}) returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+              }
+              
+              // Send SMS using TextLocal API
+              try {
+                // Format the SMS message
+                let customerName = customerData?.C_NAME || invoice.partyName || '';
+                customerName = customerName.substring(0, 30);
+                const billNumberFormatted = `${invoice.series}- ${invoice.billNo}`;
+                const billAmount = netAmountRounded.toFixed(2);
+                
+                const smsMessage = `Dear ${customerName} Thank you for Purchasing Bill No. ${billNumberFormatted} For Amount : ${billAmount} Regards Ekta Enterprises`;
+                
+                // Make TextLocal API call
+                const textLocalResponse = await axios.get('https://api.textlocal.in/send/', {
+                  params: {
+                    apikey: 'NmE0ODYyNDEzNDUzNWE2MTRhNTQ1YTQ1NDc0ZjRlNmE=',
+                    sender: 'EKTAEN',
+                    numbers: mobileNumber.replace(/\D/g, ''), // Remove non-digit characters
+                    message: encodeURIComponent(smsMessage)
+                  }
+                });
+                
+                if (textLocalResponse.data && textLocalResponse.data.status === 'success') {
+                  console.log(`[Invoicing Sync] SMS sent successfully for ${billKey}. Response: ${JSON.stringify(textLocalResponse.data)}`);
+                } else {
+                  console.warn(`[Invoicing Sync] TextLocal SMS API call for ${billKey} failed. Response: ${JSON.stringify(textLocalResponse.data)}`);
+                }
+              } catch (smsError) {
+                console.error(`[Invoicing Sync] Error sending SMS via TextLocal for ${billKey}:`, smsError.message || smsError);
               }
             } catch (apiError) {
               console.error(`[Invoicing Sync] Error calling sendMessage API for ${apiFileName} (Bill: ${billKey}):`, apiError.message || apiError);
@@ -535,7 +570,7 @@ router.post('/sync', async (req, res) => {
       success: true,
       message: `Sync completed. Processed: ${processedInvoices.length}, Skipped: ${skippedInvoices.length}`,
       processed: processedInvoices,
-      skipped: skippedInvoices, // Now includes reason potentially
+      skipped: skippedInvoices,
       messagesAttempted: messagesAttempted,
       messagesSent: messagesSent,
       messagesSkippedPdfNotFound: messagesSkippedPdfNotFound,

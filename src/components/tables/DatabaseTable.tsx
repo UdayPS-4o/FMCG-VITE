@@ -78,7 +78,7 @@ interface DatabaseTableProps {
 
 // Convert to forwardRef to expose refreshData method
 const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseTableProps>(
-  ({ endpoint: propEndpoint, tableId, onSelectionChange, hideButtons = [], hideApproveButton = false, onApproveSuccess }, ref) => {
+  ({ endpoint: propEndpoint, tableId, onSelectionChange, hideButtons = [], hideApproveButton = false, onApproveSuccess, onBeforeApprove }, ref) => {
   const [endpoint, setEndpoint] = useState<string>('');
   const [rows, setRows] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -127,6 +127,9 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   
   // Add ref for column selector dropdown
   const columnSelectorRef = useRef<HTMLDivElement>(null);
+
+  // Add state for total amount
+  const [totalAmount, setTotalAmount] = useState<number>(0);
 
   // Add event handler for clicking outside
   useEffect(() => {
@@ -202,6 +205,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     if (!user) return;
     
     setIsTableLoading(true); // Set loading state
+    setTotalAmount(0); // Reset total amount on new data fetch
     try {
       let point = propEndpoint || '';
       
@@ -261,6 +265,15 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       }
       
       setRows(filteredData);
+      
+      // Calculate total amount for cash-receipts
+      if (point === 'cash-receipts') {
+        const sum = filteredData.reduce((acc, currentRow) => {
+          const amount = parseFloat(currentRow.Amount || currentRow.amount || 0);
+          return acc + (isNaN(amount) ? 0 : amount);
+        }, 0);
+        setTotalAmount(sum);
+      }
       
       if (filteredData.length > 0) {
         const dataHeaders = Object.keys(filteredData[0]);
@@ -622,6 +635,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   };
 
   const handleApprove = async () => {
+
     if (selectedItems.length === 0) {
       toast.error('No items selected');
       return;
@@ -635,6 +649,18 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     }
 
     try {
+      // If onBeforeApprove is provided, call it for each item before approval
+      if (onBeforeApprove) {
+        // Process items sequentially to avoid race conditions
+        for (const itemId of selectedItems) {
+          const canProceed = await onBeforeApprove(itemId);
+          if (!canProceed) {
+            toast.error(`Could not proceed with approval for item ${itemId}`);
+            return; // Stop the approval process
+          }
+        }
+      }
+      
       // Updated to match the implementation in FMCG_REACT/src/components/pages/Database/accountMasterTable.js
       // Get token from localStorage
       const token = localStorage.getItem('token');
@@ -1301,6 +1327,11 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
                   </option>
                 ))}
               </select>
+              {endpoint === 'cash-receipts' && (
+                <span className="ml-4 text-sm text-gray-700 dark:text-gray-300">
+                  Total Amount: {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
             
             <div className="flex items-center gap-1">
