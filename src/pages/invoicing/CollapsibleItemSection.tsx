@@ -193,7 +193,43 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
         }
       }
 
-      updateItem(index, { ...item, unit: newUnit, rate: newRateString, pack: newPackString });
+      let dataWithNewUnitAndRate = {
+        ...item,
+        unit: newUnit,
+        rate: newRateString,
+        pack: newPackString,
+        // selectedItem is already part of 'item'
+      };
+
+      // Re-validate quantity based on the NEW unit
+      if (dataWithNewUnitAndRate.selectedItem && dataWithNewUnitAndRate.qty && dataWithNewUnitAndRate.qty !== '0') {
+        const qtyNum = parseInt(dataWithNewUnitAndRate.qty, 10);
+        const currentSelectedItem = dataWithNewUnitAndRate.selectedItem;
+        const multF = parseInt(currentSelectedItem.MULT_F || '1', 10); // pcBx
+        const stockLimitInPrimaryUnit = dataWithNewUnitAndRate.stockLimit;
+
+        let maxAllowedQtyInNewUnit;
+        if (newUnit === currentSelectedItem.UNIT_2) { // If new unit is BOX (secondary unit)
+          maxAllowedQtyInNewUnit = Math.floor(stockLimitInPrimaryUnit / multF);
+        } else { // If new unit is PCS (primary unit)
+          maxAllowedQtyInNewUnit = stockLimitInPrimaryUnit;
+        }
+
+        if (!isNaN(qtyNum) && qtyNum > maxAllowedQtyInNewUnit) {
+          setError(`Quantity cannot exceed available stock of ${maxAllowedQtyInNewUnit} ${newUnit}`);
+        } else {
+          setError('');
+        }
+      } else if (!dataWithNewUnitAndRate.qty || dataWithNewUnitAndRate.qty === '0') {
+        // If quantity is empty or zero, clear any previous error
+        setError('');
+      }
+
+      // Recalculate amounts with the new rate (and existing qty)
+      const finalDataToUpdate = calculateAmounts(dataWithNewUnitAndRate);
+
+      // Update the item in context
+      updateItem(index, finalDataToUpdate);
     }
   };
 
@@ -220,8 +256,41 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   const handleFieldChange = (name: string, newValue: string) => {
     let updatedData = { ...item, [name]: newValue };
     if (name === 'qty' || name === 'rate' || name === 'schRs' || name === 'sch' || name === 'cd') {
-      if (name === 'qty' && parseInt(newValue) > item.stockLimit) {
-        setError(`Quantity cannot exceed available stock of ${item.stockLimit}`);
+      if (name === 'qty') {
+        // Skip validation for empty or zero values
+        if (!newValue || newValue === '0') {
+          setError('');
+        } else {
+          const qty = parseInt(newValue, 10);
+          
+          // If selectedItem exists and a unit is selected
+          if (item.selectedItem && item.unit) {
+            // Get the multiplicative factor (pcBx) for unit conversion
+            const multF = parseInt(item.pcBx, 10) || 1;
+            
+            // Calculate maximum allowed quantity based on unit type
+            let maxAllowedQty;
+            
+            if (item.unit === item.selectedItem.UNIT_2) {
+              // Unit is BOX - divide stock by MULT_F to get max box count
+              maxAllowedQty = Math.floor(item.stockLimit / multF);
+            } else {
+              // Unit is PCS - direct comparison
+              maxAllowedQty = item.stockLimit;
+            }
+            
+            if (qty > maxAllowedQty) {
+              setError(`Quantity cannot exceed available stock of ${maxAllowedQty} ${item.unit}`);
+            } else {
+              setError('');
+            }
+          } else if (qty > item.stockLimit) {
+            // Fallback to simple comparison if no selectedItem or unit
+            setError(`Quantity cannot exceed available stock of ${item.stockLimit}`);
+          } else {
+            setError('');
+          }
+        }
       } else {
         setError('');
       }

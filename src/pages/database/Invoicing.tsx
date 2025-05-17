@@ -34,6 +34,7 @@ const Invoicing: React.FC = () => {
 
   const handleApproveSuccess = () => {
     showToast('Invoice approved successfully and PDF checked/generated.', 'success');
+    navigate('/approved/invoicing');
   };
 
   const handleBeforeApprove = async (invoiceId: string): Promise<boolean> => {

@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { DbfORM, DataTypes } = require('../../dbf-orm'); // Assuming dbf-orm is correctly set up
 const { format } = require('date-fns'); // For date formatting
+const axios = require('axios'); // Added for API calls
 
 // --- Helper function to format date and time ---
 function formatUserTime(date) {
@@ -69,6 +70,21 @@ async function getNextCrVrNumber(dbfOrm) {
   }, 0);
   const nextNum = maxVr + 1;
   return `CR-${String(nextNum).padStart(6, '0')}`;
+}
+
+// Helper function to get the next VR number for Journal Vouchers (JB)
+async function getNextJbVrNumber(dbfOrm) {
+  const records = await dbfOrm.findAll();
+  const jbRecords = records.filter(r => r.VR && r.VR.startsWith('JB-'));
+  if (jbRecords.length === 0) {
+    return 'JB-000001';
+  }
+  const maxVr = jbRecords.reduce((max, r) => {
+    const num = parseInt(r.VR.split('-')[1], 10);
+    return num > max ? num : max;
+  }, 0);
+  const nextNum = maxVr + 1;
+  return `JB-${String(nextNum).padStart(6, '0')}`;
 }
 
 // Map JSON record to CASH.DBF format for Cash Receipt
@@ -202,6 +218,233 @@ async function mapToCashDbfFormat(record, vr, userId, customerData) {
   };
 }
 
+// Map JSON record to CASH.DBF format for Discount Account Debit Entry
+async function mapToDiscountDebitDbfFormat(record, jbVr, crVr, userId, customerData) {
+  // Parse date components from the date field
+  let dateFormatted = null;
+  if (record.date) {
+    const dateParts = record.date.split('-'); // Assuming DD-MM-YYYY format
+    let day, month, year;
+    if (dateParts[0].length === 4) { // YYYY-MM-DD format
+      year = parseInt(dateParts[0], 10);
+      month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
+      day = parseInt(dateParts[2], 10);
+    } else { // DD-MM-YYYY format
+      day = parseInt(dateParts[0], 10);
+      month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
+      year = parseInt(dateParts[2], 10);
+    }
+    
+    dateFormatted = new Date(Date.UTC(year, month, day, 0, 0, 0));
+  }
+
+  const discount = parseFloat(record.discount) || 0;
+
+  return {
+    DATE: dateFormatted,
+    VR: jbVr,
+    M_GROUP1: "", 
+    C_CODE: "EE034", // Discount Account
+    CR: 0.00,
+    DR: discount, // Debit the discount amount
+    REMARK: `CD- BY ON R/NO ${record.receiptNo || ""}`,
+    CD: 0.00,
+    QCR: 0.000,
+    QDR: 0.000,
+    R_NO: record.receiptNo || "",
+    SERIES: record.series || "",
+    BILL: "",
+    DT_BILL: null,
+    BOOK: "CB",
+    E_TYPE: "G",
+    ITEM: "",
+    PUR_CODE: "",
+    REC_AMT: 0.00,
+    ET_PAID: " ",
+    R_CODE: record.party || "", // Reference to the party code
+    CR_NOTE: 0.00,
+    B_PLACE: "",
+    PTRAN: " ",
+    PBILL: 0,
+    PSERIES: " ",
+    JB_ENO: 0,
+    BR_CODE: record.sm || "SM001",
+    BILL1: "",
+    REC_VR: "",
+    SMPSER: "",
+    BFLAG: " ",
+    AC_NAME: "DISCOUNT A/C",
+    AC_PLACE: "",
+    AC_GST: "",
+    CD_ENTRY: "Y",
+    CD_VRNO: crVr,
+    IST_PUR: " ",
+    UNIT_NO: 0,
+    BANK_DATE: null,
+    OK: " ",
+    PRINT: "N",
+    BILL2: "",
+    TR_TYPE: "",
+    CHQ_ISSUE: "",
+    CASH: " ",
+    FINANCE: " ",
+    DN_PAY: 0.00,
+    AC_MOBILE: "",
+    TAX: 0.00,
+    TRAN_TYPE: "",
+    CODE_ORG: "EE034",
+    SM_ORG: record.sm || "SM001",
+    BANK: "",
+    ST_CODE: "",
+    ST_NAME: "",
+    CESS_TAX: 0.00,
+    GST_TAX: 0.00,
+    C_ADD1: "",
+    C_PLACE: "",
+    PUR_NAME: "",
+    PUR_ADD1: "",
+    PUR_PLACE: "",
+    PUR_GST: "",
+    PUR_ST: "",
+    PUR_STNAME: "",
+    SGST: 0.00,
+    CGST: 0.00,
+    IGST: 0.00,
+    CESS_TOTAL: 0.00,
+    DUMMY: "",
+    USER_ID: userId,
+    USER_TIME: formatUserTime(new Date()),
+    USER_ID2: 0,
+    USER_TIME2: null,
+    SPID: "",
+    INVVALUE: 0.00,
+    REGD: " ",
+    GST_TYPE: "",
+    GD00: 0.00, GD03: 0.00, GD05: 0.00, GD12: 0.00, GD18: 0.00, GD28: 0.00,
+    TAX00: 0.00, TAX03: 0.00, TAX05: 0.00, TAX12: 0.00, TAX18: 0.00, TAX28: 0.00,
+    CESS: 0.00,
+    PST9: "",
+    MST9: "",
+    B_IGST: " ",
+    TCODE: "",
+    OLDVR: ""
+  };
+}
+
+// Map JSON record to CASH.DBF format for Party Credit Entry (for discount)
+async function mapToPartyCreditDbfFormat(record, jbVr, crVr, userId, customerData) {
+  // Parse date components from the date field
+  let dateFormatted = null;
+  if (record.date) {
+    const dateParts = record.date.split('-'); // Assuming DD-MM-YYYY format
+    let day, month, year;
+    if (dateParts[0].length === 4) { // YYYY-MM-DD format
+      year = parseInt(dateParts[0], 10);
+      month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
+      day = parseInt(dateParts[2], 10);
+    } else { // DD-MM-YYYY format
+      day = parseInt(dateParts[0], 10);
+      month = parseInt(dateParts[1], 10) - 1; // JavaScript months are 0-indexed
+      year = parseInt(dateParts[2], 10);
+    }
+    
+    dateFormatted = new Date(Date.UTC(year, month, day, 0, 0, 0));
+  }
+
+  const discount = parseFloat(record.discount) || 0;
+  const mgroup = customerData?.M_GROUP || "DT";
+
+  return {
+    DATE: dateFormatted,
+    VR: jbVr,
+    M_GROUP1: mgroup, 
+    C_CODE: record.party || "", // Party code
+    CR: discount, // Credit the party with discount amount
+    DR: 0.00,
+    REMARK: `CD- BY ON R/NO ${record.receiptNo || ""}`,
+    CD: 0.00,
+    QCR: 0.000,
+    QDR: 0.000,
+    R_NO: record.receiptNo || "",
+    SERIES: record.series || "",
+    BILL: "",
+    DT_BILL: null,
+    BOOK: "CB",
+    E_TYPE: "G",
+    ITEM: "",
+    PUR_CODE: "",
+    REC_AMT: 0.00,
+    ET_PAID: " ",
+    R_CODE: "EE034", // Reference to discount account
+    CR_NOTE: 0.00,
+    B_PLACE: customerData?.C_PLACE || "",
+    PTRAN: " ",
+    PBILL: 0,
+    PSERIES: " ",
+    JB_ENO: 0,
+    BR_CODE: record.sm || "SM001",
+    BILL1: "",
+    REC_VR: "",
+    SMPSER: "",
+    BFLAG: " ",
+    AC_NAME: customerData?.C_NAME || "",
+    AC_PLACE: customerData?.C_PLACE || "",
+    AC_GST: customerData?.C_GST || "",
+    CD_ENTRY: "Y",
+    CD_VRNO: crVr,
+    IST_PUR: " ",
+    UNIT_NO: 0,
+    BANK_DATE: null,
+    OK: " ",
+    PRINT: "N",
+    BILL2: "",
+    TR_TYPE: "",
+    CHQ_ISSUE: "",
+    CASH: " ",
+    FINANCE: " ",
+    DN_PAY: 0.00,
+    AC_MOBILE: customerData?.C_MOBILE || "",
+    TAX: 0.00,
+    TRAN_TYPE: "",
+    CODE_ORG: record.party || "",
+    SM_ORG: record.sm || "SM001",
+    BANK: "",
+    ST_CODE: customerData?.C_STATE || "",
+    ST_NAME: customerData?.STATE_NAME || "",
+    CESS_TAX: 0.00,
+    GST_TAX: 0.00,
+    C_ADD1: customerData?.C_ADD1 || "",
+    C_PLACE: customerData?.C_PLACE || "",
+    PUR_NAME: "",
+    PUR_ADD1: "",
+    PUR_PLACE: "",
+    PUR_GST: "",
+    PUR_ST: "",
+    PUR_STNAME: "",
+    SGST: 0.00,
+    CGST: 0.00,
+    IGST: 0.00,
+    CESS_TOTAL: 0.00,
+    DUMMY: "",
+    USER_ID: userId,
+    USER_TIME: formatUserTime(new Date()),
+    USER_ID2: 0,
+    USER_TIME2: null,
+    SPID: "",
+    INVVALUE: 0.00,
+    REGD: customerData?.GSTNO ? "Y" : "N",
+    GST_TYPE: "",
+    GD00: 0.00, GD03: 0.00, GD05: 0.00, GD12: 0.00, GD18: 0.00, GD28: 0.00,
+    TAX00: 0.00, TAX03: 0.00, TAX05: 0.00, TAX12: 0.00, TAX18: 0.00, TAX28: 0.00,
+    CESS: 0.00,
+    PST9: customerData?.C_STATE || "",
+    MST9: customerData?.C_STATE || "",
+    B_IGST: " ",
+    TCODE: "",
+    OLDVR: ""
+  };
+}
+
 // POST endpoint to merge selected records to CASH.DBF
 router.post('/sync', async (req, res) => {
   try {
@@ -320,6 +563,10 @@ router.post('/sync', async (req, res) => {
     const nextVrStart = await getNextCrVrNumber(cashDbfOrm);
     let currentVrCounter = parseInt(nextVrStart.split('-')[1], 10);
 
+    // Get next JB voucher number for discount entries
+    const nextJbStart = await getNextJbVrNumber(cashDbfOrm);
+    let currentJbCounter = parseInt(nextJbStart.split('-')[1], 10);
+
     const dbfRecords = [];
     const customerCache = new Map(); // Cache for customer data
     console.log('Reading all customers from CMPL.DBF...');
@@ -342,6 +589,76 @@ router.post('/sync', async (req, res) => {
         }
       }
 
+      // --- Message Sending Logic (WhatsApp and TextLocal) ---
+      try {
+        const mobileNumber = customerData?.C_PHONE || customerData?.C_MOBILE; // Using AC_MOBILE from customerData
+
+        // Declare these variables here so they are in scope for both if/else blocks
+        const amount = parseFloat(record.amount) || 0;
+        const receiptNo = record.receiptNo || ""; // This 'receiptNo' is now in scope for the else block
+        const receiptDate = record.date || "Date N/A"; // Use record date
+
+        if (mobileNumber && mobileNumber.trim() !== "") {
+          // Format the WhatsApp message
+          const whatsappMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${amount.toFixed(2)} Receipt No.${receiptNo} on Date ${receiptDate}\nRegards\nEKTA ENTERPRISES`;
+
+          console.log(`[Cash Receipts Sync] Attempting to send WhatsApp text message for Receipt: ${receiptNo}, Mobile: ${mobileNumber}`);
+          console.log(`[Cash Receipts Sync] Mock WhatsApp URL: http://localhost:4292/sendMessage?phoneNumber=${encodeURIComponent(mobileNumber)}&textMessage=${encodeURIComponent(whatsappMessage)}`);
+
+          try {
+            // Send WhatsApp text message
+            const sendMessageResponse = await axios.get('http://localhost:4292/sendMessage', {
+              params: {
+                phoneNumber: mobileNumber,
+                textMessage: whatsappMessage // Assuming the API supports textMessage parameter
+              }
+            });
+
+            console.log(`[Cash Receipts Sync] WhatsApp Get query req params: ${JSON.stringify(sendMessageResponse.config.params)}`);
+            if (sendMessageResponse.status === 200) {
+              console.log(`[Cash Receipts Sync] WhatsApp message sent successfully for Receipt: ${receiptNo}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+            } else {
+              console.warn(`[Cash Receipts Sync] WhatsApp API call for Receipt: ${receiptNo} returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+            }
+
+            // Send SMS using TextLocal API
+            try {
+              // Format the SMS message
+              //format date to dd-mm-yyyy
+              const formattedDate = format(new Date(receiptDate), 'dd-MM-yyyy');
+              const smsMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${amount.toFixed(2)} on Date ${formattedDate} Regards Ekta Enterprises`;
+
+              // Make TextLocal API call
+              const textLocalResponse = await axios.get('https://api.textlocal.in/send/', {
+                params: {
+                  apikey: 'NmE0ODYyNDEzNDUzNWE2MTRhNTQ1YTQ1NDc0ZjRlNmE=',
+                  sender: 'EKTAEN',
+                  numbers: mobileNumber.replace(/\D/g, ''), // Remove non-digit characters
+                  message: encodeURIComponent(smsMessage)
+                }
+              });
+
+              if (textLocalResponse.data && textLocalResponse.data.status === 'success') {
+                console.log(`[Cash Receipts Sync] TextLocal SMS sent successfully for Receipt: ${receiptNo}. Response: ${JSON.stringify(textLocalResponse.data)}`);
+              } else {
+                console.warn(`[Cash Receipts Sync] TextLocal SMS API call for Receipt: ${receiptNo} failed. Response: ${JSON.stringify(textLocalResponse.data)}`);
+              }
+            } catch (smsError) {
+              console.error(`[Cash Receipts Sync] Error sending SMS via TextLocal for Receipt: ${receiptNo}: ${smsError.message}`, smsError);
+            }
+          } catch (apiError) {
+            console.error(`[Cash Receipts Sync] Error calling WhatsApp sendMessage API for Receipt: ${receiptNo}: ${apiError.message}`, apiError);
+          }
+        } else {
+          // 'receiptNo' is now correctly in scope here
+          console.log(`[Cash Receipts Sync] Mobile number not found or empty for party ${record.party} in receipt ${receiptNo}. Skipping message send.`);
+        }
+      } catch (messageError) {
+        // Log the full error object for better diagnostics (includes stack trace)
+        console.error(`[Cash Receipts Sync] Error during message processing for receipt ${record.receiptNo}: ${messageError.message}`, messageError);
+      }
+      // --- End Message Sending Logic ---
+
       const vr = `CR-${String(currentVrCounter++).padStart(6, '0')}`;
       
       // --- Determine User ID based on SM Code ---
@@ -358,6 +675,20 @@ router.post('/sync', async (req, res) => {
       // Pass the resolved user ID to the mapping function
       const dbfRecord = await mapToCashDbfFormat(record, vr, userIdToUse, customerData);
       dbfRecords.push(dbfRecord);
+
+      // If discount amount exists and is greater than 0, create additional entries
+      const discount = parseFloat(record.discount) || 0;
+      if (discount > 0) {
+        const jbVr = `JB-${String(currentJbCounter++).padStart(6, '0')}`;
+        
+        // Create discount account debit entry
+        const discountDebitRecord = await mapToDiscountDebitDbfFormat(record, jbVr, vr, userIdToUse, customerData);
+        dbfRecords.push(discountDebitRecord);
+        
+        // Create party credit entry for discount
+        const partyCreditRecord = await mapToPartyCreditDbfFormat(record, jbVr, vr, userIdToUse, customerData);
+        dbfRecords.push(partyCreditRecord);
+      }
     }
 
     // Append the records to the CASH.DBF file

@@ -282,9 +282,10 @@ const InvoicingContent: React.FC = () => {
   }, [date, series, billNo, cash, party, sm, ref, dueDays, items, draftExistsInStorage]);
 
   // useEffect for collapsibleItemRefs.current (this was correct locally)
+
   useEffect(() => {
     collapsibleItemRefs.current = items.map((_, i) => collapsibleItemRefs.current[i] ?? createRef<CollapsibleItemSectionRefHandle>());
-  }, [items, items.length]); // Added items.length for robustness, though items itself should suffice
+  }, [items, items.length]);   
 
   // Focus series input on initial load, after loading is complete
   useEffect(() => {
@@ -677,27 +678,25 @@ const InvoicingContent: React.FC = () => {
       setDraftExistsInStorage(false);
       setShowLoadDraftButton(false);
       
+      if (invoiceId) {
+         // Generate PDF in background instead of redirecting
+         generatePdfInBackground(invoiceId);
+        navigate(`/printInvoice?id=${invoiceId}`);
+      } else {
+        // Regular redirect to invoice list
+        navigate('/db/invoicing');
+      }
+      setTimeout(() => {
+      }, 2000);
+
+
       setToast({
         visible: true,
         message: 'Invoice created successfully!',
         type: 'success'
       });
       
-      // Store whether we should redirect to print page
-      const shouldRedirectToPrint = localStorage.getItem('redirectToPrint') === 'true';
-      
-      setTimeout(() => {
-        if (invoiceId) {
-          // Remove the flag from localStorage
-          localStorage.removeItem('redirectToPrint');
-           // Generate PDF in background instead of redirecting
-           generatePdfInBackground(invoiceId);
-          navigate(`/printInvoice?id=${invoiceId}`);
-        } else {
-          // Regular redirect to invoice list
-          navigate('/db/invoicing');
-        }
-      }, 2000);
+
       
     } catch (error) {
       console.error('Failed to submit invoice:', error);
