@@ -635,7 +635,8 @@ const InvoicingContent: React.FC = () => {
           cd: item.cd,
           amount: item.amount,
           netAmount: item.netAmount
-        }))
+        })),
+        total: calculateTotal()
       };
       
       const response = await fetch(`${constants.baseURL}/invoicing`, {

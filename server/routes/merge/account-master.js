@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const { DbfORM } = require('../../dbf-orm');
+const fs = require('fs').promises;
 
 // Set the path to the DBF file
 const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CMPL.dbf');
+const approvedFilePath = path.join(__dirname, '../../db/approved/account-master.json');
 
 console.log({dbfFilePath})
 // Map fields from JSON to DBF format
@@ -83,10 +85,10 @@ function mapToDbfFormat(record) {
 router.post('/sync', async (req, res) => {
   try {
     // Get authenticated user ID from middleware
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
-    }
+    // const userId = req.user?.id;
+    // if (!userId) {
+    //   return res.status(401).json({ success: false, message: 'User not authenticated or ID missing.' });
+    // }
 
     const { records } = req.body;
     
@@ -138,6 +140,18 @@ router.post('/sync', async (req, res) => {
       
       // Append the records to the DBF file
       await dbfOrm.insertMany(dbfRecords);
+
+      // Delete synced records from approved JSON file
+      try {
+        const approvedData = JSON.parse(await fs.readFile(approvedFilePath, 'utf8'));
+        const updatedApprovedData = approvedData.filter(approvedRecord => 
+          !validRecords.some(syncedRecord => syncedRecord.id === approvedRecord.id)
+        );
+        await fs.writeFile(approvedFilePath, JSON.stringify(updatedApprovedData, null, 2));
+      } catch (error) {
+        console.error('Error updating approved records file:', error);
+        // Continue with the response even if approved file update fails
+      }
     }
 
     // Close the DBF file
