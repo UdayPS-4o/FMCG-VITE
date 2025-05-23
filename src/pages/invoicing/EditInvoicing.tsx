@@ -544,7 +544,8 @@ const EditInvoicingContent: React.FC<{
           smName: sm?.label || '',
           ref,
           dueDays,
-          items: formattedItems
+          items: formattedItems,
+          total: calculateTotal()
         })
       });
       
