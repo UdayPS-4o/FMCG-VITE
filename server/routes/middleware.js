@@ -37,7 +37,9 @@ const middleware = async (req, res, next) => {
                        req.headers.accept && req.headers.accept.includes('application/json');
   const isPdfRequest = req.path.startsWith('/api/generate-pdf/') || 
                        req.headers.accept && req.headers.accept.includes('application/pdf') ||
-                       req.path == ('/slink/printInvoice');
+                       req.path == ('/slink/printInvoice') ||
+                       req.path.includes('/dbf-invoice-pdf/') ||
+                       req.path.includes('/pdf/');
   const token = extractToken(req);
   if (!token) {
     if (isPdfRequest){

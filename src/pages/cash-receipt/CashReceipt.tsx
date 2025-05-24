@@ -15,8 +15,8 @@ import useAuth from "../../hooks/useAuth";
 const centerElementInViewport = (element: HTMLElement) => {
   if (!element) return;
   element.scrollIntoView({
-    behavior: 'smooth',
-    block: 'center' 
+    behavior: 'smooth', // options: smooth , auto , instant, 
+    block: 'center' // options: center , start , end , nearest
   });
 };
 
@@ -92,6 +92,46 @@ interface BalanceResponse {
   data: BalanceEntry[];
 }
 
+// Function to calculate split amounts (Algorithm 5)
+const calculateSplitAmounts = (totalAmount: number): string[] => {
+  const MAX_AMOUNT_PER_SPLIT = 20000;
+  const ROUND_UNIT = 500;
+  const MIN_PRECISION = 0.01; // For floating point comparisons
+
+  if (totalAmount <= MAX_AMOUNT_PER_SPLIT) {
+    return [totalAmount.toFixed(2)];
+  }
+
+  const splits: string[] = [];
+  let remaining = totalAmount;
+  let currentIdealSplitAmount = MAX_AMOUNT_PER_SPLIT;
+
+  while (remaining > MIN_PRECISION) {
+    let amountToTake: number;
+
+    if (currentIdealSplitAmount >= remaining - MIN_PRECISION) {
+      // If ideal is greater or equal to remaining, take all remaining
+      amountToTake = remaining;
+    } else {
+      // Otherwise, take the ideal amount
+      amountToTake = currentIdealSplitAmount;
+    }
+
+    splits.push(amountToTake.toFixed(2));
+    remaining -= amountToTake;
+    remaining = parseFloat(remaining.toFixed(2)); // Mitigate floating point inaccuracies
+
+    if (remaining > MIN_PRECISION) {
+      const nextIdeal = Math.floor((currentIdealSplitAmount - 1) / ROUND_UNIT) * ROUND_UNIT;
+      currentIdealSplitAmount = Math.max(ROUND_UNIT, nextIdeal);
+      if (currentIdealSplitAmount <= 0) { // Should not happen if ROUND_UNIT is positive
+        currentIdealSplitAmount = ROUND_UNIT; // Fallback, though logic should prevent this.
+      }
+    }
+  }
+  return splits;
+};
+
 const CashReceipt: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [party, setParty] = useState<PartyOption | null>(null);
@@ -114,6 +154,11 @@ const CashReceipt: React.FC = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const { user } = useAuth();
+
+  // New states for amount splitting
+  const [originalAmountInput, setOriginalAmountInput] = useState<string>('');
+  const [splitAmounts, setSplitAmounts] = useState<string[]>([]);
+  const [isAmountOverLimit, setIsAmountOverLimit] = useState<boolean>(false);
 
   const navigate = useNavigate();
 
@@ -655,6 +700,48 @@ const CashReceipt: React.FC = () => {
         
         return updated;
       });
+    } else if (name === 'amount') {
+      setOriginalAmountInput(value); // Store raw input
+      const numericAmount = parseFloat(value);
+
+      if (isNaN(numericAmount)) {
+        setIsAmountOverLimit(false);
+        setSplitAmounts([]);
+        setFormValues(prev => ({ ...prev, [name]: value }));
+        return;
+      }
+
+      if (numericAmount > 200000) {
+        setToastMessage('Total amount cannot exceed 200,000.');
+        setToastType('error');
+        setShowToast(true);
+        // Optionally, revert to a valid value or clear, here we just show message
+        // and keep the invalid value for user to correct or formValues.amount unchanged
+        setFormValues(prev => ({ ...prev, [name]: value })); // Keep value to show user their input
+        setIsAmountOverLimit(false); // Reset splitting if invalid total
+        setSplitAmounts([]);
+        return;
+      }
+
+      if (numericAmount > 20000) {
+        setIsAmountOverLimit(true);
+        const splits = calculateSplitAmounts(numericAmount);
+        setSplitAmounts(splits);
+        // Keep formValues.amount as the total for now, submission will handle splits
+        setFormValues(prev => {
+            const updated = { ...prev, [name]: value }; // Store original value in form for display
+            // setTimeout(() => updateNarration(updated), 0); // Narration updates based on main receipt no and series
+            return updated;
+        });
+      } else {
+        setIsAmountOverLimit(false);
+        setSplitAmounts([]);
+        setFormValues(prev => {
+            const updated = { ...prev, [name]: value };
+            // setTimeout(() => updateNarration(updated), 0);
+            return updated;
+        });
+      }
     } else {
       // Handle other fields normally
       setFormValues(prev => {
@@ -699,6 +786,16 @@ const CashReceipt: React.FC = () => {
   const handleSubmit = async () => { 
     // No e.preventDefault() needed as it's not triggered by form onSubmit
 
+    // Validation for total amount limit
+    const totalAmountValue = parseFloat(formValues.amount);
+    if (isNaN(totalAmountValue) || totalAmountValue > 200000) {
+        setToastMessage('Total amount cannot exceed 200,000.');
+        setToastType('error');
+        setShowToast(true);
+        setIsSubmitting(false); 
+        return;
+    }
+
     // Validation for Party field
     if (!party) {
       setToastMessage('Party selection is required.');
@@ -738,7 +835,7 @@ const CashReceipt: React.FC = () => {
     setIsSubmitting(true);
 
     // Prepare data directly from state
-    const submissionData = {
+    const baseSubmissionData = {
       ...formValues,
       date: formatDateForAPI(formValues.date), // Ensure date is formatted correctly
       party: party?.value, // Get party value from state
@@ -748,40 +845,112 @@ const CashReceipt: React.FC = () => {
 
     try {
       const route = isEditMode ? `/edit/cash-receipts` : `/cash-receipts`;
-      const response = await fetch(constants.baseURL + route, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(submissionData) // Use data from state
-      });
+      let firstSavedReceiptNo = formValues.receiptNo; // For navigation
+      let allSubmissionsSuccessful = true;
 
-      if (!response.ok) {
-        const errorMessage = await response.text();
-        setToastMessage(`Error: ${errorMessage}`);
-        setToastType('error');
+      if (isAmountOverLimit && splitAmounts.length > 1 && !isEditMode) {
+        // Handle multiple submissions for split amounts
+        console.log('Submitting split amounts:', splitAmounts);
+        const initialReceiptNo = parseInt(formValues.receiptNo, 10);
+        if (isNaN(initialReceiptNo)) {
+          setToastMessage('Invalid Receipt No. for splitting.');
+          setToastType('error');
+          setShowToast(true);
+          setIsSubmitting(false);
+          return;
+        }
+
+        for (let i = 0; i < splitAmounts.length; i++) {
+          const currentSplitAmount = splitAmounts[i];
+          const currentReceiptNo = (initialReceiptNo + i).toString();
+          const currentNarration = `BY CASH ON R/NO.${formValues.series}-${currentReceiptNo}`;
+
+          const splitSubmissionData = {
+            ...baseSubmissionData,
+            amount: currentSplitAmount,
+            receiptNo: currentReceiptNo,
+            narration: currentNarration,
+            discount: i === 0 ? baseSubmissionData.discount : '0', // Apply discount only to the first split
+            originalAmount: formValues.amount, // Optionally send the original total amount
+            splitIndex: i, // Optionally send the index of this split
+            totalSplits: splitAmounts.length, // Optionally send the total number of splits
+          };
+
+          console.log(`Submitting split ${i+1}/${splitAmounts.length}:`, splitSubmissionData);
+
+          const response = await fetch(constants.baseURL + route, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify(splitSubmissionData)
+          });
+
+          if (!response.ok) {
+            const errorMessage = await response.text();
+            setToastMessage(`Error saving split ${i+1}: ${errorMessage}`);
+            setToastType('error');
+            setShowToast(true);
+            allSubmissionsSuccessful = false;
+            // Optionally, decide if you want to stop on first error or try all
+            break; // Stop on first error for now
+          }
+          if (i === 0) {
+            firstSavedReceiptNo = currentReceiptNo; // Update for navigation
+          }
+        }
+
+        if (allSubmissionsSuccessful) {
+          setToastMessage(`Successfully saved ${splitAmounts.length} entries.`);
+          setToastType('success');
+          setShowToast(true);
+        } else {
+          // Toast for partial failure is already shown
+          setIsSubmitting(false);
+          return; // Do not proceed to navigation if any split failed
+        }
+
+      } else {
+        // Handle single submission (or edit mode)
+        const submissionData = {
+          ...baseSubmissionData,
+          amount: isAmountOverLimit && splitAmounts.length === 1 ? splitAmounts[0] : formValues.amount,
+        };
+
+        console.log('Submitting single entry:', submissionData);
+        const response = await fetch(constants.baseURL + route, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify(submissionData) // Use data from state
+        });
+  
+        if (!response.ok) {
+          const errorMessage = await response.text();
+          setToastMessage(`Error: ${errorMessage}`);
+          setToastType('error');
+          setShowToast(true);
+          setIsSubmitting(false); // Reset on error before timeout
+          return;
+        }
+        firstSavedReceiptNo = submissionData.receiptNo;
+        setToastMessage('Data saved successfully!');
+        setToastType('success');
         setShowToast(true);
-        setIsSubmitting(false); // Reset on error before timeout
-        return;
       }
-
-      const responseData = await response.json();
-      const savedReceiptNo = submissionData.receiptNo; // Use receipt number from submission data
-
-      setToastMessage('Data saved successfully!');
-      setToastType('success');
-      setShowToast(true);
 
       // Check flag immediately before timeout
       const shouldRedirectToPrint = localStorage.getItem('redirectToPrint') === 'true';
 
       setTimeout(() => {
         try {
-          if (shouldRedirectToPrint && savedReceiptNo) {
+          if (shouldRedirectToPrint && firstSavedReceiptNo) {
             localStorage.removeItem('redirectToPrint'); // Clean up flag
-            console.log(`Redirecting to print page: /print?ReceiptNo=${savedReceiptNo}`);
-            navigate(`/print?ReceiptNo=${savedReceiptNo}`);
+            console.log(`Redirecting to print page: /print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
+            navigate(`/print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
           } else {
             console.log('Redirecting to list page: /db/cash-receipts');
             navigate('/db/cash-receipts');
@@ -911,6 +1080,30 @@ const CashReceipt: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {/* Display split amounts if amount is over limit */}
+                {isAmountOverLimit && splitAmounts.length > 1 && (
+                  <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-md">
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Amount Splits (using Receipt Nos. starting from {formValues.receiptNo}):
+                    </h4>
+                    <ul className="list-disc list-inside pl-2 space-y-1">
+                      {splitAmounts.map((split, index) => {
+                        const currentReceiptNoForDisplay = !isNaN(parseInt(formValues.receiptNo, 10)) 
+                          ? (parseInt(formValues.receiptNo, 10) + index).toString()
+                          : `${formValues.receiptNo}+${index}`;
+                        return (
+                          <li key={index} className="text-sm text-gray-600 dark:text-gray-400">
+                            Split {index + 1}: {split} | R-{currentReceiptNoForDisplay}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      This will be submitted as {splitAmounts.length} separate entries.
+                    </p>
+                  </div>
+                )}
                 
                 <div className="mt-4">
                   <Input 

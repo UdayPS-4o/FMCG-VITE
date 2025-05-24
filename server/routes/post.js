@@ -135,7 +135,32 @@ app.post('/:formType', async (req, res) => {
     // Generic duplicate check for other form types based on uniqueIdentifiers
     const validKEY = uniqueIdentifiers.find((key) => formData[key]);
     if (validKEY) {
-        const entryExists = dbData.some((entry) => entry[validKEY] === formData[validKEY]);
+      let entryExists = false;
+      if (formType === 'cash-receipts' && formData.receiptNo && formData.series) {
+        entryExists = dbData.some(
+          (entry) => 
+            entry.receiptNo === formData.receiptNo && 
+            entry.series && entry.series.toUpperCase() === formData.series.toUpperCase()
+        );
+        if (entryExists) {
+            console.log(`Duplicate found for cash-receipts on series ${formData.series} and receiptNo ${formData.receiptNo}`);
+            shouldSave = false;
+            return res.status(400).send(
+                `Error: Entry with Series ${formData.series} and Receipt No. ${formData.receiptNo} already exists.`
+            );
+        }
+      } else if (formType === 'cash-receipts') {
+        // Fallback if series is somehow missing, though it should be present
+        entryExists = dbData.some((entry) => entry.receiptNo === formData.receiptNo);
+         if (entryExists) {
+            console.log(`Duplicate found for cash-receipts on receiptNo ${formData.receiptNo} (series check skipped)`);
+            shouldSave = false;
+            return res.status(400).send(
+                `Error: Entry with Receipt No. ${formData.receiptNo} already exists (series check skipped).`
+            );
+        }
+      } else {
+        entryExists = dbData.some((entry) => entry[validKEY] === formData[validKEY]);
         if (entryExists) {
             console.log(`Duplicate found for ${formType} on key ${validKEY}: ${formData[validKEY]}`);
             shouldSave = false;
@@ -143,6 +168,7 @@ app.post('/:formType', async (req, res) => {
                 `Error: Entry with this ${validKEY} (${formData[validKEY]}) already exists.`
             );
         }
+      }
         // Add ID generation if needed for other types
         // Example: Find max ID and increment
         // let maxId = dbData.reduce((max, entry) => Math.max(max, parseInt(entry.id || 0)), 0);

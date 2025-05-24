@@ -134,6 +134,7 @@ const fmcgItems: NavItem[] = [
       { name: "Godown Transfer", path: "/db/godown-transfer", pro: false },
       { name: "Cash Receipts", path: "/db/cash-receipts", pro: false },
       { name: "Cash Payments", path: "/db/cash-payments", pro: false },
+      { name: "DBF Print", path: "/db/dbf-print", pro: false },
     ],
   },
   {
@@ -258,6 +259,7 @@ const AppSidebar = React.forwardRef<HTMLElement, {}>((props, ref) => {
             if (subItem.name === "Godown Transfer") return user.routeAccess.includes('Godown Transfer');
             if (subItem.name === "Cash Receipts") return user.routeAccess.includes('Cash Receipts');
             if (subItem.name === "Cash Payments") return user.routeAccess.includes('Cash Payments');
+            if (subItem.name === "DBF Print") return user.routeAccess.includes('Admin');
             return false;
           });
           

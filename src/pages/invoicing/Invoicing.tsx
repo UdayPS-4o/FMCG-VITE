@@ -472,6 +472,22 @@ const InvoicingContent: React.FC = () => {
     setSearchItems(e.target.value);
   };
 
+  const billCounts = useMemo(() => {
+    let casesSumQty = 0;
+    let looseCount = 0;
+
+    items.forEach(item => {
+      if (item.item && item.selectedItem && parseFloat(item.qty || '0') > 0) {
+        if (item.unit && item.selectedItem.UNIT_2 && item.unit === item.selectedItem.UNIT_2) {
+          casesSumQty += parseFloat(item.qty || '0');
+        } else if (item.unit && item.selectedItem.UNIT_1 && item.unit === item.selectedItem.UNIT_1) {
+          looseCount++;
+        }
+      }
+    });
+    return { casesInBill: casesSumQty, looseItemsInBill: looseCount };
+  }, [items]);
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -1085,7 +1101,7 @@ const InvoicingContent: React.FC = () => {
 
         <div className="flex justify-between items-center mb-6">
           <div className="text-xl font-semibold dark:text-white">
-            Total: ₹{calculateTotal()}
+            Total: ₹{calculateTotal ? calculateTotal() : '0.00'} | CB: {billCounts.casesInBill} | LB: {billCounts.looseItemsInBill}
           </div>
           <div className="flex space-x-4">
             <button
