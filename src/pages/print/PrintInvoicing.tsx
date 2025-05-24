@@ -128,43 +128,85 @@ const PrintInvoicing: React.FC = () => {
   // Data fetch karne ke liye useEffect
   useEffect(() => {
     const fetchData = async () => {
-      if (!invoiceId) {
-        setError('No invoice ID provided');
+      // Get query parameters
+      const queryParams = new URLSearchParams(window.location.search);
+      const id = queryParams.get('id');
+      const series = queryParams.get('series');
+      const billNo = queryParams.get('billNo');
+      const isDbf = queryParams.get('dbf') === 'true';
+
+      if (!id && (!series || !billNo)) {
+        setError('No invoice ID or series/billNo provided');
         setLoading(false);
-        showToast('No invoice ID provided', 'error');
+        showToast('No invoice ID or series/billNo provided', 'error');
         return;
       }
 
+      setLoading(true);
+      setError(null);
+
       try {
-        // Get token from localStorage
-        // const token = localStorage.getItem('token');
-        // if (!token) {
-        //   throw new Error('Authentication required');
+        const token = localStorage.getItem('token'); // Get token
+        // Optional: Check if token exists and handle if not, e.g., redirect to login
+        // if (!token && (isDbf || id)) { // Assuming both routes need token
+        //   setError('Authentication required. Please login.');
+        //   showToast('Authentication required. Please login.', 'error');
+        //   setLoading(false);
+        //   // navigate('/login'); // Optional: redirect to login
+        //   return;
         // }
+
+        let response;
+        let url;
+        const headers: HeadersInit = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        if (isDbf && series && billNo) {
+          url = `${constants.baseURL}/api/generate-pdf/dbf-invoice-data/${series}/${billNo}`;
+          response = await fetch(url, { headers });
+        } else if (id) {
+          url = `${constants.baseURL}/slink/printInvoice?id=${id}`;
+          // Assuming /slink/printInvoice might also need auth or handles it differently.
+          // Add headers if needed, or remove if it's a public link.
+          response = await fetch(url, { headers }); 
+        } else {
+          throw new Error('Invalid parameters provided for fetching data');
+        }
         
-        const response = await fetch(`${constants.baseURL}/slink/printInvoice?id=${invoiceId}`, {
-          // headers: {
-          //   'Authorization': `Bearer ${token}`
-          // }
-        });
+        console.log(`Fetching data from: ${url}`);
+
         if (!response.ok) {
-          throw new Error('Failed to fetch invoice data');
+          if (response.status === 401 || response.status === 403) {
+            setError('Authentication failed. Please check your login.');
+            showToast('Authentication failed.', 'error');
+            // navigate('/login'); // Optional: redirect to login
+            // return; // Stop further processing if auth failed
+          }
+          const errorData = await response.json().catch(() => ({ message: `Failed to fetch invoice data. Status: ${response.status}` }));
+          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
         }
 
         const responseData = await response.json();
         console.log('Fetched invoice data:', responseData);
         setData(responseData);
-        setLoading(false);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching invoice data:', err);
-        setError('Failed to load invoice data');
+        // Avoid overriding specific auth error messages
+        if (!error) {
+            setError(err.message || 'Failed to load invoice data');
+        }
+        if (toast.message !== 'Authentication failed.') { // Avoid duplicate toasts
+            showToast(err.message || 'Failed to load invoice data', 'error');
+        }
+      } finally {
         setLoading(false);
-        showToast('Failed to load invoice data', 'error');
       }
     };
 
     fetchData();
-  }, [invoiceId]);
+  }, []);
 
   // Toast message dikhane ka function
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -190,21 +232,34 @@ const PrintInvoicing: React.FC = () => {
   // New function to handle PDF generation request
   const handleGeneratePdf = async () => {
     const token = localStorage.getItem('token');
-    // if (!token) {
-    //   showToast('Authentication required to generate PDF', 'error');
-    //   return;
-    // }
-
-    // Optionally show a loading indicator here
     setIsPdfLoading(true);
 
     try {
-      const response = await fetch(`${constants.baseURL}/api/generate-pdf/invoice/${invoiceId}?redirect=false`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // Get query parameters
+      const queryParams = new URLSearchParams(window.location.search);
+      const id = queryParams.get('id');
+      const series = queryParams.get('series');
+      const billNo = queryParams.get('billNo');
+      const isDbf = queryParams.get('dbf') === 'true';
+
+      let response;
+      if (isDbf && series && billNo) {
+        // Use the DBF-based endpoint
+        response = await fetch(`${constants.baseURL}/api/generate-pdf/dbf-invoice-data/${series}/${billNo}?redirect=false`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } else if (id) {
+        // Use the regular endpoint
+        response = await fetch(`${constants.baseURL}/api/generate-pdf/invoice/${id}?redirect=false`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } else {
+        throw new Error('Invalid parameters for PDF generation');
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: 'Failed to generate PDF. Server returned an error.' }));
@@ -214,14 +269,8 @@ const PrintInvoicing: React.FC = () => {
       const result = await response.json();
 
       if (result.pdfPath) {
-        // Construct the full URL for the PDF
-        // Assuming constants.baseURL is like 'http://localhost:8080/api'
-        // We need the base part 'http://localhost:8080'
-        const backendBaseUrl = constants.baseURL.replace('/api', ''); // Adjust if your baseURL structure is different
-        // window.open(backendBaseUrl + result.pdfPath, '_blank'); // Open in new tab (old behavior)
-        // window.location.href = backendBaseUrl + result.pdfPath; // Redirect current tab (old behavior)
-        window.location.replace(backendBaseUrl + result.pdfPath); // Replace current history entry
-        // showToast('PDF opened in a new tab.', 'success'); // No need for toast if redirecting
+        const backendBaseUrl = constants.baseURL.replace('/api', '');
+        window.location.replace(backendBaseUrl + result.pdfPath);
       } else {
         throw new Error('PDF path not found in server response.');
       }
@@ -230,7 +279,6 @@ const PrintInvoicing: React.FC = () => {
       console.error('Error generating PDF:', err);
       showToast(`Error generating PDF: ${err.message}`, 'error');
     } finally {
-      // Optionally hide loading indicator here
       setIsPdfLoading(false);
     }
   };
@@ -537,7 +585,7 @@ const PrintInvoicing: React.FC = () => {
                                 <div className="flex items-start">
                                   <span className="font-bold text-blue-800 print:text-black w-16">GSTIN</span>
                                   <span className="mr-1 print:text-black">:</span>
-                                  <span className="flex-1">{data.party.gstin || 'N/A'}</span>
+                                  <span className="flex-1">{data.party.gstin|| 'N/A'}</span>
                                 </div>
                                   <div className="flex items-start">
                                     <span className="font-bold text-blue-800 print:text-black w-16">Mobile No.</span>
@@ -624,7 +672,7 @@ const PrintInvoicing: React.FC = () => {
                           <div className="flex items-start mt-1">
                             <span className="font-bold text-blue-800 print:text-black w-16">Party</span>
                             <span className="mx-1 print:text-black">:</span>
-                            <span className="flex-1">{data.party.name}</span>
+                            <span className="flex-1">{data.party.name.slice(0, 20) }</span>
                           </div>
                         </div>
                       </td>

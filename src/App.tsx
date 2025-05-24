@@ -34,6 +34,8 @@ import PrintCashReceipt from "./pages/print/PrintCashReceipt";
 import AddUser from "./pages/add-user/AddUser";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import PdfInvoicePrintPage from './pages/print/PdfInvoicePrintPage';
+import PrintBulkCashReceipts from "./pages/print/PrintBulkCashReceipts";
+import DbfPrint from "./pages/database/DbfPrint";
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -152,6 +154,11 @@ const AppRoutes = () => (
           <AddUser />
         </ProtectedRoute>
       } />
+      <Route path="/db/dbf-print" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <DbfPrint />
+        </ProtectedRoute>
+      } />
       
       {/* Edit Pages */}
       <Route path="/account-master/edit/:id" element={
@@ -244,7 +251,8 @@ const AppRoutes = () => (
 
     {/* Internal route for PDF generation - NO LOGIN REQUIRED */}
     <Route path="/internal/print/invoice/:id" element={<PdfInvoicePrintPage />} />
-
+    <Route path="/print/bulk-cash-receipts" element={<PrintBulkCashReceipts />} />
+    
     {/* Fallback Route */}
     <Route path="*" element={<NotFound />} />
   </Routes>

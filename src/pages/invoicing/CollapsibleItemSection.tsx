@@ -787,9 +787,9 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
         className={`flex justify-between items-center p-4 cursor-pointer ${expanded ? 'bg-brand-50 dark:bg-gray-800' : showRedOutline ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-900'}`}
         onClick={(e) => handleAccordionChange(index)(e, !expanded)}
       >
-        <h3 className={`text-md font-medium text-gray-800 dark:text-gray-100 ${item.item ? 'text-brand-600 dark:text-brand-400' : ''} ${showRedOutline ? 'text-red-600 dark:text-red-400' : ''} truncate flex-1 pr-4`} title={item.item ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}` : 'Select an item'}>
+        <h3 className={`text-md font-medium text-gray-800 dark:text-gray-100 ${item.item ? 'text-brand-600 dark:text-brand-400' : ''} ${showRedOutline ? 'text-red-600 dark:text-red-400' : ''} truncate flex-1 pr-4`} title={item.item ? `${index + 1}. ${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}` : 'Select an item'}>
           {item.item
-            ? `${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}`
+            ? `${index + 1}. ${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}`
             : 'Select an item'}
         </h3>
         <div className="flex items-center shrink-0">
