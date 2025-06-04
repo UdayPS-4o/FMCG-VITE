@@ -68,6 +68,9 @@ app.use("/api/internal/invoice-data", internalInvoiceDataRoutes);
 // use external routes from ./routes/login.js
 const loginRoutes = require('./routes/login');
 app.use(loginRoutes);
+// Register reports routes
+const reportRoutes = require('./routes/reports');
+app.use('/api/reports', reportRoutes);
 
 // set middleware to check if user is logged in
 // Apply this BEFORE routes that need authentication
@@ -99,6 +102,7 @@ app.use('/api/merge/cash-payments', cashPaymentsMergeRoutes);
 // Register cash receipts merge routes
 const cashReceiptsMergeRoutes = require('./routes/merge/cash-receipts');
 app.use('/api/merge/cash-receipts', cashReceiptsMergeRoutes);
+
 
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);

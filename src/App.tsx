@@ -36,6 +36,8 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import PdfInvoicePrintPage from './pages/print/PdfInvoicePrintPage';
 import PrintBulkCashReceipts from "./pages/print/PrintBulkCashReceipts";
 import DbfPrint from "./pages/database/DbfPrint";
+import ItemWiseSales from "./pages/reports/ItemWiseSales";
+import CompanyWiseSales from "./pages/reports/CompanyWiseSales";
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -157,6 +159,18 @@ const AppRoutes = () => (
       <Route path="/db/dbf-print" element={
         <ProtectedRoute requiredAccess="Admin">
           <DbfPrint />
+        </ProtectedRoute>
+      } />
+      
+      {/* Reports Section */}
+      <Route path="/reports/item-wise-sales" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <ItemWiseSales />
+        </ProtectedRoute>
+      } />
+      <Route path="/reports/company-wise-sales" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <CompanyWiseSales />
         </ProtectedRoute>
       } />
       
