@@ -241,7 +241,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
     const cdP = parseFloat(data.cd || '0');
 
     let amount = qty * rate;
-    let schemeValue = (qty * schRs) + (amount * schP / 100);
+    let schemeValue = schRs + (amount * schP / 100);
     let netAmountBeforeCd = amount - schemeValue;
     let cdValue = netAmountBeforeCd * cdP / 100;
     let finalAmount = netAmountBeforeCd - cdValue;
