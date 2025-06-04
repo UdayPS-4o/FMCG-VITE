@@ -148,6 +148,14 @@ const fmcgItems: NavItem[] = [
       { name: "Cash Payments", path: "/approved/cash-payments", pro: false },
     ],
   },
+  {
+    icon: <DatabaseIcon />,
+    name: "Reports",
+    subItems: [
+      { name: "Item Wise Sales", path: "/reports/item-wise-sales", pro: false },
+      { name: "Company Wise Sales", path: "/reports/company-wise-sales", pro: false },
+    ],
+  }
 ];
 
 const navItems: NavItem[] = [];
@@ -248,7 +256,11 @@ const AppSidebar = React.forwardRef<HTMLElement, {}>((props, ref) => {
       if (item.subItems) {
         // Special case for "Approved" section - only show to Admin
         if (item.name === "Approved") {
-          return false;
+          return user.routeAccess.includes('Admin');
+        }
+        // Special case for "Reports" section - only show to Admin (or specific report role)
+        if (item.name === "Reports") {
+          return user.routeAccess.includes('Admin'); // Or e.g. user.routeAccess.includes('Reports')
         }
 
         // For Database section, filter subitems based on user access
