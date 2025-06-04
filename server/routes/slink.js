@@ -1244,6 +1244,59 @@ async function printInvoicing(req, res) {
     // Get counts of cases and loose items
     const { boxes, looseItems } = countBoxesAndLooseItems(invoice.items);
 
+    // Recalculate item financial details and overall totals
+    let calculatedGrossAmt = 0;
+    let calculatedTotalSchemeDiscount = 0;
+    let calculatedTotalCashDiscount = 0;
+
+    const processedItems = invoice.items.map((item) => {
+      const pmplItem = pmplData.find((pmplItemData) => pmplItemData.CODE === item.item);
+
+      const rate = parseFloat(item.rate || '0');
+      const qty = parseFloat(item.qty || '0');
+      const schRs = parseFloat(item.schRs || '0'); // Flat scheme amount for the item line
+      const schP = parseFloat(item.sch || '0');    // Scheme percentage for the item line
+      const cdP = parseFloat(item.cd || '0');      // Cash discount percentage for the item line
+
+      const baseAmount = qty * rate; // This is the gross amount for the item line
+
+      // Calculate total scheme discount for this item (flat + percentage part)
+      const itemSchemeDiscountValue = schRs + (baseAmount * schP / 100);
+      
+      const amountAfterScheme = baseAmount - itemSchemeDiscountValue;
+      
+      // Calculate cash discount for this item on the amount after scheme
+      const itemCashDiscountValue = amountAfterScheme * cdP / 100;
+      
+      const finalItemNetAmount = amountAfterScheme - itemCashDiscountValue;
+
+      // Accumulate for invoice totals
+      calculatedGrossAmt += baseAmount;
+      calculatedTotalSchemeDiscount += itemSchemeDiscountValue;
+      calculatedTotalCashDiscount += itemCashDiscountValue;
+
+      return {
+        ...item, // Spread original item data first (like ID, godown, etc.)
+        // Overwrite financial fields with recalculated values
+        amount: baseAmount.toFixed(2), 
+        netAmount: finalItemNetAmount.toFixed(2),
+        // Add PMPL data
+        particular: pmplItem ? pmplItem.PRODUCT : '',
+        pack: pmplItem ? pmplItem.PACK : '',
+        gst: pmplItem ? parseFloat(pmplItem.GST || '0') : 0, // Ensure GST is a number
+        mrp: pmplItem ? pmplItem.MRP1 : "",
+        pcBx: pmplItem ? pmplItem.MULT_F : undefined,
+        unit1: pmplItem ? pmplItem.UNIT_1 : undefined,
+        unit2: pmplItem ? pmplItem.UNIT_2 : undefined,
+        hsn: pmplItem ? pmplItem.H_CODE : undefined,
+      };
+    });
+
+    // Calculate final total net amount for the invoice and round off
+    const exactTotalNetAmount = processedItems.reduce((acc, currentItem) => acc + parseFloat(currentItem.netAmount), 0);
+    const roundedTotalNetAmount = Math.round(exactTotalNetAmount);
+    const roundOffValue = roundedTotalNetAmount - exactTotalNetAmount;
+
     const ModifiedInv = {
       company: {
         name: 'EKTA ENTERPRISES',
@@ -1280,39 +1333,18 @@ async function printInvoicing(req, res) {
       },
       irn: '',
       billMadeBy: billMadeByName,
-      items: [
-        ...invoice.items.map((item) => {
-          const pmplItem = pmplData.find((pmplItemData) => pmplItemData.CODE === item.item);
-          console.log(`Processing item ${item.item}:`, {
-            found: !!pmplItem,
-            MULT_F: pmplItem?.MULT_F,
-            UNIT_1: pmplItem?.UNIT_1,
-            UNIT_2: pmplItem?.UNIT_2
-          });
-          
-          return {
-            ...item,
-            particular: pmplItem ? pmplItem.PRODUCT : '',
-            pack: pmplItem ? pmplItem.PACK : '',
-            gst: pmplItem ? pmplItem.GST : 0,
-            mrp: pmplItem ? pmplItem.MRP1 : "",
-            pcBx: pmplItem ? pmplItem.MULT_F : undefined, // Add pcBx (MULT_F)
-            unit1: pmplItem ? pmplItem.UNIT_1 : undefined, // Add UNIT_1
-            unit2: pmplItem ? pmplItem.UNIT_2 : undefined, // Add UNIT_2
-            hsn: pmplItem ? pmplItem.H_CODE : undefined, // Add HSN
-          };
-        }),
-      ],
+      items: processedItems, // Use the processed items with recalculated values
       summary: {
-        itemsInBill: invoice.items.length,
+        itemsInBill: processedItems.length, // Use length of processedItems
         casesInBill: boxes,
         looseItemsInBill: looseItems,
       },
       taxDetails: [
-        ...invoice.items.map((item) => {
-        const gstRate = pmplData.find((pmplItem) => pmplItem.CODE === item.item)?.GST || 0;
-          // Calculate taxable value properly - NET_AMT / (100+GST%) * 100
-          const taxableValue = Number(item.netAmount) / (100 + gstRate) * 100;
+        ...processedItems.map((pItem) => { // Iterate over processedItems
+          const gstRate = pItem.gst; // GST is now correctly a number in pItem
+          // Calculate taxable value: NET_AMT / (1 + GST_RATE_AS_DECIMAL)
+          // NET_AMT / (100 + GST_PERCENT) * 100 is equivalent
+          const taxableValue = Number(pItem.netAmount) / (100 + gstRate) * 100;
           
           return {
             goods: taxableValue.toFixed(2),
@@ -1324,11 +1356,11 @@ async function printInvoicing(req, res) {
         }),
       ],
       totals: {
-        grossAmt: invoice.items.reduce((acc, item) => acc + Number(item.netAmount), 0),
-        lessSch: 0.0,
-        lessCd: 0.0,
-        rOff: 0.0,
-        netAmount: invoice.items.reduce((acc, item) => acc + Number(item.netAmount), 0),
+        grossAmt: calculatedGrossAmt.toFixed(2),
+        lessSch: calculatedTotalSchemeDiscount.toFixed(2),
+        lessCd: calculatedTotalCashDiscount.toFixed(2),
+        rOff: roundOffValue.toFixed(2),
+        netAmount: roundedTotalNetAmount.toFixed(2),
       },
     };
     console.log(ModifiedInv);
