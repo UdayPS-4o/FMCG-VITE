@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Autocomplete, { AutocompleteRefHandle } from '../../components/form/input/Autocomplete'; // Restored Autocomplete import
 import MultiSelect from '../../components/form/MultiSelect'; // Import MultiSelect
 import Input from '../../components/form/input/Input';
@@ -44,6 +44,12 @@ interface DynamicPartyOption {
   label: string; // For Autocomplete
 }
 
+// Define Company option type
+interface CompanyOptionType {
+  value: string; // e.g., CCODE
+  text: string;  // e.g., CNAME
+}
+
 // Define User type, similar to Invoicing.tsx and AddUser.tsx
 interface User {
   id: number;
@@ -79,7 +85,11 @@ const ItemWiseSalesContent: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [seriesFilter, setSeriesFilter] = useState<string>('');
-  const [selectedParty, setSelectedParty] = useState<PartyOptionType | null>(null); // New state for selected party object
+  const [billNoFilter, setBillNoFilter] = useState<string>('');
+  const [selectedParty, setSelectedParty] = useState<PartyOptionType | null>(null);
+  const [unitFilter, setUnitFilter] = useState<'All' | 'Box' | 'Pcs'>('All');
+  const [groupItems, setGroupItems] = useState<boolean>(false);
+  const [expandedItemNames, setExpandedItemNames] = useState<Set<string>>(new Set());
 
   // State for dynamic filter options
   const [dynamicItemOptions, setDynamicItemOptions] = useState<DynamicItemOption[]>([]);
@@ -87,9 +97,53 @@ const ItemWiseSalesContent: React.FC = () => {
   const [filterOptionsLoading, setFilterOptionsLoading] = useState(false);
   const [filterOptionsError, setFilterOptionsError] = useState<string | null>(null);
 
+  // State for company filter
+  const [companyOptions, setCompanyOptions] = useState<CompanyOptionType[]>([]);
+  const [selectedCompanyCodes, setSelectedCompanyCodes] = useState<string[]>([]);
+  const [companyLoadingError, setCompanyLoadingError] = useState<string | null>(null);
+
   const { pmplData, partyOptions: contextPartyOptions } = useInvoiceContext(); 
   // const itemAutocompleteRef = useRef<AutocompleteRefHandle>(null); // Not for MultiSelect
   const [user, setUser] = useState<User | null>(null);
+
+  // Calculate totals for the report data
+  const reportTotals = useMemo(() => {
+    if (!reportData || reportData.length === 0) {
+      return {
+        Qty: 0,
+        Free: 0,
+        Gross: 0,
+        Scheme: 0,
+        // SchPct will not be summed directly, it's a percentage
+        // CD will not be summed directly, it's a percentage
+        NetAmt: 0,
+        GoodsAmt: 0,
+        GSTAmt: 0,
+        FreeV: 0,
+      };
+    }
+
+    return reportData.reduce((acc, row) => {
+      acc.Qty += Number(row.Qty) || 0;
+      acc.Free += Number(row.Free) || 0;
+      acc.Gross += Number(row.Gross) || 0;
+      acc.Scheme += Number(row.Scheme) || 0;
+      acc.NetAmt += Number(row.NetAmt) || 0;
+      acc.GoodsAmt += Number(row.GoodsAmt) || 0;
+      acc.GSTAmt += Number(row.GSTAmt) || 0;
+      acc.FreeV += Number(row.FreeV) || 0;
+      return acc;
+    }, {
+      Qty: 0,
+      Free: 0,
+      Gross: 0,
+      Scheme: 0,
+      NetAmt: 0,
+      GoodsAmt: 0,
+      GSTAmt: 0,
+      FreeV: 0,
+    });
+  }, [reportData]);
 
   // Refs for abort controllers
   const fetchOptionsAbortControllerRef = useRef<AbortController | null>(null);
@@ -110,6 +164,33 @@ const ItemWiseSalesContent: React.FC = () => {
     }
   }, []);
 
+  // Effect to fetch companies
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        const response = await fetch(`${constants.baseURL}/api/reports/companies`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        // Assuming data is an array of { CCODE: string, CNAME: string } - This was the previous assumption
+        // And MultiSelect expects { value: string, text: string }
+        // The API now directly returns data in the { value: ..., text: ... } format
+        setCompanyOptions(data); // MODIFIED LINE: Directly use data as it's already formatted
+        setCompanyLoadingError(null);
+      } catch (err: any) {
+        console.error("Error fetching companies:", err);
+        setCompanyLoadingError(err.message);
+        setCompanyOptions([]);
+      }
+    };
+    fetchCompanies();
+  }, []);
+
   // Apply default series from user settings
   useEffect(() => {
     if (user) {
@@ -120,7 +201,7 @@ const ItemWiseSalesContent: React.FC = () => {
     }
   }, [user]);
 
-  // Effect to fetch dynamic filter options when dates change or party changes
+  // Effect to fetch dynamic filter options when dates, party, or companies change
   useEffect(() => {
     const actualDatesChanged = fromDate !== prevFromDateRef.current || toDate !== prevToDateRef.current;
 
@@ -128,15 +209,21 @@ const ItemWiseSalesContent: React.FC = () => {
       prevFromDateRef.current = fromDate;
       prevToDateRef.current = toDate;
 
+      // If dates change, reset party and items, as they are dependent on date range
       if (selectedParty) {
         setSelectedParty(null);
       }
-      setSelectedItemCodes([]); // Ensure called with []
-      
-      if (selectedParty) return; 
+      setSelectedItemCodes([]);
     }
+    
+    // If companies change, reset party and items as well, as they might be filtered by company
+    // This part needs to be handled carefully. We check if this effect is running due to a company change.
+    // A simple way is to see if selectedCompanyCodes is a dependency.
+    // We also ensure that if companies change, we clear dependent filters.
+    // No, a better way is to reset selectedParty and selectedItemCodes if selectedCompanyCodes change
+    // This logic will be inside the main block where we decide to fetch.
 
-    if (fromDate && toDate) {
+    if (fromDate && toDate) { // Company selection is optional
       if (fetchOptionsAbortControllerRef.current) {
         fetchOptionsAbortControllerRef.current.abort();
       }
@@ -145,16 +232,20 @@ const ItemWiseSalesContent: React.FC = () => {
 
       setFilterOptionsLoading(true);
       setFilterOptionsError(null);
-      
-      if(actualDatesChanged || selectedParty){
-        setSelectedItemCodes([]); // Ensure called with []
-      }
+
+      // If this fetch is triggered due to date change or company change, clear item codes.
+      // If it's due to party change, item codes are already cleared or will be re-fetched.
+      // The key is that selectedParty and selectedItemCodes should be reset if their basis (date/company) changes.
+      // This is partially handled by resetting them when `actualDatesChanged` or when `selectedCompanyCodes` changes (see below)
 
       const fetchOptions = async () => {
         try {
           const params = new URLSearchParams({ fromDate, toDate });
           if (selectedParty && selectedParty.value) {
             params.append('partyCode', selectedParty.value);
+          }
+          if (selectedCompanyCodes.length > 0) {
+            params.append('companyCodes', selectedCompanyCodes.join(','));
           }
 
           const response = await fetch(`${constants.baseURL}/api/reports/filter-options?${params.toString()}`, {
@@ -175,13 +266,13 @@ const ItemWiseSalesContent: React.FC = () => {
           setDynamicItemOptions(data.itemOptions || []);
 
           if (!selectedParty || actualDatesChanged) {
-            setDynamicPartyOptions(data.partyOptions || []);
+          setDynamicPartyOptions(data.partyOptions || []);
           }
 
         } catch (err: any) {
           if (err.name !== 'AbortError') {
             console.error("Error fetching filter options:", err);
-            setFilterOptionsError(err.message);
+          setFilterOptionsError(err.message);
             setDynamicItemOptions([]); // Ensure called with []
             if (!selectedParty || actualDatesChanged) {
                setDynamicPartyOptions([]); // Ensure called with []
@@ -189,7 +280,7 @@ const ItemWiseSalesContent: React.FC = () => {
           }
         } finally {
           if (!signal.aborted) {
-            setFilterOptionsLoading(false);
+          setFilterOptionsLoading(false);
           }
         }
       };
@@ -211,10 +302,103 @@ const ItemWiseSalesContent: React.FC = () => {
       prevFromDateRef.current = undefined;
       prevToDateRef.current = undefined;
     }
-  }, [fromDate, toDate, selectedParty, setSelectedParty, setSelectedItemCodes, setDynamicItemOptions, setDynamicPartyOptions]);
+  }, [fromDate, toDate, selectedParty, selectedCompanyCodes]); // Add selectedCompanyCodes to dependency array
+
+  // Effect to reset party and items if company selection changes
+  // This is a more direct way to handle resetting dependent filters when companies change.
+  const prevSelectedCompanyCodesRef = useRef<string[] | undefined>(undefined);
+  useEffect(() => {
+    if (prevSelectedCompanyCodesRef.current && JSON.stringify(prevSelectedCompanyCodesRef.current) !== JSON.stringify(selectedCompanyCodes)) {
+        if (selectedParty) {
+      setSelectedParty(null);
+        }
+        setSelectedItemCodes([]);
+    }
+    prevSelectedCompanyCodesRef.current = selectedCompanyCodes;
+  }, [selectedCompanyCodes, selectedParty, setSelectedParty, setSelectedItemCodes]);
 
   // Function to format date as YYYY-MM-DD
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+  // Define types for grouped report item
+  interface GroupedSalesReportItem {
+    Code: string;
+    ItemName: string;
+    Qty: number;
+    Free: number;
+    Gross: number;
+    Scheme: number;
+    NetAmt: number;
+    GoodsAmt: number;
+    GSTAmt: number;
+    FreeV: number;
+    details: SalesReportItem[];
+  }
+
+  // Process report data for display (either raw or grouped)
+  const processedReportDisplayData = useMemo(() => {
+    if (!groupItems) {
+      return reportData; // Return raw data if not grouping
+    }
+    if (!reportData || reportData.length === 0) {
+      return [];
+    }
+
+    const grouped = reportData.reduce((acc, row) => {
+      const key = row.ItemName; // Group by ItemName
+      if (!acc[key]) {
+        acc[key] = {
+          Code: row.Code,
+          ItemName: row.ItemName,
+          Qty: 0,
+          Free: 0,
+          Gross: 0,
+          Scheme: 0,
+          NetAmt: 0,
+          GoodsAmt: 0,
+          GSTAmt: 0,
+          FreeV: 0,
+          details: [],
+        };
+      }
+      acc[key].Qty += Number(row.Qty) || 0;
+      acc[key].Free += Number(row.Free) || 0;
+      acc[key].Gross += Number(row.Gross) || 0;
+      acc[key].Scheme += Number(row.Scheme) || 0;
+      acc[key].NetAmt += Number(row.NetAmt) || 0;
+      acc[key].GoodsAmt += Number(row.GoodsAmt) || 0;
+      acc[key].GSTAmt += Number(row.GSTAmt) || 0;
+      acc[key].FreeV += Number(row.FreeV) || 0;
+      acc[key].details.push(row);
+      return acc;
+    }, {} as Record<string, GroupedSalesReportItem>);
+
+    return Object.values(grouped).sort((a, b) => a.ItemName.localeCompare(b.ItemName));
+  }, [reportData, groupItems]);
+
+  // Define table headers based on grouping state
+  const fullTableHeaders = ['Date', 'Bill No.', 'Code', 'Item Name', 'Party', 'Place', 'Unit', 'Qty', 'Free', 'Gross', 'Scheme', 'Sch.%', 'CD', 'NetAmt', 'GoodsAmt', 'GSTAmt', 'FreeV'];
+  const groupedSummaryHeaders = ['Code', 'Item Name', 'Qty', 'Free', 'Gross', 'Scheme', 'NetAmt', 'GoodsAmt', 'GSTAmt', 'FreeV'];
+
+  const currentTableHeaders = useMemo(() => {
+    if (groupItems) {
+      return groupedSummaryHeaders;
+    }
+    return fullTableHeaders;
+  }, [groupItems]);
+
+  // Handler to toggle item expansion
+  const handleToggleExpand = (itemName: string) => {
+    setExpandedItemNames(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemName)) {
+        newSet.delete(itemName);
+      } else {
+        newSet.add(itemName);
+      }
+      return newSet;
+    });
+  };
 
   // Effect to set initial and update dates based on selectedDateRange
   useEffect(() => {
@@ -289,13 +473,28 @@ const ItemWiseSalesContent: React.FC = () => {
       });
       // Append multiple item codes if any are selected
       if (selectedItemCodes.length > 0) {
-        selectedItemCodes.forEach(code => params.append('itemCodes[]', code));
+        params.append('itemCodes', selectedItemCodes.join(','));
       }
       if (seriesFilter) {
         params.append('series', seriesFilter);
+        // If series and bill numbers are provided, add bill numbers to params
+        if (billNoFilter) {
+          params.append('billNumbers', billNoFilter);
+        }
       }
       if (selectedParty?.value) {
         params.append('partyCode', selectedParty.value);
+      }
+      // New unit filter logic for radio buttons
+      if (unitFilter === 'Box') {
+        params.append('unit', 'Box');
+      } else if (unitFilter === 'Pcs') {
+        params.append('unit', 'Pcs');
+      }
+
+      // Add selected company codes to the report fetch
+      if (selectedCompanyCodes.length > 0) {
+        params.append('companyCodes', selectedCompanyCodes.join(','));
       }
 
       const response = await fetch(`${constants.baseURL}/api/reports/item-wise-sales?${params.toString()}`, {
@@ -317,16 +516,16 @@ const ItemWiseSalesContent: React.FC = () => {
       if (err.name === 'AbortError') {
         console.log('Fetch report aborted');
       } else {
-        setError(err.message);
-        setReportData([]);
+      setError(err.message);
+      setReportData([]);
       }
     } finally {
       if (!signal.aborted) {
-        setLoading(false);
+      setLoading(false);
       }
     }
   };
-  
+
   // Item MultiSelect uses dynamicItemOptions if available, otherwise empty or placeholder
   const currentItemOptions = dynamicItemOptions.length > 0 ? dynamicItemOptions 
     : (fromDate && toDate && !filterOptionsLoading ? [{value: '', text: 'No items found for dates'}] : []);
@@ -334,6 +533,181 @@ const ItemWiseSalesContent: React.FC = () => {
   // Party Autocomplete uses dynamicPartyOptions if available
   const currentPartyOptions = dynamicPartyOptions.length > 0 ? dynamicPartyOptions 
     : (fromDate && toDate && !filterOptionsLoading ? [{value: '', label: 'No parties found for dates'}] : (contextPartyOptions || [])); // Fallback to contextPartyOptions
+
+  const handlePrintReport = () => {
+    const companyNames = selectedCompanyCodes.map(ccode => {
+      const option = companyOptions.find(opt => opt.value === ccode);
+      return option ? option.text : ccode;
+    }).join(', ') || 'All';
+
+    const itemNames = selectedItemCodes.map(itemCode => {
+      const option = dynamicItemOptions.find(opt => opt.value === itemCode);
+      return option ? option.text : itemCode;
+    }).join(', ') || 'All';
+
+    const partyName = selectedParty ? selectedParty.label : 'All';
+
+    let reportHtml = `
+      <html>
+        <head>
+          <title>Item Wise Sales Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { text-align: center; margin-bottom: 20px; }
+            .filter-criteria { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; font-size: 0.9em; }
+            .filter-criteria p { margin: 5px 0; }
+            .filter-criteria strong { min-width: 100px; display: inline-block;}
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.8em; }
+            th, td { border: 1px solid #000; padding: 6px; text-align: left; word-break: break-word; }
+            th { background-color: #f2f2f2; font-weight: bold; }
+            .text-right { text-align: right; }
+            .total-row td { font-weight: bold; background-color: #e9e9e9; }
+            .grouped-summary-row { font-weight: bold; cursor: default; }
+            .grouped-summary-row td { background-color: #f8f8f8; }
+            .detail-header-row th { background-color: #e0e0e0; font-style: italic; padding-left: 15px !important; }
+            .detail-data-row td { background-color: #fdfdfd; padding-left: 15px !important; }
+            .detail-data-row .indent-cell { padding-left: 25px !important; } /* For first cell of detail row like Date */
+            @media print {
+              body { margin: 0.5in; font-size: 10pt; }
+              h1 { font-size: 16pt; }
+              .filter-criteria { font-size: 9pt; }
+              table { font-size: 8pt; }
+              th, td { padding: 4px; }
+              .filter-criteria { page-break-after: auto; }
+              table { page-break-inside: auto; }
+              tr { page-break-inside: avoid; page-break-after: auto; }
+              thead { display: table-header-group; } /* Repeat headers on each page */
+              tfoot { display: table-footer-group; } /* Repeat footers */
+              button, .no-print { display: none !important; } 
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Item Wise Sales Report</h1>
+          <div class="filter-criteria">
+            <p><strong>Date Range:</strong> ${fromDate} to ${toDate}</p>
+            <p><strong>Companies:</strong> ${companyNames}</p>
+            <p><strong>Party:</strong> ${partyName}</p>
+            <p><strong>Items:</strong> ${itemNames}</p>
+            <p><strong>Series:</strong> ${seriesFilter || 'All'}</p>
+            <p><strong>Bill Numbers:</strong> ${billNoFilter || 'All'}</p>
+            <p><strong>Unit:</strong> ${unitFilter}</p>
+            <p><strong>Grouped by Item:</strong> ${groupItems ? 'Yes' : 'No'}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                ${(groupItems ? groupedSummaryHeaders : fullTableHeaders).map(header => `<th>${header}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    (processedReportDisplayData as Array<SalesReportItem | GroupedSalesReportItem>).forEach(row => {
+      if (groupItems) {
+        const groupedRow = row as GroupedSalesReportItem;
+        reportHtml += `<tr class="grouped-summary-row">
+          <td>${groupedRow.Code}</td>
+          <td>${groupedRow.ItemName}</td>
+          <td class="text-right">${(groupedRow.Qty || 0).toFixed(2)}</td>
+          <td class="text-right">${(groupedRow.Free || 0).toFixed(2)}</td>
+          <td class="text-right">${(groupedRow.Gross || 0).toFixed(2)}</td>
+          <td class="text-right">${(groupedRow.Scheme || 0).toFixed(2)}</td>
+          <td class="text-right">${(groupedRow.NetAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(groupedRow.GoodsAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(groupedRow.GSTAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(groupedRow.FreeV || 0).toFixed(2)}</td>
+        </tr>`;
+
+        if (expandedItemNames.has(groupedRow.ItemName) && groupedRow.details) {
+          reportHtml += `<tr class="detail-header-row">
+            ${fullTableHeaders.map(header => `<th>${header}</th>`).join('')}
+          </tr>`;
+          groupedRow.details.forEach(detailRow => {
+            reportHtml += `<tr class="detail-data-row">
+              <td class="indent-cell">${detailRow.Date}</td>
+              <td>${detailRow.Series}-${detailRow.BillNo}</td>
+              <td>${detailRow.Code}</td>
+              <td>${detailRow.ItemName}</td>
+              <td>${detailRow.Party}</td>
+              <td>${detailRow.Place}</td>
+              <td>${detailRow.Unit}</td>
+              <td class="text-right">${(detailRow.Qty || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.Free || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.Gross || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.Scheme || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.SchPct || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.CD || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.NetAmt || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.GoodsAmt || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.GSTAmt || 0).toFixed(2)}</td>
+              <td class="text-right">${(detailRow.FreeV || 0).toFixed(2)}</td>
+            </tr>`;
+          });
+        }
+      } else {
+        const nonGroupedRow = row as SalesReportItem;
+        reportHtml += `<tr>
+          <td>${nonGroupedRow.Date}</td>
+          <td>${nonGroupedRow.Series}-${nonGroupedRow.BillNo}</td>
+          <td>${nonGroupedRow.Code}</td>
+          <td>${nonGroupedRow.ItemName}</td>
+          <td>${nonGroupedRow.Party}</td>
+          <td>${nonGroupedRow.Place}</td>
+          <td>${nonGroupedRow.Unit}</td>
+          <td class="text-right">${(nonGroupedRow.Qty || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.Free || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.Gross || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.Scheme || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.SchPct || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.CD || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.NetAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.GoodsAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.GSTAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(nonGroupedRow.FreeV || 0).toFixed(2)}</td>
+        </tr>`;
+      }
+    });
+
+    reportHtml += `</tbody>`;
+
+    if (reportData.length > 0) {
+      reportHtml += `<tfoot class="total-row">
+        <tr>
+          <td colSpan="${groupItems ? 2 : 7}">Total</td>
+          <td class="text-right">${(reportTotals.Qty || 0).toFixed(2)}</td>
+          <td class="text-right">${(reportTotals.Free || 0).toFixed(2)}</td>
+          <td class="text-right">${(reportTotals.Gross || 0).toFixed(2)}</td>
+          <td class="text-right">${(reportTotals.Scheme || 0).toFixed(2)}</td>
+          ${!groupItems ? `<td class="text-right">-</td><td class="text-right">-</td>` : ''}
+          <td class="text-right">${(reportTotals.NetAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(reportTotals.GoodsAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(reportTotals.GSTAmt || 0).toFixed(2)}</td>
+          <td class="text-right">${(reportTotals.FreeV || 0).toFixed(2)}</td>
+        </tr>
+      </tfoot>`;
+    }
+
+    reportHtml += `
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(reportHtml);
+      printWindow.document.close();
+      printWindow.focus(); // Focus new window before printing
+      // Timeout to ensure content is loaded before print dialog
+      setTimeout(() => {
+        printWindow.print();
+        // printWindow.close(); // Optional: close after print dialog
+      }, 500);
+    } else {
+      alert('Could not open print window. Please check your browser pop-up settings.');
+    }
+  };
 
   return (
     <div className="container mx-auto p-4">
@@ -377,6 +751,22 @@ const ItemWiseSalesContent: React.FC = () => {
           />
         </div>
         
+        {/* Company MultiSelect Filter */}
+        <div className="xl:col-span-1">
+          <label htmlFor="companyMultiSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Company</label>
+          <MultiSelect
+            label={companyOptions.length > 0 ? '' : (companyLoadingError ? 'Error loading companies' : 'Loading companies...')}
+            options={companyOptions}
+            value={selectedCompanyCodes}
+            onChange={setSelectedCompanyCodes}
+            allowFiltering={true}
+            selectOnEnter={true}
+            matchThreshold={3} // Adjust as needed
+            disabled={companyOptions.length === 0 && !companyLoadingError}
+          />
+          {companyLoadingError && <p className="text-xs text-red-500 mt-1">{companyLoadingError}</p>}
+        </div>
+        
         {/* Party Name Filter (using Autocomplete for single selection) */}
         <div className="xl:col-span-1">
           <label htmlFor="partyFilter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Party (Optional)</label>
@@ -397,48 +787,100 @@ const ItemWiseSalesContent: React.FC = () => {
         {/* This starts a new "visual" row or section within the grid for larger screens */}
         {/* For smaller screens, it will stack naturally. */}
         {/* Add a div to wrap series and items if you want them grouped on one line below */}
-        <div className="md:col-span-2 lg:col-span-3 xl:col-span-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mt-4 md:mt-0">
-          <div className="xl:col-span-1"> {/* Adjust span as needed */}
-            <label htmlFor="seriesFilter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Series (Optional)</label>
-            <Input
-              id="seriesFilter"
-              type="text"
-              value={seriesFilter}
-              onChange={(e) => setSeriesFilter(e.target.value.toUpperCase())}
-              placeholder="E.g., B"
-              variant="outlined"
-              maxLength={1} // Assuming series is a single character
-              disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false}
-            />
+        <div className="md:col-span-2 lg:col-span-3 xl:col-span-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4 md:mt-0">
+        {/* Series Filter */}
+        <div className="xl:col-span-1">
+          <label htmlFor="seriesFilter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Series (Optional)</label>
+            <Input id="seriesFilter" type="text" value={seriesFilter} onChange={(e) => setSeriesFilter(e.target.value.toUpperCase())} placeholder="E.g., B" variant="outlined" maxLength={1} disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false} />
           </div>
-
-          {/* Item MultiSelect - moved to new logical row */}
-          <div className="lg:col-span-2 xl:col-span-2"> {/* Adjust span as needed */}
-            <label htmlFor="itemMultiSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Items (Optional)</label>
-            <MultiSelect
-              label={filterOptionsLoading ? 'Loading items...' : (fromDate && toDate ? '' : 'Select dates first')}
-              options={currentItemOptions}
-              value={selectedItemCodes}
-              onChange={setSelectedItemCodes}
-              allowFiltering={true}
-              selectOnEnter={true}
-              matchThreshold={3}
-              disabled={!fromDate || !toDate || filterOptionsLoading}
-            />
+          {/* Bill No Filter - MOVED next to Series */}
+          <div className="xl:col-span-1">
+            <label htmlFor="billNoFilter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bill Numbers (Optional)</label>
+            <Input id="billNoFilter" type="text" value={billNoFilter} onChange={(e) => setBillNoFilter(e.target.value)} placeholder="e.g., 1,2,3" variant="outlined" disabled={!seriesFilter} />
+          </div>
+          {/* Item MultiSelect */}
+          <div className="lg:col-span-2 xl:col-span-1"> {/* Adjusted span */} 
+             <label htmlFor="itemMultiSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Items (Optional)</label>
+            <MultiSelect label={filterOptionsLoading ? 'Loading items...' : (fromDate && toDate ? '' : 'Select dates first')} options={currentItemOptions} value={selectedItemCodes} onChange={setSelectedItemCodes} allowFiltering={true} selectOnEnter={true} matchThreshold={3} disabled={!fromDate || !toDate || filterOptionsLoading} />
+          </div>
+           {/* Unit Filter Radio Buttons - REPLACED checkboxes */}
+           <div className="xl:col-span-1 flex flex-col justify-center">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Unit Filter</label>
+            <div className="flex items-center mt-1 space-x-4">
+              <div>
+                <input
+                  type="radio"
+                  id="unitFilterAll"
+                  name="unitFilter"
+                  value="All"
+                  checked={unitFilter === 'All'}
+                  onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
+                  className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="unitFilterAll" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">All</label>
+              </div>
+              <div>
+                <input
+                  type="radio"
+                  id="unitFilterBox"
+                  name="unitFilter"
+                  value="Box"
+                  checked={unitFilter === 'Box'}
+                  onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
+                  className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="unitFilterBox" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">Box</label>
+              </div>
+              <div>
+                <input
+                  type="radio"
+                  id="unitFilterPcs"
+                  name="unitFilter"
+                  value="Pcs"
+                  checked={unitFilter === 'Pcs'}
+                  onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
+                  className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="unitFilterPcs" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">Pcs</label>
+              </div>
+            </div>
           </div>
         </div>
+        {/* New row for Group Items checkbox */}
+        <div className="md:col-span-2 lg:col-span-3 xl:col-span-5 mt-4">
+            <div className="flex items-center">
+                <input
+                    type="checkbox"
+                    id="groupItems"
+                    checked={groupItems}
+                    onChange={(e) => setGroupItems(e.target.checked)}
+                    className="form-checkbox h-5 w-5 text-indigo-600 transition duration-150 ease-in-out mr-2 rounded dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:ring-offset-gray-800"
+                />
+                <label htmlFor="groupItems" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                    Group by Item Name
+                </label>
+            </div>
+        </div>
 
-        <div className="flex items-end mt-4 md:mt-0 md:col-span-1">
+        <div className="flex items-end mt-4 md:mt-0 md:col-span-1 space-x-2"> {/* MODIFIED: Added space-x-2 for button spacing */}
           <button
             onClick={handleFetchReport}
-            disabled={loading || (!fromDate || !toDate)}
+            disabled={loading || !fromDate || !toDate}
             className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
           >
             {loading ? 'Loading...' : 'Fetch Report'}
           </button>
+          <button // NEW: Print Report Button
+            onClick={handlePrintReport}
+            disabled={reportData.length === 0 && !loading} // Disable if no data
+            className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+          >
+            Print Report
+          </button>
         </div>
       </div>
 
+      {companyLoadingError && <div className="text-red-500 bg-red-100 dark:bg-red-900 dark:text-red-300 p-3 rounded-md mb-4">Company Loading Error: {companyLoadingError}</div>}
       {filterOptionsError && <div className="text-red-500 bg-red-100 dark:bg-red-900 dark:text-red-300 p-3 rounded-md mb-4">Dynamic Filter Error: {filterOptionsError}</div>}
       {error && <div className="text-red-500 bg-red-100 dark:bg-red-900 dark:text-red-300 p-3 rounded-md mb-4">Report Error: {error}</div>}
 
@@ -447,7 +889,7 @@ const ItemWiseSalesContent: React.FC = () => {
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              {['Date', 'Bill No.', 'Code', 'Item Name', 'Party', 'Place', 'Unit', 'Qty', 'Free', 'Gross', 'Scheme', 'Sch.%', 'CD', 'Net Amt', 'Goods Amt', 'GST Amt', 'FreeV'].map(header => (
+              {currentTableHeaders.map(header => (
                 <th key={header} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">
                   {header}
                 </th>
@@ -455,35 +897,129 @@ const ItemWiseSalesContent: React.FC = () => {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {reportData.length === 0 && !loading && (
+            {processedReportDisplayData.length === 0 && !loading && (
               <tr>
-                <td colSpan={17} className="px-4 py-4 text-sm text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={currentTableHeaders.length} className="px-4 py-4 text-sm text-center text-gray-500 dark:text-gray-400">
                   No data available for the selected criteria.
                 </td>
               </tr>
             )}
-            {reportData.map((row, index) => (
-              <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{row.Date}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{`${row.Series}-${row.BillNo}`}</td> 
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{row.Code}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{row.ItemName}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{row.Party}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{row.Place}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{row.Unit}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.Qty.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.Free.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.Gross.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.Scheme.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.SchPct.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.CD.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-900 dark:text-gray-100">{row.NetAmt.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.GoodsAmt.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.GSTAmt.toFixed(2)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{row.FreeV.toFixed(2)}</td>
+            {processedReportDisplayData.map((row: SalesReportItem | GroupedSalesReportItem, index) => {
+              if (groupItems) {
+                const groupedRow = row as GroupedSalesReportItem;
+                const isExpanded = expandedItemNames.has(groupedRow.ItemName);
+                return (
+                  <React.Fragment key={`${groupedRow.ItemName}-${index}`}>
+                    <tr onClick={() => handleToggleExpand(groupedRow.ItemName)} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">
+                        <span className="mr-2">{isExpanded ? '-' : '+'}</span>
+                        {groupedRow.Code}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{groupedRow.ItemName}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Qty.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Free.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Gross.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Scheme.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.NetAmt.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.GoodsAmt.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.GSTAmt.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.FreeV.toFixed(2)}</td>
+                    </tr>
+                    {isExpanded && (
+                      <>
+                        {/* Detail Header Row */}
+                        <tr className="bg-gray-200 dark:bg-gray-700/80">
+                          {fullTableHeaders.map((header, headerIndex) => (
+                            <th key={`detail-header-${headerIndex}`} 
+                                className={`px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap ${headerIndex === 0 ? 'pl-8' : ''}`}>
+                              {header}
+                            </th>
+                          ))}
+                        </tr>
+                        {/* Detail Data Rows */}
+                        {groupedRow.details.map((detailRow, detailIndex) => (
+                          <tr key={`${groupedRow.ItemName}-detail-${detailIndex}`} className="bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-700/70">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 pl-8">{detailRow.Date}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{`${detailRow.Series}-${detailRow.BillNo}`}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Code}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.ItemName}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Party}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Place}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Unit}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Qty.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Free.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Gross.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Scheme.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.SchPct.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.CD.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-700 dark:text-gray-300">{detailRow.NetAmt.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.GoodsAmt.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.GSTAmt.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.FreeV.toFixed(2)}</td>
               </tr>
             ))}
+                      </>
+                    )}
+                  </React.Fragment>
+                );
+              } else {
+                // Original non-grouped row rendering
+                const nonGroupedRow = row as SalesReportItem;
+                return (
+                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Date}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{`${nonGroupedRow.Series}-${nonGroupedRow.BillNo}`}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Code}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.ItemName}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Party}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Place}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Unit}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Qty.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Free.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Gross.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Scheme.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.SchPct.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.CD.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-900 dark:text-gray-100">{nonGroupedRow.NetAmt.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.GoodsAmt.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.GSTAmt.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.FreeV.toFixed(2)}</td>
+                  </tr>
+                );
+              }
+            })}
           </tbody>
+          {reportData.length > 0 && (
+            <tfoot className="bg-gray-100 dark:bg-gray-700 font-semibold">
+              <tr>
+                <td colSpan={groupItems ? 2 : 7} className="px-4 py-3 text-left text-sm text-gray-800 dark:text-gray-100 uppercase whitespace-nowrap">Total</td>
+                {/* Qty Total */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Qty.toFixed(2)}</td>
+                {/* Free Total */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Free.toFixed(2)}</td>
+                {/* Gross Total */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Gross.toFixed(2)}</td>
+                {/* Scheme Total */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Scheme.toFixed(2)}</td>
+                {!groupItems && (
+                  <>
+                    {/* SchPct - Empty or N/A as it's not a sum - Ensure alignment */}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">-</td> 
+                    {/* CD - Empty or N/A as it's not a sum - Ensure alignment */}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">-</td> 
+                  </>
+                )}
+                {/* NetAmt Total */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.NetAmt.toFixed(2)}</td>
+                {/* GoodsAmt Total */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.GoodsAmt.toFixed(2)}</td>
+                {/* GSTAmt Total */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.GSTAmt.toFixed(2)}</td>
+                {/* FreeV Total */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.FreeV.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
@@ -492,18 +1028,19 @@ const ItemWiseSalesContent: React.FC = () => {
 
 // Main component that includes the provider (structure remains the same)
 const ItemWiseSales: React.FC = () => {
-  const dummyItems = [];
-  const dummyUpdateItem = () => {};
-  const dummyRemoveItem = () => {};
-  const dummyAddItem = () => {};
+  // Dummy props for InvoiceProvider - Ensure all are correctly defined
+  const [dummyItemsState, setDummyItemsState] = useState<any[]>([]); // Renamed to avoid conflict and use state
+  const dummyUpdateItem = (index: number, updatedItem: any) => {};
+  const dummyRemoveItem = (index: number) => {};
+  const dummyAddItem = (item?: any) => {};
   const dummyCalculateTotal = () => '0.00';
-  const [dummyExpandedIndex, setDummyExpandedIndex] = useState(0);
+  const [dummyExpandedIndex, setDummyExpandedIndex] = useState<number | null>(null); // Allow null
   const [dummyFocusNewItemIndex, setDummyFocusNewItemIndex] = useState<number | null>(null);
-  const dummySetItems = () => {};
+  // Removed dummySetItems as setDummyItemsState serves this purpose with useState
 
   return (
     <InvoiceProvider
-      items={dummyItems}
+      items={dummyItemsState} // Use state variable
       updateItem={dummyUpdateItem}
       removeItem={dummyRemoveItem}
       addItem={dummyAddItem}
@@ -512,7 +1049,7 @@ const ItemWiseSales: React.FC = () => {
       setExpandedIndex={setDummyExpandedIndex}
       focusNewItemIndex={dummyFocusNewItemIndex}
       setFocusNewItemIndex={setDummyFocusNewItemIndex}
-      setItems={dummySetItems}
+      setItems={setDummyItemsState} // Pass the state setter
     >
       <ItemWiseSalesContent />
     </InvoiceProvider>
