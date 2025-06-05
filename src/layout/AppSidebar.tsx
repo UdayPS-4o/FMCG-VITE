@@ -153,7 +153,7 @@ const fmcgItems: NavItem[] = [
     name: "Reports",
     subItems: [
       { name: "Item Wise Sales", path: "/reports/item-wise-sales", pro: false },
-      { name: "Company Wise Sales", path: "/reports/company-wise-sales", pro: false },
+      { name: "Item Wise Purchase", path: "/reports/item-wise-purchase", pro: false },
     ],
   }
 ];

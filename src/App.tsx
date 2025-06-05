@@ -37,7 +37,7 @@ import PdfInvoicePrintPage from './pages/print/PdfInvoicePrintPage';
 import PrintBulkCashReceipts from "./pages/print/PrintBulkCashReceipts";
 import DbfPrint from "./pages/database/DbfPrint";
 import ItemWiseSales from "./pages/reports/ItemWiseSales";
-import CompanyWiseSales from "./pages/reports/CompanyWiseSales";
+import ItemWisePurchase from './pages/reports/ItemWisePurchase';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -168,9 +168,10 @@ const AppRoutes = () => (
           <ItemWiseSales />
         </ProtectedRoute>
       } />
-      <Route path="/reports/company-wise-sales" element={
+      
+      <Route path="/reports/item-wise-purchase" element={
         <ProtectedRoute requiredAccess="Admin">
-          <CompanyWiseSales />
+          <ItemWisePurchase />
         </ProtectedRoute>
       } />
       
