@@ -3,7 +3,7 @@ const router = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
 const { getDbfData } = require('./utilities'); // Assuming utilities are in the same directory or adjust path
-
+require('dotenv').config();
 // Function to parse date strings (YYYY-MM-DD)
 const parseDate = (dateString) => {
   const [year, month, day] = dateString.split('-').map(Number);
@@ -32,7 +32,8 @@ const formatDateDDMMYYYY = (dateObj) => {
 router.get('/companies', async (req, res) => {
   try {
     // Adjusted path to COMPANY.json, assuming it's in the same 'json' directory
-    const companyFilePath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'COMPANY.json');
+    const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+    const companyFilePath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'COMPANY.json');
     const data = await fs.readFile(companyFilePath, 'utf8');
     const companies = JSON.parse(data);
     
@@ -87,9 +88,10 @@ router.get('/item-wise-sales', async (req, res) => {
     const endDate = parseDate(toDate);
     endDate.setHours(23, 59, 59, 999); // Include the entire end date
 
-    const billdtlPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'BILLDTL.json');
-    const cmplPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'CMPL.json'); // Changed from ACMAST.json
-    const companyPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'COMPANY.json');// 
+    const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+    const billdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
+    const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json'); 
+    const companyPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'COMPANY.json');
 
     let billdtlData = [];
     let cmplData = []; // Changed from acmastData
@@ -280,8 +282,9 @@ router.get('/reports/company-wise-sales', async (req, res) => {
     const endDate = parseDate(toDate);
     endDate.setHours(23, 59, 59, 999); // Include the whole end day
 
-    const billdtlPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'BILLDTL.json');
-    const cmplPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'CMPL.json'); // Changed from ACMAST.json
+    const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;    
+    const billdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
+    const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json'); // Changed from ACMAST.json
 
     let billdtlData = [];
     let cmplData = []; // Changed from acmastData
@@ -410,8 +413,9 @@ router.get('/filter-options', async (req, res) => {
     }
 
     try {
-        const billDtlPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'BILLDTL.json');
-        const cmplPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'CMPL.json');
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        const billDtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
+        const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
 
         const billDtlData = JSON.parse(await fs.readFile(billDtlPath, 'utf-8'));
         const cmplData = JSON.parse(await fs.readFile(cmplPath, 'utf-8'));
@@ -517,9 +521,10 @@ router.get('/item-wise-purchase', async (req, res) => {
         const endDate = parseDate(toDate);
         endDate.setHours(23, 59, 59, 999);
 
-        const purdtlPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'PURDTL.json');
-        const cmplPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'CMPL.json');
-        const companyPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'COMPANY.json');
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        const purdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'PURDTL.json');
+        const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
+        const companyPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'COMPANY.json');
 
         let purdtlData = [];
         let cmplData = [];
@@ -682,8 +687,9 @@ router.get('/purchase-filter-options', async (req, res) => {
     }
 
     try {
-        const purdtlPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'PURDTL.json');
-        const cmplPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'CMPL.json');
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        const purdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'PURDTL.json');
+        const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
 
         const purdtlData = JSON.parse(await fs.readFile(purdtlPath, 'utf-8'));
         const cmplData = JSON.parse(await fs.readFile(cmplPath, 'utf-8'));
