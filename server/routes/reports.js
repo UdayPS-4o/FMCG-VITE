@@ -60,7 +60,7 @@ router.get('/companies', async (req, res) => {
 // GET /api/reports/item-wise-sales
 router.get('/item-wise-sales', async (req, res) => {
   try {
-    let { fromDate, toDate, itemCodes, partyCode, companyCodes, series, billNumbers, unit } = req.query;
+    let { fromDate, toDate, itemCodes, partyCode, series, billNumbers, unit, companyCodes, seriesBillFilters } = req.query;
 
     if (itemCodes) {
         itemCodes = itemCodes.split(',').map(s => s.trim()).filter(Boolean);
@@ -129,7 +129,8 @@ router.get('/item-wise-sales', async (req, res) => {
         return acc;
     }, {});
       
-    const filteredData = billdtlData.filter(item => {
+    // Filtering logic
+    let filteredData = billdtlData.filter(item => {
       const itemDate = item.DATE ? new Date(item.DATE) : null;
       if (!itemDate) return false;
 
@@ -183,6 +184,40 @@ router.get('/item-wise-sales', async (req, res) => {
 
       return isDateInRange && isItemMatch && isPartyMatch && isCompanyMatch && isSeriesMatch && isBillNumberMatch && isUnitMatch;
     });
+
+    // New filtering for series and bill numbers
+    if (seriesBillFilters) {
+      try {
+          const filters = JSON.parse(seriesBillFilters);
+          if (Array.isArray(filters) && filters.length > 0) {
+              filteredData = filteredData.filter(item => {
+                  return filters.some(filter => {
+                      // Check if series matches
+                      if (item.SERIES !== filter.series) {
+                          return false;
+                      }
+                      // If there are bill numbers for this series, check if the item's bill number is in the list
+                      if (filter.billNumbers) {
+                          const billNumberSet = new Set(filter.billNumbers.split(',').map(bn => bn.trim()));
+                          return billNumberSet.has(String(item.BILL));
+                      }
+                      // If no bill numbers are specified for this series, it's a match for the series
+                      return true;
+                  });
+              });
+          }
+      } catch (e) {
+          console.error("Error parsing seriesBillFilters:", e);
+          // Optionally, handle the error, e.g., by sending a 400 response
+      }
+    } else if (series) { // Fallback to old logic if new filter is not present
+      const seriesList = series.split(',').map(s => s.trim());
+      filteredData = filteredData.filter(item => seriesList.includes(item.SERIES));
+      if (billNumbers && seriesList.length === 1) { // This logic for single series bill numbers is kept for compatibility
+        const billNumberSet = new Set(billNumbers.split(',').map(bn => bn.trim()));
+        filteredData = filteredData.filter(item => billNumberSet.has(String(item.BILL)));
+      }
+    }
 
     const report = filteredData.map(item => {
       const partyInfo = partyDetailsMap[item.C_CODE] || { name: item.C_CODE, place: '' };
@@ -498,7 +533,7 @@ router.get('/filter-options', async (req, res) => {
 // GET /api/reports/item-wise-purchase
 router.get('/item-wise-purchase', async (req, res) => {
     try {
-        let { fromDate, toDate, itemCodes, partyCode, companyCodes, series, billNumbers, unit } = req.query;
+        let { fromDate, toDate, itemCodes, partyCode, companyCodes, series, billNumbers, unit, seriesBillFilters } = req.query;
 
         if (itemCodes) {
             itemCodes = itemCodes.split(',').map(s => s.trim()).filter(Boolean);
@@ -562,47 +597,60 @@ router.get('/item-wise-purchase', async (req, res) => {
             return acc;
         }, {});
 
+        let parsedSeriesFilters = null;
+        if (seriesBillFilters) {
+            try {
+                parsedSeriesFilters = JSON.parse(seriesBillFilters);
+            } catch (e) {
+                console.error("Error parsing seriesBillFilters for purchase report:", e);
+            }
+        }
+
         const filteredData = purdtlData.filter(item => {
-            const itemDate = item.DATE ? new Date(item.DATE) : null;
-            if (!itemDate) return false;
-
-            const isDateInRange = itemDate >= startDate && itemDate <= endDate;
-            let isItemMatch = true;
-            let isPartyMatch = true;
-            let isCompanyMatch = true;
-            let isSeriesMatch = true;
-            let isBillNumberMatch = true;
-            let isUnitMatch = true;
-
-            if (itemCodes && itemCodes.length > 0) {
-                isItemMatch = itemCodes.includes(item.CODE);
+            const itemDate = new Date(item.DATE);
+            if (itemDate < startDate || itemDate > endDate) {
+                return false;
             }
 
-            if (partyCode) {
-                isPartyMatch = item.C_CODE === partyCode;
+            if (companyCodes) {
+                const companyCodeSet = new Set(companyCodes.split(',').map(c => c.trim()));
+                if (!companyCodeSet.has(item.CCODE)) return false;
             }
 
-            if (companyCodes && companyCodes.length > 0) {
-                if (item.CODE && item.CODE.length >= 2) {
-                    const itemCompanyCode = item.CODE.substring(0, 2).toUpperCase();
-                    isCompanyMatch = companyCodes.includes(itemCompanyCode);
-                } else {
-                    isCompanyMatch = false;
+            if (parsedSeriesFilters && Array.isArray(parsedSeriesFilters) && parsedSeriesFilters.length > 0) {
+                const matchesSeries = parsedSeriesFilters.some(filter => {
+                    if (item.SERIES !== filter.series) return false;
+                    if (filter.billNumbers) {
+                        const billNumberSet = new Set(filter.billNumbers.split(',').map(bn => bn.trim()));
+                        return billNumberSet.has(String(item.PBILL));
+                    }
+                    return true;
+                });
+                if (!matchesSeries) return false;
+            } else if (series) {
+                const seriesList = series.split(',').map(s => s.trim());
+                if (!seriesList.includes(item.SERIES)) return false;
+                if (billNumbers && seriesList.length === 1) {
+                    const billNumberSet = new Set(billNumbers.split(',').map(bn => bn.trim()));
+                    if (!billNumberSet.has(String(item.PBILL))) return false;
                 }
             }
 
-            if (series) {
-                isSeriesMatch = item.SERIES === series.toUpperCase();
-                if (billNumbers && billNumbers.length > 0) {
-                    isBillNumberMatch = billNumbers.includes(String(item.BILL));
-                }
+            if (partyCode && item.PCODE !== partyCode) {
+                return false;
             }
 
-            if (unit && unit !== 'All') {
-                isUnitMatch = item.UNIT && item.UNIT.toLowerCase() === unit.toLowerCase();
+            if (itemCodes) {
+                const itemCodeSet = new Set(itemCodes.split(',').map(code => code.trim()));
+                if (!itemCodeSet.has(item.ICODE)) return false;
             }
 
-            return isDateInRange && isItemMatch && isPartyMatch && isCompanyMatch && isSeriesMatch && isBillNumberMatch && isUnitMatch;
+            if (unit === 'Box' || unit === 'Pcs') {
+                const lowerCaseUnit = unit.toLowerCase();
+                if (!item.UNIT || item.UNIT.toLowerCase() !== lowerCaseUnit) return false;
+            }
+            
+            return true;
         });
 
         const report = filteredData.map(item => {
