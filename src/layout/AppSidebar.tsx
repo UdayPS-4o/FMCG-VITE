@@ -258,9 +258,9 @@ const AppSidebar = React.forwardRef<HTMLElement, {}>((props, ref) => {
         if (item.name === "Approved") {
           return user.routeAccess.includes('Admin');
         }
-        // Special case for "Reports" section - only show to Admin (or specific report role)
+        // Special case for "Reports" section
         if (item.name === "Reports") {
-          return user.routeAccess.includes('Admin'); // Or e.g. user.routeAccess.includes('Reports')
+          return user.routeAccess.includes('Reports');
         }
 
         // For Database section, filter subitems based on user access
