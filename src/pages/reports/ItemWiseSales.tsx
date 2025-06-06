@@ -28,6 +28,12 @@ interface SalesReportItem {
   BillNo: string | number;
 }
 
+// Add this new interface for the dynamic series/bill filters
+interface SeriesBillFilter {
+  series: string;
+  billNumbers: string;
+}
+
 // Define a simple Option type for party selection state
 interface PartyOptionType {
   value: string;
@@ -84,8 +90,7 @@ const ItemWiseSalesContent: React.FC = () => {
   const [reportData, setReportData] = useState<SalesReportItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [seriesFilter, setSeriesFilter] = useState<string>('');
-  const [billNoFilter, setBillNoFilter] = useState<string>('');
+  const [seriesBillFilters, setSeriesBillFilters] = useState<SeriesBillFilter[]>([{ series: '', billNumbers: '' }]);
   const [selectedParty, setSelectedParty] = useState<PartyOptionType | null>(null);
   const [unitFilter, setUnitFilter] = useState<'All' | 'Box' | 'Pcs'>('All');
   const [groupItems, setGroupItems] = useState<boolean>(false);
@@ -105,6 +110,26 @@ const ItemWiseSalesContent: React.FC = () => {
   const { pmplData, partyOptions: contextPartyOptions } = useInvoiceContext(); 
   // const itemAutocompleteRef = useRef<AutocompleteRefHandle>(null); // Not for MultiSelect
   const [user, setUser] = useState<User | null>(null);
+
+  // Handlers for dynamic series and bill number filters
+  const handleSeriesBillFilterChange = (index: number, field: keyof SeriesBillFilter, value: string) => {
+    const updatedFilters = [...seriesBillFilters];
+    updatedFilters[index][field] = field === 'series' ? value.toUpperCase() : value;
+    setSeriesBillFilters(updatedFilters);
+  };
+
+  const addSeriesBillFilter = () => {
+    setSeriesBillFilters([...seriesBillFilters, { series: '', billNumbers: '' }]);
+  };
+
+  const removeSeriesBillFilter = (indexToRemove: number) => {
+    if (seriesBillFilters.length > 1) {
+      setSeriesBillFilters(seriesBillFilters.filter((_, index) => index !== indexToRemove));
+    } else {
+      // If it's the last one, just clear it instead of removing the row.
+      setSeriesBillFilters([{ series: '', billNumbers: '' }]);
+    }
+  };
 
   // Calculate totals for the report data
   const reportTotals = useMemo(() => {
@@ -196,7 +221,7 @@ const ItemWiseSalesContent: React.FC = () => {
     if (user) {
       const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
       if (!isAdmin && user.defaultSeries && user.defaultSeries.billing && user.canSelectSeries === false) {
-        setSeriesFilter(user.defaultSeries.billing);
+        setSeriesBillFilters([{ series: user.defaultSeries.billing, billNumbers: '' }]);
       }
     }
   }, [user]);
@@ -406,46 +431,57 @@ const ItemWiseSalesContent: React.FC = () => {
     let newFromDate = '';
     let newToDate = '';
 
-    switch (selectedDateRange) {
+        switch (selectedDateRange) {
       case 'today':
+        today.setHours(5, 30, 0, 0);
         newFromDate = formatDate(today);
         newToDate = formatDate(today);
         break;
       case 'yesterday':
         const yesterday = new Date(today);
         yesterday.setDate(today.getDate() - 1);
+        yesterday.setHours(5, 30, 0, 0);
         newFromDate = formatDate(yesterday);
         newToDate = formatDate(yesterday);
         break;
       case 'last7days':
         const last7Days = new Date(today);
-        last7Days.setDate(today.getDate() - 6); // Includes today
+        last7Days.setDate(today.getDate() - 6);
+        last7Days.setHours(5, 30, 0, 0);
+        today.setHours(5, 30, 0, 0);
         newFromDate = formatDate(last7Days);
         newToDate = formatDate(today);
         break;
       case 'thisMonth':
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        firstDayOfMonth.setHours(5, 30, 0, 0);
+        today.setHours(5, 30, 0, 0);
         newFromDate = formatDate(firstDayOfMonth);
         newToDate = formatDate(today);
         break;
       case 'lastMonth':
         const firstDayOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        const lastDayOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        const firstDayOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDayOfLastMonth = new Date(firstDayOfThisMonth);
+        lastDayOfLastMonth.setDate(firstDayOfThisMonth.getDate() - 1);
+        firstDayOfLastMonth.setHours(5, 30, 0, 0);
+        lastDayOfLastMonth.setHours(5, 30, 0, 0);
         newFromDate = formatDate(firstDayOfLastMonth);
         newToDate = formatDate(lastDayOfLastMonth);
         break;
       case 'custom':
-        // For custom, we don't override, allow manual input.
-        // If fromDate and toDate are empty, set to default (e.g. this month)
         if (!fromDate || !toDate) {
             const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            firstDayThisMonth.setHours(5, 30, 0, 0);
+            today.setHours(5, 30, 0, 0);
             setFromDate(formatDate(firstDayThisMonth));
             setToDate(formatDate(today));
         }
-        return; // Exit early for custom if dates are already set.
+        return;
       default:
-        // Default to "This Month"
         const defaultFirstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        defaultFirstDay.setHours(5, 30, 0, 0);
+        today.setHours(5, 30, 0, 0);
         newFromDate = formatDate(defaultFirstDay);
         newToDate = formatDate(today);
     }
@@ -475,13 +511,20 @@ const ItemWiseSalesContent: React.FC = () => {
       if (selectedItemCodes.length > 0) {
         params.append('itemCodes', selectedItemCodes.join(','));
       }
-      if (seriesFilter) {
-        params.append('series', seriesFilter);
-        // If series and bill numbers are provided, add bill numbers to params
-        if (billNoFilter) {
-          params.append('billNumbers', billNoFilter);
+
+      // New logic for multiple series/bill number filters
+      const validSeriesFilters = seriesBillFilters.filter(f => f.series.trim() !== '');
+      if (validSeriesFilters.length > 0) {
+        const filtersToSend = validSeriesFilters.map(f => ({
+          series: f.series,
+          billNumbers: f.billNumbers.trim(),
+        })).filter(f => f.series);
+
+        if (filtersToSend.length > 0) {
+          params.append('seriesBillFilters', JSON.stringify(filtersToSend));
         }
       }
+
       if (selectedParty?.value) {
         params.append('partyCode', selectedParty.value);
       }
@@ -547,6 +590,11 @@ const ItemWiseSalesContent: React.FC = () => {
 
     const partyName = selectedParty ? selectedParty.label : 'All';
 
+    const seriesFiltersDisplay = seriesBillFilters
+      .filter(f => f.series.trim() !== '')
+      .map(f => `Series ${f.series}: ${f.billNumbers.trim() || 'All Bills'}`)
+      .join('<br>') || 'All';
+
     let reportHtml = `
       <html>
         <head>
@@ -589,8 +637,7 @@ const ItemWiseSalesContent: React.FC = () => {
             <p><strong>Companies:</strong> ${companyNames}</p>
             <p><strong>Party:</strong> ${partyName}</p>
             <p><strong>Items:</strong> ${itemNames}</p>
-            <p><strong>Series:</strong> ${seriesFilter || 'All'}</p>
-            <p><strong>Bill Numbers:</strong> ${billNoFilter || 'All'}</p>
+            <p><strong>Series/Bills:</strong> ${seriesFiltersDisplay}</p>
             <p><strong>Unit:</strong> ${unitFilter}</p>
             <p><strong>Grouped by Item:</strong> ${groupItems ? 'Yes' : 'No'}</p>
           </div>
@@ -619,7 +666,7 @@ const ItemWiseSalesContent: React.FC = () => {
           <td class="text-right">${(groupedRow.FreeV || 0).toFixed(2)}</td>
         </tr>`;
 
-        if (expandedItemNames.has(groupedRow.ItemName) && groupedRow.details) {
+        if (groupedRow.details) {
           reportHtml += `<tr class="detail-header-row">
             ${fullTableHeaders.map(header => `<th>${header}</th>`).join('')}
           </tr>`;
@@ -713,7 +760,9 @@ const ItemWiseSalesContent: React.FC = () => {
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Item Wise Sales Report</h1>
       {/* Updated filter section grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
+      {/* width 70vw, only on breakpoint pc*/} 
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow w-full lg:w-[75vw]">
+        {/* --- Row 1: Date and Company Filters --- */}
         <div>
           <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date Range</label>
           <select
@@ -750,9 +799,7 @@ const ItemWiseSalesContent: React.FC = () => {
             disabled={selectedDateRange !== 'custom'}
           />
         </div>
-        
-        {/* Company MultiSelect Filter */}
-        <div className="xl:col-span-1">
+        <div>
           <label htmlFor="companyMultiSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Company</label>
           <MultiSelect
             label={companyOptions.length > 0 ? '' : (companyLoadingError ? 'Error loading companies' : 'Loading companies...')}
@@ -761,14 +808,14 @@ const ItemWiseSalesContent: React.FC = () => {
             onChange={setSelectedCompanyCodes}
             allowFiltering={true}
             selectOnEnter={true}
-            matchThreshold={3} // Adjust as needed
+            matchThreshold={3}
             disabled={companyOptions.length === 0 && !companyLoadingError}
           />
           {companyLoadingError && <p className="text-xs text-red-500 mt-1">{companyLoadingError}</p>}
         </div>
         
-        {/* Party Name Filter (using Autocomplete for single selection) */}
-        <div className="xl:col-span-1">
+        {/* --- Row 2: Party and Item Filters --- */}
+        <div className="lg:col-span-2">
           <label htmlFor="partyFilter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Party (Optional)</label>
           <Autocomplete
             id="partyFilter"
@@ -782,98 +829,134 @@ const ItemWiseSalesContent: React.FC = () => {
             disabled={!fromDate || !toDate || filterOptionsLoading}
           />
         </div>
+        <div className="lg:col-span-2">
+          <label htmlFor="itemMultiSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Items (Optional)</label>
+          <MultiSelect
+            label={filterOptionsLoading ? 'Loading items...' : (fromDate && toDate ? '' : 'Select dates first')}
+            options={currentItemOptions}
+            value={selectedItemCodes}
+            onChange={setSelectedItemCodes}
+            allowFiltering={true}
+            selectOnEnter={true}
+            matchThreshold={3}
+            disabled={!fromDate || !toDate || filterOptionsLoading}
+          />
+        </div>
 
-        {/* Series Filter - moved to new logical row (still within the grid) */}
-        {/* This starts a new "visual" row or section within the grid for larger screens */}
-        {/* For smaller screens, it will stack naturally. */}
-        {/* Add a div to wrap series and items if you want them grouped on one line below */}
-        <div className="md:col-span-2 lg:col-span-3 xl:col-span-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4 md:mt-0">
-        {/* Series Filter */}
-        <div className="xl:col-span-1">
-          <label htmlFor="seriesFilter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Series (Optional)</label>
-            <Input id="seriesFilter" type="text" value={seriesFilter} onChange={(e) => setSeriesFilter(e.target.value.toUpperCase())} placeholder="E.g., B" variant="outlined" maxLength={1} disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false} />
-          </div>
-          {/* Bill No Filter - MOVED next to Series */}
-          <div className="xl:col-span-1">
-            <label htmlFor="billNoFilter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bill Numbers (Optional)</label>
-            <Input id="billNoFilter" type="text" value={billNoFilter} onChange={(e) => setBillNoFilter(e.target.value)} placeholder="e.g., 1,2,3" variant="outlined" disabled={!seriesFilter} />
-          </div>
-          {/* Item MultiSelect */}
-          <div className="lg:col-span-2 xl:col-span-1"> {/* Adjusted span */} 
-             <label htmlFor="itemMultiSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Items (Optional)</label>
-            <MultiSelect label={filterOptionsLoading ? 'Loading items...' : (fromDate && toDate ? '' : 'Select dates first')} options={currentItemOptions} value={selectedItemCodes} onChange={setSelectedItemCodes} allowFiltering={true} selectOnEnter={true} matchThreshold={3} disabled={!fromDate || !toDate || filterOptionsLoading} />
-          </div>
-           {/* Unit Filter Radio Buttons - REPLACED checkboxes */}
-           <div className="xl:col-span-1 flex flex-col justify-center">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Unit Filter</label>
-            <div className="flex items-center mt-1 space-x-4">
-              <div>
-                <input
-                  type="radio"
-                  id="unitFilterAll"
-                  name="unitFilter"
-                  value="All"
-                  checked={unitFilter === 'All'}
-                  onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
-                  className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
-                />
-                <label htmlFor="unitFilterAll" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">All</label>
-              </div>
-              <div>
-                <input
-                  type="radio"
-                  id="unitFilterBox"
-                  name="unitFilter"
-                  value="Box"
-                  checked={unitFilter === 'Box'}
-                  onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
-                  className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
-                />
-                <label htmlFor="unitFilterBox" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">Box</label>
-              </div>
-              <div>
-                <input
-                  type="radio"
-                  id="unitFilterPcs"
-                  name="unitFilter"
-                  value="Pcs"
-                  checked={unitFilter === 'Pcs'}
-                  onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
-                  className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
-                />
-                <label htmlFor="unitFilterPcs" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">Pcs</label>
-              </div>
+        {/* --- Row 3: Series/Bills and Unit Filter --- */}
+        <div className="lg:col-span-3">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Series & Bill Numbers (Optional)</label>
+          {seriesBillFilters.map((filter, index) => (
+            <div key={index} className="flex items-center gap-2 mb-2">
+              <Input
+                name={`series_${index}`}
+                type="text"
+                value={filter.series}
+                onChange={(e) => handleSeriesBillFilterChange(index, 'series', e.target.value)}
+                placeholder="Series"
+                variant="outlined"
+                maxLength={1}
+                className="w-24"
+                disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false}
+              />
+              <Input
+                name={`billNumbers_${index}`}
+                type="text"
+                value={filter.billNumbers}
+                onChange={(e) => handleSeriesBillFilterChange(index, 'billNumbers', e.target.value)}
+                placeholder="Bill Numbers (e.g., 1,2,3)"
+                variant="outlined"
+                disabled={!filter.series || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false)}
+                className="flex-grow"
+              />
+              <button
+                type="button"
+                onClick={() => removeSeriesBillFilter(index)}
+                className="flex-shrink-0 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+                disabled={seriesBillFilters.length === 1 || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false)}
+              >
+                &ndash;
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addSeriesBillFilter}
+            className="mt-1 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+            disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false}
+          >
+            + Add Series
+          </button>
+        </div>
+        <div className="flex flex-col justify-start pt-1">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Unit Filter</label>
+          <div className="flex items-center mt-2 space-x-4">
+            <div>
+              <input
+                type="radio"
+                id="unitFilterAll"
+                name="unitFilter"
+                value="All"
+                checked={unitFilter === 'All'}
+                onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
+                className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
+              />
+              <label htmlFor="unitFilterAll" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">All</label>
+            </div>
+            <div>
+              <input
+                type="radio"
+                id="unitFilterBox"
+                name="unitFilter"
+                value="Box"
+                checked={unitFilter === 'Box'}
+                onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
+                className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
+              />
+              <label htmlFor="unitFilterBox" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">Box</label>
+            </div>
+            <div>
+              <input
+                type="radio"
+                id="unitFilterPcs"
+                name="unitFilter"
+                value="Pcs"
+                checked={unitFilter === 'Pcs'}
+                onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')}
+                className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600"
+              />
+              <label htmlFor="unitFilterPcs" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">Pcs</label>
             </div>
           </div>
         </div>
-        {/* New row for Group Items checkbox */}
-        <div className="md:col-span-2 lg:col-span-3 xl:col-span-5 mt-4">
-            <div className="flex items-center">
-                <input
-                    type="checkbox"
-                    id="groupItems"
-                    checked={groupItems}
-                    onChange={(e) => setGroupItems(e.target.checked)}
-                    className="form-checkbox h-5 w-5 text-indigo-600 transition duration-150 ease-in-out mr-2 rounded dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:ring-offset-gray-800"
-                />
-                <label htmlFor="groupItems" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                    Group by Item Name
-                </label>
-            </div>
-        </div>
 
-        <div className="flex items-end mt-4 md:mt-0 md:col-span-1 space-x-2"> {/* MODIFIED: Added space-x-2 for button spacing */}
+        {/* --- Row 4: Grouping and Actions --- */}
+        <div className="lg:col-span-2 flex items-center">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="groupItems"
+              checked={groupItems}
+              onChange={(e) => setGroupItems(e.target.checked)}
+              className="form-checkbox h-5 w-5 text-indigo-600 transition duration-150 ease-in-out mr-2 rounded dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:ring-offset-gray-800"
+            />
+            <label htmlFor="groupItems" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+              Group by Item Name
+            </label>
+          </div>
+        </div>
+        <div className="lg:col-span-2 flex items-end justify-end space-x-2">
           <button
             onClick={handleFetchReport}
             disabled={loading || !fromDate || !toDate}
-            className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            className="w-full max-w-xs inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
           >
             {loading ? 'Loading...' : 'Fetch Report'}
           </button>
-          <button // NEW: Print Report Button
+          <button
             onClick={handlePrintReport}
-            disabled={reportData.length === 0 && !loading} // Disable if no data
-            className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+            disabled={reportData.length === 0 && !loading}
+            className="w-full max-w-xs inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
           >
             Print Report
           </button>
@@ -907,12 +990,11 @@ const ItemWiseSalesContent: React.FC = () => {
             {processedReportDisplayData.map((row: SalesReportItem | GroupedSalesReportItem, index) => {
               if (groupItems) {
                 const groupedRow = row as GroupedSalesReportItem;
-                const isExpanded = expandedItemNames.has(groupedRow.ItemName);
                 return (
                   <React.Fragment key={`${groupedRow.ItemName}-${index}`}>
                     <tr onClick={() => handleToggleExpand(groupedRow.ItemName)} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">
-                        <span className="mr-2">{isExpanded ? '-' : '+'}</span>
+                        <span className="mr-2">{expandedItemNames.has(groupedRow.ItemName) ? '-' : '+'}</span>
                         {groupedRow.Code}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{groupedRow.ItemName}</td>
@@ -925,7 +1007,7 @@ const ItemWiseSalesContent: React.FC = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.GSTAmt.toFixed(2)}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.FreeV.toFixed(2)}</td>
                     </tr>
-                    {isExpanded && (
+                    {expandedItemNames.has(groupedRow.ItemName) && (
                       <>
                         {/* Detail Header Row */}
                         <tr className="bg-gray-200 dark:bg-gray-700/80">
