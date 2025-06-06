@@ -65,7 +65,10 @@ interface User {
   powers: string[];
   subgroups: any[]; // Adjust as per actual SubGroup structure if needed
   smCode?: string;
-  defaultSeries?: { billing?: string };
+  defaultSeries?: { 
+    billing?: string;
+    reports?: string; 
+  };
   godownAccess: string[];
   canSelectSeries?: boolean;
 }
@@ -220,8 +223,8 @@ const ItemWiseSalesContent: React.FC = () => {
   useEffect(() => {
     if (user) {
       const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
-      if (!isAdmin && user.defaultSeries && user.defaultSeries.billing && user.canSelectSeries === false) {
-        setSeriesBillFilters([{ series: user.defaultSeries.billing, billNumbers: '' }]);
+      if (!isAdmin && user.defaultSeries && user.defaultSeries.reports && user.canSelectSeries === false) {
+        setSeriesBillFilters([{ series: user.defaultSeries.reports, billNumbers: '' }]);
       }
     }
   }, [user]);
@@ -857,7 +860,7 @@ const ItemWiseSalesContent: React.FC = () => {
                 variant="outlined"
                 maxLength={1}
                 className="w-24"
-                disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false}
+                disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false}
               />
               <Input
                 name={`billNumbers_${index}`}
@@ -866,14 +869,13 @@ const ItemWiseSalesContent: React.FC = () => {
                 onChange={(e) => handleSeriesBillFilterChange(index, 'billNumbers', e.target.value)}
                 placeholder="Bill Numbers (e.g., 1,2,3)"
                 variant="outlined"
-                disabled={!filter.series || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false)}
                 className="flex-grow"
               />
               <button
                 type="button"
                 onClick={() => removeSeriesBillFilter(index)}
                 className="flex-shrink-0 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
-                disabled={seriesBillFilters.length === 1 || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false)}
+                disabled={seriesBillFilters.length === 1 || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false)}
               >
                 &ndash;
               </button>
@@ -883,7 +885,7 @@ const ItemWiseSalesContent: React.FC = () => {
             type="button"
             onClick={addSeriesBillFilter}
             className="mt-1 text-sm font-medium text-indigo-600 hover:text-indigo-800"
-            disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.billing) : false}
+            disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false}
           >
             + Add Series
           </button>

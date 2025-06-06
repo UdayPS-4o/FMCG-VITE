@@ -164,13 +164,13 @@ const AppRoutes = () => (
       
       {/* Reports Section */}
       <Route path="/reports/item-wise-sales" element={
-        <ProtectedRoute requiredAccess="Admin">
+        <ProtectedRoute requiredAccess="Reports">
           <ItemWiseSales />
         </ProtectedRoute>
       } />
       
       <Route path="/reports/item-wise-purchase" element={
-        <ProtectedRoute requiredAccess="Admin">
+        <ProtectedRoute requiredAccess="Reports">
           <ItemWisePurchase />
         </ProtectedRoute>
       } />

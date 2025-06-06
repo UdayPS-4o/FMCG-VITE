@@ -27,6 +27,7 @@ interface User {
     cashReceipt?: string;
     cashPayment?: string;
     godown?: string;
+    reports?: string;
   };
   godownAccess?: string[];
   canSelectSeries?: boolean;
@@ -53,6 +54,7 @@ const AddUser: React.FC = () => {
     'Add User',
     'Approved',
     'Cash Payments',
+    'Reports',
   ]);
   
   const [powersOptions] = useState<string[]>(['Read', 'Write', 'Delete']);
@@ -80,6 +82,7 @@ const AddUser: React.FC = () => {
   const [defaultCashReceiptSeries, setDefaultCashReceiptSeries] = useState<string>('');
   const [defaultCashPaymentSeries, setDefaultCashPaymentSeries] = useState<string>('');
   const [defaultGodownSeries, setDefaultGodownSeries] = useState<string>('');
+  const [defaultReportsSeries, setDefaultReportsSeries] = useState<string>('');
   const [canSelectSeries, setCanSelectSeries] = useState<boolean>(false);
   const [godownAccess, setGodownAccess] = useState<string[]>([]);
   
@@ -120,6 +123,7 @@ const AddUser: React.FC = () => {
           setDefaultCashReceiptSeries(userToEdit.defaultSeries.cashReceipt || '');
           setDefaultCashPaymentSeries(userToEdit.defaultSeries.cashPayment || '');
           setDefaultGodownSeries(userToEdit.defaultSeries.godown || '');
+          setDefaultReportsSeries(userToEdit.defaultSeries.reports || '');
         }
         
         // Handle series selection permission
@@ -332,7 +336,8 @@ const AddUser: React.FC = () => {
           billing: defaultBillingSeries || undefined,
           cashReceipt: defaultCashReceiptSeries || undefined,
           cashPayment: defaultCashPaymentSeries || undefined,
-          godown: defaultGodownSeries || undefined
+          godown: defaultGodownSeries || undefined,
+          reports: defaultReportsSeries || undefined,
         },
         canSelectSeries,
         godownAccess
@@ -417,12 +422,12 @@ const AddUser: React.FC = () => {
     setDefaultCashReceiptSeries('');
     setDefaultCashPaymentSeries('');
     setDefaultGodownSeries('');
+    setDefaultReportsSeries('');
     setCanSelectSeries(false);
     setGodownAccess([]);
     setIsEdit(false);
     setUserId(null);
-    // Increment key to force re-render of components
-    setFormKey(prev => prev + 1);
+    setFormKey(prevKey => prevKey + 1);
   };
   
   // Handle SM change
@@ -612,58 +617,66 @@ const AddUser: React.FC = () => {
 
               {/* Default Series Section */}
               <div className="mt-6 mb-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
+                <div className="flex items-start space-x-4">
+                  <div className="flex-1">
                     <Input
                       id="defaultBillingSeries"
-                      label="S (Billing)"
+                      label="Series (Billing)"
                       value={defaultBillingSeries}
-                      name="defaultBillingSeries"
                       onChange={(e) => handleSeriesChange(e, setDefaultBillingSeries)}
-                      variant="outlined"
-                      autoComplete="off"
-                      className="text-sm md:text-base"
+                      maxLength={1}
+                      className="uppercase"
                     />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <Input
                       id="defaultCashReceiptSeries"
-                      label="S (Cash Receipt)"
+                      label="Series (Cash Receipts)"
                       value={defaultCashReceiptSeries}
-                      name="defaultCashReceiptSeries"
                       onChange={(e) => handleSeriesChange(e, setDefaultCashReceiptSeries)}
-                      variant="outlined"
-                      autoComplete="off"
-                      className="text-sm md:text-base"
-                    />
-                  </div>
-                  <div>
-                    <Input
-                      id="defaultCashPaymentSeries"
-                      label="S (Cash Payment)"
-                      value={defaultCashPaymentSeries}
-                      name="defaultCashPaymentSeries"
-                      onChange={(e) => handleSeriesChange(e, setDefaultCashPaymentSeries)}
-                      variant="outlined"
-                      autoComplete="off"
-                      className="text-sm md:text-base"
-                    />
-                  </div>
-                  <div>
-                    <Input
-                      id="defaultGodownSeries"
-                      label="S (Godown)"
-                      value={defaultGodownSeries}
-                      name="defaultGodownSeries"
-                      onChange={(e) => handleSeriesChange(e, setDefaultGodownSeries)}
-                      variant="outlined"
-                      autoComplete="off"
-                      className="text-sm md:text-base"
+                      maxLength={1}
+                      className="uppercase"
                     />
                   </div>
                 </div>
+                <div className="flex items-start space-x-4 mt-4">
+                  <div className="flex-1">
+                    <Input
+                      id="defaultCashPaymentSeries"
+                      label="Series (Cash Payments)"
+                      value={defaultCashPaymentSeries}
+                      onChange={(e) => handleSeriesChange(e, setDefaultCashPaymentSeries)}
+                      maxLength={1}
+                      className="uppercase"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      id="defaultGodownSeries"
+                      label="Series (Godown)"
+                      value={defaultGodownSeries}
+                      onChange={(e) => handleSeriesChange(e, setDefaultGodownSeries)}
+                      maxLength={1}
+                      className="uppercase"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-start space-x-4 mt-4">
+                  <div className="flex-1">
+                    <Input
+                      id="defaultReportsSeries"
+                      label="Series (Reports)"
+                      value={defaultReportsSeries}
+                      onChange={(e) => handleSeriesChange(e, setDefaultReportsSeries)}
+                      maxLength={1}
+                      className="uppercase"
+                    />
+                  </div>
+                  <div className="flex-1"></div>
+                </div>
               </div>
-              <div className="flex items-center space-x-2 mb-4">
+              <div className="mt-4">
+                <div className="flex items-center space-x-2 mb-4">
                   <input
                     type="checkbox"
                     id="canSelectSeries"
@@ -675,6 +688,7 @@ const AddUser: React.FC = () => {
                     Allow selecting different series
                   </label>
                 </div>
+              </div>
               <div className="mt-6 flex justify-end space-x-4">
                 <button
                   type="submit"
