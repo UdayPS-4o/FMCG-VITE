@@ -58,6 +58,11 @@ app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x
 // Serve PDFs statically from the db/pdfs directory
 app.use('/db/pdfs', express.static(path.join(__dirname, 'db', 'pdfs')));
 
+// === NEW V1 API ROUTER ===
+const apiV1Routes = require('./api/v1'); // Require the new v1 router
+app.use('/api/v1', apiV1Routes);   // Mount it
+// === END NEW V1 API ROUTER ===
+
 const pdfRoutes = require('./routes/get/pdf');
 app.use("/api/generate-pdf", pdfRoutes);
 
@@ -75,8 +80,8 @@ app.use('/api/reports', reportRoutes);  // this is the main route for the report
   
 // set middleware to check if user is logged in
 // Apply this BEFORE routes that need authentication
-const middleware = require('./routes/middleware');
-app.use(middleware);
+const middleware = require('./routes/middleware'); // This is the OLD global middleware
+app.use(middleware); // It will apply to routes defined after it, but not /api/v1
 
 const slinkRoutes = require('./routes/slink');
 const orcusRoutes = require('./routes/orcusRoutes');
@@ -177,6 +182,8 @@ app.get('/favicon.ico', (req, res) => {
 const initServer = () => {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    console.log('New /api/v1 auth routes are active alongside old routes.');
+    console.log('Test new auth at: POST /api/v1/auth/login, GET /api/v1/auth/status (with Bearer token)');
   });
 };
 
