@@ -545,7 +545,7 @@ const AppSidebar = React.forwardRef<HTMLElement, {}>((props, ref) => {
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
-        className={`py-8 flex invisible ${
+        className={`py-4 lg:py-8 flex invisible ${
           !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
         }`}
       >

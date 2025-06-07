@@ -251,6 +251,10 @@ const ItemWisePurchaseContent: React.FC = () => {
     GSTAmt: number;
     FreeV: number;
     details: PurchaseReportItem[];
+    unitQty?: { [unit: string]: number };
+    displayQty?: string;
+    unitFree?: { [unit: string]: number };
+    displayFree?: string;
   }
 
   const processedReportDisplayData = useMemo(() => {
@@ -263,6 +267,8 @@ const ItemWisePurchaseContent: React.FC = () => {
         acc[key] = {
           Code: row.Code, ItemName: row.ItemName, Qty: 0, Free: 0, Gross: 0, Scheme: 0,
           NetAmt: 0, GoodsAmt: 0, GSTAmt: 0, FreeV: 0, details: [],
+          unitQty: {},
+          unitFree: {},
         };
       }
       acc[key].Qty += Number(row.Qty) || 0;
@@ -274,10 +280,70 @@ const ItemWisePurchaseContent: React.FC = () => {
       acc[key].GSTAmt += Number(row.GSTAmt) || 0;
       acc[key].FreeV += Number(row.FreeV) || 0;
       acc[key].details.push(row);
+
+      const unit = (row.Unit || 'UNKNOWN').toUpperCase();
+      if(acc[key].unitQty) {
+          if (!acc[key].unitQty[unit]) {
+            acc[key].unitQty[unit] = 0;
+          }
+          acc[key].unitQty[unit] += Number(row.Qty) || 0;
+      }
+      if(acc[key].unitFree) {
+          if (!acc[key].unitFree[unit]) {
+            acc[key].unitFree[unit] = 0;
+          }
+          acc[key].unitFree[unit] += Number(row.Free) || 0;
+      }
+
       return acc;
     }, {} as Record<string, GroupedPurchaseReportItem>);
 
-    return Object.values(grouped).sort((a, b) => a.ItemName.localeCompare(b.ItemName));
+    const groupedResult = Object.values(grouped);
+
+    groupedResult.forEach(item => {
+        const formatDisplayValue = (totalValue: number, unitValues: { [unit: string]: number } | undefined) => {
+            if (!unitValues) return totalValue.toFixed(2);
+
+            const activeUnits = Object.keys(unitValues).filter(u => unitValues[u] > 0);
+            const hasOnlyBoxAndPcs = activeUnits.every(u => u === 'BOX' || u === 'PCS');
+
+            if (hasOnlyBoxAndPcs && activeUnits.length > 0) {
+                const boxValue = unitValues['BOX'] || 0;
+                const pcsValue = unitValues['PCS'] || 0;
+                return `(BOX+PCS)\n(${boxValue}+${pcsValue})`;
+            }
+            
+            const unitOrder = ['BOX', 'PCS'];
+            const sortedUnits = Object.keys(unitValues).sort((a, b) => {
+                const indexA = unitOrder.indexOf(a);
+                const indexB = unitOrder.indexOf(b);
+                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                if (indexA !== -1) return -1;
+                if (indexB !== -1) return 1;
+                return a.localeCompare(b);
+            });
+
+            const labels: string[] = [];
+            const values: number[] = [];
+            sortedUnits.forEach(unit => {
+                if (unitValues[unit] > 0) {
+                    labels.push(unit);
+                    values.push(unitValues[unit]);
+                }
+            });
+
+            if (labels.length > 1) {
+                return `(${labels.join('+')})\n(${values.join('+')})`;
+            }
+            
+            return totalValue.toFixed(2);
+        };
+
+        item.displayQty = formatDisplayValue(item.Qty, item.unitQty);
+        item.displayFree = formatDisplayValue(item.Free, item.unitFree);
+    });
+
+    return groupedResult.sort((a, b) => a.ItemName.localeCompare(b.ItemName));
   }, [reportData, groupItems]);
 
   const fullTableHeaders = ['Date', 'Bill No.', 'Code', 'Item Name', 'Party', 'Place', 'Unit', 'Qty', 'Free', 'Gross', 'Scheme', 'Sch.%', 'CD', 'NetAmt', 'GoodsAmt', 'GSTAmt', 'FreeV'];
@@ -425,20 +491,20 @@ const ItemWisePurchaseContent: React.FC = () => {
     let reportHtml = `
       <html><head><title>Item Wise Purchase Report</title>
       <style>
+        @page { size: landscape; margin: 0.2in; }
         body { font-family: Arial, sans-serif; margin: 20px; } h1 { text-align: center; margin-bottom: 20px; }
         .filter-criteria { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; font-size: 0.9em; }
         .filter-criteria p { margin: 5px 0; } .filter-criteria strong { min-width: 100px; display: inline-block;}
         table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.8em; }
-        th, td { border: 1px solid #000; padding: 6px; text-align: left; word-break: break-word; }
+        th, td { border: 1px solid #000; padding: 2px; text-align: left; word-break: break-word; }
         th { background-color: #f2f2f2; font-weight: bold; } .text-right { text-align: right; }
         .total-row td { font-weight: bold; background-color: #e9e9e9; }
         .grouped-summary-row { font-weight: bold; cursor: default; } .grouped-summary-row td { background-color: #f8f8f8; }
-        .detail-header-row th { background-color: #e0e0e0; font-style: italic; padding-left: 15px !important; }
-        .detail-data-row td { background-color: #fdfdfd; padding-left: 15px !important; }
-        .detail-data-row .indent-cell { padding-left: 25px !important; }
+        .detail-header-row th { background-color: #e0e0e0; font-style: italic; }
+        .detail-data-row td { background-color: #fdfdfd; }
         @media print {
-          body { margin: 0.5in; font-size: 10pt; } h1 { font-size: 16pt; } .filter-criteria { font-size: 9pt; }
-          table { font-size: 8pt; } th, td { padding: 4px; } .filter-criteria { page-break-after: auto; }
+          body { margin: 0; font-size: 10pt; } h1 { font-size: 16pt; } .filter-criteria { font-size: 9pt; }
+          table { font-size: 8pt; } th, td { padding: 2px; } .filter-criteria { page-break-after: auto; }
           table { page-break-inside: auto; } tr { page-break-inside: avoid; page-break-after: auto; }
           thead { display: table-header-group; } tfoot { display: table-footer-group; }
           button, .no-print { display: none !important; } 
@@ -461,7 +527,8 @@ const ItemWisePurchaseContent: React.FC = () => {
         const groupedRow = row as GroupedPurchaseReportItem;
         reportHtml += `<tr class="grouped-summary-row">
           <td>${groupedRow.Code}</td><td>${groupedRow.ItemName}</td>
-          <td class="text-right">${(groupedRow.Qty || 0).toFixed(2)}</td><td class="text-right">${(groupedRow.Free || 0).toFixed(2)}</td>
+          <td class="text-right">${(groupedRow.displayQty || '').replace(/\n/g, '<br />')}</td>
+          <td class="text-right">${(groupedRow.displayFree || '').replace(/\n/g, '<br />')}</td>
           <td class="text-right">${(groupedRow.Gross || 0).toFixed(2)}</td><td class="text-right">${(groupedRow.Scheme || 0).toFixed(2)}</td>
           <td class="text-right">${(groupedRow.NetAmt || 0).toFixed(2)}</td><td class="text-right">${(groupedRow.GoodsAmt || 0).toFixed(2)}</td>
           <td class="text-right">${(groupedRow.GSTAmt || 0).toFixed(2)}</td><td class="text-right">${(groupedRow.FreeV || 0).toFixed(2)}</td>
@@ -471,7 +538,7 @@ const ItemWisePurchaseContent: React.FC = () => {
           reportHtml += `<tr class="detail-header-row">${fullTableHeaders.map(header => `<th>${header}</th>`).join('')}</tr>`;
           groupedRow.details.forEach(detailRow => {
             reportHtml += `<tr class="detail-data-row">
-              <td class="indent-cell">${detailRow.Date}</td><td>${detailRow.BillNo}</td>
+              <td>${detailRow.Date}</td><td>${detailRow.BillNo}</td>
               <td>${detailRow.Code}</td><td>${detailRow.ItemName}</td><td>${detailRow.Party}</td><td>${detailRow.Place}</td>
               <td>${detailRow.Unit}</td><td class="text-right">${(detailRow.Qty || 0).toFixed(2)}</td>
               <td class="text-right">${(detailRow.Free || 0).toFixed(2)}</td><td class="text-right">${(detailRow.Gross || 0).toFixed(2)}</td>
@@ -551,7 +618,7 @@ const ItemWisePurchaseContent: React.FC = () => {
         <div>
           <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date Range</label>
           <select id="dateRange" value={selectedDateRange} onChange={(e) => setSelectedDateRange(e.target.value)} className="mt-1 block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-gray-200">
-            {dateRangeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {dateRangeOptions.map(option => <option key={option.value} value={option.value} className="text-black bg-white dark:bg-gray-700 dark:text-gray-200">{option.label}</option>)}
           </select>
         </div>
         <div>
@@ -671,8 +738,8 @@ const ItemWisePurchaseContent: React.FC = () => {
                     <tr onClick={() => handleToggleExpand(groupedRow.ItemName)} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200"><span className="mr-2">{expandedItemNames.has(groupedRow.ItemName) ? '-' : '+'}</span>{groupedRow.Code}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{groupedRow.ItemName}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Qty.toFixed(2)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Free.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-pre-line text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.displayQty}</td>
+                      <td className="px-4 py-3 whitespace-pre-line text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.displayFree}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Gross.toFixed(2)}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Scheme.toFixed(2)}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.NetAmt.toFixed(2)}</td>
