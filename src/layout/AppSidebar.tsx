@@ -126,6 +126,11 @@ const fmcgItems: NavItem[] = [
     path: "/add-user",
   },
   {
+    icon: <BoxIcon />,
+    name: "Bills Delivery Register",
+    path: "/bills-delivery-register",
+  },
+  {
     icon: <DatabaseIcon />,
     name: "Database",
     subItems: [
@@ -239,6 +244,11 @@ const AppSidebar = React.forwardRef<HTMLElement, {}>((props, ref) => {
     const filtered = fmcgItems.filter(item => {
       // Special case for "Add User" - only show for Admin
       if (item.name === "Add User") {
+        return false;
+      }
+
+      // Special case for "Bills Delivery Register" - only show for Admin
+      if (item.name === "Bills Delivery Register") {
         return false;
       }
 
