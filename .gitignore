@@ -35,8 +35,7 @@ server/db/*.json
 
 server/db
 
-.env
 server/.env
 server/db
-
-
+.env
+.env.*
