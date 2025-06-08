@@ -12,6 +12,7 @@ interface Bill {
   TRUCK_NO: string;
   DATE: string; 
   BILLSTATUS: 'BILLED' | 'PICKED' | 'DELIVERED' | string | null; // Allow for other statuses and null
+  statusDate?: string | null;
 }
 
 // Define the props for the BillCard component
@@ -19,11 +20,9 @@ interface BillCardProps {
   bill: Bill;
   onMoveForward?: () => void;
   onMoveBackward?: () => void;
-  isSelected: boolean;
-  onSelect: () => void;
 }
 
-const BillCard: React.FC<BillCardProps> = ({ bill, onMoveForward, onMoveBackward, isSelected, onSelect }) => {
+const BillCard: React.FC<BillCardProps> = ({ bill, onMoveForward, onMoveBackward }) => {
   const date = new Date(bill.DATE);
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -32,12 +31,6 @@ const BillCard: React.FC<BillCardProps> = ({ bill, onMoveForward, onMoveBackward
 
   return (
     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md mb-4 flex items-center">
-      <input 
-        type="checkbox" 
-        checked={isSelected} 
-        onChange={onSelect} 
-        className="h-4 w-4 mr-4 rounded text-brand-600 focus:ring-brand-500 self-start mt-1"
-      />
       <div className="flex-grow">
         <p className="font-bold text-gray-900 dark:text-white">{bill.C_NAME}</p>
         <p className="text-sm text-gray-600 dark:text-gray-300">{bill.C_PLACE}</p>
@@ -76,77 +69,136 @@ const BillCard: React.FC<BillCardProps> = ({ bill, onMoveForward, onMoveBackward
 const BillsDeliveryRegister = () => {
   const { user } = useAuth();
   const [allBills, setAllBills] = useState<Bill[]>([]);
-  const [isUpdating, setIsUpdating] = useState(false);
-  
-  const [selectedBilled, setSelectedBilled] = useState(new Set<string>());
-  const [selectedPicked, setSelectedPicked] = useState(new Set<string>());
-  const [selectedDelivered, setSelectedDelivered] = useState(new Set<string>());
 
   const billed = allBills.filter(b => !['PICKED', 'DELIVERED'].includes(b.BILLSTATUS || ''));
   const picked = allBills.filter(b => b.BILLSTATUS === 'PICKED');
   const delivered = allBills.filter(b => b.BILLSTATUS === 'DELIVERED');
 
-  const fetchData = () => {
-    fetch(`/bill.json`)
-      .then((response) => {
-        if (!response.ok) throw new Error('Network response was not ok');
-        return response.json();
-      })
-      .then((data: Bill[]) => {
-        let filteredData = data.filter(bill => bill.BILLSTATUS !== 'DELIVERED');
-        if (user) {
-          if (user.canSelectSeries === false) {
-            if (user.defaultSeries?.billing) {
-              filteredData = filteredData.filter(b => b.SERIES === user.defaultSeries.billing);
-            } else {
-              filteredData = [];
-            }
+  const formatDate = (date: Date) => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
+  const fetchData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+
+      const [billsResponse, statusesResponse] = await Promise.all([
+        fetch(`${constants.baseURL}/api/bills`, { headers }),
+        fetch(`${constants.baseURL}/api/bills-delivery-status`, { headers })
+      ]);
+
+      if (!billsResponse.ok) throw new Error('Network response for bills was not ok');
+      if (!statusesResponse.ok) throw new Error('Network response for statuses was not ok');
+
+      const billsData: Bill[] = await billsResponse.json();
+      const statusesData: { key: string, status: string, delivered_date?: string, picked_date?: string }[] = await statusesResponse.json();
+
+      const statusMap = new Map(statusesData.map(s => [
+        s.key,
+        { status: s.status, date: s.status === 'DELIVERED' ? s.delivered_date : s.picked_date }
+      ]));
+
+      let mergedData = billsData.map(bill => {
+        const key = `${bill.SERIES}-${bill.BILL}`;
+        const statusInfo = statusMap.get(key);
+        if (statusInfo) {
+          return { ...bill, BILLSTATUS: statusInfo.status, statusDate: statusInfo.date };
+        }
+        return { ...bill, BILLSTATUS: bill.BILLSTATUS || 'BILLED', statusDate: null };
+      });
+
+      const yesterday = new Date();
+      yesterday.setHours(0, 0, 0, 0);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const parseDate = (dateStr: string) => {
+        const [day, month, year] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+      }
+
+      let filteredData = mergedData.filter(bill => {
+        if (bill.BILLSTATUS === 'DELIVERED') {
+          if (bill.statusDate) {
+            const deliveredDate = parseDate(bill.statusDate);
+            return deliveredDate >= yesterday;
+          }
+          return false;
+        }
+        return true;
+      });
+
+      if (user) {
+        if (user.canSelectSeries === false) {
+          if (user.defaultSeries?.billing) {
+            filteredData = filteredData.filter(b => b.SERIES === user.defaultSeries.billing);
+          } else {
+            filteredData = [];
           }
         }
-        setAllBills(filteredData);
-      })
-      .catch((error) => {
-        console.error('Error fetching bill data:', error);
-        toast.error('Failed to fetch bill data. Please check the file path and server configuration.');
-      });
+      }
+      setAllBills(filteredData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Failed to fetch data. Please check the server.');
+    }
   };
 
   useEffect(() => {
     fetchData();
   }, [user]);
 
-  const handleSelection = (key: string, column: 'billed' | 'picked' | 'delivered') => {
-    const updaters = {
-      billed: setSelectedBilled,
-      picked: setSelectedPicked,
-      delivered: setSelectedDelivered,
-    };
-    updaters[column](prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(key)) newSet.delete(key);
-      else newSet.add(key);
-      return newSet;
-    });
-  };
+  const moveBill = async (bill: Bill, newStatus: Bill['BILLSTATUS']) => {
+    const originalStatus = bill.BILLSTATUS;
+    const originalStatusDate = bill.statusDate;
 
-  const handleSelectAll = (column: 'billed' | 'picked' | 'delivered', isChecked: boolean) => {
-    const columnData = { billed, picked, delivered }[column];
-    const updater = { billed: setSelectedBilled, picked: setSelectedPicked, delivered: setSelectedDelivered }[column];
-    if (isChecked) {
-      updater(new Set(columnData.map(b => `${b.SERIES}-${b.BILL}`)));
-    } else {
-      updater(new Set());
-    }
-  };
-
-  const moveBill = (bill: Bill, newStatus: Bill['BILLSTATUS']) => {
+    // Optimistically update the UI
     setAllBills(currentBills =>
       currentBills.map(b =>
         (b.BILL === bill.BILL && b.SERIES === bill.SERIES)
-          ? { ...b, BILLSTATUS: newStatus }
+          ? { ...b, BILLSTATUS: newStatus, statusDate: formatDate(new Date()) }
           : b
       )
     );
+
+    try {
+      const token = localStorage.getItem('token');
+      const key = `${bill.SERIES}-${bill.BILL}`;
+      const response = await fetch(`${constants.baseURL}/api/update-bill-delivery-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ key, status: newStatus })
+      });
+
+      if (response.ok) {
+        toast.success(`Bill ${key} moved to ${newStatus}.`);
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Failed to update bill status.');
+        // Revert on failure
+        setAllBills(currentBills =>
+          currentBills.map(b =>
+            (b.BILL === bill.BILL && b.SERIES === bill.SERIES)
+              ? { ...b, BILLSTATUS: originalStatus, statusDate: originalStatusDate }
+              : b
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error updating bill status:', error);
+      toast.error('An error occurred while updating bill status.');
+      // Revert on failure
+      setAllBills(currentBills =>
+        currentBills.map(b =>
+          (b.BILL === bill.BILL && b.SERIES === bill.SERIES)
+            ? { ...b, BILLSTATUS: originalStatus, statusDate: originalStatusDate }
+            : b
+        )
+      );
+    }
   };
 
   const moveFromBilledToPicked = (bill: Bill) => moveBill(bill, 'PICKED');
@@ -154,58 +206,10 @@ const BillsDeliveryRegister = () => {
   const moveFromPickedToDelivered = (bill: Bill) => moveBill(bill, 'DELIVERED');
   const moveFromDeliveredToPicked = (bill: Bill) => moveBill(bill, 'PICKED');
 
-  const handleUpdateBillStatus = async () => {
-    const selectedKeys = new Set([...selectedBilled, ...selectedPicked, ...selectedDelivered]);
-    if (selectedKeys.size === 0) {
-      toast.warning('Please select at least one bill to update.');
-      return;
-    }
-
-    const billsToUpdate = allBills.filter(b => selectedKeys.has(`${b.SERIES}-${b.BILL}`));
-    setIsUpdating(true);
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${constants.baseURL}/api/update-bill-status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ bills: billsToUpdate })
-      });
-
-      if (response.ok) {
-        toast.success('Bill statuses updated successfully!');
-        const deliveredKeys = new Set(billsToUpdate.filter(b => b.BILLSTATUS === 'DELIVERED').map(b => `${b.SERIES}-${b.BILL}`));
-        if (deliveredKeys.size > 0) {
-          setAllBills(currentBills => currentBills.filter(b => !deliveredKeys.has(`${b.SERIES}-${b.BILL}`)));
-        }
-        setSelectedBilled(new Set());
-        setSelectedPicked(new Set());
-        setSelectedDelivered(new Set());
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.message || 'Failed to update bill statuses.');
-      }
-    } catch (error) {
-      console.error('Error updating bill statuses:', error);
-      toast.error('An error occurred while updating bill statuses.');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const renderColumn = (title: string, data: Bill[], selectedSet: Set<string>, columnKey: 'billed' | 'picked' | 'delivered') => (
+  const renderColumn = (title: string, data: Bill[], columnKey: 'billed' | 'picked' | 'delivered') => (
     <div className="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg w-full">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h2>
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
-            onChange={(e) => handleSelectAll(columnKey, e.target.checked)}
-            checked={data.length > 0 && selectedSet.size === data.length}
-            ref={el => { if (el) el.indeterminate = selectedSet.size > 0 && selectedSet.size < data.length; }}
-          />
-          <label className="ml-2 text-sm text-gray-600 dark:text-gray-300">Select All</label>
-        </div>
       </div>
       <div>
         {data.map((bill) => {
@@ -214,8 +218,6 @@ const BillsDeliveryRegister = () => {
             <BillCard
               key={key}
               bill={bill}
-              isSelected={selectedSet.has(key)}
-              onSelect={() => handleSelection(key, columnKey)}
               onMoveForward={
                 columnKey === 'billed' ? () => moveFromBilledToPicked(bill) :
                 columnKey === 'picked' ? () => moveFromPickedToDelivered(bill) : undefined
@@ -237,20 +239,9 @@ const BillsDeliveryRegister = () => {
         Bills Delivery Register
       </h1>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {renderColumn('Billed', billed, selectedBilled, 'billed')}
-        {renderColumn('Picked', picked, selectedPicked, 'picked')}
-        {renderColumn('Delivered', delivered, selectedDelivered, 'delivered')}
-      </div>
-      <div className="mt-8 text-center">
-        <button
-          onClick={handleUpdateBillStatus}
-          disabled={isUpdating}
-          className={`px-6 py-3 rounded-md text-white font-semibold ${
-            isUpdating ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
-          }`}
-        >
-          {isUpdating ? 'Updating...' : 'Update'}
-        </button>
+        {renderColumn('Billed', billed, 'billed')}
+        {renderColumn('Picked', picked, 'picked')}
+        {renderColumn('Delivered', delivered, 'delivered')}
       </div>
     </div>
   );

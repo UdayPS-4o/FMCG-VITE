@@ -35,7 +35,7 @@ const middleware = async (req, res, next) => {
   const isApiRequest = req.path.startsWith('/api/') || 
                        req.xhr || 
                        req.headers.accept && req.headers.accept.includes('application/json');
-  const isPdfRequest = req.path.startsWith('/api/generate-pdf/') || 
+  const isPdfRequest = req.path.startsWith('/api/generate-pdf/') || req.path.startsWith('/api/generate-box-stock-csv') || 
                        req.headers.accept && req.headers.accept.includes('application/pdf') ||
                        req.path == ('/slink/printInvoice') ||
                        req.path.includes('/dbf-invoice-pdf/') ||

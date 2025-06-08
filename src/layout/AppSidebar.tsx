@@ -159,6 +159,7 @@ const fmcgItems: NavItem[] = [
     subItems: [
       { name: "Item Wise Sales", path: "/reports/item-wise-sales", pro: false },
       { name: "Item Wise Purchase", path: "/reports/item-wise-purchase", pro: false },
+      { name: "Godown Stock Register", path: "/reports/godown-stock-register", pro: false },
     ],
   }
 ];
@@ -167,7 +168,7 @@ const navItems: NavItem[] = [];
 
 const othersItems: NavItem[] = [];
 
-const AppSidebar = React.forwardRef<HTMLElement, {}>((props, ref) => {
+const AppSidebar = React.forwardRef<HTMLElement, Record<string, never>>((_props, ref) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered, toggleMobileSidebar } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
