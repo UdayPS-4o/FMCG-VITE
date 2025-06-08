@@ -26,17 +26,8 @@ router.get('/bills', async (req, res) => {
         const billsPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'bill.json');
         const data = await fs.readFile(billsPath, 'utf8');
 
-        // filter only last 30days
         const bills = JSON.parse(data);
-        const today = new Date();
-        const thirtyDaysAgo = new Date(today);
-        thirtyDaysAgo.setDate(today.getDate() - 7);
-        const filteredBills = bills.filter(bill => {
-            const billDate = new Date(bill.DATE);
-            return billDate >= thirtyDaysAgo;
-        });
-
-        res.json(filteredBills);
+        res.json(bills);
     } catch (error) {
         console.error('Error fetching bill.json:', error);
         if (error.code === 'ENOENT') {
