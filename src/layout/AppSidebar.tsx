@@ -126,11 +126,6 @@ const fmcgItems: NavItem[] = [
     path: "/add-user",
   },
   {
-    icon: <BoxIcon />,
-    name: "Bills Delivery Register",
-    path: "/bills-delivery-register",
-  },
-  {
     icon: <DatabaseIcon />,
     name: "Database",
     subItems: [
