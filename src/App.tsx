@@ -184,12 +184,18 @@ const AppRoutes = () => (
         </ProtectedRoute>
       } />
       
-      {/* Bills Delivery Register */}
-      <Route path="/bills-delivery-register" element={
-        <ProtectedRoute requiredAccess="Admin">
+      <Route path="/reports/bills-delivery-register" element={
+        <ProtectedRoute requiredAccess="Reports">
           <BillsDeliveryRegister />
         </ProtectedRoute>
       } />
+      
+      {/* Bills Delivery Register */}
+      {/* <Route path="/bills-delivery-register" element={
+          <BillsDeliveryRegister />
+      } /> 
+       Move it to reports
+       */}
       
       {/* Edit Pages */}
       <Route path="/account-master/edit/:id" element={
