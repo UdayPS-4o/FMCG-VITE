@@ -39,6 +39,8 @@ import DbfPrint from "./pages/database/DbfPrint";
 import ItemWiseSales from "./pages/reports/ItemWiseSales";
 import ItemWisePurchase from './pages/reports/ItemWisePurchase';
 import BillsDeliveryRegister from './pages/BillsDeliveryRegister';
+import GodownStockRegister from './pages/reports/GodownStockRegister';
+import PrintGodownStock from './pages/print/PrintGodownStock';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -176,6 +178,12 @@ const AppRoutes = () => (
         </ProtectedRoute>
       } />
       
+      <Route path="/reports/godown-stock-register" element={
+        <ProtectedRoute requiredAccess="Reports">
+          <GodownStockRegister />
+        </ProtectedRoute>
+      } />
+      
       {/* Bills Delivery Register */}
       <Route path="/bills-delivery-register" element={
         <ProtectedRoute requiredAccess="Admin">
@@ -275,6 +283,7 @@ const AppRoutes = () => (
     {/* Internal route for PDF generation - NO LOGIN REQUIRED */}
     <Route path="/internal/print/invoice/:id" element={<PdfInvoicePrintPage />} />
     <Route path="/print/bulk-cash-receipts" element={<PrintBulkCashReceipts />} />
+    <Route path="/print/godown-stock/:godownCode" element={<PrintGodownStock />} />
     
     {/* Fallback Route */}
     <Route path="*" element={<NotFound />} />

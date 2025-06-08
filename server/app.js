@@ -67,7 +67,9 @@ app.use("/api/internal/invoice-data", internalInvoiceDataRoutes);
 
 // use external routes from ./routes/login.js
 const loginRoutes = require('./routes/login');
+const stockRoutes = require('./routes/stock');
 app.use(loginRoutes);
+app.use(stockRoutes);
 // Register reports routes
 const reportRoutes = require('./routes/reports');
 app.use('/api/reports', reportRoutes);  // this is the main route for the reports 
@@ -77,6 +79,12 @@ app.use('/api/reports', reportRoutes);  // this is the main route for the report
 // Apply this BEFORE routes that need authentication
 const middleware = require('./routes/middleware');
 app.use(middleware);
+
+const billsRoutes = require('./routes/bills');
+app.use('/api', billsRoutes);
+
+const godownRoutes = require('./routes/godowns');
+app.use('/api', godownRoutes);
 
 const slinkRoutes = require('./routes/slink');
 const orcusRoutes = require('./routes/orcusRoutes');

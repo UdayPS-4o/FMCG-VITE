@@ -12,6 +12,7 @@
     "ejs": "^3.1.9",
     "ethers": "5.7.2",
     "express": "^4.18.3",
+    "fast-csv": "^5.0.2",
     "fetch": "^1.1.0",
     "html-template-02": "github:UdayPS-4o/html-template-02",
     "i": "^0.3.7",
@@ -22,6 +23,7 @@
     "node-dbf": "^0.4.0",
     "node-xlsx": "^0.23.0",
     "npm": "^10.5.0",
+    "puppeteer": "^24.10.0",
     "shapefile": "^0.6.6",
     "socket.io": "^4.7.5",
     "xlsx": "^0.18.5"
