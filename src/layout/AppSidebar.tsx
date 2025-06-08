@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -169,7 +169,7 @@ const navItems: NavItem[] = [];
 
 const othersItems: NavItem[] = [];
 
-const AppSidebar = React.forwardRef<HTMLElement, Record<string, never>>((_props, ref) => {
+const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered, toggleMobileSidebar } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
