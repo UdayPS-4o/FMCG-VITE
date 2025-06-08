@@ -130,20 +130,77 @@ router.get('/calculate-next-day-stock', async (req, res) => {
     try {
         const files = await fs.readdir(dbPath);
         const stockFiles = files.filter(file => file.startsWith('daily_stock_') && file.endsWith('.csv'));
+        
+        const [day, month, year] = nextdate.split('-');
+        const nextDateObj = new Date(`${year}-${month}-${day}`);
+        const prevDateObj = new Date(nextDateObj);
+        prevDateObj.setDate(prevDateObj.getDate() - 1);
+        const prevDateStr = `${String(prevDateObj.getDate()).padStart(2, '0')}-${String(prevDateObj.getMonth() + 1).padStart(2, '0')}-${prevDateObj.getFullYear()}`;
 
         for (const file of stockFiles) {
             const filePath = path.join(dbPath, file);
-            const fileContent = await fs.readFile(filePath, 'utf-8');
-            const rows = fileContent.split('\n').filter(row => row.trim() !== '');
+            let fileContent = await fs.readFile(filePath, 'utf-8');
+            let rows = fileContent.split('\n').filter(row => row.trim() !== '');
+
+            // Overwrite logic: Remove existing summary and next day's opening rows if they exist
+            let initialRowCount = rows.length;
+            rows = rows.filter(row => {
+                const isPrevDateSummary = row.startsWith(prevDateStr) && 
+                                          (row.includes('total purchase') || 
+                                           row.includes('total sales') || 
+                                           row.includes('transfer to retail'));
+                const isNextDateOpening = row.startsWith(nextdate) && row.includes('OPENING:');
+                return !isPrevDateSummary && !isNextDateOpening;
+            });
+
+            if(rows.length < initialRowCount) {
+                console.log(`Overwrite: Removed existing calculated rows for ${prevDateStr}/${nextdate} in ${file}.`);
+            }
             
-            if (rows.length < 2) continue; // Not enough data to process
+            let prevDayOpeningRowIndex = -1;
+            for(let i = rows.length - 1; i >= 0; i--) {
+                if(rows[i].startsWith(prevDateStr) && rows[i].includes('OPENING:')) {
+                    prevDayOpeningRowIndex = i;
+                    break;
+                }
+            }
+            
+            if (prevDayOpeningRowIndex === -1) {
+                console.log(`Opening row for ${prevDateStr} not found in ${file}. Skipping.`);
+                continue;
+            }
 
-            const lastRow = rows[rows.length - 1];
-            const lastRowData = lastRow.split(',');
-            const newRowData = [nextdate, ...lastRowData.slice(1)];
-            const newRow = newRowData.join(',');
+            const headerRow = rows[0].split(',');
+            const numItemColumns = headerRow.length - 2;
 
-            await fs.appendFile(filePath, `\n${newRow}`);
+            const prevDayOpeningRow = rows[prevDayOpeningRowIndex];
+            const openingStocks = prevDayOpeningRow.split(',').slice(2).map(s => parseInt(s.trim() || '0', 10));
+
+            // TODO: Replace with actual data when available
+            const purchaseValues = Array(numItemColumns).fill(0);
+            const salesValues = Array(numItemColumns).fill(0);
+            const transferValues = Array(numItemColumns).fill(0);
+
+            const summaryRows = [
+                `${prevDateStr},total purchase,${purchaseValues.join(',')}`,
+                `${prevDateStr},total sales,${salesValues.join(',')}`,
+                `${prevDateStr},transfer to retail,${transferValues.join(',')}`
+            ];
+
+            const nextDayOpeningStocks = openingStocks.map((stock, i) => {
+                return stock + purchaseValues[i] - salesValues[i] - transferValues[i];
+            });
+
+            const nextDayOpeningRow = `${nextdate},OPENING:,${nextDayOpeningStocks.join(',')}`;
+            
+            // Insert summary rows after previous day's opening
+            rows.splice(prevDayOpeningRowIndex + 1, 0, ...summaryRows);
+            
+            // Append next day's opening at the end (or after the summary rows)
+            // Ensure we are adding to the very end of the file correctly
+            const finalRows = [...rows, nextDayOpeningRow];
+
+            await fs.writeFile(filePath, finalRows.join('\n') + '\n');
         }
 
         res.json({ message: `Successfully calculated and appended stock for ${nextdate} for all active godowns.` });
@@ -156,34 +213,69 @@ router.get('/calculate-next-day-stock', async (req, res) => {
 // Route to get godown stock for printing
 router.get('/godown-stock/:godownCode', async (req, res) => {
     const { godownCode } = req.params;
-    const filePath = path.join(dbPath, `daily_stock_${godownCode}.csv`);
+    const { date } = req.query; // date will be in DD-MM-YYYY format
+
+    if (!date) {
+        return res.status(400).json({ message: 'Date query parameter is required.' });
+    }
+
+    const stockFilePath = path.join(dbPath, `daily_stock_${godownCode}.csv`);
+    const pmplFilePath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'pmpl.json');
 
     try {
-        const fileContent = await fs.readFile(filePath, 'utf-8');
-        const rows = fileContent.split('\n').filter(row => row.trim() !== '');
-        
-        if (rows.length < 3) {
-            return res.status(400).json({ message: 'Not enough data in the stock file.' });
+        // Read stock and pmpl files
+        const stockFileContent = await fs.readFile(stockFilePath, 'utf-8');
+        const pmplData = JSON.parse(await fs.readFile(pmplFilePath, 'utf-8'));
+
+        // Create a map for easy lookup of product details
+        const pmplMap = new Map();
+        pmplData.forEach(p => pmplMap.set(p.PRODUCT.replace(/,/g, ''), p));
+
+        const rows = stockFileContent.split('\n').filter(row => row.trim() !== '');
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Stock file is empty or not found.' });
         }
 
-        const headerRow = rows[0].split(',').slice(2); // Item names
-        const lastTwoRows = rows.slice(-2);
+        const headerRow = rows[0].split(',').slice(2).map(h => h.trim()); // Item names from header
+
+        // Find the relevant rows for the given date
+        const openingRowData = rows.find(r => r.startsWith(date) && r.includes('OPENING:'));
+        const purchaseRowData = rows.find(r => r.startsWith(date) && r.includes('total purchase'));
+        const salesRowData = rows.find(r => r.startsWith(date) && r.includes('total sales'));
+        const transferRowData = rows.find(r => r.startsWith(date) && r.includes('transfer to retail'));
         
-        const openingRow = lastTwoRows[0].split(',');
-        const closingRow = lastTwoRows[1].split(',');
+        if (!openingRowData) {
+            return res.status(404).json({ message: `No opening stock found for date ${date}.` });
+        }
 
-        const date = openingRow[0];
-        const openingStocks = openingRow.slice(2);
-        const closingStocks = closingRow.slice(2);
+        // Extract values, providing defaults if summary rows don't exist
+        const openingStocks = openingRowData.split(',').slice(2);
+        const purchaseStocks = purchaseRowData ? purchaseRowData.split(',').slice(2) : headerRow.map(() => '0');
+        const salesStocks = salesRowData ? salesRowData.split(',').slice(2) : headerRow.map(() => '0');
+        const transferStocks = transferRowData ? transferRowData.split(',').slice(2) : headerRow.map(() => '0');
+        
+        const reportData = headerRow.map((item, index) => {
+            const opening = parseInt(openingStocks[index]?.trim() || '0', 10);
+            const purchase = parseInt(purchaseStocks[index]?.trim() || '0', 10);
+            const sales = parseInt(salesStocks[index]?.trim() || '0', 10);
+            const transfer = parseInt(transferStocks[index]?.trim() || '0', 10);
+            const closing = opening + purchase - sales - transfer;
 
-        const transposedData = headerRow.map((item, index) => ({
-            date,
-            item: item.trim(),
-            opening: openingStocks[index] ? openingStocks[index].trim() : '0',
-            closing: closingStocks[index] ? closingStocks[index].trim() : '0',
-        }));
+            const pmplItem = pmplMap.get(item);
+            const itemNameWithMrp = pmplItem ? `${item} - {${pmplItem.MRP1 || 'N/A'}}` : item;
 
-        res.json(transposedData);
+            return {
+                item: itemNameWithMrp,
+                opening: String(opening),
+                purchase: String(purchase),
+                sales: String(sales),
+                transfer: String(transfer),
+                closing: String(closing),
+            };
+        });
+
+        res.json({ date, data: reportData });
+
     } catch (error) {
         if (error.code === 'ENOENT') {
             return res.status(404).json({ message: `Stock file for godown ${godownCode} not found.` });

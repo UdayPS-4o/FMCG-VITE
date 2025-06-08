@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
+const moment = require('moment');
 const { getSTOCKFILE } = require('./utilities');
 require('dotenv').config();
 
@@ -324,12 +325,18 @@ async function updateStockItemsCsv(gdnCode) {
     console.log(`Updated ${dailyStockCsvPath} with new items.`);
 }
 
-router.get('/api/calculate-next-day-stock', async (req, res) => {
+router.post('/api/calculate-next-day-stock', async (req, res) => {
     try {
-        const { nextdate } = req.query;
+        const { nextdate, gdnCode: transferGdn, transferItems } = req.body;
         if (!nextdate) {
             return res.status(400).json({ error: 'nextdate query parameter is required.' });
         }
+
+        const activeGodowns = await getActiveGodowns();
+        const results = {
+            success: [],
+            errors: []
+        };
 
         const [day, month, year] = nextdate.split('-').map(Number);
         const prevDate = new Date(year, month - 1, day);
@@ -346,76 +353,165 @@ router.get('/api/calculate-next-day-stock', async (req, res) => {
             const name = p.PRODUCT.replace(/,/g, '');
             nameToCodeAndMultF[name] = { code: p.CODE, multF: p.MULT_F || 1 };
         });
+        const pmplMap = new Map(pmplData.map(p => [p.CODE, p]));
 
-        const activeGodowns = await getActiveGodowns();
+
         for (const gdnCode of activeGodowns) {
             await updateStockItemsCsv(gdnCode);
             
+            const dailyStockCsvPath = path.join(__dirname, '..', 'db', `daily_stock_${gdnCode}.csv`);
+            let csvData;
+            try {
+                csvData = await fs.readFile(dailyStockCsvPath, 'utf8');
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    const errorMsg = `Godown ${gdnCode}: Stock file does not exist. Run initial generation.`;
+                    results.errors.push({ gdnCode, message: errorMsg });
+                    console.log(`Skipping godown ${gdnCode}: daily_stock_ file does not exist.`);
+                    continue;
+                }
+                throw error;
+            }
+
+            let lines = csvData.trim().split('\n').filter(line => line.trim() !== '');
+            if (lines.length > 1) {
+                const lastLine = lines[lines.length - 1];
+                const lastLineData = lastLine.split(',');
+                const lastDateInFileStr = lastLineData[0];
+                const lastDateType = lastLineData[1];
+
+                if (lastDateType === 'OPENING:') {
+                    const lastOpeningDate = moment(lastDateInFileStr, 'DD-MM-YYYY');
+                    const dateFromUI = moment(nextdate, 'DD-MM-YYYY');
+
+                    const canOverwrite = dateFromUI.isSame(lastOpeningDate, 'day');
+                    const isNextDay = dateFromUI.isSame(lastOpeningDate.clone().add(1, 'days'), 'day');
+                    
+                    if (!canOverwrite && !isNextDay) {
+                        const errorMessage = `Date mismatch for Godown ${gdnCode}. Last opening stock is for ${lastOpeningDate.format('DD-MM-YYYY')}. You must select either ${lastOpeningDate.subtract(1, 'days').format('DD-MM-YYYY')} to overwrite or ${lastOpeningDate.clone().add(1, 'days').format('DD-MM-YYYY')} for the next closing.\n\n`;
+                        results.errors.push({ gdnCode, message: errorMessage });
+                        continue;
+                    }
+                }
+            }
+
             const deliveredBillKeys = register
-                .filter(entry => entry.picked_date && formatDateToDDMMYYYY(new Date(entry.picked_date)) === prevDateStr && (entry.status === 'PICKED' || entry.status === 'DELIVERED'))
+                .filter(entry => entry.picked_date === prevDateStr && (entry.status === 'PICKED' || entry.status === 'DELIVERED'))
                 .map(entry => entry.key);
             
             const itemWiseSalesByCode = await calculateItemWiseSales(deliveredBillKeys, gdnCode);
             const itemWisePurchasesByCode = await calculateItemWisePurchases(prevDateStr, gdnCode);
             
-            const dailyStockCsvPath = path.join(__dirname, '..', 'db', `daily_stock_${gdnCode}.csv`);
-            const csvData = await fs.readFile(dailyStockCsvPath, 'utf8');
-            let lines = csvData.split('\n').filter(line => line.trim() !== '');
-            if (lines.length < 1) continue;
+            let itemWiseTransfersByCode = {};
+            if (gdnCode === transferGdn && transferItems && transferItems.length > 0) {
+                for (const item of transferItems) {
+                    const pmplItem = pmplMap.get(item.code);
+                    const multF = pmplItem ? (pmplItem.MULT_F || 1) : 1;
+                    itemWiseTransfersByCode[item.code] = (itemWiseTransfersByCode[item.code] || 0) + (item.qty * multF);
+                }
+            }
+            
+            lines = lines.filter(line => {
+                const isPrevDateSummary = line.startsWith(prevDateStr) && 
+                                          (line.includes('total purchase') || 
+                                           line.includes('total sales') || 
+                                           line.includes('transfer to retail'));
+                const isNextDateOpening = line.startsWith(nextdate) && line.includes('OPENING:');
+                return !isPrevDateSummary && !isNextDateOpening;
+            });
 
             const header = lines[0].split(',');
             const itemsInCsv = header.slice(2);
 
-            const prevDateRowIndex = lines.findIndex(line => line.startsWith(prevDateStr + ','));
-            if (prevDateRowIndex === -1) {
-                console.log(`No stock data for previous day (${prevDateStr}) in godown ${gdnCode}, skipping.`);
+            let prevDayOpeningRowIndex = -1;
+            for (let i = lines.length - 1; i >= 0; i--) {
+                if (lines[i].startsWith(prevDateStr + ',') && lines[i].includes('OPENING:')) {
+                    prevDayOpeningRowIndex = i;
+                    break;
+                }
+            }
+            
+            if (prevDayOpeningRowIndex === -1) {
+                console.log(`No opening stock data for previous day (${prevDateStr}) in godown ${gdnCode}, skipping.`);
+                results.errors.push({gdnCode, message: `Godown ${gdnCode}: No opening stock found for ${prevDateStr}.`})
                 continue;
             }
-            const lastStockLine = lines[prevDateRowIndex].split(',');
+            const lastStockLine = lines[prevDayOpeningRowIndex].split(',');
 
             const lastOpeningStockInBoxes = {};
             itemsInCsv.forEach((item, index) => {
                 lastOpeningStockInBoxes[item] = parseInt(lastStockLine[index + 2] || '0', 10);
             });
+            
+            const purchaseValuesInBoxes = {};
+            const salesValuesInBoxes = {};
+            const transferValuesInBoxes = {};
 
-            const newOpeningStockValues = {};
             itemsInCsv.forEach(item => {
                 const itemDetails = nameToCodeAndMultF[item];
                 if (itemDetails && itemDetails.multF > 0) {
                     const { code, multF } = itemDetails;
-                    const soldQtyInPieces = itemWiseSalesByCode[code] || 0;
-                    const purchasedQtyInPieces = itemWisePurchasesByCode[code] || 0;
-                    const lastStockInBoxes = lastOpeningStockInBoxes[item] || 0;
                     
-                    const lastStockInPieces = lastStockInBoxes * multF;
-                    const newStockInPieces = lastStockInPieces + purchasedQtyInPieces - soldQtyInPieces;
-                    newOpeningStockValues[item] = Math.floor(newStockInPieces / multF);
+                    const soldQtyInPieces = itemWiseSalesByCode[code] || 0;
+                    salesValuesInBoxes[item] = Math.floor(soldQtyInPieces / multF);
+                    
+                    const purchasedQtyInPieces = itemWisePurchasesByCode[code] || 0;
+                    purchaseValuesInBoxes[item] = Math.floor(purchasedQtyInPieces / multF);
+                    
+                    const transferredQtyInPieces = itemWiseTransfersByCode[code] || 0;
+                    transferValuesInBoxes[item] = Math.floor(transferredQtyInPieces / multF);
                 } else {
-                    newOpeningStockValues[item] = lastOpeningStockInBoxes[item] || 0;
+                    purchaseValuesInBoxes[item] = 0;
+                    salesValuesInBoxes[item] = 0;
+                    transferValuesInBoxes[item] = 0;
                 }
             });
 
-            const nextDateObj = new Date(year, month - 1, day);
-            const formattedDate = formatDateToDDMMYYYY(nextDateObj);
+            const purchaseRowArr = [prevDateStr, 'total purchase'];
+            const salesRowArr = [prevDateStr, 'total sales'];
+            const transferRowArr = [prevDateStr, 'transfer to retail'];
+            itemsInCsv.forEach(item => {
+                purchaseRowArr.push(purchaseValuesInBoxes[item] || 0);
+                salesRowArr.push(salesValuesInBoxes[item] || 0);
+                transferRowArr.push(transferValuesInBoxes[item] || 0);
+            });
+            const summaryRows = [
+                purchaseRowArr.join(','),
+                salesRowArr.join(','),
+                transferRowArr.join(',')
+            ];
 
-            const newStockRowArr = [formattedDate, 'OPENING:'];
+            const newOpeningStockValues = {};
+            itemsInCsv.forEach(item => {
+                newOpeningStockValues[item] = (lastOpeningStockInBoxes[item] || 0) + 
+                                              (purchaseValuesInBoxes[item] || 0) -
+                                              (salesValuesInBoxes[item] || 0) -
+                                              (transferValuesInBoxes[item] || 0);
+            });
+
+            const newStockRowArr = [nextdate, 'OPENING:'];
             itemsInCsv.forEach(item => {
                 newStockRowArr.push(newOpeningStockValues[item] || 0);
             });
             const newStockRow = newStockRowArr.join(',');
 
-            const dateRowIndex = lines.findIndex(line => line.startsWith(formattedDate + ','));
-
-            if (dateRowIndex > 0) {
-                lines[dateRowIndex] = newStockRow;
-            } else {
-                lines.push(newStockRow);
-            }
+            lines.splice(prevDayOpeningRowIndex + 1, 0, ...summaryRows);
+            lines.push(newStockRow);
 
             await fs.writeFile(dailyStockCsvPath, lines.join('\n') + '\n');
+            results.success.push({ gdnCode, message: `Godown ${gdnCode}: Stock updated for ${nextdate}.` });
         }
         
-        res.json({ message: `Successfully calculated and appended stock for ${nextdate} for all active godowns.` });
+        if (results.errors.length > 0) {
+            const errorMessage = results.errors.map(e => e.message).join('\n');
+            // Use status 400 to indicate a client-side error (invalid date), but include details of successes.
+            return res.status(400).json({
+                message: errorMessage,
+                details: results
+            });
+        }
+
+        res.json({ message: `Successfully calculated and appended stock for ${nextdate} for all active godowns.`, details: results });
 
     } catch (error) {
         console.error('Error calculating next day stock:', error);
