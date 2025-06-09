@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
+import Tippy from '@tippyjs/react';
+import 'tippy.js/dist/tippy.css'; // optional
 import { useAuth } from '../contexts/AuthContext';
 import constants from '../constants';
+import BillPreview from '../components/BillPreview';
 
 // Define the structure of a bill item
 interface Bill {
@@ -35,9 +38,15 @@ const BillCard: React.FC<BillCardProps> = ({ bill, onMoveForward, onMoveBackward
         <p className="font-bold text-gray-900 dark:text-white">{bill.C_NAME}</p>
         <p className="text-sm text-gray-600 dark:text-gray-300">{bill.C_PLACE}</p>
         <p className="text-sm text-gray-600 dark:text-gray-300">{formattedDate}</p>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          {bill.SERIES}-{bill.BILL}
-        </p>
+        <Tippy
+          content={<BillPreview series={bill.SERIES} billNo={bill.BILL} />}
+          interactive={true}
+          placement="right"
+        >
+          <p className="text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
+            {bill.SERIES}-{bill.BILL}
+          </p>
+        </Tippy>
         <p className="text-sm text-gray-600 dark:text-gray-300">{bill.TRUCK_NO}</p>
       </div>
       <div className="flex flex-col space-y-2">

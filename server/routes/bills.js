@@ -276,4 +276,32 @@ router.get('/godown-stock/:godownCode', async (req, res) => {
     }
 });
 
+// Route to get specific bill details
+router.get('/bill-details/:series/:billNo', async (req, res) => {
+    const { series, billNo } = req.params;
+
+    try {
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+        }
+        const billDtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
+        const data = await fs.readFile(billDtlPath, 'utf8');
+        const allDetails = JSON.parse(data);
+
+        const filteredDetails = allDetails.filter(
+          (item) => item.SERIES === series && item.BILL === Number(billNo)
+        );
+
+        res.json(filteredDetails);
+    } catch (error) {
+        console.error('Error fetching BILLDTL.json:', error);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ message: `BILLDTL.json not found at ${error.path}` });
+        } else {
+            res.status(500).json({ message: 'Failed to fetch bill details data' });
+        }
+    }
+});
+
 module.exports = router; 
