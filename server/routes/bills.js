@@ -112,15 +112,14 @@ router.post('/update-bill-delivery-status', async (req, res) => {
 });
 
 // Route to calculate next day stock
-router.get('/calculate-next-day-stock', async (req, res) => {
-    const { nextdate } = req.query;
-    if (!nextdate) {
-        return res.status(400).json({ message: 'nextdate query parameter is required.' });
+router.post('/calculate-next-day-stock', async (req, res) => {
+    const { nextdate, gdnCode, transferItems } = req.body;
+    if (!nextdate || !gdnCode) {
+        return res.status(400).json({ message: 'nextdate and gdnCode are required.' });
     }
 
     try {
-        const files = await fs.readdir(dbPath);
-        const stockFiles = files.filter(file => file.startsWith('daily_stock_') && file.endsWith('.csv'));
+        const stockFilePath = path.join(dbPath, `daily_stock_${gdnCode}.csv`);
         
         const [day, month, year] = nextdate.split('-');
         const nextDateObj = new Date(`${year}-${month}-${day}`);
@@ -128,73 +127,94 @@ router.get('/calculate-next-day-stock', async (req, res) => {
         prevDateObj.setDate(prevDateObj.getDate() - 1);
         const prevDateStr = `${String(prevDateObj.getDate()).padStart(2, '0')}-${String(prevDateObj.getMonth() + 1).padStart(2, '0')}-${prevDateObj.getFullYear()}`;
 
-        for (const file of stockFiles) {
-            const filePath = path.join(dbPath, file);
-            let fileContent = await fs.readFile(filePath, 'utf-8');
-            let rows = fileContent.split('\n').filter(row => row.trim() !== '');
-
-            // Overwrite logic: Remove existing summary and next day's opening rows if they exist
-            let initialRowCount = rows.length;
-            rows = rows.filter(row => {
-                const isPrevDateSummary = row.startsWith(prevDateStr) && 
-                                          (row.includes('total purchase') || 
-                                           row.includes('total sales') || 
-                                           row.includes('transfer to retail'));
-                const isNextDateOpening = row.startsWith(nextdate) && row.includes('OPENING:');
-                return !isPrevDateSummary && !isNextDateOpening;
-            });
-
-            if(rows.length < initialRowCount) {
-                console.log(`Overwrite: Removed existing calculated rows for ${prevDateStr}/${nextdate} in ${file}.`);
+        let fileContent;
+        try {
+            fileContent = await fs.readFile(stockFilePath, 'utf-8');
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                return res.status(404).json({ message: `Stock file for godown ${gdnCode} not found.` });
             }
-            
-            let prevDayOpeningRowIndex = -1;
-            for(let i = rows.length - 1; i >= 0; i--) {
-                if(rows[i].startsWith(prevDateStr) && rows[i].includes('OPENING:')) {
-                    prevDayOpeningRowIndex = i;
-                    break;
-                }
-            }
-            
-            if (prevDayOpeningRowIndex === -1) {
-                console.log(`Opening row for ${prevDateStr} not found in ${file}. Skipping.`);
-                continue;
-            }
-
-            const headerRow = rows[0].split(',');
-            const numItemColumns = headerRow.length - 2;
-
-            const prevDayOpeningRow = rows[prevDayOpeningRowIndex];
-            const openingStocks = prevDayOpeningRow.split(',').slice(2).map(s => parseInt(s.trim() || '0', 10));
-
-            // TODO: Replace with actual data when available
-            const purchaseValues = Array(numItemColumns).fill(0);
-            const salesValues = Array(numItemColumns).fill(0);
-            const transferValues = Array(numItemColumns).fill(0);
-
-            const summaryRows = [
-                `${prevDateStr},total purchase,${purchaseValues.join(',')}`,
-                `${prevDateStr},total sales,${salesValues.join(',')}`,
-                `${prevDateStr},transfer to retail,${transferValues.join(',')}`
-            ];
-
-            const nextDayOpeningStocks = openingStocks.map((stock, i) => {
-                return stock + purchaseValues[i] - salesValues[i] - transferValues[i];
-            });
-
-            const nextDayOpeningRow = `${nextdate},OPENING:,${nextDayOpeningStocks.join(',')}`;
-            
-            // Insert summary rows after previous day's opening
-            rows.splice(prevDayOpeningRowIndex + 1, 0, ...summaryRows);
-            
-            // Append next day's opening at the end (or after the summary rows)
-            // Ensure we are adding to the very end of the file correctly
-            const finalRows = [...rows, nextDayOpeningRow];
-
-            await fs.writeFile(filePath, finalRows.join('\n') + '\n');
+            throw error;
+        }
+        
+        let rows = fileContent.split('\n').filter(row => row.trim() !== '');
+        if (rows.length === 0) {
+            return res.status(404).json({ message: `Stock file for godown ${gdnCode} is empty.` });
         }
 
-        res.json({ message: `Successfully calculated and appended stock for ${nextdate} for all active godowns.` });
+        // Overwrite logic: Remove existing summary and next day's opening rows if they exist
+        let initialRowCount = rows.length;
+        rows = rows.filter(row => {
+            const isPrevDateSummary = row.startsWith(prevDateStr) && 
+                                      (row.includes('total purchase') || 
+                                       row.includes('total sales') || 
+                                       row.includes('transfer to retail'));
+            const isNextDateOpening = row.startsWith(nextdate) && row.includes('OPENING:');
+            return !isPrevDateSummary && !isNextDateOpening;
+        });
+
+        if(rows.length < initialRowCount) {
+            console.log(`Overwrite: Removed existing calculated rows for ${prevDateStr}/${nextdate} in daily_stock_${gdnCode}.csv.`);
+        }
+        
+        let prevDayOpeningRowIndex = -1;
+        for(let i = rows.length - 1; i >= 0; i--) {
+            if(rows[i].startsWith(prevDateStr) && rows[i].includes('OPENING:')) {
+                prevDayOpeningRowIndex = i;
+                break;
+            }
+        }
+        
+        if (prevDayOpeningRowIndex === -1) {
+            return res.status(404).json({ message: `Opening row for ${prevDateStr} not found in stock file for godown ${gdnCode}.` });
+        }
+
+        const headerRow = rows[0].split(',').slice(2).map(h => h.trim()); // These are item codes
+        const itemCodeToIndex = new Map(headerRow.map((code, index) => [code, index]));
+        
+        const numItemColumns = headerRow.length;
+
+        const prevDayOpeningRow = rows[prevDayOpeningRowIndex];
+        const openingStocks = prevDayOpeningRow.split(',').slice(2).map(s => parseInt(s.trim() || '0', 10));
+
+        // TODO: Replace with actual data when available
+        const purchaseValues = Array(numItemColumns).fill(0);
+        const salesValues = Array(numItemColumns).fill(0);
+        
+        const transferValues = Array(numItemColumns).fill(0);
+        if (transferItems && transferItems.length > 0) {
+            transferItems.forEach(item => {
+                const index = itemCodeToIndex.get(item.code);
+                if (index !== undefined) {
+                    transferValues[index] = item.qty;
+                } else {
+                    console.warn(`Item code ${item.code} from transfer not found in stock file header for ${gdnCode}.`);
+                }
+            });
+        }
+
+        const summaryRows = [
+            `${prevDateStr},total purchase,${purchaseValues.join(',')}`,
+            `${prevDateStr},total sales,${salesValues.join(',')}`,
+            `${prevDateStr},transfer to retail,${transferValues.join(',')}`
+        ];
+
+        const nextDayOpeningStocks = openingStocks.map((stock, i) => {
+            return stock + purchaseValues[i] - salesValues[i] - transferValues[i];
+        });
+
+        const nextDayOpeningRow = `${nextdate},OPENING:,${nextDayOpeningStocks.join(',')}`;
+        
+        // Insert summary rows after previous day's opening
+        rows.splice(prevDayOpeningRowIndex + 1, 0, ...summaryRows);
+        
+        // Append next day's opening at the end (or after the summary rows)
+        // Ensure we are adding to the very end of the file correctly
+        const finalRows = [...rows, nextDayOpeningRow];
+
+        await fs.writeFile(stockFilePath, finalRows.join('\n') + '\n');
+        
+        res.json({ message: `Successfully calculated and appended stock for ${nextdate} for godown ${gdnCode}.` });
     } catch (error) {
         console.error('Error calculating next day stock:', error);
         res.status(500).json({ message: 'Failed to calculate next day stock.' });
@@ -220,14 +240,14 @@ router.get('/godown-stock/:godownCode', async (req, res) => {
 
         // Create a map for easy lookup of product details
         const pmplMap = new Map();
-        pmplData.forEach(p => pmplMap.set(p.PRODUCT.replace(/,/g, ''), p));
+        pmplData.forEach(p => pmplMap.set(p.CODE, p));
 
         const rows = stockFileContent.split('\n').filter(row => row.trim() !== '');
         if (rows.length === 0) {
             return res.status(404).json({ message: 'Stock file is empty or not found.' });
         }
 
-        const headerRow = rows[0].split(',').slice(2).map(h => h.trim()); // Item names from header
+        const headerRow = rows[0].split(',').slice(2).map(h => h.trim()); // Item codes from header
 
         // Find the relevant rows for the given date
         const openingRowData = rows.find(r => r.startsWith(date) && r.includes('OPENING:'));
@@ -245,17 +265,18 @@ router.get('/godown-stock/:godownCode', async (req, res) => {
         const salesStocks = salesRowData ? salesRowData.split(',').slice(2) : headerRow.map(() => '0');
         const transferStocks = transferRowData ? transferRowData.split(',').slice(2) : headerRow.map(() => '0');
         
-        const reportData = headerRow.map((item, index) => {
+        let reportData = headerRow.map((itemCode, index) => {
             const opening = parseInt(openingStocks[index]?.trim() || '0', 10);
             const purchase = parseInt(purchaseStocks[index]?.trim() || '0', 10);
             const sales = parseInt(salesStocks[index]?.trim() || '0', 10);
             const transfer = parseInt(transferStocks[index]?.trim() || '0', 10);
             const closing = opening + purchase - sales - transfer;
 
-            const pmplItem = pmplMap.get(item);
-            const itemNameWithMrp = pmplItem ? `${item} - {${pmplItem.MRP1 || 'N/A'}}` : item;
+            const pmplItem = pmplMap.get(itemCode);
+            const itemNameWithMrp = pmplItem ? `[${itemCode}] ${pmplItem.PRODUCT} {${pmplItem.MRP1 || 'N/A'}}` : itemCode;
 
             return {
+                itemCode,
                 item: itemNameWithMrp,
                 opening: String(opening),
                 purchase: String(purchase),
@@ -264,6 +285,12 @@ router.get('/godown-stock/:godownCode', async (req, res) => {
                 closing: String(closing),
             };
         });
+        
+        // Filter out items with zero closing stock
+        reportData = reportData.filter(item => parseInt(item.closing, 10) !== 0);
+
+        // Sort alphabetically by item code
+        reportData.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
 
         res.json({ date, data: reportData });
 

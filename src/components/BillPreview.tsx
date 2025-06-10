@@ -72,10 +72,7 @@ const BillPreview: React.FC<BillPreviewProps> = ({ series, billNo }) => {
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 Rate
               </th>
-               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                GST %
-              </th>
-            </tr>
+               </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {billDetails.map((item, index) => (
@@ -89,10 +86,7 @@ const BillPreview: React.FC<BillPreviewProps> = ({ series, billNo }) => {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {item.RATE.toFixed(2)}
                 </td>
-                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                  {item.GST}
-                </td>
-              </tr>
+                 </tr>
             ))}
           </tbody>
         </table>
