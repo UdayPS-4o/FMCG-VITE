@@ -168,7 +168,11 @@ const GodownStockRegister: React.FC = () => {
 
             const stockDate = new Date(date);
             stockDate.setDate(stockDate.getDate() + 1); // We calculate opening for the *next* day
-            const nextDateForApi = stockDate.toLocaleDateString('en-GB').replace(/\//g, '-');
+            
+            const day = String(stockDate.getDate()).padStart(2, '0');
+            const month = String(stockDate.getMonth() + 1).padStart(2, '0');
+            const year = stockDate.getFullYear();
+            const nextDateForApi = `${day}-${month}-${year}`;
 
             // Aggregate quantities for duplicate items, assuming each entry is 1 box
             const aggregatedTransfers = transferItems.reduce((acc, item) => {
@@ -202,7 +206,8 @@ const GodownStockRegister: React.FC = () => {
             toast.warn('Please select a godown.');
             return;
         }
-        const formattedDate = new Date(date).toLocaleDateString('en-GB').replace(/\//g, '-');
+        const [year, month, day] = date.split('-');
+        const formattedDate = `${day}-${month}-${year}`;
         window.open(`/print/godown-stock/${selectedGodown}?date=${formattedDate}`, '_blank');
     };
     
@@ -221,7 +226,7 @@ const GodownStockRegister: React.FC = () => {
             })
             .map(p => ({ 
                 value: p.CODE, 
-                label: `${p.PRODUCT || p.NAME} (${p.CODE}) {${p.MRP1 || 'N/A'}}` 
+                label: `[${p.CODE}] ${p.PRODUCT || p.NAME} {${p.MRP1 || 'N/A'}}` 
             }));
     }, [pmplData, stockData]);
 

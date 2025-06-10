@@ -188,22 +188,35 @@ router.get('/api/generate-initial-stock-csvs', async (req, res) => {
       const boxStockItems = [];
       for (const code in stock) {
         if (stock[code][gdnCode]) {
-          const totalStockPcs = stock[code][gdnCode];
-          const pmplItem = pmplData.find(p => p.CODE === code);
-          if (pmplItem && pmplItem.MULT_F > 1 && totalStockPcs > pmplItem.MULT_F) {
-            boxStockItems.push({
-              name: pmplItem.PRODUCT.replace(/,/g, ''),
-              stock: Math.floor(totalStockPcs / pmplItem.MULT_F)
-            });
-          }
+            const totalStockPcs = stock[code][gdnCode];
+            if (totalStockPcs <= 0) continue;
+
+            const pmplItem = pmplData.find(p => p.CODE === code);
+            if (pmplItem) {
+                const multF = pmplItem.MULT_F || 1;
+                const stockInBoxes = Math.floor(totalStockPcs / multF);
+
+                if (stockInBoxes > 0) {
+                    boxStockItems.push({
+                        code: pmplItem.CODE,
+                        name: `[${pmplItem.CODE}] ${pmplItem.PRODUCT.replace(/,/g, '')} {${pmplItem.MRP1 || 'N/A'}}`,
+                        stock: stockInBoxes
+                    });
+                }
+            }
         }
       }
 
-      boxStockItems.sort((a, b) => a.name.localeCompare(b.name));
+      boxStockItems.sort((a, b) => a.code.localeCompare(b.code));
       const itemNames = boxStockItems.map(item => item.name).join(',');
       const stockValues = boxStockItems.map(item => item.stock).join(',');
       
-      const csvContent = `Date,ITEMS:,${itemNames}\n${formatDateToDDMMYYYY(new Date())},OPENING:,${stockValues}`;
+      const d = new Date();
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const formattedDate = `${day}-${month}-${year}`;
+      const csvContent = `Date,ITEMS:,${itemNames}\n${formattedDate},OPENING:,${stockValues}`;
       
       await fs.writeFile(dailyStockCsvPath, csvContent + '\n');
       createdFiles.push(dailyStockCsvPath);
@@ -262,10 +275,16 @@ async function updateStockItemsCsv(gdnCode) {
     for (const code in stock) {
         if (stock[code][gdnCode]) {
             const totalStockPcs = stock[code][gdnCode];
+            if (totalStockPcs <= 0) continue;
+
             const pmplItem = pmplData.find(p => p.CODE === code);
-            if (pmplItem && pmplItem.MULT_F > 1 && totalStockPcs > pmplItem.MULT_F) {
-                const name = pmplItem.PRODUCT.replace(/,/g, '');
-                currentBoxStockMap[name] = Math.floor(totalStockPcs / pmplItem.MULT_F);
+            if (pmplItem) {
+                const multF = pmplItem.MULT_F || 1;
+                const stockInBoxes = Math.floor(totalStockPcs / multF);
+                if (stockInBoxes > 0) {
+                    const name = `[${pmplItem.CODE}] ${pmplItem.PRODUCT.replace(/,/g, '')} {${pmplItem.MRP1 || 'N/A'}}`;
+                    currentBoxStockMap[name] = stockInBoxes;
+                }
             }
         }
     }
@@ -348,11 +367,6 @@ router.post('/api/calculate-next-day-stock', async (req, res) => {
         const register = JSON.parse(registerData);
 
         const pmplData = await getSTOCKFILE('pmpl.json');
-        const nameToCodeAndMultF = {};
-        pmplData.forEach(p => {
-            const name = p.PRODUCT.replace(/,/g, '');
-            nameToCodeAndMultF[name] = { code: p.CODE, multF: p.MULT_F || 1 };
-        });
         const pmplMap = new Map(pmplData.map(p => [p.CODE, p]));
 
 
@@ -448,9 +462,12 @@ router.post('/api/calculate-next-day-stock', async (req, res) => {
             const transferValuesInBoxes = {};
 
             itemsInCsv.forEach(item => {
-                const itemDetails = nameToCodeAndMultF[item];
-                if (itemDetails && itemDetails.multF > 0) {
-                    const { code, multF } = itemDetails;
+                const codeMatch = item.match(/\[(.*?)\]/);
+                const code = codeMatch ? codeMatch[1] : null;
+                const pmplItem = code ? pmplMap.get(code) : null;
+
+                if (pmplItem) {
+                    const multF = pmplItem.MULT_F || 1;
                     
                     const soldQtyInPieces = itemWiseSalesByCode[code] || 0;
                     salesValuesInBoxes[item] = Math.floor(soldQtyInPieces / multF);
@@ -519,4 +536,4 @@ router.post('/api/calculate-next-day-stock', async (req, res) => {
     }
 });
 
-module.exports = router; 
+module.exports = router;
