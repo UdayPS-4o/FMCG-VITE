@@ -27,6 +27,7 @@
     "puppeteer": "^24.10.0",
     "shapefile": "^0.6.6",
     "socket.io": "^4.7.5",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "name": "fmcg",

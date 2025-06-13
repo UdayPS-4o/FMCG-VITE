@@ -41,6 +41,7 @@ import ItemWisePurchase from './pages/reports/ItemWisePurchase';
 import BillsDeliveryRegister from './pages/BillsDeliveryRegister';
 import GodownStockRegister from './pages/reports/GodownStockRegister';
 import PrintGodownStock from './pages/print/PrintGodownStock';
+import PushNotifications from './pages/push-notifications/PushNotifications';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -125,6 +126,11 @@ const AppRoutes = () => (
       <Route path="/add-user" element={
         <ProtectedRoute requiredAccess="Admin">
           <AddUser />
+        </ProtectedRoute>
+      } />
+      <Route path="/push-notifications" element={
+        <ProtectedRoute>
+          <PushNotifications />
         </ProtectedRoute>
       } />
       
