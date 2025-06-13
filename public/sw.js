@@ -39,11 +39,6 @@ self.addEventListener('push', event => {
                 action: 'approve',
                 title: 'Approve',
                 icon: '/icons/approve-icon.svg'
-            },
-            {
-                action: 'view',
-                title: 'View',
-                icon: '/icons/view-icon.svg'
             }
         ]
     };
