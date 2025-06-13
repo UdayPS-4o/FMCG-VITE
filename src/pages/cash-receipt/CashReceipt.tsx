@@ -949,8 +949,18 @@ const CashReceipt: React.FC = () => {
         try {
           if (shouldRedirectToPrint && firstSavedReceiptNo) {
             localStorage.removeItem('redirectToPrint'); // Clean up flag
-            console.log(`Redirecting to print page: /print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
-            navigate(`/print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
+            
+            // If we have multiple splits, include all receipt numbers in the URL
+            if (isAmountOverLimit && splitAmounts.length > 1) {
+              const allReceiptNos = splitAmounts.map((_, index) => 
+                (parseInt(firstSavedReceiptNo, 10) + index).toString()
+              ).join(',');
+              console.log(`Redirecting to print page with multiple receipts: /print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}`);
+              navigate(`/print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}`);
+            } else {
+              console.log(`Redirecting to print page: /print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
+              navigate(`/print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
+            }
           } else {
             console.log('Redirecting to list page: /db/cash-receipts');
             navigate('/db/cash-receipts');
