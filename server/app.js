@@ -80,6 +80,10 @@ app.use('/api/reports', reportRoutes);  // this is the main route for the report
 const middleware = require('./routes/middleware');
 app.use(middleware);
 
+// Register push notification routes
+const pushRoutes = require('./routes/push');
+app.use('/api/push', pushRoutes);
+
 const billsRoutes = require('./routes/bills');
 app.use('/api', billsRoutes);
 
