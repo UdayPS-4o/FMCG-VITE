@@ -8,61 +8,106 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('push', event => {
-    console.log('Push event received:', event);
-    
-    let data = { 
-        title: 'New Notification',
-        message: 'You have a new notification.',
+    console.log('Push received:', event);
+
+    let payload = {
+        title: 'Default Title',
+        message: 'Default message',
         url: '/'
     };
-    
-    try {
-        if (event.data) {
-            data = event.data.json();
-            console.log('Push data:', data);
+
+    if (event.data) {
+        try {
+            payload = event.data.json();
+            console.log('Push data parsed:', payload);
+        } catch (e) {
+            console.error('Failed to parse push data:', e);
         }
-    } catch (e) {
-        console.error('Error parsing push data:', e);
     }
 
-    const { title, message, url } = data;
+    const { title, message, url } = payload;
 
     const options = {
         body: message,
-        icon: '/icons/icon-192x192.png',
-        badge: '/icons/badge-72x72.png',
-        data: { url: url || '/' },
+        icon: '/favicon.png',
+        badge: '/favicon.png',
+        data: payload.data || { url: url || '/' },
         requireInteraction: true,
-        vibrate: [200, 100, 200]
+        vibrate: [200, 100, 200],
+        actions: [
+            {
+                action: 'approve',
+                title: 'Approve',
+                icon: '/icons/approve-icon.svg'
+            },
+            {
+                action: 'view',
+                title: 'View',
+                icon: '/icons/view-icon.svg'
+            }
+        ]
     };
 
-    event.waitUntil(
-        self.registration.showNotification(title, options)
-            .then(() => {
-                console.log('Notification shown successfully');
-            })
-            .catch(error => {
-                console.error('Error showing notification:', error);
-            })
-    );
+    event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', event => {
-    console.log('Notification clicked:', event);
-    
     event.notification.close();
 
-    const urlToOpen = event.notification.data?.url || '/';
+    if (event.action === 'approve') {
+        const urlToOpen = event.notification.data.url;
+        if (!urlToOpen) {
+            console.error('No URL found in notification data for approval.');
+            return;
+        }
 
-    event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-            .then(clientList => {
-                for (const client of clientList) {
-                    if (client.url === urlToOpen && 'focus' in client) {
-                        return client.focus();
-                    }
+        event.waitUntil(
+            fetch(urlToOpen)
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        // Try to extract error message from HTML if present
+                        const errorMatch = text.match(/<p>(.*?)<\/p>/);
+                        throw new Error(errorMatch ? errorMatch[1] : `HTTP error! status: ${response.status}`);
+                    });
                 }
-                return self.clients.openWindow(urlToOpen);
+                return response.text();
             })
-    );
+            .then(html => {
+                // Check if the response contains success indicators
+                const isSuccess = html.includes('Successfully Approved!') || 
+                                html.includes('already been approved');
+                
+                if (!isSuccess) {
+                    throw new Error('Approval response did not indicate success');
+                }
+
+                // Show success notification
+                return self.registration.showNotification('Approval Success', {
+                    body: 'The entry has been successfully approved!',
+                    icon: '/favicon.png',
+                    badge: '/favicon.png',
+                    vibrate: [200, 100, 200]
+                });
+            })
+            .catch(error => {
+                console.error('Approval failed:', error);
+                return self.registration.showNotification('Approval Failed', {
+                    body: error.message || 'Failed to approve the entry. Please try again.',
+                    icon: '/favicon.png',
+                    badge: '/favicon.png',
+                    vibrate: [200, 100, 200]
+                });
+            })
+        );
+    } else {
+        const urlToOpen = event.notification.data.url;
+        if (urlToOpen) {
+            console.log(`Opening URL: ${urlToOpen}`);
+            event.waitUntil(clients.openWindow(urlToOpen));
+        } else {
+            console.error('No URL found in notification data.');
+            event.waitUntil(clients.openWindow('/'));
+        }
+    }
 }); 

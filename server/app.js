@@ -55,11 +55,13 @@ const spawn = require('child_process').spawn;// app.use(express.static(80/public
 app.use(bodyParser.json()); // for parsing application/json
 app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Serve PDFs statically from the db/pdfs directory
 app.use('/db/pdfs', express.static(path.join(__dirname, 'db', 'pdfs')));
 
 const pdfRoutes = require('./routes/get/pdf');
-app.use("/api/generate-pdf", pdfRoutes);
+app.use("/api/generate-pdf", pdfRoutes.router);
 
 // Add the internal data route BEFORE the main middleware
 const internalInvoiceDataRoutes = require('./routes/get/internalInvoiceData');
@@ -81,8 +83,8 @@ const middleware = require('./routes/middleware');
 app.use(middleware);
 
 // Register push notification routes
-const pushRoutes = require('./routes/push');
-app.use('/api/push', pushRoutes);
+const { router: pushRouter } = require('./routes/push');
+app.use('/api/push', pushRouter);
 
 const billsRoutes = require('./routes/bills');
 app.use('/api', billsRoutes);
@@ -114,8 +116,10 @@ app.use('/api/merge/cash-payments', cashPaymentsMergeRoutes);
 
 // Register cash receipts merge routes
 const cashReceiptsMergeRoutes = require('./routes/merge/cash-receipts');
-app.use('/api/merge/cash-receipts', cashReceiptsMergeRoutes); 
+app.use('/api/merge/cash-receipts', cashReceiptsMergeRoutes);
 
+const approvalRoutes = require('./routes/approval');
+app.use('/api', approvalRoutes);
 
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);
