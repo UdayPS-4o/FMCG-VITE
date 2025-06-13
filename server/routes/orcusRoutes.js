@@ -131,7 +131,6 @@ app.get('/print', verifyToken, async (req, res) => {
       const data = await fs.readFile(path.resolve(__dirname, '../db/cash-receipts.json'), 'utf8');
       const json = JSON.parse(data);
       const receipt = json.find((receipt) => receipt.receiptNo == ReceiptNo);
-      console.log('receipt', receipt);
       
       const cmplJson = await getCmplData();
       const cmplInfo = cmplJson.find((cmpl) => cmpl.C_CODE == receipt.party);
@@ -162,7 +161,7 @@ app.get('/print', verifyToken, async (req, res) => {
       res.send({ ...receipt, ...cmplInfo, AmountInWords });
     }
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.send(error);
   }
 });
@@ -174,7 +173,7 @@ app.get('/account-master', verifyToken, async (req, res) => {
     const user = json.find((user) => user.C_CODE == req.query.code);
     res.send(user);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.send(error);
   }
 });
@@ -185,11 +184,10 @@ app.post('/signin', async (req, res) => {
     const data = await fs.readFile(path.resolve(__dirname, '../db/users.json'));
     const users = JSON.parse(data);
     const user = users.find((user) => user.username == username && user.password == password);
-    console.log('user', user);
     if (!user) throw new Error('Invalid username or password');
     res.send(user);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.send(error);
   }
 });
@@ -197,7 +195,6 @@ app.post('/signin', async (req, res) => {
 app.post('/approve', verifyToken, async (req, res) => {
   try {
     const { approved, endpoint } = req.body;
-    console.log('approved', approved, 'endpoint', endpoint);
     const data = await fs.readFile(path.resolve(__dirname, `../db/${endpoint}.json`));
     const json = JSON.parse(data);
     const id =
@@ -213,7 +210,6 @@ app.post('/approve', verifyToken, async (req, res) => {
         ? 'id'
         : null;
 
-    console.log('id', id);
     const approvedjson = json.filter((item) => {
       const itemIdValue = String(item[id]).toLowerCase();
       return approved.some((approvedValue) => itemIdValue.includes(approvedValue.toLowerCase()));
@@ -254,10 +250,9 @@ app.post('/approve', verifyToken, async (req, res) => {
       JSON.stringify(combinedApproved, null, 2),
     );
     
-    console.log('updatedJson', approvedjson);
     res.send(approvedjson);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.send(error);
   }
 });
@@ -265,7 +260,6 @@ app.post('/approve', verifyToken, async (req, res) => {
 app.post('/toDBF', verifyToken, async (req, res) => {
   try {
     const { approved, endpoint } = req.body;
-    console.log('approved', approved, 'endpoint', endpoint);
     const data = await fs.readFile(path.resolve(__dirname, `../db/${endpoint}.json`));
     const json = JSON.parse(data);
     const id =
@@ -279,7 +273,6 @@ app.post('/toDBF', verifyToken, async (req, res) => {
         ? 'voucherNo'
         : null;
 
-    console.log('id', id);
     const approvedjson = json.filter((item) => {
       const itemIdValue = String(item[id]).toLowerCase();
       return approved.some((approvedValue) => itemIdValue.includes(approvedValue.toLowerCase()));
@@ -320,10 +313,9 @@ app.post('/toDBF', verifyToken, async (req, res) => {
       JSON.stringify(combinedApproved, null, 2),
     );
     
-    console.log('updatedJson', approvedjson);
     res.send(approvedjson);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.send(error);
   }
 });

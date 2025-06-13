@@ -3,6 +3,7 @@ const app = express.Router();
 const fs = require('fs');
 const fss = require('fs/promises');
 const path = require('path');
+const { sendNotificationToAdmins } = require('./push');
 
 const {
   redirect,
@@ -14,414 +15,259 @@ const {
 
 const uniqueIdentifiers = ['receiptNo', 'voucherNo', 'subgroup', 'id'];
 
+function formatFormType(formType) {
+  if (!formType) return '';
+  return formType
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+let cmplCache = null;
+async function getPartyName(partyCode) {
+    if (!partyCode) return null;
+    try {
+        if (!cmplCache) {
+            const cmplDataPath = path.join(__dirname, '..', 'd01-2324', 'data', 'json', 'CMPL.json');
+            const cmplData = await fss.readFile(cmplDataPath, 'utf8');
+            cmplCache = JSON.parse(cmplData);
+        }
+        const party = cmplCache.find(p => p.C_CODE === partyCode);
+        return party ? party.C_NAME.trim() : null;
+    } catch (error) {
+        console.error('Error reading or parsing CMPL.json:', error);
+        cmplCache = null;
+        return null;
+    }
+}
+
 app.post('/:formType', async (req, res) => {
   const { formType } = req.params;
   const formData = req.body;
   const { email, mobile, aadhar } = req.body;
-  console.log('Received form data for:', formType, req.body);
   
   const filePath = path.join(__dirname, '..', 'db', `${formType}.json`);
   let dbData = [];
-  let shouldSave = true; // Flag to control saving
+  let shouldSave = true;
 
   try {
     const data = await fs.promises.readFile(filePath, 'utf8');
     dbData = JSON.parse(data);
   } catch (err) {
-    if (err.code === 'ENOENT') {
-      console.log('No existing file, creating a new one.');
-    } else {
+    if (err.code !== 'ENOENT') {
       console.error('Error reading database file:', err);
       return res.status(500).send('Error reading database file.');
     }
   }
 
-  // Special handling for invoicing - generate ID and check for duplicates
   if (formType === 'invoicing') {
-    try {
-      const series = formData.series?.toUpperCase(); // Ensure consistent casing
-      const billNo = formData.billNo;
-      
-      if (!series || !billNo) {
-         console.error('Missing series or billNo in invoicing data');
-         return res.status(400).send('Missing series or bill number in request.');
-      }
-      
-      // Check if the series + billNo combination already exists
-      const duplicate = dbData.find(
-        invoice => invoice.series?.toUpperCase() === series && String(invoice.billNo) === String(billNo)
-      );
-      
-      if (duplicate) {
-        shouldSave = false; // Don't save if duplicate found
-        let suggestedBillNo;
-        
-        // Try to get the next expected bill number as suggestion
-        try {
-          const protocol = req.protocol || 'http';
-          const host = req.get('host') || 'localhost:8000';
-          const baseUrl = `${protocol}://${host}`;
-          const invoiceIdResponse = await fetch(`${baseUrl}/slink/invoiceId`, {
-             headers: { 'Authorization': req.headers.authorization || '' } // Pass auth token if present
-          });
-          if (invoiceIdResponse.ok) {
-            const invoiceIdData = await invoiceIdResponse.json();
-            suggestedBillNo = invoiceIdData.nextSeries[series];
-          }
-        } catch (fetchError) {
-          console.warn('Could not fetch next invoice ID for suggestion:', fetchError.message);
-        }
-        
-        // If suggestion couldn't be fetched, calculate based on current data
-        if (!suggestedBillNo) {
-            let maxBillNo = 0;
-            dbData.forEach(invoice => {
-              if (invoice.series?.toUpperCase() === series && parseInt(invoice.billNo) > maxBillNo) {
-                maxBillNo = parseInt(invoice.billNo);
-              }
-            });
-            suggestedBillNo = maxBillNo + 1;
-        }
-        
-        console.log(`Duplicate found for Series: ${series}, BillNo: ${billNo}. Suggesting: ${suggestedBillNo}`);
-        // Return a conflict error with suggested next bill number
-        return res.status(409).json({
-          error: 'Duplicate bill number',
-          message: `Bill number ${billNo} for series ${series} already exists.`,
-          suggestedBillNo: suggestedBillNo?.toString() // Ensure it's a string
-        });
-      }
-      
-      // Find the highest ID overall (regardless of series) to generate the next internal ID
-      let maxId = 0;
-      dbData.forEach(invoice => {
-        const currentId = parseInt(invoice.id || 0, 10);
-        if (currentId > maxId) {
-          maxId = currentId;
-        }
+    const series = formData.series?.toUpperCase();
+    const billNo = formData.billNo;
+    
+    if (!series || !billNo) {
+       return res.status(400).send('Missing series or bill number in request.');
+    }
+    
+    const duplicate = dbData.find(
+      invoice => invoice.series?.toUpperCase() === series && String(invoice.billNo) === String(billNo)
+    );
+    
+    if (duplicate) {
+      return res.status(409).json({
+        error: 'Duplicate bill number',
+        message: `Bill number ${billNo} for series ${series} already exists.`,
       });
-      
-      // Assign the next internal ID
-      formData.id = (maxId + 1).toString();
-      console.log(`Assigning new internal ID ${formData.id} for Series: ${series}, BillNo: ${billNo}`);
-      
-    } catch (err) {
-      console.error('Error processing invoice ID or duplicate check:', err);
-      return res.status(500).send('Failed to process invoice: ' + err.message);
     }
-  } else if (formType === 'account-master') {
-      // Handle potential duplicates for account-master (email/mobile)
-      const accountMasterPath = path.join(__dirname, '..', 'db', 'account-master.json');
-      try {
-          const accountMasterData = JSON.parse(await fss.readFile(accountMasterPath, 'utf8'));
-          const duplicateAccount = accountMasterData.find(element => 
-              (email && element.email === email) || (mobile && element.mobile === mobile)
-          );
-          if (duplicateAccount) {
-              const field = duplicateAccount.email === email ? 'email' : 'mobile';
-              console.log(`Account master duplicate found on ${field}: ${formData[field]}`);
-              shouldSave = false;
-              return res.status(400).send({ message: `User with same ${field} already exists` });
-          }
-      } catch (err) {
-          if (err.code !== 'ENOENT') {
-              console.error('Error reading account-master.json for duplicate check:', err);
-              // Decide if this should be a fatal error or just logged
-          }
+    
+    let maxId = 0;
+    dbData.forEach(invoice => {
+      const currentId = parseInt(invoice.id || 0, 10);
+      if (currentId > maxId) {
+        maxId = currentId;
       }
-      // Add ID generation logic if needed for account-master
-      // ... (assuming ID is handled elsewhere or not needed here)
-  } else {
-    // Generic duplicate check for other form types based on uniqueIdentifiers
-    const validKEY = uniqueIdentifiers.find((key) => formData[key]);
-    if (validKEY) {
-      let entryExists = false;
-      if (formType === 'cash-receipts' && formData.receiptNo && formData.series) {
-        entryExists = dbData.some(
-          (entry) => 
-            entry.receiptNo === formData.receiptNo && 
-            entry.series && entry.series.toUpperCase() === formData.series.toUpperCase()
-        );
-        if (entryExists) {
-            console.log(`Duplicate found for cash-receipts on series ${formData.series} and receiptNo ${formData.receiptNo}`);
-            shouldSave = false;
-            return res.status(400).send(
-                `Error: Entry with Series ${formData.series} and Receipt No. ${formData.receiptNo} already exists.`
-            );
-        }
-      } else if (formType === 'cash-receipts') {
-        // Fallback if series is somehow missing, though it should be present
-        entryExists = dbData.some((entry) => entry.receiptNo === formData.receiptNo);
-         if (entryExists) {
-            console.log(`Duplicate found for cash-receipts on receiptNo ${formData.receiptNo} (series check skipped)`);
-            shouldSave = false;
-            return res.status(400).send(
-                `Error: Entry with Receipt No. ${formData.receiptNo} already exists (series check skipped).`
-            );
-        }
-      } else {
-        entryExists = dbData.some((entry) => entry[validKEY] === formData[validKEY]);
-        if (entryExists) {
-            console.log(`Duplicate found for ${formType} on key ${validKEY}: ${formData[validKEY]}`);
-            shouldSave = false;
-            return res.status(400).send(
-                `Error: Entry with this ${validKEY} (${formData[validKEY]}) already exists.`
-            );
-        }
-      }
-        // Add ID generation if needed for other types
-        // Example: Find max ID and increment
-        // let maxId = dbData.reduce((max, entry) => Math.max(max, parseInt(entry.id || 0)), 0);
-        // formData.id = (maxId + 1).toString();
-    }
+    });
+    
+    formData.id = (maxId + 1).toString();
   }
-
-  // Only proceed to save if no duplicates were found
+  console.log('-------------------------------------------');
   if (shouldSave) {
     try {
-      // Add a timestamp before saving
+      
       formData.createdAt = new Date().toISOString();
-      
-      // Add the new data to the array
       dbData.push(formData);
-      
-      // Write the updated array back to the file
       await fs.promises.writeFile(filePath, JSON.stringify(dbData, null, 2), 'utf8');
-      console.log(`Successfully saved new entry for ${formType}. ID: ${formData.id || 'N/A'}, Series: ${formData.series || 'N/A'}, BillNo: ${formData.billNo || 'N/A'}`);
 
-      // Special redirect/response handling
-      if (formType === 'invoicing') {
-          return res.status(200).json({ 
-              message: 'Entry added successfully.',
-              id: formData.id,
-              series: formData.series, // Return series as well
-              billNo: formData.billNo // Return billNo as well
-          });
-      } else if (formType === 'cash-receipts') {
-           // Example redirect logic (adapt as needed)
-           // let url = `/print?date=${formData.date}...`;
-           // return res.send({ url });
-           return res.status(200).json({ message: 'Cash receipt added successfully.' });
-      } else if (formType === 'godown') {
-           // Example redirect logic
-           // let url = `/printGODOWN?data=...`;
-           // return res.send({ url });
-           return res.status(200).json({ message: 'Godown entry added successfully.' });
-      } else {
-          // Default success response
-          return res.status(200).json({ message: 'Entry added successfully.' });
+      // --- PUSH NOTIFICATION LOGIC ---
+      const uniqueIdField = uniqueIdentifiers.find(id => formData[id]);
+      const uniqueId = formData[uniqueIdField];
+      const user = req.user || { name: 'A user' }; // Fallback user
+
+      const { smName, series, amount, date, total, party } = formData;
+      let creatorName = smName || user.name;
+      if (creatorName) {
+        // Sanitize creatorName to remove localhost prefix
+        creatorName = creatorName;
       }
+      const formTypeFormatted = formatFormType(formType);
+      const notificationAmount = amount || total || 0;
+
+      let message = `${creatorName} has created a ${formTypeFormatted} ${series}-${uniqueId} of ₹${notificationAmount}`;
+
+      if (party) {
+          const partyName = await getPartyName(party);
+          if (partyName) {
+              message += ` for ${partyName}`;
+          }
+      }
+
+      if (date) {
+          const entryDate = new Date(date);
+          const today = new Date();
+          entryDate.setHours(0, 0, 0, 0);
+          today.setHours(0, 0, 0, 0);
+
+          if (entryDate.getTime() !== today.getTime()) {
+              const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+              message += ` on ${dateString}`;
+          }
+      }
+
+      const title = `New Entry in ${formTypeFormatted}`;
+
+      const notificationPayload = {
+        title: title,
+        message: message,
+        data: {
+          url: `${req.protocol}://${req.get('host')}/api/approve-from-notification?endpoint=${formType}&id=${uniqueId}`,
+          endpoint: formType,
+          id: uniqueId
+        } 
+      };
+      sendNotificationToAdmins(notificationPayload);
+      // --- END PUSH NOTIFICATION LOGIC ---
+
+      return res.status(200).json({ 
+          message: 'Entry added successfully.',
+          id: formData.id,
+      });
       
     } catch (err) {
       console.error('Error writing data to file:', err);
       return res.status(500).send('Failed to save data.');
     }
-  } else {
-      // This part should ideally not be reached if duplicate checks return responses
-      console.warn(`Save operation was blocked for ${formType}, likely due to a duplicate check.`);
-      // If a duplicate check failed but didn't return a response, send a generic error
-      if (!res.headersSent) {
-          return res.status(400).send('Operation failed, possibly due to duplicate data.');
-      }
   }
 });
 
 app.post('/edit/:formType', async (req, res) => {
   const { formType } = req.params;
   const formData = req.body;
-  console.log({formData});
-  console.log(`Processing edit request for ${formType}`);
-  console.log('Request body keys:', Object.keys(formData));
   
-  // Handle items parsing more robustly
   if (formData.items && typeof formData.items === 'string') {
     try {
       formData.items = JSON.parse(formData.items);
-      console.log(`Successfully parsed ${formData.items.length} items`);
     } catch (error) {
-      console.error('Failed to parse items:', error);
       return res.status(400).send('Invalid format for items.');
     }
   }
 
-  // Handle party data
   if (formData.party && typeof formData.party === 'string') {
-    try {
-      // Check if party is already a string ID or needs parsing
-      if (formData.party.startsWith('{') || formData.party.startsWith('[')) {
-        const parsed = JSON.parse(formData.party);
-        formData.party = Array.isArray(parsed) ? parsed[0].value : parsed.value;
-      }
-      // Store the original party value if it wasn't JSON
-      console.log('Using party as string:', formData.party);
-    } catch (error) {
-      // If parsing fails, keep the original string value
-      console.log('Using party as string (parse failed):', formData.party);
+    if (!/^[a-zA-Z0-9]+$/.test(formData.party)) {
+        try {
+            const partyData = JSON.parse(formData.party);
+            formData.party = partyData.value;
+        } catch (err) {
+            console.error('Failed to parse party data, using original value');
+        }
     }
+  } else if (formData.party && typeof formData.party === 'object' && formData.party.value) {
+    formData.party = formData.party.value;
   }
 
   const filePath = path.join(__dirname, '..', 'db', `${formType}.json`);
 
-  console.log(`Checking if the file exists: ${filePath}`);
-
   try {
-    let dbData;
-    try {
-      const data = await fs.promises.readFile(filePath, 'utf8');
-      dbData = JSON.parse(data);
-      console.log(`Successfully read ${dbData.length} records from ${formType} database`);
-    } catch (readError) {
-      if (readError.code === 'ENOENT') {
-        console.error(`File not found: ${filePath}`);
-        return res.status(404).send('Database file does not exist.');
-      } else {
-        console.error('Error reading database file:', readError);
-        return res.status(500).send('Database file read error: ' + readError.message);
-      }
-    }
+    const data = await fs.promises.readFile(filePath, 'utf8');
+    let dbData = JSON.parse(data);
 
-    // Find entry using appropriate identifiers based on form type
-    let entryIndex = -1;
+    const identifier = uniqueIdentifiers.find((key) => formData[key]);
+
+    if (!identifier) {
+      return res.status(400).send('No valid identifier provided.');
+    }
     
-    if (formType === 'invoicing') {
-      // For invoicing, look for combination of series and id fields
-      console.log(`Looking for invoicing with series: ${formData.series} and id: ${formData.id}`);
-      entryIndex = dbData.findIndex((entry) => 
-        String(entry.id) === String(formData.id) && 
-        entry.series === formData.series
-      );
-      
-      // If updating an invoice and the bill number has changed, check for duplicate bill numbers
-      if (entryIndex > -1 && formData.billNo) {
-        const existingEntry = dbData[entryIndex];
-        const billNoChanged = existingEntry.billNo !== formData.billNo;
-        const seriesChanged = existingEntry.series !== formData.series;
-        
-        // If either the bill number or series changed, we need to validate
-        if (billNoChanged || seriesChanged) {
-          const series = formData.series;
-          const billNo = formData.billNo;
-          
-          // First, check if the new bill number matches the expected next bill number
-          // Only if this is a completely new bill number (not just editing an existing invoice)
-          if (billNoChanged || seriesChanged) {
-            try {
-              // Get expected next bill number from the invoiceId endpoint
-              const protocol = req.protocol || 'http';
-              const host = req.get('host') || 'localhost:8000';
-              const baseUrl = `${protocol}://${host}`;
-              
-              console.log(`Fetching next invoice ID from ${baseUrl}/slink/invoiceId`);
-              const invoiceIdResponse = await fetch(`${baseUrl}/slink/invoiceId`);
-              
-              if (!invoiceIdResponse.ok) {
-                throw new Error(`Failed to fetch invoice ID data: ${invoiceIdResponse.statusText}`);
-              }
-              
-              const invoiceIdData = await invoiceIdResponse.json();
-              const expectedNextBillNo = invoiceIdData.nextSeries[series.toUpperCase()];
-              
-              console.log(`Expected next bill number for series ${series}: ${expectedNextBillNo}`);
-              
-              // Check if the bill number is either the original one or the expected next one
-              // This allows keeping the original bill number or switching to the next available one
-              const isOriginalBillNo = !billNoChanged && series === existingEntry.series;
-              const isExpectedNextBillNo = parseInt(billNo) === expectedNextBillNo;
-              
-              if (!isOriginalBillNo && !isExpectedNextBillNo) {
-                return res.status(409).json({
-                  error: 'Incorrect bill number',
-                  message: `Bill number ${billNo} for series ${series} doesn't match the expected next bill number.`,
-                  suggestedBillNo: expectedNextBillNo.toString()
-                });
-              }
-            } catch (fetchError) {
-              console.error('Error fetching invoice ID data:', fetchError);
-              // Continue with regular processing if we can't fetch the expected bill number
-            }
-          }
-          
-          // Check if the new bill number already exists for this series (duplicate)
-          const duplicate = dbData.findIndex(invoice => 
-            invoice.series === formData.series && 
-            invoice.billNo === formData.billNo &&
-            String(invoice.id) !== String(formData.id) // Exclude the current invoice
-          );
-          
-          if (duplicate !== -1) {
-            // If duplicate found, find the highest bill number for this series
-            let maxBillNo = 0;
-            dbData.forEach(invoice => {
-              if (invoice.series === formData.series && parseInt(invoice.billNo) > maxBillNo) {
-                maxBillNo = parseInt(invoice.billNo);
-              }
-            });
-            
-            // Return a conflict error with suggested next bill number
-            return res.status(409).json({
-              error: 'Duplicate bill number',
-              message: `Bill number ${formData.billNo} for series ${formData.series} already exists.`,
-              suggestedBillNo: (maxBillNo + 1).toString()
-            });
-          }
-        }
-      }
-    } else {
-      // For other types, try standard identifiers
-      if (formData.receiptNo) {
-        entryIndex = dbData.findIndex((entry) => entry.receiptNo === formData.receiptNo);
-      } else if (formData.voucherNo) {
-        entryIndex = dbData.findIndex((entry) => entry.voucherNo === formData.voucherNo);
-      } else if (formData.id) {
-        entryIndex = dbData.findIndex((entry) => String(entry.id) === String(formData.id));
-      } else if (formType === 'account-master' && formData.subgroup) {
-        console.log(`Looking for account-master record with subgroup: ${formData.subgroup}`);
-        entryIndex = dbData.findIndex((entry) => String(entry.subgroup) === String(formData.subgroup));
-        
-        // Only if not found by subgroup and achead exists, try achead as fallback
-        if (entryIndex === -1 && formData.achead) {
-          console.log(`Not found by subgroup, trying achead: ${formData.achead}`);
-          entryIndex = dbData.findIndex((entry) => String(entry.achead) === String(formData.achead));
-        }
-      }
+    const entryIndex = dbData.findIndex(
+      (entry) => String(entry[identifier]) === String(formData[identifier]),
+    );
+
+    if (entryIndex === -1) {
+      return res.status(404).send('Entry not found.');
     }
 
-    if (entryIndex > -1) {
-      console.log(`Found entry at index ${entryIndex}, updating...`);
-      
-      // Create a new object by merging the existing data with the updated data
-      // This preserves any fields in the original record that weren't included in the form
-      dbData[entryIndex] = { 
-        ...dbData[entryIndex], 
-        ...formData,
-        // Add an updated timestamp
-        lastUpdated: new Date().toISOString()
-      };
-      
-      try {
-        await fs.promises.writeFile(filePath, JSON.stringify(dbData, null, 2), 'utf8');
-        console.log(`Successfully updated ${formType} record with id ${formData.id}`);
-        res.status(200).json({ 
-          message: 'Entry updated successfully.',
-          id: formData.id,
-          series: formData.series
-        });
-      } catch (writeError) {
-        console.error('Error writing to database file:', writeError);
-        res.status(500).send('Failed to write updated data: ' + writeError.message);
-      }
-    } else {
-      console.log('Entry not found, request data:', formData);
-      res.status(404).send(
-        `Error: Entry not found in database. The record with ID ${formData.id} could not be found.`
-      );
+    const originalCreatedAt = dbData[entryIndex].createdAt;
+    dbData[entryIndex] = { ...dbData[entryIndex], ...formData, updatedAt: new Date().toISOString() };
+    if (originalCreatedAt) {
+      dbData[entryIndex].createdAt = originalCreatedAt;
     }
+
+    await fs.promises.writeFile(filePath, JSON.stringify(dbData, null, 2), 'utf8');
+    
+    // --- PUSH NOTIFICATION LOGIC ---
+    const uniqueId = formData[identifier];
+    const user = req.user || { name: 'A user' }; // Fallback user
+
+    const { smName, series, amount, date, total, party } = formData;
+    let creatorName = smName || user.name;
+    if (creatorName) {
+      // Sanitize creatorName to remove localhost prefix
+      creatorName = creatorName.replace(/localhost:3000\s*/, '').trim();
+    }
+    const formTypeFormatted = formatFormType(formType);
+    const notificationAmount = amount || total || 0;
+
+    let message = `${creatorName} has updated a ${formTypeFormatted} ${series}-${uniqueId} of ₹${notificationAmount}`;
+
+    if (party) {
+        const partyName = await getPartyName(party);
+        if (partyName) {
+            message += ` for ${partyName}`;
+        }
+    }
+
+    if (date) {
+        const entryDate = new Date(date);
+        const today = new Date();
+        entryDate.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+
+        if (entryDate.getTime() !== today.getTime()) {
+            const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+            message += ` on ${dateString}`;
+        }
+    }
+    
+    const title = `Entry Edited in ${formTypeFormatted}`;
+
+    const notificationPayload = {
+      title: title,
+      message: message,
+      data: {
+        url: `${req.protocol}://${req.get('host')}/api/approve-from-notification?endpoint=${formType}&id=${uniqueId}`,
+        endpoint: formType,
+        id: uniqueId
+      }
+    };
+    sendNotificationToAdmins(notificationPayload);
+    // --- END PUSH NOTIFICATION LOGIC ---
+    
+    res.status(200).json({
+      message: 'Entry updated successfully',
+      data: dbData[entryIndex],
+    });
   } catch (err) {
-    console.error('Unexpected error:', err);
-    res.status(500).send('Failed to edit data: ' + err.message);
+    console.error(`Error updating entry for ${formType}:`, err);
+    res.status(500).send('Error updating entry.');
   }
 });
-
 
 app.get('/add/godown', async (req, res) => {
   let { data } = req.query;

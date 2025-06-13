@@ -25,6 +25,11 @@ if (!vapidPublicKey || !vapidPrivateKey) {
     );
 }
 
+// Route to get the VAPID public key
+router.get('/vapidPublicKey', (req, res) => {
+    res.send(vapidPublicKey);
+});
+
 // Subscribe route
 router.post('/subscribe', (req, res) => {
     const { subscription, userId } = req.body;
@@ -48,8 +53,8 @@ router.post('/subscribe', (req, res) => {
 
 // Send notification route
 router.post('/send', (req, res) => {
-    const { userId, title, message, url } = req.body;
-
+    const { title, message, url } = req.body;
+    const userId = req.user.id; 
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required.' });
     }
@@ -89,4 +94,60 @@ router.post('/send', (req, res) => {
         });
 });
 
-module.exports = router; 
+const sendNotificationToAdmins = (payload) => {
+
+    console.log(`-------------------------------------------
+        Sending notification to admins with payload:
+        -------------------------------------------`);
+    console.log(payload);
+    console.log(`-------------------------------------------`);
+
+    const subscriptions = JSON.parse(fs.readFileSync(subscriptionsPath, 'utf-8'));
+    const adminSubscriptions = subscriptions['admin'];
+
+    if (!adminSubscriptions || adminSubscriptions.length === 0) {
+        console.log('No admin subscriptions found. Cannot send notification.');
+        return;
+    }
+
+    console.log(`Found ${adminSubscriptions.length} admin subscription(s).`);
+    console.log('-------------------------------------------');
+    console.log('Sending notification with payload:');
+    console.log(payload);
+    console.log('-------------------------------------------');
+
+    // Flatten the payload for the service worker
+    const notificationPayload = JSON.stringify({
+        title: payload.title,
+        message: payload.message,
+        url: payload.data.url,
+        data: {
+            url: payload.data.url,
+            endpoint: payload.data.endpoint,
+            id: payload.data.id
+        }
+    });
+
+    const promises = adminSubscriptions.map(sub => {
+        console.log(`--> Sending to endpoint: ${sub.endpoint}`);
+        return webpush.sendNotification(sub, notificationPayload)
+            .then(sendResult => {
+                console.log(`    ...Success! Result: ${sendResult.statusCode}`);
+            })
+            .catch(err => {
+                console.error(`    ...Error for endpoint ${sub.endpoint}:`, err.statusCode, err.body);
+                if (err.statusCode === 410 || err.statusCode === 404) {
+                    console.log('    ...Subscription has expired or is invalid. Removing it.');
+                    const updatedSubscriptions = adminSubscriptions.filter(s => s.endpoint !== sub.endpoint);
+                    subscriptions['admin'] = updatedSubscriptions;
+                    fs.writeFileSync(subscriptionsPath, JSON.stringify(subscriptions, null, 2));
+                }
+            });
+    });
+
+    Promise.all(promises)
+        .then(() => console.log('Finished sending all notifications.'))
+        .catch(err => console.error('A critical error occurred during notification sending:', err));
+};
+
+module.exports = { router, sendNotificationToAdmins };
