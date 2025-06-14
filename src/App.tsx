@@ -191,13 +191,6 @@ const AppRoutes = () => (
         </ProtectedRoute>
       } />
       
-      {/* Bills Delivery Register */}
-      {/* <Route path="/bills-delivery-register" element={
-          <BillsDeliveryRegister />
-      } /> 
-       Move it to reports
-       */}
-      
       {/* Edit Pages */}
       <Route path="/account-master/edit/:id" element={
         <ProtectedRoute requiredAccess="Account Master">
@@ -278,9 +271,13 @@ const AppRoutes = () => (
           <CashPaymentApproved />
         </ProtectedRoute>
       } />
-    </Route>
 
-    <Route path="/push-notifications" element={<PushNotifications />} />
+      <Route path="/push-notifications" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <PushNotifications />
+        </ProtectedRoute>
+      } />
+    </Route>
 
     {/* Print Layout - No sidebar/header needed */}
     <Route path="/printInvoicing" element={<PrintInvoicing />} />
