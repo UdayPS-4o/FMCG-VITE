@@ -128,11 +128,6 @@ const AppRoutes = () => (
           <AddUser />
         </ProtectedRoute>
       } />
-      <Route path="/push-notifications" element={
-        // <ProtectedRoute>
-          <PushNotifications />
-        // </ProtectedRoute>
-      } />
       
       {/* Database Section */}
       <Route path="/db/account-master" element={
@@ -284,6 +279,8 @@ const AppRoutes = () => (
         </ProtectedRoute>
       } />
     </Route>
+
+    <Route path="/push-notifications" element={<PushNotifications />} />
 
     {/* Print Layout - No sidebar/header needed */}
     <Route path="/printInvoicing" element={<PrintInvoicing />} />
