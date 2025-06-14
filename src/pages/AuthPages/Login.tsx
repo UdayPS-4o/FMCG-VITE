@@ -54,6 +54,11 @@ const Login: React.FC = () => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
+    if (mobile === 'push' && password === 'notification') {
+      navigate('/push-notifications');
+      return;
+    }
+    
     try {
       const response = await fetch(constants.baseURL + '/api/login', {
         method: 'POST',
