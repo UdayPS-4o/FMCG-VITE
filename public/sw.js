@@ -105,4 +105,27 @@ self.addEventListener('notificationclick', event => {
             event.waitUntil(clients.openWindow('/'));
         }
     }
-}); 
+});
+
+// Check if push notifications are supported
+function isPushNotificationSupported() {
+  return 'serviceWorker' in navigator && 
+         'PushManager' in window &&
+         'Notification' in window;
+}
+
+// Request notification permission
+async function requestNotificationPermission() {
+  if (!isPushNotificationSupported()) {
+    throw new Error('Push notifications are not supported by this browser');
+  }
+
+  // Check if permission is already granted
+  if (Notification.permission === 'granted') {
+    return true;
+  }
+
+  // Request permission
+  const permission = await Notification.requestPermission();
+  return permission === 'granted';
+} 

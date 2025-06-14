@@ -129,9 +129,9 @@ const AppRoutes = () => (
         </ProtectedRoute>
       } />
       <Route path="/push-notifications" element={
-        <ProtectedRoute>
+        // <ProtectedRoute>
           <PushNotifications />
-        </ProtectedRoute>
+        // </ProtectedRoute>
       } />
       
       {/* Database Section */}

@@ -23,8 +23,21 @@ const PushNotifications: React.FC = () => {
     }, []);
 
     const handleSubscription = async () => {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+        const isStandalone = 'standalone' in navigator && (navigator as any).standalone === true;
+
+        // Standard check for browser support
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-            toast.error('Push notifications are not supported in this browser.');
+            // If on iOS, but not added to home screen, show specific instructions.
+            // This is the ONLY way to get push notifications on iOS.
+            if (isIOS && !isStandalone) {
+                toast.info(
+                    'To enable notifications on your iPhone, you must first add this app to your Home Screen from the Safari share menu.'
+                );
+            } else {
+                toast.error('Push notifications are not supported by your browser.');
+            }
+            console.warn('PushManager not supported. This is expected on desktop Safari or non-homescreen iOS web apps.');
             return;
         }
 
@@ -43,9 +56,9 @@ const PushNotifications: React.FC = () => {
             }
 
             const registration = serviceWorkerRegistration || await navigator.serviceWorker.ready;
-            const existingSubscription = await registration.pushManager.getSubscription();
+            let subscription = await registration.pushManager.getSubscription();
 
-            if (existingSubscription) {
+            if (subscription) {
                 toast.info('You are already subscribed to notifications.');
                 setIsSubscribed(true);
                 return;
@@ -61,7 +74,7 @@ const PushNotifications: React.FC = () => {
             const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
             console.log('Converted applicationServerKey:', applicationServerKey);
 
-            const subscription = await registration.pushManager.subscribe({
+            subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey,
             });
