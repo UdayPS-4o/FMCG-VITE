@@ -4,7 +4,7 @@ const webpush = require('web-push');
 const fs = require('fs');
 const path = require('path');
 
-const subscriptionsPath = path.join(__dirname, '../subscriptions.json');
+const subscriptionsPath = path.join(__dirname, '../db/subscriptions.json');
 
 // Make sure the subscriptions file exists
 if (!fs.existsSync(subscriptionsPath)) {
