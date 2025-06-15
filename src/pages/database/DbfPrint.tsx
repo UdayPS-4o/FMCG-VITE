@@ -9,7 +9,7 @@ const DbfPrint: React.FC = () => {
 
   const handlePrint = () => {
     if (series && billNo) {
-      const url = `http://180.188.227.224:8000/api/generate-pdf/dbf-invoice/${series}/${billNo}`;
+      const url = `https://ekta-enterprises.com/proxy/api/generate-pdf/dbf-invoice/${series}/${billNo}`;
       
       window.open(url, '_blank'); // Open in a new tab
     } else {
