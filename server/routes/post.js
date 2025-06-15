@@ -113,7 +113,7 @@ app.post('/:formType', async (req, res) => {
       const formTypeFormatted = formatFormType(formType);
       const notificationAmount = amount || total || 0;
 
-      let message = `${creatorName} has created a ${formTypeFormatted} ${series}-${uniqueId} of ₹${notificationAmount}`;
+      let message = `${creatorName} has created a ${formTypeFormatted} ${series}-${formData.billNo} of ₹${notificationAmount}`;
 
       if (party) {
           const partyName = await getPartyName(party);
@@ -226,7 +226,7 @@ app.post('/edit/:formType', async (req, res) => {
     const formTypeFormatted = formatFormType(formType);
     const notificationAmount = amount || total || 0;
 
-    let message = `${creatorName} has updated a ${formTypeFormatted} ${series}-${uniqueId} of ₹${notificationAmount}`;
+    let message = `${creatorName} has updated a ${formTypeFormatted} ${series}-${formData.billNo} of ₹${notificationAmount}`;
 
     if (party) {
         const partyName = await getPartyName(party);
