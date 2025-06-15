@@ -253,7 +253,7 @@ app.post('/edit/:formType', async (req, res) => {
       title: title,
       message: message,
       data: {
-        url: `${req.protocol}://${req.get('host')}/api/approve-from-notification?endpoint=${formType}&id=${uniqueId}`,
+        url: `https://ekta-enterprises.com/proxy/api/approve-from-notification?endpoint=${formType}&id=${uniqueId}`,
         endpoint: formType,
         id: uniqueId
       }
