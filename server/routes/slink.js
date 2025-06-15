@@ -327,6 +327,7 @@ async function getNextGodownId(req, res) {
     // Define file paths to check for modifications
     const godownFilePaths = [
       path.join(__dirname, '..', 'db', 'godown.json'),
+      path.join(__dirname, '..', 'db', 'approved', 'godown.json'),
       path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'TRANSFER.json')
     ];
 
@@ -391,9 +392,18 @@ async function getNextGodownId(req, res) {
         return [];
       },
     );
+
+    const approvedGodownFilePath = path.join(__dirname, '..', 'db', 'approved', 'godown.json');
+    const approvedGodownData = await fs.readFile(approvedGodownFilePath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        if (error.code !== 'ENOENT') throw error;
+        return [];
+      },
+    );
     
     // Calculate next internal ID based on the 'id' field in godown.json
-    const maxInternalId = godownData.reduce((maxId, gdn) => Math.max(maxId, parseInt(gdn.id || 0, 10)), 0);
+    const maxInternalId = [...godownData, ...approvedGodownData].reduce((maxId, gdn) => Math.max(maxId, parseInt(gdn.id || 0, 10)), 0);
     const nextGodownId = maxInternalId + 1;
 
     // Get the TRANSFER.json data using getSTOCKFILE function
@@ -422,6 +432,16 @@ async function getNextGodownId(req, res) {
                 seriesMap[series] = billNumber;
             }
         }
+    });
+
+    approvedGodownData.forEach(entry => {
+      const series = entry.series?.toUpperCase(); // Ensure consistent casing
+      const billNumber = Number(entry.id);
+      if (series && !isNaN(billNumber)) {
+          if (!seriesMap[series] || billNumber > seriesMap[series]) {
+              seriesMap[series] = billNumber;
+          }
+      }
     });
     
     // Increment each max bill number by 1 to get the next bill number
@@ -521,6 +541,7 @@ async function getNextInvoiceId(req, res) {
     // Update file paths to include invoicing.json for modification time check
     const invoiceFilePaths = [
       path.join(__dirname, '..', 'db', 'invoicing.json'),
+      path.join(__dirname, '..', 'db', 'approved', 'invoicing.json'),
       path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'billdtl.json')
     ];
 
@@ -585,6 +606,16 @@ async function getNextInvoiceId(req, res) {
         return [];
       },
     );
+
+    const approvedInvoicingFilePath = path.join(__dirname, '..', 'db', 'approved', 'invoicing.json');
+    const approvedInvoicingData = await fs.readFile(approvedInvoicingFilePath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        if (error.code !== 'ENOENT') throw error;
+        return [];
+      },
+    );
+    
     // Calculate next internal ID based on the 'id' field in invoicing.json
     const maxInternalId = invoicingData.reduce((maxId, inv) => Math.max(maxId, parseInt(inv.id || 0, 10)), 0);
     const nextInvoiceId = maxInternalId + 1;
@@ -615,6 +646,17 @@ async function getNextInvoiceId(req, res) {
                 seriesMap[series] = billNumber;
             }
         }
+    });
+
+    // Process approved/invoicing.json (approved local database)
+    approvedInvoicingData.forEach(entry => {
+      const series = entry.series?.toUpperCase();
+      const billNumber = Number(entry.billNo);
+      if(series && !isNaN(billNumber)) {
+        if(!seriesMap[series] || billNumber > seriesMap[series]) {
+          seriesMap[series] = billNumber;
+        }
+      }
     });
     
     // Increment each max bill number by 1 to get the next bill number
@@ -676,6 +718,7 @@ async function getNextCashReceiptId(req, res) {
     // Define file paths to check for modifications
     const cashReceiptFilePaths = [
       path.join(__dirname, '..', 'db', 'cash-receipts.json'),
+      path.join(__dirname, '..', 'db', 'approved', 'cash-receipts.json'),
       path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CASH.json')
     ];
 
@@ -740,6 +783,15 @@ async function getNextCashReceiptId(req, res) {
         return [];
       },
     );
+
+    const approvedCashReceiptsFilePath = path.join(__dirname, '..', 'db', 'approved', 'cash-receipts.json');
+    const approvedCashReceiptsData = await fs.readFile(approvedCashReceiptsFilePath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        if (error.code !== 'ENOENT') throw error;
+        return [];
+      },
+    );
     
     // 2. Read CASH.json for transactions with BOOK="BR" (bank receipts)
     const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CASH.json');
@@ -781,10 +833,21 @@ async function getNextCashReceiptId(req, res) {
         }
       }
     });
+
+    approvedCashReceiptsData.forEach(entry => {
+      const series = entry.series?.toUpperCase(); // Ensure consistent casing
+      const receiptNumber = Number(entry.receiptNo);
+      if (series !== undefined && !isNaN(receiptNumber)) {
+        if (!seriesMap[series] || receiptNumber > seriesMap[series]) {
+          seriesMap[series] = receiptNumber;
+        }
+      }
+    });
     
     // Calculate next local receipt number (ignoring series)
-    const maxLocalId = cashReceiptsData.length > 0 
-      ? Math.max(...cashReceiptsData.map(entry => Number(entry.receiptNo) || 0))
+    const combinedData = [...cashReceiptsData, ...approvedCashReceiptsData];
+    const maxLocalId = combinedData.length > 0 
+      ? Math.max(...combinedData.map(entry => Number(entry.receiptNo) || 0))
       : 0;
     const nextReceiptNo = maxLocalId + 1;
     
@@ -847,6 +910,7 @@ async function getNextCashPaymentId(req, res) {
     // Define file paths to check for modifications
     const cashPaymentFilePaths = [
       path.join(__dirname, '..', 'db', 'cash-payments.json'), // Assuming cash-payments.json for local data
+      path.join(__dirname, '..', 'db', 'approved', 'cash-payments.json'),
       path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CASH.json')
     ];
 
@@ -912,6 +976,15 @@ async function getNextCashPaymentId(req, res) {
       },
     );
 
+    const approvedCashPaymentsFilePath = path.join(__dirname, '..', 'db', 'approved', 'cash-payments.json');
+    const approvedCashPaymentsData = await fs.readFile(approvedCashPaymentsFilePath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        if (error.code !== 'ENOENT') throw error;
+        return [];
+      },
+    );
+
     // 2. Read CASH.json for transactions
     const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'CASH.json');
     const cashDbfData = await fs.readFile(cashDbfPath, 'utf8').then(
@@ -953,9 +1026,21 @@ async function getNextCashPaymentId(req, res) {
       }
     });
 
+    approvedCashPaymentsData.forEach(entry => {
+      const series = entry.series?.toUpperCase(); // Ensure consistent casing
+      // Assuming voucherNo in local DB corresponds to R_NO in DBF
+      const voucherNumber = Number(entry.voucherNo);
+      if (series !== undefined && !isNaN(voucherNumber)) {
+        if (!seriesMap[series] || voucherNumber > seriesMap[series]) {
+          seriesMap[series] = voucherNumber;
+        }
+      }
+    });
+
     // Calculate next local voucher number (ignoring series, for fallback or general next ID)
-    const maxLocalId = cashPaymentsData.length > 0
-      ? Math.max(...cashPaymentsData.map(entry => Number(entry.voucherNo) || 0))
+    const combinedData = [...cashPaymentsData, ...approvedCashPaymentsData];
+    const maxLocalId = combinedData.length > 0
+      ? Math.max(...combinedData.map(entry => Number(entry.voucherNo) || 0))
       : 0;
     const nextVoucherNo = maxLocalId + 1; // This will be the general nextReceiptNo equivalent
 
