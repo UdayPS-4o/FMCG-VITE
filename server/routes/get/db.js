@@ -4,6 +4,9 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+
+require('dotenv').config();
+
 const {
   redirect,
   getDbfData,
@@ -250,7 +253,7 @@ app.get('/api/dbf/:file', async (req, res) => {
 
 app.get('/dbf', async (req, res) => {
   try {
-    const files = await fs.readdir(path.join('../', './d01-2324/data'));
+    const files = await fs.readdir(path.join(process.env.DBF_FOLDER_PATH, 'data'));
     let dbfFiles = files
       .filter((file) => file.endsWith('.dbf') || file.endsWith('.DBF'))
       .map((file, index) => ({ name: file }));
