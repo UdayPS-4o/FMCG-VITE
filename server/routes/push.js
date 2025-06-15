@@ -71,7 +71,7 @@ router.post('/send', (req, res) => {
         message: message || 'You have a new notification.',
         url: url || '/'
     });
-
+    console.log(notificationPayload);
     const promises = userSubscriptions.map(sub => 
         webpush.sendNotification(sub, notificationPayload)
             .catch(err => {
