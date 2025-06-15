@@ -11,3 +11,6 @@ public
 db/CASH.json
 
 server/db
+
+db/subscription.json
+db/subscriptions.json
