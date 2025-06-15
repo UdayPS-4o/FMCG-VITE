@@ -5,6 +5,8 @@ const fss = require('fs/promises');
 const path = require('path');
 const { sendNotificationToAdmins } = require('./push');
 
+require('dotenv').config();
+
 const {
   redirect,
   getDbfData,
@@ -28,7 +30,7 @@ async function getPartyName(partyCode) {
     if (!partyCode) return null;
     try {
         if (!cmplCache) {
-            const cmplDataPath = path.join(__dirname, '..', 'd01-2324', 'data', 'json', 'CMPL.json');
+            const cmplDataPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
             const cmplData = await fss.readFile(cmplDataPath, 'utf8');
             cmplCache = JSON.parse(cmplData);
         }
