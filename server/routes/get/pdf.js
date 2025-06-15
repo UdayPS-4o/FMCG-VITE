@@ -4,6 +4,17 @@ const path = require('path');
 const fs = require('fs').promises; // Use promises for async file operations
 const router = express.Router();
 
+// --- Puppeteer Configuration ---
+const puppeteerOptions = {
+  headless: true,
+  args: ['--no-sandbox', '--disable-setuid-sandbox']
+};
+
+// Allow overriding the executable path via an environment variable for flexibility.
+if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+  puppeteerOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+}
+
 try {
   require('fs').mkdirSync(path.join(__dirname, '..', '..', 'db', 'pdfs'), { recursive: true });
 } catch (e) {
@@ -96,10 +107,7 @@ router.get('/invoice/:id', async (req, res) => {
   console.log(`[PDF Generation] Target save path: ${pdfPath}`);
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'] 
-    });
+    browser = await puppeteer.launch(puppeteerOptions);
     const page = await browser.newPage();
 
     console.log(`[PDF Generation] Navigating to ${pdfUrl}...`);
@@ -213,10 +221,7 @@ async function checkOrGenerateInvoicePdf(id) {
   console.log(`[PDF Check/Gen] Target save path: ${pdfPath}`);
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    browser = await puppeteer.launch(puppeteerOptions);
     const page = await browser.newPage();
 
     console.log(`[PDF Check/Gen] Navigating to ${pdfUrl}...`);
@@ -561,11 +566,7 @@ router.get('/dbf-invoice/:series/:billNo', async (req, res) => {
     let browser = null;
 
     try {
-      browser = await puppeteer.launch({
-        executablePath: process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : process.platform === 'linux' ? '/usr/bin/brave-browser' : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+      browser = await puppeteer.launch(puppeteerOptions);
       const page = await browser.newPage();
 
       console.log(`[PDF Generation] Navigating to ${pdfUrl}...`);
