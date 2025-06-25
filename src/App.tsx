@@ -41,6 +41,7 @@ import ItemWisePurchase from './pages/reports/ItemWisePurchase';
 import BillsDeliveryRegister from './pages/BillsDeliveryRegister';
 import GodownStockRegister from './pages/reports/GodownStockRegister';
 import PrintGodownStock from './pages/print/PrintGodownStock';
+import PushNotifications from './pages/push-notifications/PushNotifications';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -190,13 +191,6 @@ const AppRoutes = () => (
         </ProtectedRoute>
       } />
       
-      {/* Bills Delivery Register */}
-      {/* <Route path="/bills-delivery-register" element={
-          <BillsDeliveryRegister />
-      } /> 
-       Move it to reports
-       */}
-      
       {/* Edit Pages */}
       <Route path="/account-master/edit/:id" element={
         <ProtectedRoute requiredAccess="Account Master">
@@ -275,6 +269,12 @@ const AppRoutes = () => (
       <Route path="/approved/cash-payments" element={
         <ProtectedRoute requiredAccess="Admin">
           <CashPaymentApproved />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/push-notifications" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <PushNotifications />
         </ProtectedRoute>
       } />
     </Route>
