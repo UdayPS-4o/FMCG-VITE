@@ -1,9 +1,11 @@
 const fs = require('fs').promises;
 const path = require('path');
 
+require('dotenv').config();
+
 // --- Configuration ---
 // Adjust these paths relative to your project root or where you run the script
-const jsonFolderPath = path.resolve(__dirname, '..', '..', 'd01-2324', 'data', 'json'); 
+const jsonFolderPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data', 'json'); 
 const filesToAnalyze = [
     { name: 'BILLDTL.json', path: path.join(jsonFolderPath, 'BILLDTL.json'), idFields: ['SERIES', 'BILL', 'SNO'] },
     { name: 'bill.json', path: path.join(jsonFolderPath, 'bill.json'), idFields: ['SERIES', 'BILL'] }

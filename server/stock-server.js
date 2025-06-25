@@ -4,6 +4,7 @@ const puppeteer = require('puppeteer')
 const path = require('path');
 const { DbfORM } = require('./dbf-orm');
 
+require('dotenv').config();
 const app = express();
 
 app.use(express.static('dist'));
@@ -16,21 +17,21 @@ async function calculateStock(gdnCode) {
     try {
         [salesData, purchaseData, transferData] = await Promise.all([
             (async () => {
-                const salesOrm = new DbfORM("./d01-2425/data/billdtl.dbf");
+                const salesOrm = new DbfORM(path.join(process.env.DBF_FOLDER_PATH, 'data', 'billdtl.dbf'));
                 await salesOrm.open();
                 const data = await salesOrm.findAll();
                 salesOrm.close();
                 return data;
             })(),
             (async () => {
-                const purchaseOrm = new DbfORM("./d01-2425/data/purdtl.dbf");
+                const purchaseOrm = new DbfORM(path.join(process.env.DBF_FOLDER_PATH, 'data', 'purdtl.dbf'));
                 await purchaseOrm.open();
                 const data = await purchaseOrm.findAll();
                 purchaseOrm.close();
                 return data;
             })(),
             (async () => {
-                const transferOrm = new DbfORM("./d01-2425/data/transfer.dbf");
+                const transferOrm = new DbfORM(path.join(process.env.DBF_FOLDER_PATH, 'data', 'transfer.dbf'));
                 await transferOrm.open();
                 const data = await transferOrm.findAll();
                 transferOrm.close();
@@ -110,7 +111,7 @@ async function calculateStock(gdnCode) {
 async function updatedStock(stock, salesData, purchaseData, transferData, gdnCode) {
     let productData;
     try {
-        const pmplOrm = new DbfORM("./d01-2425/data/pmpl.dbf");
+        const pmplOrm = new DbfORM(path.join(process.env.DBF_FOLDER_PATH, 'data', 'pmpl.dbf'));
         await pmplOrm.open();
         productData = await pmplOrm.findAll();
         pmplOrm.close();

@@ -31,11 +31,11 @@ const generateHash = (data) => {
   
 const getCmplData = async (req, res) => {
   const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, "data", "CMPL.dbf");
-  console.log(dbfFilePath);
+  // console.log(dbfFilePath);
   try {
-    console.log("-----------------------------------------------------")
+    // console.log("-----------------------------------------------------")
     let jsonData = await fs.readFile(path.resolve(process.env.DBF_FOLDER_PATH, "data/json", "CMPL.json"), 'utf8');
-    console.log(path.resolve(process.env.DBF_FOLDER_PATH, "data/json", "CMPL.json"));
+    // console.log(path.resolve(process.env.DBF_FOLDER_PATH, "data/json", "CMPL.json"));
     
     jsonData = JSON.parse(jsonData);
     jsonData = jsonData.map((entry) => {
@@ -66,12 +66,12 @@ const getCmplData = async (req, res) => {
       // Allow clients to access the ETag header
       res.setHeader('Access-Control-Expose-Headers', 'ETag');
       
-      console.log(`Generated Hash: ${hash}, Client Hash: ${clientHash}`);
-      console.log('Response Headers:', res._headers || 'Headers not available');
+      // console.log(`Generated Hash: ${hash}, Client Hash: ${clientHash}`);
+      // console.log('Response Headers:', res._headers || 'Headers not available');
       
       // If client has valid hash, send 304 Not Modified
       if (clientHash && (clientHash === hash || clientHash === `"${hash}"` || clientHash === hash.replace(/^"|"$/g, ''))) {
-        console.log(`Using cached data for CMPL.json with hash: ${hash}`);
+        // console.log(`Using cached data for CMPL.json with hash: ${hash}`);
         return res.status(304).end();
       }
       

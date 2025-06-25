@@ -4,6 +4,17 @@ const path = require('path');
 const fs = require('fs').promises; // Use promises for async file operations
 const router = express.Router();
 
+// --- Puppeteer Configuration ---
+const puppeteerOptions = {
+  headless: true,
+  args: ['--no-sandbox', '--disable-setuid-sandbox']
+};
+
+// Allow overriding the executable path via an environment variable for flexibility.
+if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+  puppeteerOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+}
+
 try {
   require('fs').mkdirSync(path.join(__dirname, '..', '..', 'db', 'pdfs'), { recursive: true });
 } catch (e) {
@@ -96,10 +107,7 @@ router.get('/invoice/:id', async (req, res) => {
   console.log(`[PDF Generation] Target save path: ${pdfPath}`);
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'] 
-    });
+    browser = await puppeteer.launch(puppeteerOptions);
     const page = await browser.newPage();
 
     console.log(`[PDF Generation] Navigating to ${pdfUrl}...`);
@@ -168,24 +176,20 @@ router.get('/invoice/:id', async (req, res) => {
   }
 });
 
-// New route to check for existing PDF or generate if not found
-router.get('/check-or-generate-invoice-pdf/:id', async (req, res) => {
-  const { id } = req.params;
-
+async function checkOrGenerateInvoicePdf(id) {
   if (!id) {
-    return res.status(400).json({ message: 'Invoice ID is required' });
+    throw new Error('Invoice ID is required');
   }
 
   let invoiceDetails;
   try {
     invoiceDetails = await invoiceHash(id);
     if (!invoiceDetails || !invoiceDetails.series || !invoiceDetails.billNo || !invoiceDetails.hash) {
-      console.error(`[PDF Check/Gen] Failed to retrieve complete invoice details for ID: ${id}`);
-      return res.status(500).json({ message: 'Failed to retrieve invoice details for naming.' });
+      throw new Error(`Failed to retrieve complete invoice details for ID: ${id}`);
     }
   } catch (error) {
     console.error(`[PDF Check/Gen] Error fetching invoice hash for ID ${id}:`, error);
-    return res.status(500).json({ message: 'Failed to fetch invoice details for naming.', error: error.message });
+    throw new Error(`Failed to fetch invoice details: ${error.message}`);
   }
 
   const { series, billNo, hash } = invoiceDetails;
@@ -196,33 +200,28 @@ router.get('/check-or-generate-invoice-pdf/:id', async (req, res) => {
 
   console.log(`[PDF Check/Gen] Checking for PDF: ${pdfPath}`);
   try {
-    await fs.access(pdfPath); // Check if file exists
+    await fs.access(pdfPath);
     console.log(`[PDF Check/Gen] PDF found: ${pdfPath}.`);
-    return res.status(200).json({
+    return {
+      success: true,
       message: 'PDF already exists and matches current data.',
       pdfPath: relativePdfPath,
       status: 'exists'
-    });
+    };
   } catch (error) {
     if (error.code !== 'ENOENT') {
-      console.error(`[PDF Check/Gen] Error accessing PDF ${pdfPath}:`, error);
-      return res.status(500).json({ message: 'Error checking for PDF', error: error.message, status: 'error_checking' });
+      throw new Error(`Error checking for PDF: ${error.message}`);
     }
-    // File does not exist (ENOENT), so proceed to generate
     console.log(`[PDF Check/Gen] PDF not found at ${pdfPath}. Generating...`);
   }
 
-  // PDF Generation Logic (adapted from /invoice/:id route, ensuring JSON response)
   const pdfUrl = `${FRONTEND_BASE_URL}/printInvoice?id=${id}`;
   let browser = null;
   console.log(`[PDF Check/Gen] Attempting generation for invoice ${id} from URL: ${pdfUrl}`);
   console.log(`[PDF Check/Gen] Target save path: ${pdfPath}`);
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    browser = await puppeteer.launch(puppeteerOptions);
     const page = await browser.newPage();
 
     console.log(`[PDF Check/Gen] Navigating to ${pdfUrl}...`);
@@ -239,8 +238,8 @@ router.get('/check-or-generate-invoice-pdf/:id', async (req, res) => {
     }
     const loadingElement = await page.$('.animate-spin');
     if (loadingElement) {
-        console.warn('[PDF Check/Gen] Warning: Page has a .animate-spin element present. Waiting extra 3s.');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+      console.warn('[PDF Check/Gen] Warning: Page has a .animate-spin element present. Waiting extra 3s.');
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
     console.log('[PDF Check/Gen] Page status checks passed.');
     
@@ -259,34 +258,47 @@ router.get('/check-or-generate-invoice-pdf/:id', async (req, res) => {
     await fs.writeFile(pdfPath, pdfBuffer);
     console.log(`[PDF Check/Gen] PDF written to: ${pdfPath}`);
 
-    return res.status(201).json({
+    return {
+      success: true,
       message: 'PDF generated successfully.',
       pdfPath: relativePdfPath,
       status: 'generated'
-    });
+    };
 
   } catch (error) {
     console.error(`[PDF Check/Gen] CRITICAL ERROR for invoice ${id}:`, error.message);
     console.error("[PDF Check/Gen] Full error stack:", error.stack);
-    // Attempt to clean up a partially created PDF if an error occurs during generation steps
     try {
       await fs.unlink(pdfPath);
       console.log(`[PDF Check/Gen] Cleaned up partially created PDF (if any) at ${pdfPath}`);
     } catch (cleanupError) {
-      if (cleanupError.code !== 'ENOENT') { // Ignore if file doesn't exist
+      if (cleanupError.code !== 'ENOENT') {
         console.error(`[PDF Check/Gen] Error cleaning up PDF during error handling:`, cleanupError);
       }
     }
-    return res.status(500).json({
-      message: 'Failed to generate PDF',
-      error: error.message,
-      status: 'error_generating'
-    });
+    throw new Error(`Failed to generate PDF: ${error.message}`);
   } finally {
     if (browser) {
       await browser.close();
       console.log('[PDF Check/Gen] Puppeteer browser closed.');
     }
+  }
+}
+
+
+// Route handler using the function
+router.get('/check-or-generate-invoice-pdf/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await checkOrGenerateInvoicePdf(id);
+    const statusCode = result.status === 'generated' ? 201 : 200;
+    res.status(statusCode).json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      status: 'error'
+    });
   }
 });
 
@@ -554,10 +566,7 @@ router.get('/dbf-invoice/:series/:billNo', async (req, res) => {
     let browser = null;
 
     try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+      browser = await puppeteer.launch(puppeteerOptions);
       const page = await browser.newPage();
 
       console.log(`[PDF Generation] Navigating to ${pdfUrl}...`);
@@ -703,4 +712,8 @@ router.get('/dbf-invoice-data/:series/:billNo', async (req, res) => {
   }
 });
 
-module.exports = router;
+// Export both the router and the function
+module.exports = {
+  router,
+  checkOrGenerateInvoicePdf
+};

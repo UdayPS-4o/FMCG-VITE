@@ -17,5 +17,9 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: ["giant-wasps-fold.loca.lt"],
+    port: 3000
   },
+  define: {
+    'import.meta.env.VITE_VAPID_PUBLIC_KEY': JSON.stringify('BMoDDiSzf7AavViREU6_M0Yez44WtpEUUi52Fkscvfd6uI1UfLXXGdzMOTDHbyATt5apBAe6o-eDgYBb33khRmI')
+  }
 });

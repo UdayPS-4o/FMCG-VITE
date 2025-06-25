@@ -9,7 +9,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
 
 const PUBLIC_API_PATHS = [
   '/api/generate-pdf/', 
-  '/api/internal/invoice-data/'
+  '/api/internal/invoice-data/',
+  '/api/push/subscribe',
+  '/api/approve-from-notification'
 ];
 
 // Extract JWT token from Authorization header
