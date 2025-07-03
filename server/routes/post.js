@@ -125,8 +125,8 @@ app.post('/:formType', async (req, res) => {
       if (date) {
           const entryDate = new Date(date);
           const today = new Date();
-          entryDate.setHours(0, 0, 0, 0);
-          today.setHours(0, 0, 0, 0);
+          entryDate.setHours(5,30, 0, 0);
+          today.setHours(5,30, 0, 0);
 
           if (entryDate.getTime() !== today.getTime()) {
               const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
