@@ -1226,13 +1226,39 @@ async function printInvoicing(req, res) {
     // Read invoice data
     let invoiceData = await fs.readFile(path.join(__dirname, '..', 'db', 'invoicing.json'), 'utf8');
     invoiceData = JSON.parse(invoiceData);
-    const invoice = invoiceData.find((inv) => inv.id == (id));
-
-    if (!invoice) {
-      console.error(`[slink/printInvoice] Invoice not found for ID: ${id}`);
-      return res.status(404).send('Invoice not found');
+    
+    // Check if multiple IDs are provided (comma-separated)
+    let invoices = [];
+    if (id && id.includes(',')) {
+      const idArray = id.split(',');
+      console.log(`[slink/printInvoice] Multiple IDs requested: ${idArray.length} invoices`);
+      
+      // Get all requested invoices
+      invoices = idArray.map(singleId => {
+        const invoice = invoiceData.find((inv) => inv.id == singleId);
+        if (!invoice) {
+          console.warn(`[slink/printInvoice] Invoice not found for ID: ${singleId}`);
+        }
+        return invoice;
+      }).filter(Boolean); // Remove any null/undefined invoices
+      
+      if (invoices.length === 0) {
+        console.error(`[slink/printInvoice] No invoices found for IDs: ${id}`);
+        return res.status(404).send('No invoices found');
+      }
+    } else {
+      // Single invoice case
+      const invoice = invoiceData.find((inv) => inv.id == id);
+      if (!invoice) {
+        console.error(`[slink/printInvoice] Invoice not found for ID: ${id}`);
+        return res.status(404).send('Invoice not found');
+      }
+      invoices.push(invoice);
+      console.log(`[slink/printInvoice] Found invoice:`, invoice.id, `SM Code: ${invoice.sm || 'N/A'}`);
     }
-    console.log(`[slink/printInvoice] Found invoice:`, invoice.id, `SM Code: ${invoice.sm || 'N/A'}`);
+    
+    // Process the first invoice for now (we'll modify this to handle all invoices)
+    const invoice = invoices[0];
 
     // Read users data to find the salesperson
     let users = [];

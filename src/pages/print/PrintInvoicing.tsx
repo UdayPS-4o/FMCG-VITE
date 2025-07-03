@@ -124,6 +124,30 @@ const PrintInvoicing: React.FC = () => {
   };
 
   const invoiceId = getQueryParams();
+  const isMultipleInvoices = invoiceId.includes(',');
+  const invoiceCount = isMultipleInvoices ? invoiceId.split(',').length : 1;
+  const [currentInvoiceIndex, setCurrentInvoiceIndex] = useState(0);
+  const [allInvoices, setAllInvoices] = useState<InvoiceData[]>([]);
+  
+  // Function to navigate between invoices
+  const goToNextInvoice = () => {
+    if (currentInvoiceIndex < allInvoices.length - 1) {
+      setCurrentInvoiceIndex(currentInvoiceIndex + 1);
+    }
+  };
+  
+  const goToPreviousInvoice = () => {
+    if (currentInvoiceIndex > 0) {
+      setCurrentInvoiceIndex(currentInvoiceIndex - 1);
+    }
+  };
+  
+  // Effect to update data when currentInvoiceIndex changes
+  useEffect(() => {
+    if (allInvoices.length > 0 && currentInvoiceIndex >= 0 && currentInvoiceIndex < allInvoices.length) {
+      setData(allInvoices[currentInvoiceIndex]);
+    }
+  }, [currentInvoiceIndex, allInvoices]);
 
   // Data fetch karne ke liye useEffect
   useEffect(() => {
@@ -147,50 +171,74 @@ const PrintInvoicing: React.FC = () => {
 
       try {
         const token = localStorage.getItem('token'); // Get token
-        // Optional: Check if token exists and handle if not, e.g., redirect to login
-        // if (!token && (isDbf || id)) { // Assuming both routes need token
-        //   setError('Authentication required. Please login.');
-        //   showToast('Authentication required. Please login.', 'error');
-        //   setLoading(false);
-        //   // navigate('/login'); // Optional: redirect to login
-        //   return;
-        // }
-
-        let response;
-        let url;
         const headers: HeadersInit = {};
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
 
-        if (isDbf && series && billNo) {
-          url = `${constants.baseURL}/api/generate-pdf/dbf-invoice-data/${series}/${billNo}`;
-          response = await fetch(url, { headers });
-        } else if (id) {
-          url = `${constants.baseURL}/slink/printInvoice?id=${id}`;
-          // Assuming /slink/printInvoice might also need auth or handles it differently.
-          // Add headers if needed, or remove if it's a public link.
-          response = await fetch(url, { headers }); 
-        } else {
-          throw new Error('Invalid parameters provided for fetching data');
-        }
-        
-        console.log(`Fetching data from: ${url}`);
-
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            setError('Authentication failed. Please check your login.');
-            showToast('Authentication failed.', 'error');
-            // navigate('/login'); // Optional: redirect to login
-            // return; // Stop further processing if auth failed
+        // Handle multiple invoice IDs
+        if (id && id.includes(',')) {
+          const idArray = id.split(',');
+          console.log(`Multiple invoice IDs detected: ${idArray.length} invoices`);
+          
+          // Fetch each invoice separately
+          const invoicePromises = idArray.map(async (singleId) => {
+            const url = `${constants.baseURL}/slink/printInvoice?id=${singleId}`;
+            const response = await fetch(url, { headers });
+            
+            if (!response.ok) {
+              console.warn(`Failed to fetch invoice ID ${singleId}: ${response.status}`);
+              return null;
+            }
+            
+            return await response.json();
+          });
+          
+          // Wait for all fetches to complete
+          const results = await Promise.all(invoicePromises);
+          const validInvoices = results.filter(Boolean) as InvoiceData[];
+          
+          if (validInvoices.length === 0) {
+            throw new Error('Failed to fetch any valid invoices');
           }
-          const errorData = await response.json().catch(() => ({ message: `Failed to fetch invoice data. Status: ${response.status}` }));
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-        }
+          
+          // Store all invoices and set the first one as current
+          setAllInvoices(validInvoices);
+          setData(validInvoices[0]);
+          setCurrentInvoiceIndex(0);
+          
+          console.log(`Successfully fetched ${validInvoices.length} invoices`);
+        } else {
+          // Single invoice case
+          let response;
+          let url;
+          
+          if (isDbf && series && billNo) {
+            url = `${constants.baseURL}/api/generate-pdf/dbf-invoice-data/${series}/${billNo}`;
+            response = await fetch(url, { headers });
+          } else if (id) {
+            url = `${constants.baseURL}/slink/printInvoice?id=${id}`;
+            response = await fetch(url, { headers }); 
+          } else {
+            throw new Error('Invalid parameters provided for fetching data');
+          }
+          
+          console.log(`Fetching data from: ${url}`);
 
-        const responseData = await response.json();
-        console.log('Fetched invoice data:', responseData);
-        setData(responseData);
+          if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+              setError('Authentication failed. Please check your login.');
+              showToast('Authentication failed.', 'error');
+            }
+            const errorData = await response.json().catch(() => ({ message: `Failed to fetch invoice data. Status: ${response.status}` }));
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+          }
+
+          const responseData = await response.json();
+          console.log('Fetched invoice data:', responseData);
+          setData(responseData);
+          setAllInvoices([responseData]);
+        }
       } catch (err: any) {
         console.error('Error fetching invoice data:', err);
         // Avoid overriding specific auth error messages
@@ -518,6 +566,38 @@ const PrintInvoicing: React.FC = () => {
           </button>
         </div>
       </div>
+      
+      {/* Multiple Invoice Navigation Controls */}
+      {isMultipleInvoices && (
+        <div className="print:hidden mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+          <div className="flex flex-col sm:flex-row justify-between items-center">
+            <div className="mb-2 sm:mb-0">
+              <p className="font-semibold text-blue-800">
+                Showing invoice {currentInvoiceIndex + 1} of {invoiceCount}
+              </p>
+            </div>
+            <div className="flex space-x-2">
+              <button 
+                onClick={goToPreviousInvoice} 
+                disabled={currentInvoiceIndex === 0}
+                className={`px-3 py-1 border rounded ${currentInvoiceIndex === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-blue-600 hover:bg-blue-50'}`}
+              >
+                ← Previous Invoice
+              </button>
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded">
+                {currentInvoiceIndex + 1} / {invoiceCount}
+              </span>
+              <button 
+                onClick={goToNextInvoice} 
+                disabled={currentInvoiceIndex === invoiceCount - 1}
+                className={`px-3 py-1 border rounded ${currentInvoiceIndex === invoiceCount - 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-blue-600 hover:bg-blue-50'}`}
+              >
+                Next Invoice →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Invoice Content */}
       {data && (
