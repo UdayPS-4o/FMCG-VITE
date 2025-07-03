@@ -88,6 +88,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   const [rowsPerPage, setRowsPerPage] = useState<number>(100);
   const [search, setSearch] = useState<string>('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [smFilter, setSmFilter] = useState<string>('');
   // Add tooltip state
   const [tooltipContent, setTooltipContent] = useState<{ content: any; position: { x: number; y: number } } | null>(null);
   // Add party mapping state
@@ -169,6 +170,8 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
 
   // Add state for table loading
   const [isTableLoading, setIsTableLoading] = useState<boolean>(true);
+  // Add state for SM options
+  const [smOptions, setSmOptions] = useState<{value: string, label: string}[]>([]);
 
   // Get user state from localStorage
   const [user, setUser] = useState<User | null>(null);
@@ -273,6 +276,41 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
           return acc + (isNaN(amount) ? 0 : amount);
         }, 0);
         setTotalAmount(sum);
+      }
+      
+      // Extract unique SM values for filter dropdown
+      if (filteredData.length > 0) {
+        const smField = Object.keys(filteredData[0]).find(key => 
+          key.toLowerCase() === 'sm' || key.toLowerCase() === 'smcode'
+        );
+        
+        if (smField) {
+          const uniqueSms = new Set<string>();
+          
+          filteredData.forEach(row => {
+            if (row[smField]) {
+              uniqueSms.add(row[smField]);
+            }
+          });
+          
+          const smNameField = Object.keys(filteredData[0]).find(key => 
+            key.toLowerCase() === 'smname' || key.toLowerCase() === 'sm_name'
+          );
+          
+          const options = Array.from(uniqueSms).map(sm => {
+            // Find a row with this SM to get the name
+            const rowWithSm = filteredData.find(row => row[smField] === sm);
+            const smName = smNameField && rowWithSm ? rowWithSm[smNameField] : '';
+            
+            return {
+              value: sm,
+              label: smName ? `${sm} (${smName})` : sm
+            };
+          }).sort((a, b) => a.label.localeCompare(b.label));
+          
+          // Add 'All' option at the beginning
+          setSmOptions([{ value: '', label: 'All SMs' }, ...options]);
+        }
       }
       
       if (filteredData.length > 0) {
@@ -406,6 +444,11 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     setSearch(event.target.value);
     setPage(0);
   };
+  
+  const handleSmFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSmFilter(event.target.value);
+    setPage(0);
+  };
 
   // Add column visibility toggle handler
   const toggleColumnVisibility = (header: string) => {
@@ -421,11 +464,30 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     setHiddenColumns([]);
   };
 
-  const filteredRows = rows.filter((row) =>
-    headers.some((header) => 
-      row[header]?.toString().toLowerCase().includes(search.toLowerCase())
-    )
-  );
+  const filteredRows = rows.filter((row) => {
+    // First apply search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      const matchesSearch = headers.some((header) => 
+        row[header]?.toString().toLowerCase().includes(searchLower)
+      );
+      
+      if (!matchesSearch) return false;
+    }
+    
+    // Then apply SM filter if selected
+    if (smFilter) {
+      const smField = Object.keys(row).find(key => 
+        key.toLowerCase() === 'sm' || key.toLowerCase() === 'smcode'
+      );
+      
+      if (smField && row[smField] !== smFilter) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
 
   const sortedRows = [...filteredRows].sort((a, b) => {
     if (!a[orderBy] || !b[orderBy]) return 0;
@@ -995,19 +1057,21 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm w-full overflow-hidden max-w-[95vw] mx-auto custom-scrollbar">
           {/* Toolbar */}
           <div className="p-4 flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="relative w-full sm:w-64">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={search}
-                onChange={handleSearch}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:focus:ring-brand-400"
-              />
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
+            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={search}
+                  onChange={handleSearch}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:focus:ring-brand-400"
+                />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                </div>
               </div>
             </div>
             
@@ -1124,15 +1188,41 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
                         key={header}
                         className="px-4 py-3 font-medium text-sm text-gray-900 dark:text-gray-100 cursor-pointer"
                       >
-                        <div 
-                          className="flex items-center gap-1"
-                          onClick={() => handleRequestSort(header)}
-                        >
-                          {header.charAt(0).toUpperCase() + header.slice(1).replace(/_/g, ' ')}
-                          {orderBy === header && (
-                            <span className="text-gray-500 dark:text-gray-400">
-                              {order === 'asc' ? '↑' : '↓'}
-                            </span>
+                        <div className="flex flex-col">
+                          <div 
+                            className="flex items-center gap-1"
+                            onClick={() => handleRequestSort(header)}
+                          >
+                            {header.charAt(0).toUpperCase() + header.slice(1).replace(/_/g, ' ')}
+                            {orderBy === header && (
+                              <span className="text-gray-500 dark:text-gray-400">
+                                {order === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* SM Filter in header */}
+                          {header.toLowerCase() === 'sm' && smOptions.length > 1 && (
+                            <div className="mt-2 relative">
+                              <select
+                                value={smFilter}
+                                onChange={handleSmFilterChange}
+                                className="w-full text-xs pl-2 pr-6 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 appearance-none"
+                                onClick={(e) => e.stopPropagation()} // Prevent sorting when clicking the dropdown
+                                style={{ colorScheme: 'auto' }} // Ensures dropdown options match the color scheme
+                              >
+                                {smOptions.map((option) => (
+                                  <option key={option.value} value={option.value} className="dark:bg-gray-700 dark:text-gray-100">
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </TableCell>
@@ -1374,4 +1464,4 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   );
 });
 
-export default DatabaseTable; 
+export default DatabaseTable;
