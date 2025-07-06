@@ -546,6 +546,7 @@ router.get('/item-wise-purchase', async (req, res) => {
             if (companyCodes.length === 0) {
                 companyCodes = undefined;
             }
+            console.log('[ITEM-WISE-PURCHASE] Processed companyCodes:', companyCodes);
         }
 
         if (!fromDate || !toDate) {
@@ -612,9 +613,15 @@ router.get('/item-wise-purchase', async (req, res) => {
                 return false;
             }
 
-            if (companyCodes) {
-                const companyCodeSet = new Set(companyCodes.split(',').map(c => c.trim()));
-                if (!companyCodeSet.has(item.CCODE)) return false;
+            if (companyCodes && Array.isArray(companyCodes) && companyCodes.length > 0) {
+                if (item.CODE && item.CODE.length >= 2) {
+                    const itemCompanyCode = item.CODE.substring(0, 2).toUpperCase();
+                    if (!companyCodes.includes(itemCompanyCode)) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
             }
 
             if (parsedSeriesFilters && Array.isArray(parsedSeriesFilters) && parsedSeriesFilters.length > 0) {
@@ -636,8 +643,11 @@ router.get('/item-wise-purchase', async (req, res) => {
                 }
             }
 
-            if (partyCode && item.PCODE !== partyCode) {
-                return false;
+            if (partyCode) {
+                // Check both PCODE and C_CODE fields for party code matching
+                if (item.PCODE !== partyCode && item.C_CODE !== partyCode) {
+                    return false;
+                }
             }
 
             if (itemCodes) {
@@ -807,4 +817,4 @@ router.get('/purchase-filter-options', async (req, res) => {
     }
 });
 
-module.exports = router; 
+module.exports = router;
