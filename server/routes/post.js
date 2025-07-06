@@ -65,7 +65,12 @@ app.post('/:formType', async (req, res) => {
   if (formType === 'invoicing') {
     const series = formData.series?.toUpperCase();
     const billNo = formData.billNo;
-    
+
+  if (formType === 'cash-payment') {
+    const series = formData.series?.toUpperCase();
+    const voucherNo = formData.voucherNo;
+  }
+      
     if (!series || !billNo) {
        return res.status(400).send('Missing series or bill number in request.');
     }
