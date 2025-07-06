@@ -65,15 +65,27 @@ app.post('/:formType', async (req, res) => {
   if (formType === 'invoicing') {
     const series = formData.series?.toUpperCase();
     const billNo = formData.billNo;
-
-  if (formType === 'cash-payment') {
-    const series = formData.series?.toUpperCase();
-    const voucherNo = formData.voucherNo;
-  }
-      
+  
     if (!series || !billNo) {
        return res.status(400).send('Missing series or bill number in request.');
     }
+  if (formType === 'cash-receipts') {
+    const series = formData.series?.toUpperCase();
+    const receiptNo = formData.receiptNo;
+    if (!series || !receiptNo) {
+      return res.status(400).send('Missing series or receipt number in request.');
+    }
+  }
+
+  if (formType === 'cash-payments') {
+    const series = formData.series?.toUpperCase();
+    const voucherNo = formData.voucherNo;
+    if (!series || !voucherNo) {
+      return res.status(400).send('Missing series or voucher number in request.');
+    }
+  }
+    
+  
     
     const duplicate = dbData.find(
       invoice => invoice.series?.toUpperCase() === series && String(invoice.billNo) === String(billNo)
@@ -119,9 +131,9 @@ app.post('/:formType', async (req, res) => {
       const notificationAmount = amount || total || 0;
 
       let documentNumber = formData.billNo;
-      if (formType === 'cash-receipt') {
+      if (formType === 'cash-receipts') {
         documentNumber = formData.receiptNo;
-      } else if (formType === 'cash-payment') {
+      } else if (formType === 'cash-payments') {
         documentNumber = formData.voucherNo;
       }
       let message = `${creatorName} has created a ${formTypeFormatted} ${series}-${documentNumber} of ₹${notificationAmount}`;
@@ -238,9 +250,9 @@ app.post('/edit/:formType', async (req, res) => {
     const notificationAmount = amount || total || 0;
 
     let documentNumber = formData.billNo;
-    if (formType === 'cash-receipt') {
+    if (formType === 'cash-receipts') {
       documentNumber = formData.receiptNo;
-    } else if (formType === 'cash-payment') {
+    } else if (formType === 'cash-payments') {
       documentNumber = formData.voucherNo;
     }
     let message = `${creatorName} has updated a ${formTypeFormatted} ${series}-${documentNumber} of ₹${notificationAmount}`;
