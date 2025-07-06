@@ -113,7 +113,13 @@ app.post('/:formType', async (req, res) => {
       const formTypeFormatted = formatFormType(formType);
       const notificationAmount = amount || total || 0;
 
-      let message = `${creatorName} has created a ${formTypeFormatted} ${series}-${formData.billNo} of ₹${notificationAmount}`;
+      let documentNumber = formData.billNo;
+      if (formType === 'cash-receipt') {
+        documentNumber = formData.receiptNo;
+      } else if (formType === 'cash-payment') {
+        documentNumber = formData.voucherNo;
+      }
+      let message = `${creatorName} has created a ${formTypeFormatted} ${series}-${documentNumber} of ₹${notificationAmount}`;
 
       if (party) {
           const partyName = await getPartyName(party);
@@ -121,7 +127,7 @@ app.post('/:formType', async (req, res) => {
               message += ` for ${partyName}`;
           }
       }
-
+      
       if (date) {
           const entryDate = new Date(date);
           const today = new Date();
@@ -129,7 +135,7 @@ app.post('/:formType', async (req, res) => {
           today.setHours(5,30, 0, 0);
 
           if (entryDate.getTime() !== today.getTime()) {
-              const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+              const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
               message += ` on ${dateString}`;
           }
       }
@@ -226,7 +232,13 @@ app.post('/edit/:formType', async (req, res) => {
     const formTypeFormatted = formatFormType(formType);
     const notificationAmount = amount || total || 0;
 
-    let message = `${creatorName} has updated a ${formTypeFormatted} ${series}-${formData.billNo} of ₹${notificationAmount}`;
+    let documentNumber = formData.billNo;
+    if (formType === 'cash-receipt') {
+      documentNumber = formData.receiptNo;
+    } else if (formType === 'cash-payment') {
+      documentNumber = formData.voucherNo;
+    }
+    let message = `${creatorName} has updated a ${formTypeFormatted} ${series}-${documentNumber} of ₹${notificationAmount}`;
 
     if (party) {
         const partyName = await getPartyName(party);
@@ -242,7 +254,7 @@ app.post('/edit/:formType', async (req, res) => {
         today.setHours(0, 0, 0, 0);
 
         if (entryDate.getTime() !== today.getTime()) {
-            const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+            const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
             message += ` on ${dateString}`;
         }
     }

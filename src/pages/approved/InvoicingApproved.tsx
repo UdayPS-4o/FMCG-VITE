@@ -6,13 +6,17 @@ import { toast } from 'react-toastify';
 import constants from '../../constants';
 const baseUrl = constants.baseURL;
 
-interface SyncHistory {
-  datetime: string;
+interface SyncTransaction {
   billNo: string;
   billDate: string;
   partyName: string;
   totalAmount: number;
   salesmanName: string;
+}
+
+interface SyncHistory {
+  datetime: string;
+  transactions: SyncTransaction[];
 }
 
 const InvoicingApproved: React.FC = () => {
@@ -21,12 +25,47 @@ const InvoicingApproved: React.FC = () => {
   const [selectedRecords, setSelectedRecords] = useState<any[]>([]);
   const [syncHistory, setSyncHistory] = useState<SyncHistory[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedTransactions, setSelectedTransactions] = useState<SyncTransaction[]>([]);
+  const [showTransactions, setShowTransactions] = useState(false);
   const tableRef = useRef<{ refreshData: () => Promise<void> }>(null);
 
   useEffect(() => {
     const history = localStorage.getItem('syncHistory');
     if (history) {
-      setSyncHistory(JSON.parse(history));
+      try {
+        const parsedHistory = JSON.parse(history);
+        
+        // Check if the history is in the old format (array of individual transactions)
+        // and convert it to the new format if needed
+        if (parsedHistory.length > 0 && 'billNo' in parsedHistory[0]) {
+          // Old format - convert to new format
+          const convertedHistory: SyncHistory[] = [{
+            datetime: new Date().toLocaleString('en-US', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: true
+            }).replace(/,/g, ''),
+            transactions: parsedHistory.map((record: any) => ({
+              billNo: record.billNo,
+              billDate: record.billDate,
+              partyName: record.partyName,
+              totalAmount: record.totalAmount,
+              salesmanName: record.salesmanName
+            }))
+          }];
+          setSyncHistory(convertedHistory);
+        } else {
+          // New format - use as is
+          setSyncHistory(parsedHistory);
+        }
+      } catch (error) {
+        console.error('Error parsing sync history:', error);
+        setSyncHistory([]);
+      }
     }
   }, []);
 
@@ -39,24 +78,34 @@ const InvoicingApproved: React.FC = () => {
   };
 
   const updateSyncHistory = (records: any[]) => {
-    const newEntry: SyncHistory[] = records.map(record => ({
-      datetime: new Date().toLocaleString('en-US', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      }).replace(/,/g, ''),
+    // Format current date and time in DD-MM-YYYY, HH:MM:SS AM/PM format
+    const currentDateTime = new Date().toLocaleString('en-US', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }).replace(/,/g, '');
+    
+    // Create transaction records for each synced invoice
+    const transactions: SyncTransaction[] = records.map(record => ({
       billNo: record.series + '-' + record.billNo,
       billDate: record.date,
       partyName: record.partyName || record.party,
       totalAmount: parseFloat(record.total || '0'),
       salesmanName: record.salesmanName || record.smName || record.sm || ''
     }));
+    
+    // Create a new sync history entry with the current date/time and all transactions
+    const newEntry: SyncHistory = {
+      datetime: currentDateTime,
+      transactions: transactions
+    };
 
-    const updatedHistory = [...newEntry, ...syncHistory].slice(0, 7);
+    // Keep all sync operations (no limit)
+    const updatedHistory = [newEntry, ...syncHistory];
     setSyncHistory(updatedHistory);
     localStorage.setItem('syncHistory', JSON.stringify(updatedHistory));
   };
@@ -240,11 +289,11 @@ const InvoicingApproved: React.FC = () => {
       </div>
 
       <div
-        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showHistory ? '' : 'hidden'}`}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1100] ${showHistory ? '' : 'hidden'}`}
         onClick={() => setShowHistory(false)}
       >
         <div
-          className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-6xl w-full mx-4"
+          className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-6xl w-full mx-4 ml-[260px] md:ml-4 max-h-[80vh] overflow-y-auto"
           onClick={e => e.stopPropagation()}
         >
           <div className="flex justify-between items-center mb-4">
@@ -260,23 +309,71 @@ const InvoicingApproved: React.FC = () => {
             <table className="min-w-full table-auto border-collapse">
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Bill No</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Bill Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Party Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total Amount</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Salesman</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Sync Date & Time</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Transactions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {syncHistory.map((record, index) => (
-                  <tr key={index}>
+                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{record.datetime}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{record.billNo}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{record.billDate}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{record.partyName}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{record.totalAmount}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{record.salesmanName}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                      <button 
+                        className="cursor-pointer text-blue-500 hover:text-blue-700 underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTransactions(record.transactions);
+                          setShowTransactions(true);
+                        }}
+                      >
+                        {record.transactions.length} invoice(s) synced
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Transaction Details Modal */}
+      <div
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1200] ${showTransactions ? '' : 'hidden'}`}
+        onClick={() => setShowTransactions(false)}
+      >
+        <div
+          className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-6xl w-full mx-4 ml-[260px] md:ml-4 max-h-[80vh] overflow-y-auto"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Transaction Details</h2>
+            <button
+              onClick={() => setShowTransactions(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <span className="text-2xl">&times;</span>
+            </button>
+          </div>
+          <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+            <table className="min-w-full table-auto border-collapse">
+              <thead className="sticky top-0 bg-white dark:bg-gray-800">
+                <tr className="bg-gray-100 dark:bg-gray-700">
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Bill No</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Bill Date</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Party Name</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total Amount</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Salesman</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {selectedTransactions.map((transaction, tIndex) => (
+                  <tr key={tIndex} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.billNo}</td>
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.billDate}</td>
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.partyName}</td>
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.totalAmount}</td>
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.salesmanName}</td>
                   </tr>
                 ))}
               </tbody>
