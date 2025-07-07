@@ -4,6 +4,10 @@ const fs = require('fs').promises;
 const path = require('path');
 const { getDbfData } = require('./utilities'); // Assuming utilities are in the same directory or adjust path
 require('dotenv').config();
+
+// Import Cash Book report routes
+const cashBookRoutes = require('./reports/cashBook');
+router.use(cashBookRoutes);
 // Function to parse date strings (YYYY-MM-DD)
 const parseDate = (dateString) => {
   const [year, month, day] = dateString.split('-').map(Number);
