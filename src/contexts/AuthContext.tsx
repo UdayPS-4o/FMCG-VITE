@@ -28,6 +28,7 @@ export interface User {
     subgroupCode?: string;
   }>;
   defaultSeries?: {
+    reports(reports: any): string;
     billing?: string;
     cashReceipt?: string;
     cashPayment?: string;
