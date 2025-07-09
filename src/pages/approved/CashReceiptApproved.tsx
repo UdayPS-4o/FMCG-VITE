@@ -10,6 +10,7 @@ interface SyncTransaction {
   receiptNo: string;
   billDate: string;
   partyName: string;
+  partyCode?: string;
   totalAmount: number;
   salesmanName: string;
 }
@@ -53,6 +54,7 @@ const CashReceiptApproved: React.FC = () => {
               receiptNo: record.receiptNo,
               billDate: record.billDate,
               partyName: record.partyName,
+              partyCode: record.partyCode || '',
               totalAmount: record.totalAmount,
               salesmanName: record.salesmanName
             }))
@@ -94,6 +96,7 @@ const CashReceiptApproved: React.FC = () => {
       receiptNo: record.series ? `${record.series}-${record.receiptNo}` : record.receiptNo,
       billDate: record.date,
       partyName: record.partyDesc || record.partyName || record.party || '',
+      partyCode: record.partyCode || record.party_code || '',
       totalAmount: parseFloat(record.amount || record.total || '0'),
       salesmanName: record.salesmanName || record.smName || record.sm || ''
     }));
@@ -385,15 +388,46 @@ const CashReceiptApproved: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {selectedTransactions.map((transaction, tIndex) => (
-                      <tr key={tIndex} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.receiptNo}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.billDate}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.partyName}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.totalAmount}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.salesmanName}</td>
-                      </tr>
-                    ))}
+                    {selectedTransactions.map((transaction, tIndex) => {
+                      // Format date to DD-MM-YYYY
+                      const formatDate = (dateStr: string) => {
+                        try {
+                          const date = new Date(dateStr);
+                          if (isNaN(date.getTime())) {
+                            // If date parsing fails, try to parse DD-MM-YYYY format
+                            const parts = dateStr.split('-');
+                            if (parts.length === 3) {
+                              return dateStr; // Already in DD-MM-YYYY format
+                            }
+                            return dateStr; // Return as is if can't parse
+                          }
+                          const day = date.getDate().toString().padStart(2, '0');
+                          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                          const year = date.getFullYear();
+                          return `${day}-${month}-${year}`;
+                        } catch {
+                          return dateStr; // Return original if any error
+                        }
+                      };
+
+                      // Format party name with code
+                      const formatPartyName = (name: string, code?: string) => {
+                        if (code && code.trim()) {
+                          return `${name} (${code})`;
+                        }
+                        return name;
+                      };
+
+                      return (
+                        <tr key={tIndex} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.receiptNo}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDate(transaction.billDate)}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatPartyName(transaction.partyName, transaction.partyCode)}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.totalAmount}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.salesmanName}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

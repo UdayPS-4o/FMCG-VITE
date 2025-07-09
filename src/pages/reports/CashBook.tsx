@@ -37,6 +37,26 @@ interface SalesmanOption {
   text: string;
 }
 
+// Define User type, similar to ItemWiseSales.tsx and AddUser.tsx
+interface User {
+  id: number;
+  name: string;
+  username: string;
+  routeAccess: string[];
+  powers: string[];
+  subgroups: any[];
+  smCode?: string;
+  defaultSeries?: { 
+    billing?: string;
+    cashReceipt?: string;
+    cashPayment?: string;
+    godown?: string;
+    reports?: string; 
+  };
+  godownAccess: string[];
+  canSelectSeries?: boolean;
+}
+
 const CashBook: React.FC = () => {
   const { user } = useAuth();
   const [selectedDateRange, setSelectedDateRange] = useState<string>('thisMonth');
@@ -121,6 +141,16 @@ const CashBook: React.FC = () => {
 
     fetchSalesmenData();
    }, []);
+
+  // Apply default series from user settings
+  useEffect(() => {
+    if (user) {
+      const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+      if (!isAdmin && user.defaultSeries && user.defaultSeries.reports && user.canSelectSeries === false) {
+        setSeries(user.defaultSeries.reports);
+      }
+    }
+  }, [user]);
 
   const handleFetchReport = async () => {
     setLoading(true);
@@ -297,6 +327,7 @@ const CashBook: React.FC = () => {
               }}
               placeholder="e.g., A,B,K"
               className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              disabled={Boolean(user && !user.routeAccess?.includes('Admin') && user.canSelectSeries === false && user.defaultSeries?.reports)}
             />
           </div>
         </div>
