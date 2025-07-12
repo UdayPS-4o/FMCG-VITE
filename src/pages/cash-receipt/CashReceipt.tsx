@@ -8,6 +8,7 @@ import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
+import ShurutiAssistant from '../../components/ai/ShurutiAssistant';
 import apiCache from '../../utils/apiCache';
 import useAuth from "../../hooks/useAuth";
 
@@ -944,10 +945,13 @@ const CashReceipt: React.FC = () => {
 
       // Check flag immediately before timeout
       const shouldRedirectToPrint = localStorage.getItem('redirectToPrint') === 'true';
+      console.log('HandleSubmit: Checking redirectToPrint flag:', shouldRedirectToPrint);
+      console.log('HandleSubmit: firstSavedReceiptNo:', firstSavedReceiptNo);
 
       setTimeout(() => {
         try {
           if (shouldRedirectToPrint && firstSavedReceiptNo) {
+            console.log('HandleSubmit: Conditions met for print redirection');
             localStorage.removeItem('redirectToPrint'); // Clean up flag
             
             // If we have multiple splits, include all receipt numbers in the URL
@@ -962,7 +966,8 @@ const CashReceipt: React.FC = () => {
               navigate(`/print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
             }
           } else {
-            console.log('Redirecting to list page: /db/cash-receipts');
+            console.log('HandleSubmit: Redirecting to list page (no print flag or no receipt number)');
+            console.log('HandleSubmit: shouldRedirectToPrint:', shouldRedirectToPrint, 'firstSavedReceiptNo:', firstSavedReceiptNo);
             navigate('/db/cash-receipts');
           }
         } catch (navError) {
@@ -1179,8 +1184,59 @@ const CashReceipt: React.FC = () => {
           onClose={() => setShowToast(false)}
         />
       )}
+      
+      {/* Shuruti AI Assistant */}
+      <ShurutiAssistant 
+        currentFormData={{
+          party: party?.value,
+          amount: formValues.amount,
+          series: formValues.series,
+          narration: formValues.narration,
+          smName: sm?.label
+        }}
+        user={user}
+        onSuggestion={(field, value) => {
+          // Handle AI suggestions for form fields
+          if (field === 'narration') {
+            setFormValues(prev => ({ ...prev, narration: value }));
+          } else if (field === 'party') {
+            // Find existing party option
+            const existingParty = partyOptions.find(p => 
+              p.label.toLowerCase().includes(value.toLowerCase()) ||
+              value.toLowerCase().includes(p.label.toLowerCase())
+            );
+            if (existingParty) {
+              setParty(existingParty);
+            } else {
+              // Show toast message that party was not found
+              setToastMessage(`Party "${value}" not found in existing parties. Please select from the dropdown or add manually.`);
+              setToastType('error'); // Changed from 'warning' to 'error' since only 'success' | 'error' are valid types
+              setShowToast(true);
+              
+              // Still create a temporary party option for user convenience
+              const newParty = { value: value, label: value };
+              setParty(newParty);
+            }
+          } else if (field === 'amount') {
+            // Use handleInputChange to trigger split calculation logic
+            const syntheticEvent = {
+              target: {
+                name: 'amount',
+                value: value
+              }
+            } as React.ChangeEvent<HTMLInputElement>;
+            handleInputChange(syntheticEvent);
+          } else if (field === 'series') {
+            setFormValues(prev => ({ ...prev, series: value.toUpperCase() }));
+          }
+        }}
+        onSubmitAndPrint={() => {
+          // This function will be called when AI processes "Submit and Print" command
+          handleSubmit();
+        }}
+      />
     </div>
   );
 };
 
-export default CashReceipt; 
+export default CashReceipt;
