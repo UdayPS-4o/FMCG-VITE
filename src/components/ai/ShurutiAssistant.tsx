@@ -23,6 +23,8 @@ interface SpeechRecognition extends EventTarget {
   onresult: (event: SpeechRecognitionEvent) => void;
   onerror: (event: any) => void;
   onend: () => void;
+  maxAlternatives: number;
+    
 }
 
 declare global {
@@ -66,6 +68,12 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isWakeWordListening, setIsWakeWordListening] = useState(false);
+  
+  // Guided receipt creation state
+  const [isGuidedMode, setIsGuidedMode] = useState(false);
+  const [currentStep, setCurrentStep] = useState<'party' | 'amount' | 'series' | 'narration' | 'complete'>('party');
+  const [guidedData, setGuidedData] = useState<{party?: string, amount?: string, series?: string, narration?: string}>({});
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -85,12 +93,12 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
       unknown: "I'm sorry, I didn't understand that. Try asking about party, amount, series, narration, or date fields."
     },
     hi: {
-      greeting: "नमस्ते! मैं शुरुति हूँ, आपकी नकद रसीद के लिए AI सहायक। आज मैं आपकी कैसे मदद कर सकती हूँ?",
-      help: "मैं इनमें आपकी मदद कर सकती हूँ:\n• रसीद विवरण भरना\n• विवरण पाठ सुझाना\n• फॉर्म फील्ड समझाना\n• राशि को शब्दों में बदलना\n• दिनांक प्रारूप सुझाव\n• विभाजित रसीदें (₹20,000 से अधिक राशि)\n• रसीद सेव और प्रिंट करना\n\n'[पार्टी] के लिए [राशि] की रसीद बनाओ', 'प्रिंट', 'सेव और प्रिंट' कहने की कोशिश करें या 'विभाजित रसीदों' के बारे में पूछें।",
+      greeting: "नमस्ते! मैं शुरुति हूँ, आपकी नकद रसीद raseed,rassed के लिए AI सहायक। आज मैं आपकी कैसे मदद कर सकती हूँ?",
+      help: "मैं इनमें आपकी मदद कर सकती हूँ:\n• रसीद raseed,rassed विवरण भरना\n• विवरण पाठ सुझाना\n• फॉर्म फील्ड समझाना\n• राशि को शब्दों में बदलना\n• दिनांक प्रारूप सुझाव\n• विभाजित रसीदें raseed,rassed (₹20,000 से अधिक राशि)\n• रसीद raseed,rassed सेव और प्रिंट करना\n\n'[पार्टी] के लिए [राशि] की रसीद raseed,rassed बनाओ', 'प्रिंट', 'सेव और प्रिंट' कहने की कोशिश करें या 'विभाजित रसीदों raseed,rassed' के बारे में पूछें।",
       partyHelp: "पार्टी चुनने के लिए, पार्टी फील्ड में पार्टी का नाम या कोड टाइप करना शुरू करें। सिस्टम मैचिंग विकल्प दिखाएगा।",
-      amountHelp: "रसीद की राशि संख्या में दर्ज करें। यदि राशि ₹20,000 से अधिक है, तो यह स्वचालित रूप से कई रसीदों में विभाजित हो जाएगी।",
-      seriesHelp: "सीरीज़ एक अक्षर (A-Z) है जो आपकी रसीदों को वर्गीकृत करने के लिए है। आपकी डिफ़ॉल्ट सीरीज़ पहले से भरी हो सकती है।",
-      narrationHelp: "विवरण रसीद के उद्देश्य के बारे में एक संक्षिप्त विवरण है (अधिकतम 25 अक्षर)।",
+      amountHelp: "रसीद raseed,rassed की राशि संख्या में दर्ज करें। यदि राशि ₹20,000 से अधिक है, तो यह स्वचालित रूप से कई रसीदों raseed,rassed में विभाजित हो जाएगी।",
+      seriesHelp: "सीरीज़ एक अक्षर (A-Z) है जो आपकी रसीदों raseed,rassed को वर्गीकृत करने के लिए है। आपकी डिफ़ॉल्ट सीरीज़ पहले से भरी हो सकती है।",
+      narrationHelp: "विवरण रसीद raseed,rassed के उद्देश्य के बारे में एक संक्षिप्त विवरण है (अधिकतम 25 अक्षर)।",
       dateHelp: "दिनांक के लिए DD-MM-YYYY प्रारूप का उपयोग करें। आज की तारीख डिफ़ॉल्ट रूप से पहले से भरी है।",
       unknown: "माफ़ करें, मैं समझ नहीं पाई। पार्टी, राशि, सीरीज़, विवरण, या दिनांक फील्ड के बारे में पूछने की कोशिश करें।"
     }
@@ -118,17 +126,43 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       
-      // Initialize regular speech recognition
+      // Initialize regular speech recognition with Hinglish support
       recognitionRef.current = new SpeechRecognition();
       if (recognitionRef.current) {
         recognitionRef.current.continuous = false;
         recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+        // Set to Hindi-India for better Hinglish recognition
+        recognitionRef.current.lang = 'hi-IN';
+        // Enable alternative recognition for mixed language
+        recognitionRef.current.maxAlternatives = 3;
         
         recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-          const transcript = event.results[0][0].transcript;
+          // Get the best transcript from alternatives for Hinglish support
+          let transcript = event.results[0][0].transcript;
+          
+          // Try to get better alternative if available
+          if (Object.keys(event.results[0]).length > 1) {
+              for (let i = 0; i < Object.keys(event.results[0]).length; i++) {
+              const alternative = event.results[0][i].transcript;
+              // Prefer alternatives with mixed script or common Hinglish patterns
+              if (alternative.match(/[a-zA-Z].*[\u0900-\u097F]|[\u0900-\u097F].*[a-zA-Z]/) || 
+                  alternative.match(/\b(kar|karo|hai|hain|kya|aur|main|mein|tum|aap|yeh|woh|kuch|koi)\b/i)) {
+                transcript = alternative;
+                break;
+              }
+            }
+          }
+          
           setInputText(transcript);
           setIsListening(false);
+          
+          // Auto-send after voice recognition completes
+          setTimeout(() => {
+            if (transcript.trim()) {
+              handleSendMessage(transcript);
+              setInputText(''); // Clear input after sending
+            }
+          }, 100);
         };
         
         recognitionRef.current.onerror = (event) => {
@@ -141,20 +175,34 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
         };
       }
       
-      // Initialize wake word recognition
+      // Initialize wake word recognition with Hinglish support
       wakeWordRecognitionRef.current = new SpeechRecognition();
       if (wakeWordRecognitionRef.current) {
         wakeWordRecognitionRef.current.continuous = true;
         wakeWordRecognitionRef.current.interimResults = true;
-        wakeWordRecognitionRef.current.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+        // Set to Hindi-India for better Hinglish recognition
+        wakeWordRecognitionRef.current.lang = 'hi-IN';
+        wakeWordRecognitionRef.current.maxAlternatives = 3;
         
         wakeWordRecognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
           const lastResultIndex = Object.keys(event.results).length - 1;
           const transcript = event.results[lastResultIndex][0].transcript.toLowerCase();
           
-          // Check for wake words
-          if (transcript.includes('hey shuruti') || transcript.includes('hey shruti') || 
-              transcript.includes('हे श्रुति') || transcript.includes('हे शुरुति')) {
+          // Check for wake words in English, Hindi, and Hinglish
+          const wakeWords = [
+            'hey shuruti', 'hey shruti', 'shuruti', 'shruti',
+            'हे श्रुति', 'हे शुरुति', 'श्रुति', 'शुरुति',
+            'hey shruti ji', 'shruti ji', 'shuruti ji',
+            'arre shruti', 'arre shuruti', 'suniye shruti',
+            // Additional Hinglish variations
+            'shruti yaar', 'shruti bhai', 'shruti didi',
+            'arre yaar shruti', 'oye shruti', 'acha shruti',
+            'shruti help karo', 'shruti madad karo',
+            'shruti sun', 'shruti suno', 'shruti suniye',
+            'ai shruti', 'computer shruti', 'system shruti'
+          ];
+          
+          if (wakeWords.some(word => transcript.includes(word))) {
             console.log('Wake word detected:', transcript);
             
             // Stop wake word listening and start regular listening
@@ -173,8 +221,15 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
               startListening();
             }, 500);
             
-            // Provide audio feedback
-            speakText(currentLanguage === 'en' ? 'Yes, how can I help you?' : 'हाँ, मैं आपकी कैसे मदद कर सकती हूँ?');
+            // Provide audio feedback with Hinglish support
+            const responses = [
+              'Yes, how can I help you?',
+              'हाँ, मैं आपकी कैसे मदद कर सकती हूँ?',
+              'Haan bolo, kya chahiye?',
+              'Yes, kaise help kar sakti hun?'
+            ];
+            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+            speakText(randomResponse);
           }
         };
         
@@ -202,7 +257,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
       synthRef.current = window.speechSynthesis;
       setVoiceEnabled(true);
     }
-  }, [currentLanguage]);
+  }, []);
 
   // Speech synthesis function
   const speakText = (text: string) => {
@@ -327,7 +382,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
         id: 'welcome',
         text: currentLanguage === 'en' 
           ? "Hello! I'm Shuruti, your AI assistant for cash receipts. You can say things like 'Create a receipt for Uday Sheety for amount 1000' and I'll automatically fill the form for you. You can also say 'Select series A-Z, Try using the microphone button for voice commands!"
-          : "नमस्ते! मैं श्रुति हूँ, कैश रसीद के लिए आपकी AI सहायक। आप 'उदय शेट्टी के नाम पर 1000 की रसीद बनाओ' जैसी बातें कह सकते हैं और मैं आपके लिए फॉर्म भर दूंगी। आप 'सीरीज A-Z भी कह सकते हैं। आवाज़ कमांड के लिए माइक्रोफोन बटन का उपयोग करें!",
+          : "नमस्ते! मैं श्रुति हूँ, कैश रसीद raseed,rassed के लिए आपकी AI सहायक। आप 'उदय शेट्टी के नाम पर 1000 की रसीद raseed,rassed बनाओ' जैसी बातें कह सकते हैं और मैं आपके लिए फॉर्म भर दूंगी। आप 'सीरीज A-Z भी कह सकते हैं। आवाज़ कमांड के लिए माइक्रोफोन बटन का उपयोग करें!",
         isUser: false,
         timestamp: new Date(),
         language: currentLanguage
@@ -350,23 +405,290 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
   };
 
   // Parse receipt creation commands
+  const handleGuidedFlow = (userInput: string): string => {
+    const input = userInput.trim();
+    const lowerInput = input.toLowerCase();
+    
+    // Allow user to cancel guided mode
+    if (lowerInput.includes('cancel') || lowerInput.includes('stop') || lowerInput.includes('exit') || 
+        lowerInput.includes('रद्द') || lowerInput.includes('बंद') || lowerInput.includes('रोकें')) {
+      setIsGuidedMode(false);
+      setCurrentStep('party');
+      setGuidedData({});
+      const cancelResponses = [
+        '❌ Receipt creation cancelled. How can I help you?',
+        '❌ रसीद raseed,rassed निर्माण रद्द किया गया। मैं आपकी कैसे मदद कर सकती हूं?',
+        '❌ Okay, cancel kar diya. Aur kya help chahiye?',
+        '❌ Thik hai, receipt banane se ruk gaye. Kya aur kaam hai?'
+      ];
+      return cancelResponses[Math.floor(Math.random() * cancelResponses.length)];
+    }
+    
+    // Check for party change requests at any step
+    const partyChangeMatch = input.match(/(?:change|update|modify)\s+(?:party|पार्टी)\s+(?:to|को)\s+(.+)/i) ||
+                            input.match(/(?:party|पार्टी)\s+(?:change|update|modify|बदलें|अपडेट)\s+(?:to|को)\s+(.+)/i) ||
+                            input.match(/(?:set|सेट)\s+(?:party|पार्टी)\s+(?:to|को)\s+(.+)/i);
+    
+    if (partyChangeMatch) {
+      const newPartyName = partyChangeMatch[1].trim();
+      setGuidedData(prev => ({ ...prev, party: newPartyName }));
+      
+      if (onSuggestion) {
+        onSuggestion('party', newPartyName);
+      }
+      
+      // Add validation check for party change
+      setTimeout(() => {
+        if (!currentFormData?.party || currentFormData.party.trim() === '') {
+          const partyNotFoundMessage: Message = {
+            id: (Date.now() + 3).toString(),
+            text: currentLanguage === 'en'
+              ? `⚠️ Party "${newPartyName}" could not be found in the system. Please check the spelling or try a different party name.`
+              : `⚠️ पार्टी "${newPartyName}" सिस्टम में नहीं मिली। कृपया स्पेलिंग चेक करें या कोई अलग पार्टी नाम ट्राई करें।`,
+            isUser: false,
+            timestamp: new Date(),
+            language: currentLanguage
+          };
+          setMessages(prev => [...prev, partyNotFoundMessage]);
+        }
+      }, 1000);
+      
+      // Helper function to get current step prompt
+      const getCurrentStepPrompt = () => {
+        switch (currentStep) {
+          case 'party':
+            return currentLanguage === 'en'
+              ? 'Now please provide the amount.'
+              : 'अब कृपया राशि बताएं।';
+          case 'amount':
+            return currentLanguage === 'en'
+              ? 'Please provide the amount.'
+              : 'कृपया राशि बताएं।';
+          case 'series':
+            return currentLanguage === 'en'
+              ? 'Please provide the series (A-Z).'
+              : 'कृपया सीरीज़ (A-Z) बताएं।';
+          
+            return '';
+        }
+      };
+      
+      return currentLanguage === 'en'
+        ? `✅ Party updated to "${newPartyName}". ${getCurrentStepPrompt()}`
+        : `✅ पार्टी "${newPartyName}" में अपडेट की गई। ${getCurrentStepPrompt()}`;
+    }
+    
+    switch (currentStep) {
+      case 'party':
+        if (input) {
+          const newGuidedData = { ...guidedData, party: input };
+          setGuidedData(newGuidedData);
+          
+          // Try to fill the party field
+          if (onSuggestion) {
+            onSuggestion('party', input);
+          }
+          
+          // Add a timeout to check if party was successfully validated
+          // Note: The actual validation happens in the parent component
+          // If party is not found, the parent component will show a toast error
+          // We provide a helpful message about party validation
+          setTimeout(() => {
+            // Check if the party field is still empty after attempting to set it
+            // This is a basic check - the real validation happens in the parent component
+            if (!currentFormData?.party || currentFormData.party.trim() === '') {
+              // Add a message about party not being found
+              const partyNotFoundMessage: Message = {
+                id: (Date.now() + 2).toString(),
+                text: currentLanguage === 'en'
+                  ? `⚠️ Party "${input}" could not be found in the system. Please check the spelling or try a different party name. You can also type part of the name to see suggestions.`
+                  : `⚠️ पार्टी "${input}" सिस्टम में नहीं मिली। कृपया स्पेलिंग चेक करें या कोई अलग पार्टी नाम ट्राई करें। आप नाम का हिस्सा भी टाइप कर सकते हैं सुझाव देखने के लिए।`,
+                isUser: false,
+                timestamp: new Date(),
+                language: currentLanguage
+              };
+              setMessages(prev => [...prev, partyNotFoundMessage]);
+            }
+          }, 1000);
+          
+          // Check if amount is already set (from amount-only commands)
+          if (guidedData.amount) {
+            // Amount already exists, check if series is required
+            if (user?.canSelectSeries !== false) {
+              setCurrentStep('series');
+              return currentLanguage === 'en'
+                ? `✅ Party set to "${input}". Now please provide the series (A-Z).`
+                : `✅ पार्टी "${input}" सेट की गई। अब कृपया सीरीज़ (A-Z) बताएं।`;
+            } else {
+              // Skip series and complete
+              setCurrentStep('complete');
+              setIsGuidedMode(false);
+              return currentLanguage === 'en'
+                ? `✅ Party set to "${input}". All mandatory fields are complete! Your receipt is ready to submit and print. Click "Save" to finalize the receipt.`
+                : `✅ पार्टी "${input}" सेट की गई। सभी अनिवार्य फ़ील्ड पूर्ण हैं! आपकी रसीद raseed,rassed सबमिट और प्रिंट के लिए तैयार है। रसीद raseed,rassed को अंतिम रूप देने के लिए "सेव" पर क्लिक करें।`;
+            }
+          } else {
+            // Amount not set, proceed to amount step
+            setCurrentStep('amount');
+            const partySetResponses = [
+              `✅ Party set to "${input}". Now please provide the amount.`,
+              `✅ पार्टी "${input}" सेट की गई। अब कृपया राशि बताएं।`,
+              `✅ Accha, party "${input}" set kar diya. Ab amount batao.`,
+              `✅ Okay, "${input}" ka naam set ho gaya. Ab kitne rupees ka receipt banayenge?`
+            ];
+            return partySetResponses[Math.floor(Math.random() * partySetResponses.length)];
+          }
+        }
+        return currentLanguage === 'en'
+          ? 'Please provide a valid party name.'
+          : 'कृपया एक वैध पार्टी नाम बताएं।';
+          
+      case 'amount':
+        const amountMatch = input.match(/(\d+(?:\.\d+)?)/i);
+        if (amountMatch) {
+          const amount = parseFloat(amountMatch[1]);
+          const newGuidedData = { ...guidedData, amount: amount };
+          setGuidedData({...guidedData, amount: amount.toString()});
+          
+          // Try to fill the amount field
+          if (onSuggestion) {
+            onSuggestion('amount', amount.toString());
+          }
+          
+          // Check if series is required
+          if (user?.canSelectSeries !== false) {
+            setCurrentStep('series');
+            const amountSetResponses = [
+              `✅ Amount set to ₹${amount}. Now please provide the series (A-Z).`,
+              `✅ राशि ₹${amount} सेट की गई। अब कृपया सीरीज़ (A-Z) बताएं।`,
+              `✅ Accha, ₹${amount} set kar diya. Ab series batao A se Z tak.`,
+              `✅ Okay, ₹${amount} ka amount ho gaya. Ab kya series chahiye - A, B, C?`
+            ];
+            return amountSetResponses[Math.floor(Math.random() * amountSetResponses.length)];
+          } else {
+            // Skip series, check if narration is needed
+            setCurrentStep('narration');
+            return currentLanguage === 'en'
+              ? `✅ Amount set to ₹${amount}. Would you like to add any narration/description? (Optional - you can say "skip" or "no")`
+              : `✅ राशि ₹${amount} सेट की गई। क्या आप कोई विवरण जोड़ना चाहते हैं? (वैकल्पिक - आप "skip" या "no" कह सकते हैं)`;
+          }
+        }
+        return currentLanguage === 'en'
+          ? 'Please provide a valid amount (numbers only).'
+          : 'कृपया एक वैध राशि बताएं (केवल संख्या)।';
+          
+      case 'series':
+        const seriesMatch = input.match(/([A-Za-z])/i);
+        if (seriesMatch) {
+          const series = seriesMatch[1].toUpperCase();
+          const newGuidedData = { ...guidedData, series: series };
+          setGuidedData(newGuidedData);
+          
+          // Try to fill the series field
+          if (onSuggestion) {
+            onSuggestion('series', series);
+          }
+          
+          setCurrentStep('narration');
+          return currentLanguage === 'en'
+            ? `✅ Series set to "${series}". Would you like to add any narration/description? (Optional - you can say "skip" or "no")`
+            : `✅ सीरीज़ "${series}" सेट की गई। क्या आप कोई विवरण जोड़ना चाहते हैं? (वैकल्पिक - आप "skip" या "no" कह सकते हैं)`;
+        }
+        return currentLanguage === 'en'
+          ? 'Please provide a valid series (single letter A-Z).'
+          : 'कृपया एक वैध सीरीज़ बताएं (एक अक्षर A-Z)।';
+          
+      case 'narration':
+        const lowerInput = input.toLowerCase();
+        if (lowerInput.includes('skip') || lowerInput.includes('no') || lowerInput.includes('नहीं')) {
+          // Skip narration
+          setCurrentStep('complete');
+          setIsGuidedMode(false);
+          return currentLanguage === 'en'
+            ? '✅ All mandatory fields are complete! Your receipt is ready to submit and print. Click "Save" to finalize the receipt.'
+            : '✅ सभी अनिवार्य फ़ील्ड पूर्ण हैं! आपकी रसीद raseed,rassed सबमिट और प्रिंट के लिए तैयार है। रसीद raseed,rassed को अंतिम रूप देने के लिए "सेव" पर क्लिक करें।';
+        } else if (input.trim()) {
+          // Add narration
+          const newGuidedData = { ...guidedData, narration: input };
+          setGuidedData(newGuidedData);
+          
+          if (onSuggestion) {
+            onSuggestion('narration', input);
+          }
+          
+          setCurrentStep('complete');
+          setIsGuidedMode(false);
+          return currentLanguage === 'en'
+            ? `✅ Narration set to "${input}". All mandatory fields are complete! Your receipt is ready to submit and print. Click "Save" to finalize the receipt.`
+            : `✅ विवरण "${input}" सेट किया गया। सभी अनिवार्य फ़ील्ड पूर्ण हैं! आपकी रसीद raseed,rassed सबमिट और प्रिंट के लिए तैयार है। रसीद raseed,rassed को अंतिम रूप देने के लिए "सेव" पर क्लिक करें।`;
+        }
+        return currentLanguage === 'en'
+          ? 'Please provide narration text or say "skip" to continue.'
+          : 'कृपया विवरण टेक्स्ट बताएं या जारी रखने के लिए "skip" कहें।';
+          
+      default:
+        setIsGuidedMode(false);
+        return currentLanguage === 'en'
+          ? 'Guided mode completed. How can I help you further?'
+          : 'गाइडेड मोड पूरा हुआ। मैं आपकी और कैसे मदद कर सकती हूं?';
+    }
+  };
+
   const parseReceiptCommand = (input: string) => {
     const lowerInput = input.toLowerCase();
     const receiptData: any = {};
     
-    // Extract party name (with or without quotes) - works for both receipt creation and standalone
-    const nameMatch = input.match(/(?:name of|in the name of|for|receipt for)\s+["']([^"']+)["']/i) ||
-                     input.match(/(?:name of|in the name of|for|receipt for)\s+([A-Za-z\s]+?)(?:\s+for\s+amount|\s+amount|$)/i) ||
-                     input.match(/(?:नाम|के नाम)\s+["']([^"']+)["']/i) ||
-                     input.match(/(?:नाम|के नाम)\s+([A-Za-z\s]+?)(?:\s+राशि|$)/i);
-    if (nameMatch) {
-      receiptData.party = (nameMatch[1] || nameMatch[2]).trim();
+    // Enhanced party name extraction patterns with Hinglish support
+    const namePatterns = [
+      // Standard English patterns
+      /(?:name of|in the name of|for|receipt for)\s+["']([^"']+)["']/i,
+      /(?:name of|in the name of|for|receipt for)\s+([A-Za-z\s]+?)(?:\s+for\s+amount|\s+amount|$)/i,
+      // Standard Hindi patterns
+      /(?:नाम|के नाम)\s+["']([^"']+)["']/i,
+      /(?:नाम|के नाम)\s+([A-Za-z\s]+?)(?:\s+राशि|$)/i,
+      // Hinglish patterns
+      /(?:receipt|रसीद|raseed,rassed)\s+(?:banao|banaiye|kar do|karo)\s+([A-Za-z\s]+?)(?:\s+(?:ke liye|ka|ki)|\s+(?:amount|राशि)|\s+(?:rs|₹)|$)/i,
+      /([A-Za-z\s]+?)\s+(?:ka|ke|ki)\s+(?:receipt|रसीद|raseed|rassed)\s+(?:banao|banaiye|kar do)/i,
+      /(?:create|make|banao|banaiye|बनाओ|बनाएं).*?(?:receipt|रसीद|raseed|rassed).*?(?:in\s+name\s+of|name\s+of|for|के\s+नाम|ka|ke)\s+([A-Za-z\s]+?)(?:\s|$)/i,
+      /(?:create|make|banao|banaiye|बनाओ|बनाएं).*?(?:for|के\s+लिए|ka|ke liye)\s+([A-Za-z\s]+?)(?:\s+(?:receipt|रसीद|raseed,rassed)|\s+(?:amount|राशि)|\s+(?:rs|₹)|$)/i,
+      // Pattern for "5000rs receipt in name of Ritesh modi" with Hinglish
+      /(?:\d+(?:\.\d+)?(?:rs|₹|rupees|rupaye)?).*?(?:receipt|रसीद|raseed|rassed).*?(?:in\s+name\s+of|name\s+of|के\s+नाम|ka|ke naam)\s+([A-Za-z\s]+?)(?:\s|$)/i,
+      // Pattern for "receipt for Ritesh modi" with Hinglish
+      /(?:receipt|रसीद|raseed|rassed)\s+(?:for|के\s+लिए|ka|ke liye)\s+([A-Za-z\s]+?)(?:\s+(?:amount|राशि)|\s+(?:rs|₹)|$)/i,
+      // Common Hinglish patterns
+      /([A-Za-z\s]+?)\s+(?:ko|ka|ke|ki)\s+(?:\d+(?:\.\d+)?(?:rs|₹|rupees|rupaye)?)/i
+    ];
+    
+    for (const pattern of namePatterns) {
+      const nameMatch = input.match(pattern);
+      if (nameMatch) {
+        receiptData.party = nameMatch[1].trim();
+        break;
+      }
     }
     
-    // Extract amount - works for both receipt creation and standalone
-    const amountMatch = input.match(/(?:amount|for amount|राशि)\s+(\d+(?:\.\d+)?)/i);
-    if (amountMatch) {
-      receiptData.amount = parseFloat(amountMatch[1]);
+    // Enhanced amount extraction patterns with Hinglish support
+    const amountPatterns = [
+      // Standard patterns
+      /(?:amount|for amount|राशि)\s+(\d+(?:\.\d+)?)/i,
+      // Natural language patterns with Hinglish
+      /(\d+(?:\.\d+)?)(?:rs|₹|rupees?|rupaye?)/i,  // 5000rs or 5000₹ or 5000rupees
+      /(?:create|make|banao|banaiye|बनाओ|बनाएं).*?(\d+(?:\.\d+)?).*?(?:receipt|रसीद|raseed,rassed)/i,  // create 5000 receipt
+      /(?:receipt|रसीद|raseed,rassed).*?(?:of|का|ka|ke)\s+(\d+(?:\.\d+)?)/i,  // receipt of 5000 or receipt ka 5000
+      /(\d+(?:\.\d+)?)\s*(?:rupees?|रुपए|रुपये|rupaye?|taka|टका)/i,  // 5000 rupees with Hinglish variations
+      // Hinglish specific patterns
+      /(?:kitne|kitna|kya)\s*(?:amount|राशि|paisa|paise)?\s*(\d+(?:\.\d+)?)/i,  // kitna amount 5000
+      /(\d+(?:\.\d+)?)\s*(?:ka|ke|ki)\s*(?:receipt|रसीद|raseed,rassed)/i,  // 5000 ka receipt
+      /(?:paanch|das|bees|pachaas|sau|hazaar)\s*(?:rupees?|रुपये?|rupaye?)/i,  // written numbers in Hinglish
+      /(\d+(?:\.\d+)?)\s*(?:wala|wali)\s*(?:receipt|रसीद|raseed,rassed)/i  // 5000 wala receipt
+    ];
+    
+    for (const pattern of amountPatterns) {
+      const amountMatch = input.match(pattern);
+      if (amountMatch) {
+        receiptData.amount = parseFloat(amountMatch[1]);
+        break;
+      }
     }
     
     // Extract series - works for both receipt creation and standalone commands
@@ -377,6 +699,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
       /(?:select|choose|चुनें)\s+(?:series|सीरीज)\s+([A-Za-z])/i,  // select series A
       /(?:series|सीरीज)\s+([A-Za-z])/i  // series A
     ];
+
     
     for (const pattern of seriesPatterns) {
       const seriesMatch = input.match(pattern);
@@ -397,6 +720,150 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
   const generateResponse = (userInput: string): string => {
     const input = userInput.toLowerCase();
     const lang = currentLanguage;
+
+    // Handle guided receipt creation flow
+    if (isGuidedMode) {
+      return handleGuidedFlow(userInput);
+    }
+
+    // Check for amount-only receipt creation (e.g., "Make a receipt of Rs. 5000")
+    const amountOnlyPatterns = [
+      /make\s+a?\s*receipt\s+of\s+(?:rs\.?|₹)\s*(\d+)/i,
+      /create\s+a?\s*receipt\s+of\s+(?:rs\.?|₹)\s*(\d+)/i,
+      /generate\s+a?\s*receipt\s+of\s+(?:rs\.?|₹)\s*(\d+)/i,
+      /(\d+)\s*(?:rs\.?|₹)\s*(?:ka|की)\s*receipt\s*(?:banao|बनाओ)/i,
+      /(\d+)\s*(?:rupees?|रुपए?)\s*(?:ka|की)\s*receipt/i,
+      /(\d+)\s*(?:रुपये?)\s*(?:की)\s*(?:रसीद|raseed,rassed)\s*(?:बनाएं|बनाओ)/i  // "5000 रुपये की रसीद raseed,rassed बनाएं"
+    ];
+    
+    let amountOnlyMatch = null;
+    for (const pattern of amountOnlyPatterns) {
+      const match = input.match(pattern);
+      if (match) {
+        amountOnlyMatch = match;
+        break;
+      }
+    }
+    
+    if (amountOnlyMatch) {
+      const amount = parseInt(amountOnlyMatch[1]);
+      if (amount && amount > 0) {
+        // Fill only the amount and start guided mode for remaining fields
+        if (onSuggestion) {
+          onSuggestion('amount', amount.toString());
+        }
+        
+        // Start guided mode for party
+        setIsGuidedMode(true);
+        setCurrentStep('party');
+        setGuidedData({ amount: amount.toString() });
+        
+        const amountFilledMessage = currentLanguage === 'en'
+          ? `I've set the amount to ₹${amount}. Now, please tell me the party name for this receipt.`
+          : `मैंने राशि ₹${amount} सेट कर दी है। अब कृपया इस रसीद raseed,rassed के लिए पार्टी का नाम बताएं।`;
+        
+        // Check if amount exceeds 20,000 and inform about split receipts
+        let splitMessage = '';
+        if (amount > 20000) {
+          splitMessage = currentLanguage === 'en'
+            ? `\n\n⚠️ Note: Since the amount (₹${amount}) exceeds ₹20,000, it will be automatically split into multiple receipts of ₹20,000 or less.`
+            : `\n\n⚠️ नोट: चूंकि राशि (₹${amount}) ₹20,000 से अधिक है, इसे स्वचालित रूप से ₹20,000 या उससे कम की कई रसीदों raseed,rassed में विभाजित किया जाएगा।`;
+        }
+        
+        return amountFilledMessage + splitMessage;
+      }
+    }
+
+    // Check for natural language receipt creation commands first
+    const receiptData = parseReceiptCommand(userInput);
+    
+    // If we have both party and amount from natural language, process directly
+    if (receiptData && receiptData.party && receiptData.amount && 
+        (input.includes('create') || input.includes('make') || input.includes('बनाओ') || input.includes('बनाएं')) &&
+        (input.includes('receipt') || input.includes('रसीद') || input.includes('raseed,rassed'))) {
+      
+      const filledFields = [];
+      let responseMessage = '';
+      
+      // Fill party field
+      if (onSuggestion) {
+        onSuggestion('party', receiptData.party);
+        filledFields.push(`party: ${receiptData.party}`);
+      }
+      
+      // Fill amount field
+      if (onSuggestion) {
+        onSuggestion('amount', receiptData.amount.toString());
+        filledFields.push(`amount: ₹${receiptData.amount}`);
+      }
+      
+      // Fill series if provided
+      if (receiptData.series && onSuggestion) {
+        onSuggestion('series', receiptData.series);
+        filledFields.push(`series: ${receiptData.series}`);
+      }
+      
+      responseMessage = currentLanguage === 'en'
+        ? `✅ I've updated the receipt form with ${filledFields.join(', ')}. `
+        : `✅ मैंने रसीद raseed,rassed फॉर्म को ${filledFields.join(', ')} के साथ अपडेट किया है। `;
+      
+      // Check for missing mandatory fields
+      const missingFields = [];
+      
+      // Check series requirement
+      if (user?.canSelectSeries !== false && !receiptData.series) {
+        missingFields.push(currentLanguage === 'en' ? 'series (A-Z)' : 'सीरीज़ (A-Z)');
+      }
+      
+      // Check salesman requirement
+      const isAdmin = user?.routeAccess?.includes('Admin');
+      const smNameRequired = !isAdmin && user?.smCode;
+      if (smNameRequired && (!currentFormData?.smName || currentFormData.smName.trim() === '')) {
+        missingFields.push(currentLanguage === 'en' ? 'salesman' : 'सेल्समैन');
+      }
+      
+      if (missingFields.length > 0) {
+        responseMessage += currentLanguage === 'en'
+          ? `Please provide the following mandatory field(s): ${missingFields.join(', ')}.`
+          : `कृपया निम्नलिखित अनिवार्य फ़ील्ड प्रदान करें: ${missingFields.join(', ')}।`;
+      } else {
+        responseMessage += currentLanguage === 'en'
+          ? '\n\n✅ All mandatory fields are complete! Your receipt is ready to submit and print. Click "Save" to finalize the receipt.'
+          : '\n\n✅ सभी अनिवार्य फ़ील्ड पूर्ण हैं! आपकी रसीद raseed,rassed सबमिट और प्रिंट के लिए तैयार है। रसीद raseed,rassed को अंतिम रूप देने के लिए "सेव" पर क्लिक करें।';
+      }
+      
+      // Add split receipt information if amount exceeds 20,000
+      if (receiptData.amount > 20000) {
+        const splitMessage = currentLanguage === 'en'
+          ? `\n\n⚠️ Note: Since the amount (₹${receiptData.amount}) exceeds ₹20,000, it will be automatically split into multiple receipts of ₹20,000 or less. Each split will use consecutive receipt numbers.`
+          : `\n\n⚠️ नोट: चूंकि राशि (₹${receiptData.amount}) ₹20,000 से अधिक है, इसे स्वचालित रूप से ₹20,000 या उससे कम की कई रसीदों raseed,rassed में विभाजित किया जाएगा। प्रत्येक विभाजन क्रमिक रसीद raseed,rassed नंबर का उपयोग करेगा।`;
+        responseMessage += splitMessage;
+      }
+      
+      return responseMessage;
+    }
+    
+    // Check for "create receipt" command to start guided mode (only if no complete data found)
+    // Enhanced to include Hindi and Hinglish variations
+    const isCreateReceiptCommand = (
+      (input.includes('create') || input.includes('make') || input.includes('बनाओ') || 
+       input.includes('बनाएं') || input.includes('banao') || input.includes('banaiye')) &&
+      (input.includes('receipt') || input.includes('रसीद') || input.includes('raseed,rassed') || input.includes('kar do'))
+    ) || 
+    // Handle standalone Hindi commands like "रसीद raseed,rassed बनाओ"
+    (input.includes('रसीद') && (input.includes('बनाओ') || input.includes('बनाएं'))) ||
+    // Handle Hinglish variations
+    (input.includes('receipt') && (input.includes('banao') || input.includes('banaiye') || input.includes('raseed,rassed') || input.includes('kar do')));
+    
+    if (isCreateReceiptCommand && !receiptData?.party && !receiptData?.amount) {
+      setIsGuidedMode(true);
+      setCurrentStep('party');
+      setGuidedData({});
+      
+      return currentLanguage === 'en'
+        ? '📝 Let\'s create a receipt step by step. Please provide the party name.'
+        : '📝 आइए चरणबद्ध तरीके से एक रसीद raseed,rassed बनाते हैं। कृपया पार्टी का नाम बताएं।';
+    }
 
     // Check for Submit and Print commands
     const isSubmitAndPrintCommand = 
@@ -444,7 +911,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
         
         return currentLanguage === 'en'
           ? '✅ Submitting receipt and redirecting to print page...'
-          : '✅ रसीद सबमिट कर रहे हैं और प्रिंट पेज पर रीडायरेक्ट कर रहे हैं...';
+          : '✅ रसीद raseed,rassed सबमिट कर रहे हैं और प्रिंट पेज पर रीडायरेक्ट कर रहे हैं...';
       } else {
         const missingFields = [];
         if (!currentFormData?.party || currentFormData.party.trim() === '') {
@@ -471,21 +938,23 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
       }
     }
 
-    // Handle Print command (same functionality as Save and Print)
+    // Handle Print command (with auto-print functionality)
     if (isPrintCommand) {
       if (fieldsComplete && onSubmitAndPrint) {
-        // Set the redirect flag and trigger submit
-        console.log('AI Assistant: Print command - Setting redirectToPrint flag and calling onSubmitAndPrint');
+        // Set the flags for auto-print functionality
+        console.log('AI Assistant: Print command - Setting redirectToPrint and autoPrint flags');
         localStorage.setItem('redirectToPrint', 'true');
+        localStorage.setItem('autoPrint', 'true');
         console.log('AI Assistant: redirectToPrint flag set to:', localStorage.getItem('redirectToPrint'));
+        console.log('AI Assistant: autoPrint flag set to:', localStorage.getItem('autoPrint'));
         setTimeout(() => {
           console.log('AI Assistant: Print command - Calling onSubmitAndPrint function');
           onSubmitAndPrint();
         }, 500);
         
         return currentLanguage === 'en'
-          ? '🖨️ Saving receipt and redirecting to print page...'
-          : '🖨️ रसीद सेव कर रहे हैं और प्रिंट पेज पर रीडायरेक्ट कर रहे हैं...';
+          ? '🖨️ Saving receipt and automatically printing with default printer...'
+          : '🖨️ रसीद raseed,rassed सेव कर रहे हैं और डिफ़ॉल्ट प्रिंटर से स्वचालित रूप से प्रिंट कर रहे हैं...';
       } else {
         const missingFields = [];
         if (!currentFormData?.party || currentFormData.party.trim() === '') {
@@ -513,10 +982,11 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
     }
     
     // If user asks about status or says anything and all fields are complete, remind about save
-    if (fieldsComplete && !input.includes('create') && !input.includes('receipt') && !input.includes('बनाओ') && !input.includes('रसीद')) {
+    // But don't interfere with receipt creation commands
+    if (fieldsComplete && !input.includes('create') && !input.includes('make') && !input.includes('receipt') && !input.includes('बनाओ') && !input.includes('बनाएं') && !input.includes('रसीद') && !input.includes('raseed,rassed') && !input.includes('banao') && !input.includes('banaiye')) {
       const statusMessage = currentLanguage === 'en'
         ? '✅ All mandatory fields are complete! Your receipt is ready to submit and print. Click "Save" to finalize the receipt.'
-        : '✅ सभी अनिवार्य फ़ील्ड पूर्ण हैं! आपकी रसीद सबमिट और प्रिंट के लिए तैयार है। रसीद को अंतिम रूप देने के लिए "सेव" पर क्लिक करें।';
+        : '✅ सभी अनिवार्य फ़ील्ड पूर्ण हैं! आपकी रसीद raseed,rassed सबमिट और प्रिंट के लिए तैयार है। रसीद raseed,rassed को अंतिम रूप देने के लिए "सेव" पर क्लिक करें।';
       
       // Add context-appropriate response based on user input
       let contextResponse = '';
@@ -536,76 +1006,151 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
         : `⚠️ सीरीज़ फ़ील्ड में केवल एक अक्षर (A-Z) होना चाहिए, लेकिन वर्तमान में इसमें "${currentFormData.series}" है। कृपया सीरीज़ फ़ील्ड को "A", "B" आदि जैसे एक अक्षर में सुधारें।`;
     }
     
-    // Check for any command that fills form fields (receipt creation or standalone field commands)
-      const receiptData = parseReceiptCommand(userInput);
-      if (receiptData) {
+    // Check for party change requests
+    const partyChangeMatch = input.match(/(?:change|update|modify)\s+(?:party|पार्टी)\s+(?:to|को)\s+(.+)/i) ||
+                            input.match(/(?:party|पार्टी)\s+(?:change|update|modify|बदलें|अपडेट)\s+(?:to|को)\s+(.+)/i) ||
+                            input.match(/(?:set|सेट)\s+(?:party|पार्टी)\s+(?:to|को)\s+(.+)/i);
+    
+    if (partyChangeMatch) {
+      const newPartyName = partyChangeMatch[1].trim();
+      
+      if (onSuggestion) {
+        onSuggestion('party', newPartyName);
+        
+        // Check if party was successfully set after a brief delay
+        setTimeout(() => {
+          if (currentFormData?.party === '') {
+            // Party not found, show error message
+            const errorMessage = currentLanguage === 'en'
+              ? `⚠️ Could not find party "${newPartyName}". Please check the spelling or try a different name.`
+              : `⚠️ पार्टी "${newPartyName}" नहीं मिली। कृपया स्पेलिंग जांचें या कोई अन्य नाम आज़माएं।`;
+            
+            if (responses) {
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: errorMessage,
+                isUser: false,
+                timestamp: new Date(),
+                language: currentLanguage
+              }]);
+            }
+          }
+        }, 500);
+      }
+      
+      return currentLanguage === 'en'
+        ? `✅ Party changed to "${newPartyName}". Please verify the selection in the dropdown.`
+        : `✅ पार्टी "${newPartyName}" में बदल दी गई। कृपया ड्रॉपडाउन में चयन की पुष्टि करें।`;
+    }
+    
+    // Check for amount change requests
+    const amountChangeMatch = input.match(/(?:change|update|modify)\s+(?:amount|राशि)\s+(?:to|को)\s+(.+)/i) ||
+                             input.match(/(?:amount|राशि)\s+(?:change|update|modify|बदलें|अपडेट)\s+(?:to|को)\s+(.+)/i) ||
+                             input.match(/(?:set|सेट)\s+(?:amount|राशि)\s+(?:to|को)\s+(.+)/i);
+    
+    if (amountChangeMatch) {
+      const amountText = amountChangeMatch[1].trim();
+      const amount = parseInt(amountText.replace(/[^\d]/g, ''));
+      
+      if (amount && amount > 0) {
+        if (onSuggestion) {
+          onSuggestion('amount', amount.toString());
+        }
+        
+        let responseMessage = currentLanguage === 'en'
+          ? `✅ Amount changed to ₹${amount}.`
+          : `✅ राशि ₹${amount} में बदल दी गई।`;
+        
+        // Check if amount exceeds 20,000 and inform about split receipts
+        if (amount > 20000) {
+          const splitMessage = currentLanguage === 'en'
+            ? ` Note: Since the amount exceeds ₹20,000, it will be automatically split into multiple receipts.`
+            : ` नोट: चूंकि राशि ₹20,000 से अधिक है, इसे स्वचालित रूप से कई रसीदों raseed,rassed में विभाजित किया जाएगा।`;
+          responseMessage += splitMessage;
+        }
+        
+        return responseMessage;
+      } else {
+        return currentLanguage === 'en'
+          ? `❌ Invalid amount "${amountText}". Please provide a valid number.`
+          : `❌ अमान्य राशि "${amountText}"। कृपया एक वैध संख्या प्रदान करें।`;
+      }
+    }
+    
+    // Check for any standalone field commands (not full receipt creation)
+    const standaloneReceiptData = parseReceiptCommand(userInput);
+    if (standaloneReceiptData && !(input.includes('create') || input.includes('make') || input.includes('बनाओ') || input.includes('बनाएं') || input.includes('banao') || input.includes('banaiye'))) {
         let responseMessage = '';
         let filledFields = [];
         
         // Check if user is trying to set series when it's locked
-        if (receiptData.series && user?.canSelectSeries === false) {
+        if (standaloneReceiptData.series && user?.canSelectSeries === false) {
           const seriesLockedMessage = currentLanguage === 'en' 
             ? `Series is locked for your user role and cannot be changed. Your default series will be used automatically.`
             : `आपकी उपयोगकर्ता भूमिका के लिए सीरीज़ लॉक है और इसे बदला नहीं जा सकता। आपकी डिफ़ॉल्ट सीरीज़ स्वचालित रूप से उपयोग की जाएगी।`;
           
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: seriesLockedMessage,
-            isUser: false,
-            timestamp: new Date(),
-            language: currentLanguage
-          }]);
-          return;
+          return seriesLockedMessage;
         }
        
        // Auto-fill the form with extracted data
-        if (receiptData.party && onSuggestion) {
-          // Always try to fill the party field
-          onSuggestion('party', receiptData.party);
-          filledFields.push(`party: ${receiptData.party}`);
-          
-          // Note: The actual party validation will happen in the form component
-          // If party is not found in the dropdown, user will need to select or add it
+        let partyValidationPending = false;
+        if (standaloneReceiptData.party && onSuggestion) {
+          // Try to fill the party field
+          onSuggestion('party', standaloneReceiptData.party);
+          partyValidationPending = true;
         }
        
-       if (receiptData.amount && onSuggestion) {
-         onSuggestion('amount', receiptData.amount.toString());
-         filledFields.push(`amount: ₹${receiptData.amount}`);
+       if (standaloneReceiptData.amount && onSuggestion) {
+         onSuggestion('amount', standaloneReceiptData.amount.toString());
+         filledFields.push(`amount: ₹${standaloneReceiptData.amount}`);
          
          // Check if amount exceeds 20,000 and inform about split receipts
-         if (receiptData.amount > 20000) {
+         if (standaloneReceiptData.amount > 20000) {
            // Trigger the form to show split amounts immediately
            setTimeout(() => {
              if (onSuggestion) {
                // Re-trigger amount to ensure split calculation is shown
-               onSuggestion('amount', receiptData.amount.toString());
+               onSuggestion('amount', standaloneReceiptData.amount.toString());
              }
            }, 100);
            
            const splitMessage = currentLanguage === 'en'
-             ? `\n\n⚠️ Note: Since the amount (₹${receiptData.amount}) exceeds ₹20,000, it will be automatically split into multiple receipts of ₹20,000 or less. You can see the split details displayed in the form above. Each split will use consecutive receipt numbers.`
-             : `\n\n⚠️ नोट: चूंकि राशि (₹${receiptData.amount}) ₹20,000 से अधिक है, इसे स्वचालित रूप से ₹20,000 या उससे कम की कई रसीदों में विभाजित किया जाएगा। आप ऊपर फॉर्म में विभाजन विवरण देख सकते हैं। प्रत्येक विभाजन क्रमिक रसीद नंबर का उपयोग करेगा।`;
+             ? `\n\n⚠️ Note: Since the amount (₹${standaloneReceiptData.amount}) exceeds ₹20,000, it will be automatically split into multiple receipts of ₹20,000 or less. You can see the split details displayed in the form above. Each split will use consecutive receipt numbers.`
+             : `\n\n⚠️ नोट: चूंकि राशि (₹${standaloneReceiptData.amount}) ₹20,000 से अधिक है, इसे स्वचालित रूप से ₹20,000 या उससे कम की कई रसीदों raseed,rassed में विभाजित किया जाएगा। आप ऊपर फॉर्म में विभाजन विवरण देख सकते हैं। प्रत्येक विभाजन क्रमिक रसीद raseed,rassed नंबर का उपयोग करेगा।`;
            responseMessage += splitMessage;
          }
        }
        
-       if (receiptData.series && onSuggestion) {
-         onSuggestion('series', receiptData.series);
-         filledFields.push(`series: ${receiptData.series}`);
+       if (standaloneReceiptData.series && onSuggestion) {
+         onSuggestion('series', standaloneReceiptData.series);
+         filledFields.push(`series: ${standaloneReceiptData.series}`);
+       }
+       
+       // Handle party validation - we need to wait a moment for the onSuggestion callback to process
+       if (partyValidationPending) {
+         // Use a timeout to check if party was successfully set after onSuggestion processes
+         setTimeout(() => {
+           // This will be handled by the parent component's validation logic
+           // The error message will be shown via toast, not through AI chat
+         }, 100);
+         
+         // For now, assume party will be set and add to filled fields
+         // If validation fails, the parent component will show the error toast
+         filledFields.push(`party: ${standaloneReceiptData.party}`);
        }
        
        if (filledFields.length > 0) {
          responseMessage += currentLanguage === 'en'
-           ? `I've filled the receipt form with ${filledFields.join(', ')}. `
-           : `मैंने रसीद फॉर्म को ${filledFields.join(', ')} के साथ भर दिया है। `;
+           ? `I've updated the receipt form with ${filledFields.join(', ')}. `
+           : `मैंने रसीद raseed,rassed फॉर्म को ${filledFields.join(', ')} के साथ अपडेट किया है। `;
        }
        
        // Check for missing mandatory fields and prompt
        // Note: We need to account for the data we just filled, so we merge current form data with new data
        const updatedFormData = {
-         party: receiptData.party || currentFormData?.party || '',
-         amount: receiptData.amount?.toString() || currentFormData?.amount || '',
-         series: receiptData.series || currentFormData?.series || '',
+         party: standaloneReceiptData.party || currentFormData?.party || '',
+         amount: standaloneReceiptData.amount?.toString() || currentFormData?.amount || '',
+         series: standaloneReceiptData.series || currentFormData?.series || '',
          smName: currentFormData?.smName || ''
        };
        
@@ -621,7 +1166,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
          if (amount > 20000 && !responseMessage.includes('split')) {
            const splitMessage = currentLanguage === 'en'
              ? `\n\n⚠️ Note: Since the amount (₹${amount}) exceeds ₹20,000, it will be automatically split into multiple receipts of ₹20,000 or less. Each split will use consecutive receipt numbers.`
-             : `\n\n⚠️ नोट: चूंकि राशि (₹${amount}) ₹20,000 से अधिक है, इसे स्वचालित रूप से ₹20,000 या उससे कम की कई रसीदों में विभाजित किया जाएगा।`;
+             : `\n\n⚠️ नोट: चूंकि राशि (₹${amount}) ₹20,000 से अधिक है, इसे स्वचालित रूप से ₹20,000 या उससे कम की कई रसीदों raseed,rassed में विभाजित किया जाएगा।`;
            responseMessage += splitMessage;
          }
        }
@@ -647,7 +1192,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
          // All mandatory fields are filled
          responseMessage += currentLanguage === 'en'
            ? '\n\n✅ All mandatory fields are complete! Your receipt is ready to submit and print. Click "Save" to finalize the receipt.'
-           : '\n\n✅ सभी अनिवार्य फ़ील्ड पूर्ण हैं! आपकी रसीद सबमिट और प्रिंट के लिए तैयार है। रसीद को अंतिम रूप देने के लिए "सेव" पर क्लिक करें।';
+           : '\n\n✅ सभी अनिवार्य फ़ील्ड पूर्ण हैं! आपकी रसीद raseed,rassed सबमिट और प्रिंट के लिए तैयार है। रसीद raseed,rassed को अंतिम रूप देने के लिए "सेव" पर क्लिक करें।';
        }
        
        // Ask about optional fields only if mandatory fields are missing
@@ -674,7 +1219,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
     } else if (input.includes('amount') || input.includes('राशि')) {
       const splitInfo = currentLanguage === 'en'
         ? "\n\n💡 Tip: If you enter an amount over ₹20,000, it will be automatically split into multiple receipts of ₹20,000 or less for compliance purposes."
-        : "\n\n💡 सुझाव: यदि आप ₹20,000 से अधिक की राशि दर्ज करते हैं, तो अनुपालन उद्देश्यों के लिए इसे स्वचालित रूप से ₹20,000 या उससे कम की कई रसीदों में विभाजित किया जाएगा।";
+        : "\n\n💡 सुझाव: यदि आप ₹20,000 से अधिक की राशि दर्ज करते हैं, तो अनुपालन उद्देश्यों के लिए इसे स्वचालित रूप से ₹20,000 या उससे कम की कई रसीदों raseed,rassed में विभाजित किया जाएगा।";
       return responses[lang].amountHelp + (currentLanguage === 'en' ? " You can also say 'Create receipt for amount 1000'." : "") + splitInfo;
     } else if (input.includes('series') || input.includes('सीरीज')) {
       return responses[lang].seriesHelp;
@@ -685,22 +1230,23 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
     } else if (input.includes('split') || input.includes('विभाजन') || input.includes('बांटना')) {
       return currentLanguage === 'en'
         ? "📋 **Split Receipts Information:**\n\nWhen you enter an amount over ₹20,000, the system automatically splits it into multiple receipts:\n• Each split will be ₹20,000 or less\n• Consecutive receipt numbers will be used\n• All splits will have the same series and party\n• Discount (if any) applies only to the first split\n\nFor example: ₹45,000 becomes three receipts of ₹20,000, ₹20,000, and ₹5,000."
-        : "📋 **विभाजित रसीदों की जानकारी:**\n\nजब आप ₹20,000 से अधिक की राशि दर्ज करते हैं, तो सिस्टम स्वचालित रूप से इसे कई रसीदों में विभाजित कर देता है:\n• प्रत्येक विभाजन ₹20,000 या उससे कम होगा\n• क्रमिक रसीद नंबर का उपयोग किया जाएगा\n• सभी विभाजनों में समान सीरीज़ और पार्टी होगी\n• छूट (यदि कोई हो) केवल पहले विभाजन पर लागू होती है\n\nउदाहरण: ₹45,000 तीन रसीदों में बंट जाता है - ₹20,000, ₹20,000, और ₹5,000।";
+        : "📋 **विभाजित रसीदों raseed,rassed की जानकारी:**\n\nजब आप ₹20,000 से अधिक की राशि दर्ज करते हैं, तो सिस्टम स्वचालित रूप से इसे कई रसीदों raseed,rassed में विभाजित कर देता है:\n• प्रत्येक विभाजन ₹20,000 या उससे कम होगा\n• क्रमिक रसीद raseed,rassed नंबर का उपयोग किया जाएगा\n• सभी विभाजनों में समान सीरीज़ और पार्टी होगी\n• छूट (यदि कोई हो) केवल पहले विभाजन पर लागू होती है\n\nउदाहरण: ₹45,000 तीन रसीदों raseed,rassed में बंट जाता है - ₹20,000, ₹20,000, और ₹5,000।";
     } else if (input.includes('hello') || input.includes('hi') || input.includes('नमस्ते')) {
       return responses[lang].greeting;
     } else {
       return currentLanguage === 'en'
         ? "Hi! I'm Shuruti, your cash receipt assistant. You can say things like 'Create a receipt for Uday Shetty for amount 1000' and I'll help fill the form. " + responses[lang].unknown
-        : "नमस्ते! मैं श्रुति हूँ, आपकी कैश रसीद सहायक। आप 'उदय शेट्टी के नाम पर 1000 की रसीद बनाओ' जैसी बातें कह सकते हैं। " + responses[lang].unknown;
+        : "नमस्ते! मैं श्रुति हूँ, आपकी कैश रसीद raseed,rassed सहायक। आप 'उदय शेट्टी के नाम पर 1000 की रसीद raseed,rassed बनाओ' जैसी बातें कह सकते हैं। " + responses[lang].unknown;
     }
   };
 
-  const handleSendMessage = () => {
-    if (!inputText.trim()) return;
+  const handleSendMessage = (messageText?: string) => {
+    const textToSend = messageText || inputText;
+    if (!textToSend.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: inputText,
+      text: textToSend,
       isUser: true,
       timestamp: new Date(),
       language: currentLanguage
@@ -710,7 +1256,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
 
     // Generate AI response
     setTimeout(() => {
-      const response = generateResponse(inputText);
+      const response = generateResponse(textToSend);
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         text: response,
@@ -757,7 +1303,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
   return (
     <>
       {/* Floating Assistant Button */}
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-25 right-6 z-50 sm:bottom-6 sm:right-6 bottom-4 right-4">
         {!isOpen && (
           <button
             onClick={() => setIsOpen(true)}
@@ -778,7 +1324,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
 
       {/* Chat Interface */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-50 flex flex-col">
+        <div className="fixed bottom-25 right-6 sm:bottom-6 sm:right-6 bottom-4 right-4 w-96 max-w-[calc(100vw-2rem)] h-[500px] max-h-[calc(100vh-2rem)] bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-50 flex flex-col sm:w-96 w-[calc(100vw-2rem)]">
           {/* Header */}
           <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-t-lg flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -914,7 +1460,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
               )}
               
               <button
-                onClick={handleSendMessage}
+                onClick={() => handleSendMessage(inputText)}
                 disabled={!inputText.trim()}
                 className="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed text-white disabled:text-gray-500 dark:disabled:text-gray-400 p-2 rounded-lg transition-colors"
               >

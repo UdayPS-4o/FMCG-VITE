@@ -113,6 +113,17 @@ const PrintBulkCashReceipts: React.FC = () => {
         console.log('Fetched data for all IDs:', fetchedDataArray);
         setData(fetchedDataArray);
         setLoading(false);
+        
+        // Check if auto-print was requested
+        const shouldAutoPrint = localStorage.getItem('autoPrint') === 'true';
+        if (shouldAutoPrint) {
+          localStorage.removeItem('autoPrint'); // Clean up flag
+          // Delay auto-print to ensure the page is fully rendered
+          setTimeout(() => {
+            console.log('Auto-printing triggered');
+            window.print();
+          }, 1000);
+        }
       } catch (err) {
         console.error('Error fetching data:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to load data';
@@ -450,4 +461,4 @@ th, td {
   );
 };
 
-export default PrintBulkCashReceipts; 
+export default PrintBulkCashReceipts;

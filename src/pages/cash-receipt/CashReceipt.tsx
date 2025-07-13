@@ -8,7 +8,7 @@ import DatePicker from '../../components/form/input/DatePicker';
 import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
-import ShurutiAssistant from '../../components/ai/ShurutiAssistant';
+import SarthakAssistant from '../../components/ai/SarthakAssistant';
 import apiCache from '../../utils/apiCache';
 import useAuth from "../../hooks/useAuth";
 
@@ -954,16 +954,32 @@ const CashReceipt: React.FC = () => {
             console.log('HandleSubmit: Conditions met for print redirection');
             localStorage.removeItem('redirectToPrint'); // Clean up flag
             
+            // Check if auto-print is enabled for bulk printing
+            const shouldAutoPrint = localStorage.getItem('autoPrint') === 'true';
+            
             // If we have multiple splits, include all receipt numbers in the URL
             if (isAmountOverLimit && splitAmounts.length > 1) {
               const allReceiptNos = splitAmounts.map((_, index) => 
                 (parseInt(firstSavedReceiptNo, 10) + index).toString()
               ).join(',');
-              console.log(`Redirecting to print page with multiple receipts: /print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}`);
-              navigate(`/print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}`);
+              
+              if (shouldAutoPrint) {
+                console.log(`Redirecting to bulk print page with auto-print: /print/bulk-cash-receipts?receiptNo=${allReceiptNos}`);
+                localStorage.removeItem('autoPrint'); // Clean up flag
+                navigate(`/print/bulk-cash-receipts?receiptNo=${allReceiptNos}`);
+              } else {
+                console.log(`Redirecting to print page with multiple receipts: /print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}`);
+                navigate(`/print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}`);
+              }
             } else {
-              console.log(`Redirecting to print page: /print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
-              navigate(`/print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
+              if (shouldAutoPrint) {
+                console.log(`Redirecting to bulk print page with auto-print: /print/bulk-cash-receipts?receiptNo=${firstSavedReceiptNo}`);
+                localStorage.removeItem('autoPrint'); // Clean up flag
+                navigate(`/print/bulk-cash-receipts?receiptNo=${firstSavedReceiptNo}`);
+              } else {
+                console.log(`Redirecting to print page: /print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
+                navigate(`/print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
+              }
             }
           } else {
             console.log('HandleSubmit: Redirecting to list page (no print flag or no receipt number)');
@@ -1185,8 +1201,8 @@ const CashReceipt: React.FC = () => {
         />
       )}
       
-      {/* Shuruti AI Assistant */}
-      <ShurutiAssistant 
+      {/* Sarthak AI Assistant */}
+      <SarthakAssistant 
         currentFormData={{
           party: party?.value,
           amount: formValues.amount,
@@ -1195,6 +1211,10 @@ const CashReceipt: React.FC = () => {
           smName: sm?.label
         }}
         user={user}
+        party={party}
+        sm={sm}
+        partyOptions={partyOptions}
+        formValues={formValues}
         onSuggestion={(field, value) => {
           // Handle AI suggestions for form fields
           if (field === 'narration') {
