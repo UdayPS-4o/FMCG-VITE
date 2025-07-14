@@ -116,14 +116,14 @@ const PrintBulkCashReceipts: React.FC = () => {
         
         // Check if auto-print was requested
         const shouldAutoPrint = localStorage.getItem('autoPrint') === 'true';
+        setTimeout(() => {
         if (shouldAutoPrint) {
           localStorage.removeItem('autoPrint'); // Clean up flag
           // Delay auto-print to ensure the page is fully rendered
-          setTimeout(() => {
             console.log('Auto-printing triggered');
             window.print();
-          }, 1000);
-        }
+          }
+        }, 5000);
       } catch (err) {
         console.error('Error fetching data:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to load data';
