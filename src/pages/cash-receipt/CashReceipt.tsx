@@ -832,6 +832,18 @@ const CashReceipt: React.FC = () => {
         setShowToast(true);
         return;
     }
+    if (!formValues.series) {
+      setToastMessage('Series is required.');
+      setToastType('error');
+      setShowToast(true);
+      return;
+    }
+    if (!formValues.narration) {
+      setToastMessage('Narration is required.');
+      setToastType('error');
+      setShowToast(true);
+      return;
+    }
 
     setIsSubmitting(true);
 
