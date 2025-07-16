@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatBubbleLeftIcon as ChatIcon, XMarkIcon as CloseIcon, MicrophoneIcon, PaperAirplaneIcon as PaperPlaneIcon, SpeakerWaveIcon as SpeakerIcon, StopIcon } from '@heroicons/react/24/solid';
 import { GoogleGenerativeAI, Part } from '@google/generative-ai';
-import { toast } from 'react-toastify';
 import ReactMarkdown from 'react-markdown';
 import { functionDeclarations, handleFunctionCall } from './functions';
 
@@ -117,12 +116,18 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   const [isListening, setIsListening] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWakeWordDetected, setIsWakeWordDetected] = useState(false);
-  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
-  const [isRecognitionActive, setIsRecognitionActive] = useState(false);
+  const [isWakeWordListening, setIsWakeWordListening] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [hasShownActivationMessage, setHasShownActivationMessage] = useState(false);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const inputRef = useRef<null | HTMLInputElement>(null);
   const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const wakeWordRecognitionRef = useRef<SpeechRecognition | null>(null);
+  const lastActivationTimeRef = useRef<number>(0);
+  const silenceTimeoutRef = useRef<any>(null);
+  const wakeWordProcessingTimeoutRef = useRef<any>(null);
+  const lastProcessedTranscriptRef = useRef<string>('');
 
   const GEMINI_API_KEY = 'AIzaSyC-VMGbtv2QYMlCJIZymVOjlGbmQEQD23E';
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -135,6 +140,21 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
     console.log('sm prop changed:', JSON.stringify(sm, null, 2));
   }, [formValues, party, sm]);
 
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (wakeWordProcessingTimeoutRef.current) {
+        clearTimeout(wakeWordProcessingTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const getSystemPrompt = async () => {
     try {
       const response = await fetch('./sysprompt.md');
@@ -146,164 +166,220 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
     }
   };
 
-  // Initialize speech recognition
-  const initializeSpeechRecognition = () => {
+  // Initialize voice capabilities with dual recognition system
+  const initializeVoiceCapabilities = () => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
       
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'hi-IN'; // Hindi language
-      recognition.maxAlternatives = 1;
+      // Initialize regular speech recognition
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true; // Make it continuous for better command capture
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'hi-IN';
+      recognitionRef.current.maxAlternatives = 5; // Increase alternatives for better number sequence recognition
       
-      let finalTranscript = '';
-      let isProcessingCommand = false;
-      
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        let transcript = '';
         let interimTranscript = '';
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          
           if (event.results[i].isFinal) {
-            finalTranscript += transcript;
+            transcript += event.results[i][0].transcript;
           } else {
-            interimTranscript += transcript;
+            interimTranscript += event.results[i][0].transcript;
           }
         }
         
-        const fullTranscript = (finalTranscript + interimTranscript).toLowerCase().trim();
+        // Update input field with interim results for better UX
+        if (interimTranscript.trim()) {
+          setInputText(interimTranscript.trim());
+        }
         
-        // Check for wake word "sarthak"
-        if (!isWakeWordDetected && fullTranscript.includes('sarthak')) {
-          console.log('Wake word detected:', fullTranscript);
-          setIsWakeWordDetected(true);
-          setIsListening(true);
-          toast.success('🎤 Sarthak listening... Speak your command!');
-          finalTranscript = '';
+        if (transcript.trim()) {
+          console.log('Regular recognition result:', transcript);
+          setInputText(transcript.trim());
           
-          // Clear any existing silence timeout
+          // Clear any existing timeout since we have a final result
           if (silenceTimeoutRef.current) {
             clearTimeout(silenceTimeoutRef.current);
           }
           
-          return;
-        }
-        
-        // Process command after wake word
-        if (isWakeWordDetected && !isProcessingCommand) {
-          // Remove wake word from transcript
-          const cleanTranscript = fullTranscript.replace(/sarthak/g, '').trim();
-          
-          if (cleanTranscript) {
-            setInputText(cleanTranscript);
-            
-            // Set timeout for auto-submit after silence
-            if (silenceTimeoutRef.current) {
-              clearTimeout(silenceTimeoutRef.current);
+          // Set timeout to send message after voice ends
+          silenceTimeoutRef.current = setTimeout(() => {
+            if (transcript.trim() && transcript.trim() !== lastProcessedTranscriptRef.current) {
+              lastProcessedTranscriptRef.current = transcript.trim();
+              handleSendMessage(transcript.trim());
             }
-            
-            silenceTimeoutRef.current = setTimeout(() => {
-              if (cleanTranscript && !isProcessingCommand) {
-                console.log('Auto-submitting after silence:', cleanTranscript);
-                isProcessingCommand = true;
-                handleVoiceCommand(cleanTranscript);
-                finalTranscript = '';
-                setIsWakeWordDetected(false);
-                setIsListening(false);
-                isProcessingCommand = false;
-              }
-            }, 2000); // 2 seconds of silence
-          }
+          }, 1500); // Send after 1.5 seconds of silence
         }
       };
       
-      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error('Speech recognition error:', event.error);
-        if (event.error === 'not-allowed') {
-          toast.error('Microphone access denied. Please enable microphone permissions.');
-        }
-        // Restart recognition on error
-        setTimeout(() => {
-          if (isRecognitionActive) {
-            startContinuousListening();
-          }
-        }, 1000);
+      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Regular recognition error:', event.error);
+        setIsListening(false);
       };
       
-      recognition.onend = () => {
-        console.log('Speech recognition ended, restarting...');
-        // Restart recognition to keep it always on
-        if (isRecognitionActive) {
+      recognitionRef.current.onend = () => {
+        console.log('Regular recognition ended');
+        setIsListening(false);
+        // Continue listening for more commands if assistant is open and wake word was detected
+        if (isOpen && isWakeWordDetected && !isPlaying) {
           setTimeout(() => {
-            startContinuousListening();
-          }, 100);
+            startListening();
+          }, 500);
         }
       };
       
-      setRecognition(recognition);
-      return recognition;
+      // Initialize wake word recognition
+      wakeWordRecognitionRef.current = new SpeechRecognition();
+      wakeWordRecognitionRef.current.continuous = true;
+      wakeWordRecognitionRef.current.interimResults = true;
+      wakeWordRecognitionRef.current.lang = 'hi-IN';
+      wakeWordRecognitionRef.current.maxAlternatives = 3; // Increase alternatives for better recognition
+      
+      const wakeWords = ['sarthak', 'sarthac', 'sartac', 'start', 'start up', 'सार्थक', 'सारथक', 'शुरू', 'शुरु', 'हेलो सार्थक', 'hello sarthak'];
+      
+      wakeWordRecognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        if (wakeWordProcessingTimeoutRef.current) {
+          clearTimeout(wakeWordProcessingTimeoutRef.current);
+        }
+
+        let fullTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript;
+        }
+        fullTranscript = fullTranscript.toLowerCase();
+
+        console.log('Wake word recognition:', fullTranscript);
+
+        const wakeWordDetected = wakeWords.some(word => fullTranscript.includes(word));
+
+        if (wakeWordDetected && !isOpen) {
+          // Extract command after wake word
+          let commandAfterWakeWord = '';
+          for (const wakeWord of wakeWords) {
+            const wakeWordIndex = fullTranscript.indexOf(wakeWord);
+            if (wakeWordIndex !== -1) {
+              commandAfterWakeWord = fullTranscript.substring(wakeWordIndex + wakeWord.length).trim();
+              break;
+            }
+          }
+          
+          wakeWordProcessingTimeoutRef.current = setTimeout(() => {
+            const currentTime = Date.now();
+            const timeSinceLastActivation = currentTime - lastActivationTimeRef.current;
+
+            if (timeSinceLastActivation < 3000) {
+              console.log('Wake word detected but cooldown active, ignoring');
+              return;
+            }
+
+            console.log('Wake word processing after pause:', fullTranscript);
+            lastActivationTimeRef.current = currentTime;
+
+            stopWakeWordListening();
+            setIsOpen(true);
+            setIsWakeWordDetected(true);
+
+            if (!hasShownActivationMessage) {
+              setHasShownActivationMessage(true);
+            }
+
+            if (commandAfterWakeWord && commandAfterWakeWord.length > 3) {
+              console.log('Command detected after wake word:', commandAfterWakeWord);
+              setInputText(commandAfterWakeWord);
+              handleSendMessage(commandAfterWakeWord);
+            } else {
+              startListening();
+            }
+
+            speakText(currentLanguage === 'hi' ? 'हाँ, मैं आपकी कैसे मदद कर सकता हूँ?' : 'Yes, how can I help you?');
+          }, 2000); // Wait for 2s of silence before processing
+        }
+      };
+
+      wakeWordRecognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Wake word recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          setVoiceEnabled(false);
+        } else {
+          // Restart wake word listening on other errors
+          setTimeout(() => {
+            if (voiceEnabled && !isOpen) {
+              startWakeWordListening();
+            }
+          }, 10000);
+        }
+      };
+      
+      wakeWordRecognitionRef.current.onend = () => {
+        console.log('Wake word recognition ended, restarting...');
+        // Restart wake word listening
+        setTimeout(() => {
+          if (voiceEnabled && !isOpen && !isListening) {
+            startWakeWordListening();
+          }
+        }, 100);
+      };
+      
+      console.log('Voice capabilities initialized');
     } else {
-      toast.error('Speech recognition not supported in this browser');
-      return null;
+      setVoiceEnabled(false);
     }
   };
 
-  // Start continuous listening
-  const startContinuousListening = () => {
-    if (recognition && !isRecognitionActive) {
+  // Start voice recognition
+  const startListening = () => {
+    if (recognitionRef.current && !isListening) {
+      setIsListening(true);
+      recognitionRef.current.start();
+      console.log('Regular listening started');
+    }
+  };
+
+  // Stop voice recognition
+  const stopListening = () => {
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+      console.log('Regular listening stopped');
+    }
+  };
+
+  // Start wake word listening
+  const startWakeWordListening = () => {
+    if (wakeWordRecognitionRef.current && !isWakeWordListening && !isListening) {
       try {
-        recognition.start();
-        setIsRecognitionActive(true);
-        console.log('Continuous listening started');
+        setIsWakeWordListening(true);
+        wakeWordRecognitionRef.current.start();
+        console.log('Wake word listening started');
       } catch (error) {
-        console.error('Error starting recognition:', error);
+        console.error('Error starting wake word recognition:', error);
+        setIsWakeWordListening(false);
       }
     }
   };
 
-  // Stop continuous listening
-  const stopContinuousListening = () => {
-    if (recognition && isRecognitionActive) {
-      recognition.stop();
-      setIsRecognitionActive(false);
-      setIsListening(false);
-      setIsWakeWordDetected(false);
-      console.log('Continuous listening stopped');
+  // Stop wake word listening
+  const stopWakeWordListening = () => {
+    if (wakeWordRecognitionRef.current && isWakeWordListening) {
+      wakeWordRecognitionRef.current.stop();
+      setIsWakeWordListening(false);
+      console.log('Wake word listening stopped');
     }
   };
 
-  // Handle voice command
-  const handleVoiceCommand = async (transcript: string) => {
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: transcript,
-      isUser: true,
-      timestamp: new Date(),
-      language: currentLanguage,
-      isVoiceMessage: true
-    };
-
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setInputText('');
-
-    const aiResponseText = await getGeminiResponse(transcript, newMessages);
-
-    const aiResponse: Message = {
-      id: (Date.now() + 1).toString(),
-      text: aiResponseText,
-      isUser: false,
-      timestamp: new Date(),
-      language: currentLanguage
-    };
-    
-    setMessages(prev => [...prev, aiResponse]);
-    
-    // Speak the response
-    speakText(aiResponseText);
+  // Legacy functions for compatibility
+  const startContinuousListening = () => {
+    startWakeWordListening();
   };
+
+  const stopContinuousListening = () => {
+    stopWakeWordListening();
+    stopListening();
+  };
+
+
 
   // Function to send a message to the Gemini API with conversation history
   const getGeminiResponse = async (userInput: string, allMessages: Message[]) => {
@@ -392,6 +468,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       utterance.rate = 0.9;
       utterance.pitch = 1.0;
       utterance.volume = 0.8;
+      utterance.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-IN';
       
       // Try to find a Hindi voice, fallback to default
       const voices = window.speechSynthesis.getVoices();
@@ -406,36 +483,46 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       utterance.onstart = () => {
         setIsPlaying(true);
         // Stop listening while speaking to avoid feedback
-        if (recognition && isRecognitionActive) {
-          recognition.stop();
-          setIsRecognitionActive(false);
+        if (isListening) {
+          stopListening();
+        }
+        if (isWakeWordListening) {
+          stopWakeWordListening();
         }
       };
       
       utterance.onend = () => {
         setIsPlaying(false);
-        // Resume listening after speaking
-        setTimeout(() => {
-          if (isOpen) {
-            startContinuousListening();
-          }
-        }, 500);
+        // Resume appropriate listening after speaking
+        if (!isOpen) {
+          setTimeout(() => {
+            startWakeWordListening();
+          }, 500);
+        } else {
+          // If assistant is open, always listen for follow-up commands
+          setTimeout(() => {
+            startListening();
+          }, 500);
+        }
       };
       
       utterance.onerror = () => {
         setIsPlaying(false);
-        // Resume listening on error
-        setTimeout(() => {
-          if (isOpen) {
-            startContinuousListening();
-          }
-        }, 500);
+        // Resume appropriate listening on error
+        if (!isOpen) {
+          setTimeout(() => {
+            startWakeWordListening();
+          }, 500);
+        } else {
+          // If assistant is open, always listen for follow-up commands
+          setTimeout(() => {
+            startListening();
+          }, 500);
+        }
       };
       
       speechSynthesisRef.current = utterance;
       window.speechSynthesis.speak(utterance);
-    } else {
-      toast.error('Text-to-speech not supported in this browser');
     }
   };
 
@@ -444,10 +531,12 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       setIsPlaying(false);
-      // Resume listening after stopping speech
+      // Resume appropriate listening after stopping speech
       setTimeout(() => {
-        if (isOpen) {
-          startContinuousListening();
+        if (!isOpen) {
+          startWakeWordListening();
+        } else if (isWakeWordDetected) {
+          startListening();
         }
       }, 100);
     }
@@ -455,66 +544,124 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
 
   // Toggle listening
   const toggleListening = () => {
-    if (isRecognitionActive) {
-      stopContinuousListening();
-      toast.info('🎤 Microphone turned off');
+    if (voiceEnabled) {
+      setVoiceEnabled(false);
+      stopWakeWordListening();
+      stopListening();
     } else {
-      startContinuousListening();
-      toast.info('🎤 Microphone turned on - Say "Sarthak" to activate');
+      setVoiceEnabled(true);
+      if (!isOpen) {
+        startWakeWordListening();
+      }
     }
   };
 
-  const handleSendMessage = async (messageText?: string) => {
+  const handleSendMessage = async (messageText?: string, isVoiceMessage: boolean = false) => {
     const textToSend = messageText || inputText;
     if (!textToSend.trim()) return;
+
+    // Clear any pending timeouts
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       text: textToSend,
       isUser: true,
       timestamp: new Date(),
-      language: currentLanguage
+      language: currentLanguage,
+      isVoiceMessage: isVoiceMessage || isListening // Mark as voice message if currently listening
     };
 
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInputText('');
 
-    const aiResponseText = await getGeminiResponse(textToSend, newMessages);
+    // Stop listening before processing to avoid feedback
+    if (isListening) {
+      stopListening();
+    }
 
-    const aiResponse: Message = {
-      id: (Date.now() + 1).toString(),
-      text: aiResponseText,
-      isUser: false,
-      timestamp: new Date(),
-      language: currentLanguage
-    };
-    setMessages(prev => [...prev, aiResponse]);
+    try {
+      const aiResponseText = await getGeminiResponse(textToSend, newMessages);
+
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: aiResponseText,
+        isUser: false,
+        timestamp: new Date(),
+        language: currentLanguage
+      };
+      
+      setMessages(prev => [...prev, aiResponse]);
+      
+      // Speak the response if it was a voice message or assistant is open
+      if (isVoiceMessage || isListening || isOpen) {
+        speakText(aiResponseText);
+      }
+    } catch (error) {
+      console.error('Error processing message:', error);
+      
+      // Resume listening on error if assistant is open
+      setTimeout(() => {
+        if (isWakeWordDetected && isOpen) {
+          startListening();
+        }
+      }, 1000);
+    }
   };
 
-  // Initialize speech recognition when component mounts
+  // Initialize voice capabilities and start wake word listening on component mount
   useEffect(() => {
-    const speechRecognition = initializeSpeechRecognition();
-    if (speechRecognition) {
-      setRecognition(speechRecognition);
-    }
-  }, []);
-
-  // Start/stop listening based on chat open state
-  useEffect(() => {
-    if (isOpen && recognition) {
-      startContinuousListening();
-      toast.info('🎤 Always listening - Say "Sarthak" to activate');
-    } else {
-      stopContinuousListening();
-    }
+    initializeVoiceCapabilities();
+    
+    // Start wake word listening with a delay
+    setTimeout(() => {
+      if (voiceEnabled) {
+        startWakeWordListening();
+      }
+    }, 500);
     
     return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (wakeWordRecognitionRef.current) {
+        wakeWordRecognitionRef.current.stop();
+      }
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
       }
     };
-  }, [isOpen, recognition]);
+  }, []);
+
+  // Start wake word listening when voice is enabled and assistant is closed
+  useEffect(() => {
+    if (voiceEnabled && !isOpen) {
+      startWakeWordListening();
+    }
+  }, [voiceEnabled, isOpen]);
+
+  // Stop wake word listening when assistant opens, restart when it closes
+  useEffect(() => {
+    if (isOpen) {
+      stopWakeWordListening();
+    } else {
+      // Reset wake word detection state when closing
+      setIsWakeWordDetected(false);
+      setHasShownActivationMessage(false); // Reset activation message flag for next session
+      if (voiceEnabled) {
+        setTimeout(() => {
+          startWakeWordListening();
+        }, 500);
+      }
+    }
+  }, [isOpen, voiceEnabled]);
+
+  // Focus input when chat opens
+
 
   useEffect(() => {
     if (isOpen) {
@@ -579,7 +726,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
               <div>
                 <h3 className="font-semibold flex items-center gap-2">
                   Sarthak AI
-                  {isRecognitionActive && (
+                  {voiceEnabled && (
                     <div className="w-2 h-2 bg-blue-300 rounded-full animate-pulse" title="Always listening"></div>
                   )}
                   {isListening && (
@@ -590,7 +737,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
                   )}
                 </h3>
                 <p className="text-xs opacity-90">
-                  {isRecognitionActive ? 'Always listening - Say "Sarthak"' : 'Cash Receipt Assistant'}
+                  {voiceEnabled ? 'Always listening - Say "Sarthak"' : 'Cash Receipt Assistant'}
                 </p>
               </div>
             </div>
@@ -598,11 +745,11 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
               <button
                 onClick={toggleListening}
                 className={`hover:bg-white hover:bg-opacity-20 p-1 rounded ${
-                  isRecognitionActive ? 'bg-white bg-opacity-20' : ''
+                  voiceEnabled ? 'bg-white bg-opacity-20' : ''
                 }`}
-                title={isRecognitionActive ? 'Turn off microphone' : 'Turn on microphone'}
+                title={voiceEnabled ? 'Turn off microphone' : 'Turn on microphone'}
               >
-                <MicrophoneIcon className={`w-4 h-4 ${isRecognitionActive ? 'text-yellow-300' : ''}`} />
+                <MicrophoneIcon className={`w-4 h-4 ${voiceEnabled ? 'text-yellow-300' : ''}`} />
               </button>
               {isPlaying && (
                 <button
@@ -614,7 +761,10 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
                 </button>
               )}
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  setIsOpen(false);
+                  setHasShownActivationMessage(false); // Reset for next session
+                }}
                 className="hover:bg-white hover:bg-opacity-20 p-1 rounded"
               >
                 <CloseIcon className="w-4 h-4" />
@@ -683,6 +833,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
                 </div>
               </div>
             ))}
+
             <div ref={messagesEndRef} />
           </div>
 
