@@ -135,7 +135,7 @@ export const fuzzySearchPartyDeclaration: FunctionDeclaration = {
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
-      searchTerm: { type: SchemaType.STRING, description: 'The name or partial name to search for.' },
+      searchTerm: { type: SchemaType.STRING, description: 'The name or partial name to search for. Party names are in English (Latin script). The user may speak the name in Hindi (Devanagari script). If the user provides a name in Hindi, transliterate it to English before calling the function. For example, if the user says "सुरेश", the searchTerm should be "Suresh".' },
       selectOption: { type: SchemaType.NUMBER, description: 'Option number to select from search results (1-based index).' }
     },
     required: ['searchTerm']
@@ -178,9 +178,9 @@ async function handlePrintCall(props: SarthakAIAssistantProps){
   // }
   // execute JS CODE document.querySelector('.flex > [type="button"].bg-green-600').click()
   try{
-    console.log('searching print button')
-
-    const printButton = document.querySelector('.flex > [type="button"].bg-green-500') as HTMLElement;
+    console.log('searching-print button')
+    localStorage.setItem('autoPrint', 'true');
+    const printButton = document.querySelector('#autoprint') as HTMLElement;
     if (printButton) {
       printButton.click();
     } else {

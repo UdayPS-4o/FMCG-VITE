@@ -29,8 +29,9 @@ interface SpeechRecognition extends EventTarget {
 
 declare global {
   interface Window {
-    SpeechRecognition: new () => SpeechRecognition;
-    webkitSpeechRecognition: new () => SpeechRecognition;
+    // SpeechRecognition: new () => SpeechRecognition;
+   // webkitSpeechRecognition: new () => SpeechRecognition;
+    SpeechSynthesisUtterance: new () => SpeechSynthesisUtterance;
   }
 }
 
@@ -127,7 +128,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       
       // Initialize regular speech recognition with Hinglish support
-      recognitionRef.current = new SpeechRecognition();
+      //recognitionRef.current = new SpeechRecognition();
       if (recognitionRef.current) {
         recognitionRef.current.continuous = false;
         recognitionRef.current.interimResults = false;
@@ -176,7 +177,7 @@ const ShurutiAssistant: React.FC<ShurutiAssistantProps> = ({ onSuggestion, curre
       }
       
       // Initialize wake word recognition with Hinglish support
-      wakeWordRecognitionRef.current = new SpeechRecognition();
+      //wakeWordRecognitionRef.current = new SpeechRecognition();
       if (wakeWordRecognitionRef.current) {
         wakeWordRecognitionRef.current.continuous = true;
         wakeWordRecognitionRef.current.interimResults = true;

@@ -67,7 +67,7 @@ const PrintBulkCashReceipts: React.FC = () => {
   };
 
   const { queryKey, value } = getQueryParams();
-
+  let isprinted = false;
   useEffect(() => {
     // Determine if this is a receipt or payment based on the query key
     setIsReceipt(queryKey !== 'voucherNo');
@@ -115,13 +115,22 @@ const PrintBulkCashReceipts: React.FC = () => {
         setLoading(false);
         
         // Check if auto-print was requested
-        const shouldAutoPrint = localStorage.getItem('autoPrint') === 'true';
+        const shouldAutoPrint = localStorage.getItem('autoPrint') == 'true';
+        // check for query param ?autoprint=true
+        const autoPrint = window.location.search.includes('autoprint');
+        console.log("location:",window.location.search)
         setTimeout(() => {
-        if (shouldAutoPrint) {
+        if (shouldAutoPrint || autoPrint) {
           localStorage.removeItem('autoPrint'); // Clean up flag
           // Delay auto-print to ensure the page is fully rendered
             console.log('Auto-printing triggered');
-            window.print();
+            // window.print();
+            if(!isprinted) {
+              isprinted = true;
+              const printBtn = document.querySelector("button.bg-blue-500.transition-colors") as HTMLButtonElement;
+              printBtn.click();
+            }
+
           }
         }, 5000);
       } catch (err) {
