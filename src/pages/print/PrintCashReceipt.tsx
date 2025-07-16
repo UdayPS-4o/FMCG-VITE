@@ -67,7 +67,7 @@ const PrintBulkCashReceipts: React.FC = () => {
   };
 
   const { queryKey, value } = getQueryParams();
-
+  let isprinted = false;
   useEffect(() => {
     // Determine if this is a receipt or payment based on the query key
     setIsReceipt(queryKey !== 'voucherNo');
@@ -113,6 +113,23 @@ const PrintBulkCashReceipts: React.FC = () => {
         console.log('Fetched data for all IDs:', fetchedDataArray);
         setData(fetchedDataArray);
         setLoading(false);
+
+        const shouldAutoPrint = localStorage.getItem('autoPrint') == 'true';
+        // check for query param ?autoprint=true
+        const autoPrint = window.location.search.includes('autoprint');
+        console.log("location:",window.location.search)
+        // setTimeout(() => {
+        if (shouldAutoPrint || autoPrint) {
+          localStorage.removeItem('autoPrint'); // Clean up flag
+          // Delay auto-print to ensure the page is fully rendered
+            console.log('Auto-printing triggered');
+            if(!isprinted) window.print();
+            isprinted = true;
+            // const printBtn = document.querySelector("button.bg-blue-500.transition-colors") as HTMLButtonElement;
+            // printBtn.click();
+          }
+        // }, 2000);
+
       } catch (err) {
         console.error('Error fetching data:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to load data';

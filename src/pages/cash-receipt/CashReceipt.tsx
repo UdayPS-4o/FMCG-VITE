@@ -784,7 +784,8 @@ const CashReceipt: React.FC = () => {
   };
 
   // Refactored handleSubmit to use state directly
-  const handleSubmit = async () => { 
+  const handleSubmit = async (autoprint?: boolean) => { 
+
     // No e.preventDefault() needed as it's not triggered by form onSubmit
 
     // Validation for total amount limit
@@ -959,7 +960,7 @@ const CashReceipt: React.FC = () => {
       const shouldRedirectToPrint = localStorage.getItem('redirectToPrint') === 'true';
       console.log('HandleSubmit: Checking redirectToPrint flag:', shouldRedirectToPrint);
       console.log('HandleSubmit: firstSavedReceiptNo:', firstSavedReceiptNo);
-
+      console.log('SUBMITTING ' , autoprint)
       setTimeout(() => {
         try {
           if (shouldRedirectToPrint && firstSavedReceiptNo) {
@@ -978,19 +979,19 @@ const CashReceipt: React.FC = () => {
               if (shouldAutoPrint) {
                 console.log(`Redirecting to bulk print page with auto-print: /print/bulk-cash-receipts?receiptNo=${allReceiptNos}`);
                 localStorage.removeItem('autoPrint'); // Clean up flag
-                navigate(`/print/bulk-cash-receipts?receiptNo=${allReceiptNos}`);
+                navigate(`/print/bulk-cash-receipts?receiptNo=${allReceiptNos}${autoprint ? '&autoprint=true' : ''}`);
               } else {
                 console.log(`Redirecting to print page with multiple receipts: /print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}`);
-                navigate(`/print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}`);
+                navigate(`/print?ReceiptNo=${allReceiptNos}&Series=${formValues.series}${autoprint ? '&autoprint=true' : ''}`);
               }
             } else {
               if (shouldAutoPrint) {
                 console.log(`Redirecting to bulk print page with auto-print: /print/bulk-cash-receipts?receiptNo=${firstSavedReceiptNo}`);
                 localStorage.removeItem('autoPrint'); // Clean up flag
-                navigate(`/print/bulk-cash-receipts?receiptNo=${firstSavedReceiptNo}`);
+                navigate(`/print/bulk-cash-receipts?receiptNo=${firstSavedReceiptNo}${autoprint ? '&autoprint=true' : ''}`);
               } else {
                 console.log(`Redirecting to print page: /print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
-                navigate(`/print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}`);
+                navigate(`/print?ReceiptNo=${firstSavedReceiptNo}&Series=${formValues.series}${autoprint ? '&autoprint=true' : ''}`);
               }
             }
           } else {
@@ -1199,6 +1200,24 @@ const CashReceipt: React.FC = () => {
                 </svg>
                 {isSubmitting ? 'Saving...' : 'Save & Print'}
               </button>
+
+              <button
+                type="button"
+                id="autoprint"
+                className="hidden px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 flex items-center gap-2"
+                disabled={isSubmitting}
+                onClick={() => {
+                  localStorage.setItem('redirectToPrint', 'true'); // Set flag first
+                  handleSubmit(true); // Then call submit handler
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                {isSubmitting ? 'Saving...' : 'Save & Print'}
+              </button>
             </div>
           </FormComponent>
         </div>
@@ -1264,7 +1283,7 @@ const CashReceipt: React.FC = () => {
         }}
         onSubmitAndPrint={() => {
           // This function will be called when AI processes "Submit and Print" command
-          handleSubmit();
+          handleSubmit(true);
         }}
       />
     </div>
