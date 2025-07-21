@@ -123,7 +123,13 @@ const PrintBulkCashReceipts: React.FC = () => {
           localStorage.removeItem('autoPrint'); // Clean up flag
           // Delay auto-print to ensure the page is fully rendered
             console.log('Auto-printing triggered');
-            if(!isprinted) window.print();
+            if(!isprinted) {
+              window.print();
+              
+              setTimeout(() => {
+                navigate('/cash-receipt');
+              }, 2000);
+            }
             isprinted = true;
             // const printBtn = document.querySelector("button.bg-blue-500.transition-colors") as HTMLButtonElement;
             // printBtn.click();
@@ -156,6 +162,15 @@ const PrintBulkCashReceipts: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
+    
+    // Add event listener for after print
+    const afterPrint = () => {
+      window.removeEventListener('afterprint', afterPrint);
+      // Redirect to cash receipt page after print
+      navigate('/cash-receipt');
+    };
+    
+    window.addEventListener('afterprint', afterPrint);
   };
 
   const handleBack = () => {
@@ -467,4 +482,4 @@ th, td {
   );
 };
 
-export default PrintBulkCashReceipts; 
+export default PrintBulkCashReceipts;

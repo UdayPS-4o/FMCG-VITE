@@ -125,14 +125,19 @@ const PrintBulkCashReceipts: React.FC = () => {
           // Delay auto-print to ensure the page is fully rendered
             console.log('Auto-printing triggered');
             // window.print();
+
+            
             if(!isprinted) {
               isprinted = true;
               const printBtn = document.querySelector("button.bg-blue-500.transition-colors") as HTMLButtonElement;
               printBtn.click();
+              
+              setTimeout(() => {
+                navigate('/cash-receipt');
+              }, 2000);
             }
-
           }
-        }, 5000);
+        }, 2000);
       } catch (err) {
         console.error('Error fetching data:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to load data';
@@ -159,6 +164,16 @@ const PrintBulkCashReceipts: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
+    
+    // Add event listener for after print
+    const afterPrint = () => {
+      console.log("print done")
+      window.removeEventListener('afterprint', afterPrint);
+      // Redirect to cash receipt page after print
+      navigate('/cash-receipt');
+    };
+    
+    window.addEventListener('afterprint', afterPrint);
   };
 
   const handleBack = () => {
@@ -224,9 +239,9 @@ const PrintBulkCashReceipts: React.FC = () => {
           >
             <div className="receipt">
               <header className="header">
-                <h1 className="text-white print:text-black font-bold text-xl">Ekta Enterprises</h1>
-                <h2 className="text-white print:text-black">GSTIN: 23AJBPS6285R1ZF , Mob: 9179174888, 9169164888, 9826623188</h2>
-                <p className="text-white print:text-black">Budhwari Bazar, Gn Road Seoni, Seoni</p>
+                <h1 className="text-white print:text-black font-bold text-xxl">Ekta Enterprises</h1>
+                <h2 className="text-white print:text-black text-xl">GSTIN: 23AJBPS6285R1ZF , Mob: 9179174888, 9169164888, 9826623188</h2>
+                <p className="text-white print:text-black text-xl">Budhwari Bazar, Gn Road Seoni, Seoni</p>
               </header>
               <div className="content">
                 <div className="details border-white print:border-black" style={{ margin: 0, padding: '10px 10px', fontSize: 'larger' }}>
