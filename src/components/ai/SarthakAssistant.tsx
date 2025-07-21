@@ -119,15 +119,17 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   const [isWakeWordListening, setIsWakeWordListening] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [hasShownActivationMessage, setHasShownActivationMessage] = useState(false);
+  const [isReady, setIsReady] = useState(false); // New state to track readiness
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const inputRef = useRef<null | HTMLInputElement>(null);
   const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wakeWordRecognitionRef = useRef<SpeechRecognition | null>(null);
   const lastActivationTimeRef = useRef<number>(0);
-  const silenceTimeoutRef = useRef<any>(null);
+
   const wakeWordProcessingTimeoutRef = useRef<any>(null);
   const lastProcessedTranscriptRef = useRef<string>('');
+  const isStartingWakeWordRef = useRef<boolean>(false);
 
   const GEMINI_API_KEY = 'AIzaSyC-VMGbtv2QYMlCJIZymVOjlGbmQEQD23E';
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -143,9 +145,6 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-      }
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
@@ -173,7 +172,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       
       // Initialize regular speech recognition
       recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true; // Make it continuous for better command capture
+      recognitionRef.current.continuous = false; // Set to false for better auto-sending
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'hi-IN';
       recognitionRef.current.maxAlternatives = 5; // Increase alternatives for better number sequence recognition
@@ -190,27 +189,35 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
           }
         }
         
-        // Update input field with interim results for better UX
-        if (interimTranscript.trim()) {
-          setInputText(interimTranscript.trim());
-        }
+        // Get the most recent text (either final or interim)
+        const currentText = transcript.trim() || interimTranscript.trim();
         
-        if (transcript.trim()) {
-          console.log('Regular recognition result:', transcript);
-          setInputText(transcript.trim());
-          
-          // Clear any existing timeout since we have a final result
-          if (silenceTimeoutRef.current) {
-            clearTimeout(silenceTimeoutRef.current);
-          }
-          
-          // Set timeout to send message after voice ends
-          silenceTimeoutRef.current = setTimeout(() => {
-            if (transcript.trim() && transcript.trim() !== lastProcessedTranscriptRef.current) {
-              lastProcessedTranscriptRef.current = transcript.trim();
-              handleSendMessage(transcript.trim());
+        if (currentText) {
+          console.log('=== VOICE RECOGNITION DEBUG ===');
+          console.log('Raw transcript:', JSON.stringify(currentText));
+          console.log('Is final:', !!transcript.trim());
+          console.log('=== END VOICE RECOGNITION DEBUG ===');
+          console.log('currentText:', currentText);
+          setInputText(currentText);
+          console.log("text set ")
+          setTimeout(() => {
+            console.log('clicking button');
+            let sendBTN = document.querySelector('button[title="Send message"]') as HTMLButtonElement;
+            sendBTN.click();
+          }, 3000);
+          // If it's a final result, send immediately
+          if (transcript.trim()) {
+            const trimmedTranscript = transcript.trim();
+            if (trimmedTranscript && trimmedTranscript !== lastProcessedTranscriptRef.current) {
+              lastProcessedTranscriptRef.current = trimmedTranscript;
+              console.log('🚀 AUTO-SENDING voice message:', trimmedTranscript);
+              // Force send the message immediately
+              setTimeout(() => {
+                console.log(0);
+                handleSendMessage(trimmedTranscript, true);
+              }, 5000); // Small delay to ensure state updates
             }
-          }, 1500); // Send after 1.5 seconds of silence
+          }
         }
       };
       
@@ -222,11 +229,22 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       recognitionRef.current.onend = () => {
         console.log('Regular recognition ended');
         setIsListening(false);
-        // Continue listening for more commands if assistant is open and wake word was detected
+        
+        // Send any pending text when recognition ends (fallback)
+        setTimeout(() => {
+          const pendingText = inputText.trim();
+          if (pendingText && pendingText !== lastProcessedTranscriptRef.current) {
+            lastProcessedTranscriptRef.current = pendingText;
+            console.log('🚀 AUTO-SENDING on recognition end:', pendingText);
+            handleSendMessage(pendingText, true);
+          }
+        }, 200); // Small delay to capture final text
+        
+        // Auto-restart listening for continuous voice input
         if (isOpen && isWakeWordDetected && !isPlaying) {
           setTimeout(() => {
             startListening();
-          }, 500);
+          }, 500); // Delay to allow message processing
         }
       };
       
@@ -248,7 +266,22 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           fullTranscript += event.results[i][0].transcript;
         }
-        fullTranscript = fullTranscript.toLowerCase();
+        
+        console.log('=== WAKE WORD RECOGNITION DEBUG ===');
+        console.log('Raw transcript:', JSON.stringify(fullTranscript));
+        console.log('Raw char codes:', fullTranscript.split('').map(c => c.charCodeAt(0)));
+        
+        // Clean the transcript using the same aggressive cleaning
+        fullTranscript = fullTranscript
+          .trim()
+          .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+          .replace(/\s+/g, ' ') // Collapse whitespace
+          .replace(/[^a-zA-Z0-9\s\u0900-\u097F]/g, '') // Allow only alphanumeric, space, and Hindi characters
+          .toLowerCase();
+        
+        console.log('Cleaned transcript:', JSON.stringify(fullTranscript));
+        console.log('Cleaned char codes:', fullTranscript.split('').map(c => c.charCodeAt(0)));
+        console.log('=== END WAKE WORD RECOGNITION DEBUG ===');
 
         console.log('Wake word recognition:', fullTranscript);
 
@@ -288,7 +321,13 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
             if (commandAfterWakeWord && commandAfterWakeWord.length > 3) {
               console.log('Command detected after wake word:', commandAfterWakeWord);
               setInputText(commandAfterWakeWord);
-              handleSendMessage(commandAfterWakeWord);
+              setTimeout(() => {
+                const sendBTN = document.querySelector('button[title="Send message"]') as HTMLButtonElement;
+                sendBTN.click();
+              }, 500);
+
+
+              handleSendMessage(commandAfterWakeWord, true); // Mark as voice message
             } else {
               startListening();
             }
@@ -300,6 +339,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
 
       wakeWordRecognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Wake word recognition error:', event.error);
+        setIsWakeWordListening(false);
         if (event.error === 'not-allowed') {
           setVoiceEnabled(false);
         } else {
@@ -312,14 +352,24 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
         }
       };
       
+      // Add event handlers to track actual recognition state
+      wakeWordRecognitionRef.current.addEventListener('start', () => {
+        console.log('Wake word recognition actually started');
+        setIsWakeWordListening(true);
+        isStartingWakeWordRef.current = false; // Clear the starting flag
+      });
+      
       wakeWordRecognitionRef.current.onend = () => {
-        console.log('Wake word recognition ended, restarting...');
-        // Restart wake word listening
-        setTimeout(() => {
-          if (voiceEnabled && !isOpen && !isListening) {
+        console.log('Wake word recognition actually ended');
+        setIsWakeWordListening(false);
+        isStartingWakeWordRef.current = false; // Clear the starting flag
+        
+        // Restart if voice is enabled and assistant is closed
+        if (voiceEnabled && !isOpen && !isListening) {
+          setTimeout(() => {
             startWakeWordListening();
-          }
-        }, 100);
+          }, 100);
+        }
       };
       
       console.log('Voice capabilities initialized');
@@ -348,24 +398,66 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
 
   // Start wake word listening
   const startWakeWordListening = () => {
-    if (wakeWordRecognitionRef.current && !isWakeWordListening && !isListening) {
-      try {
-        setIsWakeWordListening(true);
-        wakeWordRecognitionRef.current.start();
-        console.log('Wake word listening started');
-      } catch (error) {
-        console.error('Error starting wake word recognition:', error);
-        setIsWakeWordListening(false);
+    if (!wakeWordRecognitionRef.current) {
+      console.log('Wake word recognition ref not available');
+      return;
+    }
+    
+    if (isWakeWordListening) {
+      console.log('Wake word listening already active, skipping start');
+      return;
+    }
+    
+    if (isListening) {
+      console.log('Regular listening is active, cannot start wake word listening');
+      return;
+    }
+    
+    if (isStartingWakeWordRef.current) {
+      console.log('Already in process of starting wake word listening, skipping');
+      return;
+    }
+    
+    isStartingWakeWordRef.current = true;
+    
+    try {
+      wakeWordRecognitionRef.current.start();
+      console.log('Wake word listening start command sent');
+      // Note: setIsWakeWordListening(true) will be called by onstart event handler
+    } catch (error) {
+      console.error('Error starting wake word recognition:', error);
+      isStartingWakeWordRef.current = false;
+      
+      // If error is because it's already started, the onstart event will handle state
+      if (error.message && error.message.includes('already started')) {
+        console.log('Recognition was already started, onstart event will handle state');
       }
     }
   };
 
   // Stop wake word listening
   const stopWakeWordListening = () => {
-    if (wakeWordRecognitionRef.current && isWakeWordListening) {
+    if (!wakeWordRecognitionRef.current) {
+      if (isWakeWordListening) {
+        console.log('Wake word recognition ref not available, updating state only');
+        setIsWakeWordListening(false);
+      }
+      return;
+    }
+    
+    if (!isWakeWordListening) {
+      console.log('Wake word listening not active, skipping stop');
+      return;
+    }
+    
+    try {
       wakeWordRecognitionRef.current.stop();
+      console.log('Wake word listening stop command sent');
+      // Note: setIsWakeWordListening(false) will be called by onend event handler
+    } catch (error) {
+      console.error('Error stopping wake word recognition:', error);
+      // Force state update on error
       setIsWakeWordListening(false);
-      console.log('Wake word listening stopped');
     }
   };
 
@@ -382,11 +474,50 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
 
 
   // Function to send a message to the Gemini API with conversation history
-  const getGeminiResponse = async (userInput: string, allMessages: Message[]) => {
+  const getGeminiResponse = async (userInput: string, allMessages: Message[], isVoiceMessage: boolean = false) => {
     console.log('=== SARTHAK ASSISTANT DEBUG ===');
+    console.log('User input received:', userInput);
+    console.log('Is voice message:', isVoiceMessage);
     console.log('formValues received in SarthakAssistant:', JSON.stringify(formValues, null, 2));
     console.log('party received in SarthakAssistant:', JSON.stringify(party, null, 2));
     console.log('sm received in SarthakAssistant:', JSON.stringify(sm, null, 2));
+    console.log('partyOptions length:', partyOptions?.length || 0);
+    if (partyOptions && partyOptions.length > 0) {
+      console.log('Sample party options:', partyOptions.slice(0, 5).map(p => p.label));
+    }
+    
+    // Enhanced waiting mechanism for party options in voice messages
+  if (isVoiceMessage && (!partyOptions || partyOptions.length === 0)) {
+    console.log('⚠️ Party options not loaded yet for voice message, implementing enhanced wait...');
+    
+    // Wait up to 8 seconds for party options to load with more frequent checks
+    let attempts = 0;
+    const maxAttempts = 16; // 16 attempts * 500ms = 8 seconds
+    
+    while (attempts < maxAttempts) {
+      // Check if partyOptions are now available (they might be updated in parent component)
+      const currentPartyOptions = props.partyOptions;
+      if (currentPartyOptions && currentPartyOptions.length > 0) {
+        console.log(`✅ Party options loaded after ${attempts * 500}ms wait, found ${currentPartyOptions.length} parties`);
+        // Update local partyOptions state to reflect the loaded data
+        break;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
+      console.log(`⏳ Waiting for party options... attempt ${attempts}/${maxAttempts} (${attempts * 500}ms elapsed)`);
+    }
+    
+    // Final check with current props
+    const finalPartyOptions = props.partyOptions;
+    if (!finalPartyOptions || finalPartyOptions.length === 0) {
+      console.log('⚠️ Party options still not loaded after 8 second wait, proceeding with limited functionality...');
+      // Return a helpful message to the user
+      return '⏳ **Party data is still loading...**\n\nThe party list is taking longer than expected to load. This might be due to:\n\n• Network connectivity issues\n• Server response delays\n• Large dataset loading\n\nPlease try your voice command again in a moment, or manually select the party from the dropdown.';
+    } else {
+      console.log('✅ Party options successfully loaded, proceeding with voice command...');
+    }
+  }
     
     const systemPrompt = await getSystemPrompt();
     const model = genAI.getGenerativeModel({
@@ -411,6 +542,9 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       history: historyForApi
     });
 
+    // Use the most current partyOptions from props
+    const currentPartyOptions = props.partyOptions || [];
+    
     const contextMessage = `Current form data: ${JSON.stringify({
       party: party?.label || 'Not selected',
       amount: formValues.amount || 'Empty',
@@ -420,7 +554,13 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       date: formValues.date || 'Empty',
       discount: formValues.discount || 'Empty',
       sm: sm?.label || 'Not selected'
-    })}`;
+    })}
+
+Available parties (${currentPartyOptions.length} total): ${currentPartyOptions.slice(0, 10).map(p => p.label).join(', ') || 'None'}
+
+Note: When user mentions a party name in Hindi (like सुरेश, राम, etc.), extract and transliterate it to English (Suresh, Ram, etc.) before calling fuzzy_search_party function.`;
+    
+    console.log('Party options being sent to AI:', currentPartyOptions.length);
 
     console.log('Context message being sent:', contextMessage);
     console.log('=== END SARTHAK ASSISTANT DEBUG ===');
@@ -557,14 +697,59 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   };
 
   const handleSendMessage = async (messageText?: string, isVoiceMessage: boolean = false) => {
-    const textToSend = messageText || inputText;
-    if (!textToSend.trim()) return;
-
-    // Clear any pending timeouts
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current);
-      silenceTimeoutRef.current = null;
+    console.log('handleSendMessage triggered. isVoiceMessage:', isVoiceMessage, 'isReady:', isReady);
+    console.log('Current partyOptions length:', partyOptions?.length || 0);
+    
+    // Enhanced readiness check for both voice and text messages
+    if (!isReady || !partyOptions || partyOptions.length === 0) {
+      const warningMessage = isVoiceMessage 
+        ? 'Party data is still loading. Please wait a moment and try again.'
+        : 'Assistant is not ready yet. Please wait for party options to load.';
+      
+      console.warn(warningMessage);
+      
+      // For voice messages, provide audio feedback
+      if (isVoiceMessage) {
+        speakText('Party data is still loading. Please wait a moment and try your command again.');
+      }
+      
+      // For text messages, show a helpful message in the chat
+      if (!isVoiceMessage) {
+        const loadingMessage: Message = {
+          id: Date.now().toString(),
+          text: '⏳ **Loading party data...**\n\nI\'m still loading the party information from the server. Please wait a moment and try again.',
+          isUser: false,
+          timestamp: new Date(),
+          language: currentLanguage
+        };
+        setMessages(prev => [...prev, loadingMessage]);
+      }
+      
+      return;
     }
+
+    let textToSend = messageText || inputText;
+    
+    // Enhanced cleaning for voice messages
+    if (isVoiceMessage || isListening) {
+      console.log('=== VOICE MESSAGE PROCESSING ===');
+      console.log('Original text:', JSON.stringify(textToSend));
+      console.log('Original char codes:', textToSend.split('').map(c => c.charCodeAt(0)));
+
+      // More aggressive cleaning
+      const cleanedText = textToSend
+        .trim()
+        .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+        .replace(/\s+/g, ' ') // Collapse whitespace
+        .replace(/[^a-zA-Z0-9\s\u0900-\u097F]/g, ''); // Allow only alphanumeric, space, and Hindi characters
+
+      console.log('Cleaned text:', JSON.stringify(cleanedText));
+      console.log('Cleaned char codes:', cleanedText.split('').map(c => c.charCodeAt(0)));
+      console.log('=== END VOICE MESSAGE PROCESSING ===');
+      textToSend = cleanedText;
+    }
+    
+    if (!textToSend.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -577,6 +762,8 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
 
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
+    
+    // Clear input text immediately
     setInputText('');
 
     // Stop listening before processing to avoid feedback
@@ -585,7 +772,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
     }
 
     try {
-      const aiResponseText = await getGeminiResponse(textToSend, newMessages);
+      const aiResponseText = await getGeminiResponse(textToSend, newMessages, isVoiceMessage || isListening);
 
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
@@ -613,16 +800,24 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
     }
   };
 
+  // Effect to check if the component is ready for voice commands
+  useEffect(() => {
+    console.log('=== PARTY OPTIONS UPDATE ===');
+    console.log('partyOptions received:', partyOptions?.length || 0, 'items');
+    if (partyOptions && partyOptions.length > 0) {
+      console.log('Sample parties:', partyOptions.slice(0, 3).map(p => p.label));
+      console.log('✅ Party options are loaded, assistant is ready.');
+      setIsReady(true);
+    } else {
+      console.log('⏳ Waiting for party options to load...');
+      setIsReady(false);
+    }
+    console.log('=== END PARTY OPTIONS UPDATE ===');
+  }, [partyOptions]);
+
   // Initialize voice capabilities and start wake word listening on component mount
   useEffect(() => {
     initializeVoiceCapabilities();
-    
-    // Start wake word listening with a delay
-    setTimeout(() => {
-      if (voiceEnabled) {
-        startWakeWordListening();
-      }
-    }, 500);
     
     return () => {
       if (recognitionRef.current) {
@@ -631,34 +826,41 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       if (wakeWordRecognitionRef.current) {
         wakeWordRecognitionRef.current.stop();
       }
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-      }
     };
   }, []);
 
-  // Start wake word listening when voice is enabled and assistant is closed
+  // Manage wake word listening based on voice enabled state and assistant open/close
   useEffect(() => {
-    if (voiceEnabled && !isOpen) {
-      startWakeWordListening();
-    }
-  }, [voiceEnabled, isOpen]);
-
-  // Stop wake word listening when assistant opens, restart when it closes
-  useEffect(() => {
-    if (isOpen) {
-      stopWakeWordListening();
-    } else {
-      // Reset wake word detection state when closing
-      setIsWakeWordDetected(false);
-      setHasShownActivationMessage(false); // Reset activation message flag for next session
-      if (voiceEnabled) {
-        setTimeout(() => {
+    const hasPartyData = partyOptions && partyOptions.length > 0;
+    
+    if (voiceEnabled && !isOpen && isReady && hasPartyData) {
+      console.log('Attempting to start wake word listening with party data available...');
+      // Add a delay to prevent race conditions and debounce rapid changes
+      const timeoutId = setTimeout(() => {
+        // Double-check conditions before starting
+        if (voiceEnabled && !isOpen && isReady && hasPartyData && !isWakeWordListening && !isStartingWakeWordRef.current) {
           startWakeWordListening();
-        }, 500);
-      }
+        }
+      }, 200);
+      
+      return () => clearTimeout(timeoutId);
+    } else if (isOpen) {
+      console.log('Assistant is open, stopping wake word listening');
+      stopWakeWordListening();
+      // Reset wake word detection state when opening
+      setIsWakeWordDetected(false);
+      setHasShownActivationMessage(false);
+    } else {
+      console.log('Conditions not met for starting wake word listening:', { 
+        voiceEnabled, 
+        isOpen, 
+        isReady, 
+        hasPartyData,
+        partyOptionsLength: partyOptions?.length || 0
+      });
+      stopWakeWordListening();
     }
-  }, [isOpen, voiceEnabled]);
+  }, [voiceEnabled, isOpen, isReady, partyOptions]);
 
   // Focus input when chat opens
 
@@ -691,8 +893,12 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSendMessage();
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      // Send message even if currently listening (allows manual override)
+      if (inputText.trim()) {
+        handleSendMessage(inputText.trim(), isListening); // Mark as voice if currently listening
+      }
     }
   };
 
@@ -737,7 +943,16 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
                   )}
                 </h3>
                 <p className="text-xs opacity-90">
-                  {voiceEnabled ? 'Always listening - Say "Sarthak"' : 'Cash Receipt Assistant'}
+                  {!partyOptions || partyOptions.length === 0 ? (
+                    <span className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-yellow-300 rounded-full animate-spin"></div>
+                      Loading party data...
+                    </span>
+                  ) : isReady ? (
+                    voiceEnabled ? 'Ready - Say "Sarthak" to start' : 'Cash Receipt Assistant Ready'
+                  ) : (
+                    'Initializing...'
+                  )}
                 </p>
               </div>
             </div>
@@ -800,23 +1015,25 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
                   ) : (
                     <div className="text-sm prose prose-sm max-w-none dark:prose-invert">
                       <div className="flex items-start justify-between gap-2">
-                        <ReactMarkdown
-                          components={{
-                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                            ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
-                            li: ({ children }) => <li className="mb-1">{children}</li>,
-                            strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                            em: ({ children }) => <em className="italic">{children}</em>,
-                            code: ({ children }) => <code className="bg-gray-200 dark:bg-gray-600 px-1 py-0.5 rounded text-xs">{children}</code>,
-                            pre: ({ children }) => <pre className="bg-gray-200 dark:bg-gray-600 p-2 rounded text-xs overflow-x-auto">{children}</pre>,
-                            h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
-                            h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
-                            h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
-                          }}
-                        >
-                          {message.text}
-                        </ReactMarkdown>
+                        <div className="text-sm leading-relaxed">
+                          <ReactMarkdown
+                            components={{
+                              p: ({ children }) => <span className="inline">{children} </span>,
+                              ul: ({ children }) => <span className="inline">{children} </span>,
+                              ol: ({ children }) => <span className="inline">{children} </span>,
+                              li: ({ children }) => <span className="inline">{children} </span>,
+                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                              em: ({ children }) => <em className="italic">{children}</em>,
+                              code: ({ children }) => <code className="bg-gray-200 dark:bg-gray-600 px-1 py-0.5 rounded text-xs">{children}</code>,
+                              pre: ({ children }) => <code className="bg-gray-200 dark:bg-gray-600 px-1 py-0.5 rounded text-xs">{children}</code>,
+                              h1: ({ children }) => <strong className="font-bold">{children} </strong>,
+                              h2: ({ children }) => <strong className="font-bold">{children} </strong>,
+                              h3: ({ children }) => <strong className="font-semibold">{children} </strong>,
+                            }}
+                          >
+                            {message.text}
+                          </ReactMarkdown>
+                        </div>
                         <button
                           onClick={() => speakText(message.text)}
                           className="flex-shrink-0 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1 rounded"
@@ -846,14 +1063,15 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder={isListening ? 'Listening...' : 'Type or say "Sarthak" to speak...'}
+                placeholder={isListening ? 'Listening... (Press Enter to send)' : 'Type or say "Sarthak" to speak...'}
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
-                disabled={isListening}
+                disabled={false}
               />
               <button
-                onClick={() => handleSendMessage(inputText)}
-                disabled={!inputText.trim() || isListening}
+                onClick={() => handleSendMessage(inputText.trim(), isListening)}
+                disabled={!inputText.trim()}
                 className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed text-white disabled:text-gray-500 dark:disabled:text-gray-400 p-2 rounded-lg transition-colors"
+                title={isListening ? 'Send voice message' : 'Send message'}
               >
                 <PaperPlaneIcon className="w-4 h-4" />
               </button>

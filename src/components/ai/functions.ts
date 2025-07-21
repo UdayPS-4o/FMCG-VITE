@@ -22,29 +22,107 @@ interface SarthakAIAssistantProps {
 const calculateFuzzyScore = (text: string, searchTerm: string): number => {
   if (!text || !searchTerm) return 0;
 
+  // Convert to lowercase for case-insensitive matching
+  const lowerText = text.toLowerCase();
+  const lowerSearchTerm = searchTerm.toLowerCase();
+
   let score = 0;
   let searchIndex = 0;
 
-  for (let i = 0; i < text.length && searchIndex < searchTerm.length; i++) {
-    if (text[i] === searchTerm[searchIndex]) {
+  // Exact match gets highest score
+  if (lowerText === lowerSearchTerm) {
+    return 1000;
+  }
+
+  // Check if search term is at the beginning (common for names)
+  if (lowerText.startsWith(lowerSearchTerm)) {
+    score += 500;
+  }
+
+  // Check if search term is contained anywhere
+  if (lowerText.includes(lowerSearchTerm)) {
+    score += 300;
+  }
+
+  // Enhanced fuzzy matching for voice input tolerance
+  // Check for partial word matches
+  const textWords = lowerText.split(/\s+/);
+  const searchWords = lowerSearchTerm.split(/\s+/);
+  
+  for (const searchWord of searchWords) {
+    for (const textWord of textWords) {
+      if (textWord.startsWith(searchWord)) {
+        score += 100;
+      }
+      if (textWord.includes(searchWord) && searchWord.length >= 3) {
+        score += 50;
+      }
+      // Phonetic similarity for common voice recognition errors
+      if (arePhoneticallySimilar(textWord, searchWord)) {
+        score += 75;
+      }
+    }
+  }
+
+  // Character-by-character matching (original logic)
+  for (let i = 0; i < lowerText.length && searchIndex < lowerSearchTerm.length; i++) {
+    if (lowerText[i] === lowerSearchTerm[searchIndex]) {
       score += 10;
-      searchIndex++;
-    } else if (text[i].toLowerCase() === searchTerm[searchIndex].toLowerCase()) {
-      score += 8;
       searchIndex++;
     }
   }
 
   // Bonus for completing the search term
-  if (searchIndex === searchTerm.length) {
-    score += 20;
+  if (searchIndex === lowerSearchTerm.length) {
+    score += 50;
   }
 
-  // Penalty for length difference
-  const lengthDiff = Math.abs(text.length - searchTerm.length);
-  score -= lengthDiff * 2;
+  // Less penalty for length difference (names can vary in length)
+  const lengthDiff = Math.abs(lowerText.length - lowerSearchTerm.length);
+  score -= lengthDiff * 0.5; // Reduced penalty for voice input tolerance
 
   return Math.max(0, score);
+};
+
+// Helper function to check phonetic similarity for common voice recognition errors
+const arePhoneticallySimilar = (word1: string, word2: string): boolean => {
+  if (!word1 || !word2 || Math.abs(word1.length - word2.length) > 2) return false;
+  
+  // Common phonetic substitutions in voice recognition
+  const phoneticMap: { [key: string]: string[] } = {
+    'c': ['k', 's'],
+    'k': ['c'],
+    's': ['c', 'z'],
+    'z': ['s'],
+    'f': ['ph', 'v'],
+    'v': ['f', 'w'],
+    'w': ['v'],
+    'i': ['e'],
+    'e': ['i'],
+    'o': ['u'],
+    'u': ['o'],
+    'th': ['t'],
+    't': ['th'],
+    'sh': ['s'],
+    'ch': ['c']
+  };
+  
+  let differences = 0;
+  const maxLen = Math.max(word1.length, word2.length);
+  
+  for (let i = 0; i < maxLen; i++) {
+    const char1 = word1[i] || '';
+    const char2 = word2[i] || '';
+    
+    if (char1 !== char2) {
+      const similar = phoneticMap[char1]?.includes(char2) || phoneticMap[char2]?.includes(char1);
+      if (!similar) {
+        differences++;
+      }
+    }
+  }
+  
+  return differences <= 2; // Allow up to 2 phonetic differences
 };
 
 // Function Declarations
@@ -197,6 +275,35 @@ export const handleFunctionCall = async (functionCall: any, props: SarthakAIAssi
   const { name, args } = functionCall;
   const { onSuggestion, onSubmitAndPrint, formValues, party, sm, partyOptions } = props;
 
+  console.log('=== FUNCTION CALL DEBUG ===');
+  console.log('Function name:', name);
+  console.log('Function args:', JSON.stringify(args, null, 2));
+  console.log('partyOptions available:', partyOptions?.length || 0);
+  console.log('=== END FUNCTION CALL DEBUG ===');
+  
+  // Special handling for fuzzy_search_party when party options are not loaded
+  if (name === 'fuzzy_search_party' && (!partyOptions || partyOptions.length === 0)) {
+    console.log('⚠️ Party options not available for fuzzy search, returning error...');
+    return {
+      name,
+      response: {
+        executed: false,
+        error: 'Party options are still loading. Please wait a moment and try again.',
+        message: '⏳ **Party data is loading...**\n\nPlease wait a moment for the party list to load, then try your search again.',
+        currentFormState: {
+          party: party?.label || 'Not selected',
+          amount: formValues?.amount || 'Empty',
+          series: formValues?.series || 'Empty',
+          receiptNo: formValues?.receiptNo || 'Empty',
+          narration: formValues?.narration || 'Empty',
+          date: formValues?.date || 'Empty',
+          discount: formValues?.discount || 'Empty',
+          sm: sm?.label || 'Not selected'
+        }
+      }
+    };
+  }
+
   let functionResult = {
     executed: true,
     message: '',
@@ -229,7 +336,30 @@ export const handleFunctionCall = async (functionCall: any, props: SarthakAIAssi
 
       case 'fuzzy_search_party':
         console.log('Fuzzy searching party:', args);
-        const fuzzySearchTerm = args.searchTerm?.toLowerCase() || '';
+        console.log('Available partyOptions:', partyOptions?.length || 0, 'parties');
+        console.log('First few parties:', partyOptions?.slice(0, 5).map(p => p.label));
+        
+        // Enhanced debugging for voice input issues
+        console.log('=== FUZZY SEARCH DEBUG ===');
+        console.log('Raw searchTerm:', JSON.stringify(args.searchTerm));
+        console.log('SearchTerm type:', typeof args.searchTerm);
+        console.log('SearchTerm length:', args.searchTerm?.length);
+        console.log('SearchTerm char codes:', args.searchTerm?.split('').map(c => c.charCodeAt(0)));
+        
+        // Clean the search term more aggressively for voice input
+        let cleanedSearchTerm = (args.searchTerm || '')
+          .trim() // Remove leading/trailing whitespace
+          .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+          .replace(/[^\w\s\u0900-\u097F]/g, '') // Keep only word characters, spaces, and Hindi characters
+          .toLowerCase();
+        
+        console.log('Cleaned search term:', JSON.stringify(cleanedSearchTerm));
+        console.log('Cleaned term length:', cleanedSearchTerm.length);
+        console.log('=== END FUZZY SEARCH DEBUG ===');
+        
+        const fuzzySearchTerm = cleanedSearchTerm;
+        
         const fuzzyMatches = (partyOptions ?? []).map(p => {
           const label = p.label.toLowerCase();
           const value = p.value.toLowerCase();
@@ -237,27 +367,58 @@ export const handleFunctionCall = async (functionCall: any, props: SarthakAIAssi
           if (value) {
               score = Math.max(score, calculateFuzzyScore(value, fuzzySearchTerm));
           }
+          
+          // Enhanced scoring for better matches
+          // Check if search term is contained in label or value
+          if (label.includes(fuzzySearchTerm)) {
+            score += 50;
+          }
+          if (value.includes(fuzzySearchTerm)) {
+            score += 50;
+          }
+          
+          // Check for word boundaries (better for names)
+          const labelWords = label.split(/\s+/);
+          const valueWords = value.split(/\s+/);
+          
+          for (const word of labelWords) {
+            if (word.startsWith(fuzzySearchTerm)) {
+              score += 30;
+            }
+            if (word === fuzzySearchTerm) {
+              score += 60;
+            }
+          }
+          
+          for (const word of valueWords) {
+            if (word.startsWith(fuzzySearchTerm)) {
+              score += 30;
+            }
+            if (word === fuzzySearchTerm) {
+              score += 60;
+            }
+          }
+          
+          console.log(`Party: ${p.label}, Score: ${score}`);
           return { ...p, score };
         })
-        .filter(p => p.score > 30)
+        .filter(p => p.score > 10) // Lower threshold for better recall (lowered for voice input tolerance)
         .sort((a, b) => b.score - a.score)
         .slice(0, 10);
+        
+        console.log('Fuzzy matches found:', fuzzyMatches.length);
+        console.log('Top matches:', fuzzyMatches.slice(0, 3).map(m => ({ label: m.label, score: m.score })));
 
         if (fuzzyMatches.length === 0) {
           toast.warning('No matching parties found');
           functionResult.executed = false;
           functionResult.error = 'No matching parties found for the given search term.';
           functionResult.message = '❌ **No matching parties found**\n\nPlease try a different search term or check the spelling.';
-        } else if (fuzzyMatches.length === 1 || (fuzzyMatches.length > 1 && fuzzyMatches[0].score >= 85)) {
+        } else if (fuzzyMatches.length === 1 || (fuzzyMatches.length > 1 && fuzzyMatches[0].score >= 90)) {
           const selectedParty = fuzzyMatches[0];
           onSuggestion?.('party', selectedParty.label);
           toast.success(`Selected party: ${selectedParty.label}`);
           functionResult.message = `✅ **Auto-selected party:** ${selectedParty.label}`;
-        } else if (args.selectOption && args.selectOption >= 1 && args.selectOption <= fuzzyMatches.length) {
-          const selectedParty = fuzzyMatches[args.selectOption - 1];
-          onSuggestion?.('party', selectedParty.label);
-          toast.success(`Selected party: ${selectedParty.label}`);
-          functionResult.message = `✅ **Selected party:** ${selectedParty.label}`;
         } else {
           toast.info(`Found ${fuzzyMatches.length} matching parties`);
           const optionsList = fuzzyMatches.map((p, index) => `${index + 1}. **${p.label}**`).join('\n');
