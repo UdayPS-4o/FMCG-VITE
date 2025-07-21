@@ -25,6 +25,16 @@ function formatFormType(formType) {
     .join(' ');
 }
 
+// Helper function to parse dd-mm-yyyy format correctly
+function parseDateDDMMYYYY(dateStr) {
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    // Convert dd-mm-yyyy to yyyy-mm-dd for proper parsing
+    return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+  }
+  return new Date(dateStr); // fallback for other formats
+}
+
 let cmplCache = null;
 async function getPartyName(partyCode) {
     if (!partyCode) return null;
@@ -146,13 +156,13 @@ app.post('/:formType', async (req, res) => {
       }
       
       if (date) {
-          const entryDate = new Date(date);
+          const entryDate = parseDateDDMMYYYY(date);
           const today = new Date();
           entryDate.setHours(5,30, 0, 0);
           today.setHours(5,30, 0, 0);
 
           if (entryDate.getTime() !== today.getTime()) {
-              const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
+              const dateString = entryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
               message += ` on ${dateString}`;
           }
       }
@@ -265,13 +275,13 @@ app.post('/edit/:formType', async (req, res) => {
     }
 
     if (date) {
-        const entryDate = new Date(date);
+        const entryDate = parseDateDDMMYYYY(date);
         const today = new Date();
         entryDate.setHours(0, 0, 0, 0);
         today.setHours(0, 0, 0, 0);
 
         if (entryDate.getTime() !== today.getTime()) {
-            const dateString = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
+            const dateString = entryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
             message += ` on ${dateString}`;
         }
     }
