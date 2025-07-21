@@ -269,7 +269,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       
       setRows(filteredData);
       
-      // Calculate total amount for cash-receipts
+      // Initial total amount calculation for cash-receipts (will be recalculated with filters)
       if (point === 'cash-receipts') {
         const sum = filteredData.reduce((acc, currentRow) => {
           const amount = parseFloat(currentRow.Amount || currentRow.amount || 0);
@@ -488,6 +488,17 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     
     return true;
   });
+
+  // Recalculate total amount for cash-receipts when filtered rows change (includes SM filter)
+  useEffect(() => {
+    if (endpoint === 'cash-receipts') {
+      const total = filteredRows.reduce((sum, row) => {
+        const amount = parseFloat(row.Amount || row.amount || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      setTotalAmount(total);
+    }
+  }, [filteredRows, endpoint]);
 
   const sortedRows = [...filteredRows].sort((a, b) => {
     if (!a[orderBy] || !b[orderBy]) return 0;
