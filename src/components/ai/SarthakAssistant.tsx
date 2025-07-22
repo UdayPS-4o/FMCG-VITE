@@ -130,6 +130,13 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   const wakeWordProcessingTimeoutRef = useRef<any>(null);
   const lastProcessedTranscriptRef = useRef<string>('');
   const isStartingWakeWordRef = useRef<boolean>(false);
+  const wasAbortedRef = useRef<boolean>(false);
+  
+  // Abort tracking mechanism
+  const totalAbortsRef = useRef<number>(0);
+  const criticalAbortCountRef = useRef<number>(0);
+  const criticalAbortTimeoutRef = useRef<any>(null);
+  const isCriticalAbortModeRef = useRef<boolean>(false);
 
   const GEMINI_API_KEY = 'AIzaSyC-VMGbtv2QYMlCJIZymVOjlGbmQEQD23E';
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -150,6 +157,9 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       }
       if (wakeWordProcessingTimeoutRef.current) {
         clearTimeout(wakeWordProcessingTimeoutRef.current);
+      }
+      if (criticalAbortTimeoutRef.current) {
+        clearTimeout(criticalAbortTimeoutRef.current);
       }
     };
   }, []);
@@ -340,15 +350,60 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       wakeWordRecognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Wake word recognition error:', event.error);
         setIsWakeWordListening(false);
+        isStartingWakeWordRef.current = false; // Clear the starting flag on error
+        
         if (event.error === 'not-allowed') {
           setVoiceEnabled(false);
+        } else if (event.error === 'aborted') {
+          // Track abort events
+          totalAbortsRef.current += 1;
+          console.log(`Wake word recognition aborted. Total aborts: ${totalAbortsRef.current}`);
+          
+          // Check if we've exceeded 20 total aborts
+          if (totalAbortsRef.current > 20 && !isCriticalAbortModeRef.current) {
+            console.warn('🚨 CRITICAL: More than 20 aborts detected. Entering critical abort monitoring mode.');
+            isCriticalAbortModeRef.current = true;
+            criticalAbortCountRef.current = 0;
+            
+            // Set up 30-second timeout for critical abort monitoring
+            criticalAbortTimeoutRef.current = setTimeout(() => {
+              console.log('✅ Critical abort monitoring period ended without triggering reload.');
+              isCriticalAbortModeRef.current = false;
+              criticalAbortCountRef.current = 0;
+            }, 30000); // 30 seconds
+          }
+          
+          // If in critical mode, count additional aborts
+          if (isCriticalAbortModeRef.current) {
+            criticalAbortCountRef.current += 1;
+            console.warn(`🚨 Critical abort #${criticalAbortCountRef.current}/5 detected within monitoring period.`);
+            
+            // If we get 5 aborts within 30 seconds, trigger hard reload
+            if (criticalAbortCountRef.current >= 5) {
+              console.error('🚨 CRITICAL: 5 aborts detected within 30 seconds. Performing hard reload!');
+              
+              // Clear the timeout since we're reloading
+              if (criticalAbortTimeoutRef.current) {
+                clearTimeout(criticalAbortTimeoutRef.current);
+              }
+              
+              // Perform hard reload
+              window.location.reload();
+              return; // Exit early since we're reloading
+            }
+          }
+          
+          // Mark as aborted to prevent onend handler from restarting
+          wasAbortedRef.current = true;
+          console.log('Wake word recognition aborted, marked to prevent restart');
         } else {
-          // Restart wake word listening on other errors
+          // Restart wake word listening on other errors with longer delay
           setTimeout(() => {
-            if (voiceEnabled && !isOpen) {
+            if (voiceEnabled && !isOpen && !isWakeWordListening && !isStartingWakeWordRef.current) {
+              console.log('Restarting wake word recognition after error:', event.error);
               startWakeWordListening();
             }
-          }, 10000);
+          }, 5000); // Reduced from 10000 to 5000ms
         }
       };
       
@@ -364,11 +419,23 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
         setIsWakeWordListening(false);
         isStartingWakeWordRef.current = false; // Clear the starting flag
         
+        // Check if this end was due to an abort
+        if (wasAbortedRef.current) {
+          console.log('Recognition ended due to abort, not restarting');
+          wasAbortedRef.current = false; // Reset the flag
+          return;
+        }
+        
         // Restart if voice is enabled and assistant is closed
-        if (voiceEnabled && !isOpen && !isListening) {
+        // Add additional checks to prevent restart loops
+        if (voiceEnabled && !isOpen && !isListening && !isStartingWakeWordRef.current) {
           setTimeout(() => {
-            startWakeWordListening();
-          }, 100);
+            // Double-check conditions before restarting
+            if (voiceEnabled && !isOpen && !isListening && !isWakeWordListening && !isStartingWakeWordRef.current) {
+              console.log('Restarting wake word recognition after normal end');
+              startWakeWordListening();
+            }
+          }, 500); // Increased from 100ms to 500ms to prevent rapid restarts
         }
       };
       
@@ -418,6 +485,8 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       return;
     }
     
+    // Clear the aborted flag when starting fresh
+    wasAbortedRef.current = false;
     isStartingWakeWordRef.current = true;
     
     try {
@@ -428,9 +497,19 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       console.error('Error starting wake word recognition:', error);
       isStartingWakeWordRef.current = false;
       
-      // If error is because it's already started, the onstart event will handle state
+      // If error is because it's already started, force stop and retry
       if (error.message && error.message.includes('already started')) {
-        console.log('Recognition was already started, onstart event will handle state');
+        console.log('Recognition was already started, forcing stop and retry');
+        try {
+          wakeWordRecognitionRef.current.stop();
+          setTimeout(() => {
+            if (!isWakeWordListening && !isStartingWakeWordRef.current) {
+              startWakeWordListening();
+            }
+          }, 1000);
+        } catch (stopError) {
+          console.error('Error stopping recognition for retry:', stopError);
+        }
       }
     }
   };
@@ -441,11 +520,12 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       if (isWakeWordListening) {
         console.log('Wake word recognition ref not available, updating state only');
         setIsWakeWordListening(false);
+        isStartingWakeWordRef.current = false;
       }
       return;
     }
     
-    if (!isWakeWordListening) {
+    if (!isWakeWordListening && !isStartingWakeWordRef.current) {
       console.log('Wake word listening not active, skipping stop');
       return;
     }
@@ -458,6 +538,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       console.error('Error stopping wake word recognition:', error);
       // Force state update on error
       setIsWakeWordListening(false);
+      isStartingWakeWordRef.current = false;
     }
   };
 

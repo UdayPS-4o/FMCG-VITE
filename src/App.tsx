@@ -41,6 +41,7 @@ import ItemWisePurchase from './pages/reports/ItemWisePurchase';
 import BillsDeliveryRegister from './pages/BillsDeliveryRegister';
 import GodownStockRegister from './pages/reports/GodownStockRegister';
 import CashBook from './pages/reports/CashBook';
+import PartyLedger from './pages/reports/PartyLedger';
 import PrintGodownStock from './pages/print/PrintGodownStock';
 import PushNotifications from './pages/push-notifications/PushNotifications';
 // import AnimatedLogo from '../components/AnimatedLogo';
@@ -195,6 +196,12 @@ const AppRoutes = () => (
       <Route path="/reports/cash-book" element={
         <ProtectedRoute requiredAccess="Reports">
           <CashBook />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/reports/party-ledger" element={
+        <ProtectedRoute requiredAccess="Reports">
+          <PartyLedger />
         </ProtectedRoute>
       } />
       
