@@ -104,8 +104,8 @@ const Invoicing: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Invoicing" />
       
-      <div className="container mx-auto px-4 py-6 overflow-hidden">
-        <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
+      <div className="container mx-auto px-4 py-6">
+        <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Invoicing Database</h2>
             <button

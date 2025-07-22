@@ -780,41 +780,98 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     page * rowsPerPage + rowsPerPage
   );
 
-  // Add tooltip handlers
+  // Add tooltip handlers with debounce
+const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  
   const handleItemsHover = (event: React.MouseEvent<HTMLTableCellElement>, items: any) => {
     if (!items) return;
     
-    let content;
-    if (typeof items === 'string' && items.includes('[object Object]')) {
-      content = 'Items available';
-    } else if (Array.isArray(items)) {
-      content = (
-        <div className="p-2">
-          <h4 className="font-medium mb-1">Items ({items.length})</h4>
-          <div className="max-h-60 overflow-y-auto pr-2">
-            <ul className="list-disc pl-4">
-              {items.map((item: any, idx: number) => (
-                <li key={idx} className="mb-1 text-sm">
-                  {item.name || item.description || JSON.stringify(item).substring(0, 30)}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      );
-    } else {
-      content = 'No items';
+    // Clear any existing timeout
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
     }
     
-    setTooltipContent({
-      content,
-      position: { x: event.clientX, y: event.clientY - 10 }
-    });
+    // Add a small delay to prevent rapid flickering
+    tooltipTimeoutRef.current = setTimeout(() => {
+      let content;
+      if (typeof items === 'string' && items.includes('[object Object]')) {
+        content = 'Items available';
+      } else if (Array.isArray(items)) {
+        content = (
+          <div className="p-2 sm:p-3 w-full">
+            <h4 className="font-semibold mb-2 sm:mb-3 text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-600 pb-2 text-sm sm:text-base">
+              Items ({items.length})
+            </h4>
+            <div className="max-h-60 sm:max-h-80 overflow-y-auto overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="bg-gray-100 dark:bg-gray-700">
+                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[120px]">Item Name</th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[60px]">Qty</th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[60px]">Unit</th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Rate</th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Amount</th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Godown</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item: any, idx: number) => {
+                    const itemName = item.particular || item.name || item.description || item.item || 'Unknown Item';
+                    const quantity = item.qty || item.quantity || 'N/A';
+                    const unit = item.unit || 'N/A';
+                    const rate = item.rate || 'N/A';
+                    const amount = item.amount || item.netAmount || 'N/A';
+                    const godown = item.godown || 'N/A';
+                    
+                    return (
+                      <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-600">
+                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 break-words">{itemName}</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 text-center">{quantity}</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 text-center">{unit}</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 text-right">₹{rate}</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 font-medium text-right">₹{amount}</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 break-words">{godown}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      } else {
+        content = 'No items';
+      }
+      
+      // Position tooltip to the right of the cursor to avoid mouse conflicts
+      setTooltipContent({
+        content,
+        position: { x: event.clientX + 15, y: event.clientY - 50 }
+      });
+    }, 150); // 150ms delay to prevent rapid flickering
   };
 
   const handleItemsLeave = () => {
-    setTooltipContent(null);
+    // Clear timeout if mouse leaves before tooltip shows
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+    
+    // Add a small delay before hiding to prevent accidental hiding
+    setTimeout(() => {
+      setTooltipContent(null);
+    }, 100);
   };
+  
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Memoize the getRowId function
   const getRowId = React.useCallback((row: any): string => {
@@ -1161,13 +1218,13 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
           {/* Tooltip content */}
           {tooltipContent && (
             <div 
-              className="fixed bg-white dark:bg-gray-800 shadow-lg rounded-md z-50 max-w-xs border border-gray-200 dark:border-gray-700"
+              className="fixed bg-white dark:bg-gray-800 shadow-lg rounded-md z-50 border border-gray-200 dark:border-gray-700 w-[95vw] max-w-[800px] sm:w-auto sm:max-w-[600px] md:max-w-[800px]"
               style={{ 
-                top: `${tooltipContent.position.y - 100}px`, 
-                left: `${tooltipContent.position.x}px`,
-                transform: 'translateX(-50%)',
-                maxHeight: '300px',
-                overflowY: 'auto'
+                top: `${Math.max(10, Math.min(tooltipContent.position.y, window.innerHeight - 350))}px`, 
+                left: `${Math.max(10, Math.min(tooltipContent.position.x, window.innerWidth - (window.innerWidth < 640 ? window.innerWidth * 0.95 : 600)))}px`,
+                maxHeight: window.innerHeight < 600 ? '250px' : '300px',
+                overflowY: 'auto',
+                pointerEvents: 'none'
               }}
             >
               {tooltipContent.content}
