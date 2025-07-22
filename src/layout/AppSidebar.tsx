@@ -179,6 +179,7 @@ const fmcgItems: NavItem[] = [
       { name: "Godown Stock Register", path: "/reports/godown-stock-register", pro: false },
       { name: "Bills Delivery Register", path: "/reports/bills-delivery-register", pro: false },
       { name: "Cash Book", path: "/reports/cash-book", pro: false },
+      { name: "Party Ledger", path: "/reports/party-ledger", pro: false },
     ],
   }
 ];

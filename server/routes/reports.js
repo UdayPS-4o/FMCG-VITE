@@ -8,6 +8,10 @@ require('dotenv').config();
 // Import Cash Book report routes
 const cashBookRoutes = require('./reports/cashBook');
 router.use(cashBookRoutes);
+
+// Import Party Ledger report routes
+const partyLedgerRoutes = require('./reports/partyLedger');
+router.use(partyLedgerRoutes);
 // Function to parse date strings (YYYY-MM-DD)
 const parseDate = (dateString) => {
   const [year, month, day] = dateString.split('-').map(Number);
