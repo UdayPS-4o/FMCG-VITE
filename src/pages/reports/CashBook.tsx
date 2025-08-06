@@ -355,50 +355,100 @@ const CashBook: React.FC = () => {
           </div>
 
           <div ref={printRef} className="p-4">
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Cash Book Report</h2>
-              <p className="text-gray-700 dark:text-gray-300">
-                Period: {formatDateToDDMMYYYY(fromDate)} to {formatDateToDDMMYYYY(toDate)}
-              </p>
-            </div>
+            <style>
+              {`
+                @media print {
+                  .cash-book-print {
+                    font-size: 10px !important;
+                    line-height: 1.2 !important;
+                  }
+                  .cash-book-print h2 {
+                    font-size: 16px !important;
+                    margin-bottom: 8px !important;
+                  }
+                  .cash-book-print p {
+                    font-size: 12px !important;
+                    margin-bottom: 12px !important;
+                  }
+                  .cash-book-print table {
+                    border-collapse: collapse !important;
+                    width: 100% !important;
+                    margin: 0 !important;
+                  }
+                  .cash-book-print th,
+                  .cash-book-print td {
+                    padding: 2px 4px !important;
+                    font-size: 9px !important;
+                    line-height: 1.1 !important;
+                    border: 0.5px solid #000 !important;
+                    vertical-align: top !important;
+                  }
+                  .cash-book-print th {
+                    background-color: #f0f0f0 !important;
+                    font-weight: bold !important;
+                    padding: 3px 4px !important;
+                  }
+                  .cash-book-print .total-row {
+                    font-weight: bold !important;
+                    background-color: #f5f5f5 !important;
+                  }
+                  .cash-book-print .opening-balance-row {
+                    font-weight: bold !important;
+                    background-color: #f8f8f8 !important;
+                  }
+                  @page {
+                    margin: 0.5in !important;
+                    size: A4 !important;
+                  }
+                }
+              `}
+            </style>
+            <div className="cash-book-print">
+              <div className="text-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Cash Book Report</h2>
+                <p className="text-gray-700 dark:text-gray-300">
+                  Period: {formatDateToDDMMYYYY(fromDate)} to {formatDateToDDMMYYYY(toDate)}
+                </p>
+              </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
-                <thead>
-                  <tr className="bg-gray-100 dark:bg-gray-700">
-                    <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Date</th>
-                    <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Narration (Remark)</th>
-                    <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Party Name (Party Code)</th>
-                    <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Credit (CR)</th>
-                    <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Debit (DR)</th>
-                    <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Balance (CR-DR)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportData.map((item, index) => (
-                    <tr key={index} className={item.isOpeningBalance ? 'bg-gray-50 dark:bg-gray-600 font-semibold' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}>
-                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.isOpeningBalance ? formatDateToDDMMYYYY(fromDate) : formatDateToDDMMYYYY(item.date)}</td>
-                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.narration}</td>
-                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.party_name && item.c_code ? `${item.party_name} (${item.c_code})` : (item.party_name || item.c_code || '-')}</td>
-                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
-                        {item.credit > 0 ? formatCurrency(item.credit) : '-'}
-                      </td>
-                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
-                        {item.debit > 0 ? formatCurrency(item.debit) : '-'}
-                      </td>
-                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
-                        {formatCurrency(item.balance)}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="min-w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
+                  <thead>
+                    <tr className="bg-gray-100 dark:bg-gray-700">
+                      <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Date</th>
+                      <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Narration (Remark)</th>
+                      <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Party Name (Party Code)</th>
+                      <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Credit (CR)</th>
+                      <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Debit (DR)</th>
+                      <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Balance (CR-DR)</th>
                     </tr>
-                  ))}
-                  <tr className="font-bold bg-gray-100 dark:bg-gray-700">
-                    <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white" colSpan={3}>Total</td>
-                    <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">{formatCurrency(totals.totalCredit)}</td>
-                    <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">{formatCurrency(totals.totalDebit)}</td>
-                    <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">{formatCurrency(reportData[reportData.length - 1]?.balance || 0)}</td>
-                  </tr>
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {reportData.map((item, index) => (
+                      <tr key={index} className={item.isOpeningBalance ? 'bg-gray-50 dark:bg-gray-600 font-semibold opening-balance-row' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}>
+                        <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.isOpeningBalance ? formatDateToDDMMYYYY(fromDate) : formatDateToDDMMYYYY(item.date)}</td>
+                        <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.narration}</td>
+                        <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.party_name && item.c_code ? `${item.party_name} (${item.c_code})` : (item.party_name || item.c_code || '-')}</td>
+                        <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
+                          {item.credit > 0 ? formatCurrency(item.credit) : '-'}
+                        </td>
+                        <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
+                          {item.debit > 0 ? formatCurrency(item.debit) : '-'}
+                        </td>
+                        <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
+                          {formatCurrency(item.balance)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="font-bold bg-gray-100 dark:bg-gray-700 total-row">
+                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white" colSpan={3}>Total</td>
+                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">{formatCurrency(totals.totalCredit)}</td>
+                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">{formatCurrency(totals.totalDebit)}</td>
+                      <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">{formatCurrency(reportData[reportData.length - 1]?.balance || 0)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

@@ -73,7 +73,7 @@ interface SarthakAssistantProps {
   sm?: { label: string; value: string } | null;
   partyOptions?: { label: string; value: string }[];
   formValues?: {
-    date: string;
+    date: string; 
     series: string;
     amount: string;
     discount: string;
@@ -125,6 +125,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wakeWordRecognitionRef = useRef<SpeechRecognition | null>(null);
+  const interruptWakeWordRecognitionRef = useRef<SpeechRecognition | null>(null);
   const lastActivationTimeRef = useRef<number>(0);
 
   const wakeWordProcessingTimeoutRef = useRef<any>(null);
@@ -439,6 +440,88 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
         }
       };
       
+      // Initialize interrupt wake word recognition for during speech
+      interruptWakeWordRecognitionRef.current = new SpeechRecognition();
+      interruptWakeWordRecognitionRef.current.continuous = true;
+      interruptWakeWordRecognitionRef.current.interimResults = true;
+      interruptWakeWordRecognitionRef.current.lang = 'hi-IN';
+      interruptWakeWordRecognitionRef.current.maxAlternatives = 3;
+      
+      const interruptWakeWords = ['sarthak', 'sarthac', 'sartac', 'start', 'start up', 'सार्थक', 'सारथक', 'शुरू', 'शुरु', 'हेलो सार्थक', 'hello sarthak'];
+      
+      interruptWakeWordRecognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        let fullTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript;
+        }
+        
+        console.log('=== INTERRUPT WAKE WORD RECOGNITION DEBUG ===');
+        console.log('Raw transcript during speech:', JSON.stringify(fullTranscript));
+        
+        // Clean the transcript
+        fullTranscript = fullTranscript
+          .trim()
+          .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+          .replace(/\s+/g, ' ') // Collapse whitespace
+          .replace(/[^a-zA-Z0-9\s\u0900-\u097F]/g, '') // Allow only alphanumeric, space, and Hindi characters
+          .toLowerCase();
+        
+        console.log('Cleaned transcript during speech:', JSON.stringify(fullTranscript));
+        console.log('=== END INTERRUPT WAKE WORD RECOGNITION DEBUG ===');
+
+        const wakeWordDetected = interruptWakeWords.some(word => fullTranscript.includes(word));
+
+        if (wakeWordDetected && isPlaying) {
+          console.log('🚨 WAKE WORD DETECTED DURING AI SPEECH - INTERRUPTING!');
+          
+          // Extract command after wake word
+          let commandAfterWakeWord = '';
+          for (const wakeWord of interruptWakeWords) {
+            const wakeWordIndex = fullTranscript.indexOf(wakeWord);
+            if (wakeWordIndex !== -1) {
+              commandAfterWakeWord = fullTranscript.substring(wakeWordIndex + wakeWord.length).trim();
+              break;
+            }
+          }
+          
+          // Stop current speech immediately
+          stopSpeech();
+          
+          // Stop interrupt recognition temporarily
+          stopInterruptWakeWordListening();
+          
+          // Process the command after a brief delay
+          setTimeout(() => {
+            if (commandAfterWakeWord && commandAfterWakeWord.length > 3) {
+              console.log('Command detected after interrupt wake word:', commandAfterWakeWord);
+              setInputText(commandAfterWakeWord);
+              setTimeout(() => {
+                handleSendMessage(commandAfterWakeWord, true);
+              }, 500);
+            } else {
+              // Start regular listening for new command
+              startListening();
+              speakText(currentLanguage === 'hi' ? 'हाँ, बताइए?' : 'Yes, tell me?');
+            }
+          }, 300);
+        }
+      };
+      
+      interruptWakeWordRecognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Interrupt wake word recognition error:', event.error);
+        // Don't restart automatically on error during speech interruption
+      };
+      
+      interruptWakeWordRecognitionRef.current.onend = () => {
+        console.log('Interrupt wake word recognition ended');
+        // Restart if still playing and voice enabled
+        if (isPlaying && voiceEnabled) {
+          setTimeout(() => {
+            startInterruptWakeWordListening();
+          }, 500);
+        }
+      };
+      
       console.log('Voice capabilities initialized');
     } else {
       setVoiceEnabled(false);
@@ -539,6 +622,40 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       // Force state update on error
       setIsWakeWordListening(false);
       isStartingWakeWordRef.current = false;
+    }
+  };
+
+  // Start interrupt wake word listening (during AI speech)
+  const startInterruptWakeWordListening = () => {
+    if (!interruptWakeWordRecognitionRef.current) {
+      console.log('Interrupt wake word recognition ref not available');
+      return;
+    }
+    
+    if (!voiceEnabled || !isPlaying) {
+      console.log('Not starting interrupt wake word listening - voice disabled or not playing');
+      return;
+    }
+    
+    try {
+      interruptWakeWordRecognitionRef.current.start();
+      console.log('Interrupt wake word listening started during AI speech');
+    } catch (error) {
+      console.error('Error starting interrupt wake word recognition:', error);
+    }
+  };
+
+  // Stop interrupt wake word listening
+  const stopInterruptWakeWordListening = () => {
+    if (!interruptWakeWordRecognitionRef.current) {
+      return;
+    }
+    
+    try {
+      interruptWakeWordRecognitionRef.current.stop();
+      console.log('Interrupt wake word listening stopped');
+    } catch (error) {
+      console.error('Error stopping interrupt wake word recognition:', error);
     }
   };
 
@@ -710,10 +827,18 @@ Note: When user mentions a party name in Hindi (like सुरेश, राम,
         if (isWakeWordListening) {
           stopWakeWordListening();
         }
+        // Start interrupt wake word listening during speech
+        if (voiceEnabled) {
+          setTimeout(() => {
+            startInterruptWakeWordListening();
+          }, 1000); // Small delay to let speech start properly
+        }
       };
       
       utterance.onend = () => {
         setIsPlaying(false);
+        // Stop interrupt wake word listening
+        stopInterruptWakeWordListening();
         // Resume appropriate listening after speaking
         if (!isOpen) {
           setTimeout(() => {
@@ -729,6 +854,8 @@ Note: When user mentions a party name in Hindi (like सुरेश, राम,
       
       utterance.onerror = () => {
         setIsPlaying(false);
+        // Stop interrupt wake word listening on error
+        stopInterruptWakeWordListening();
         // Resume appropriate listening on error
         if (!isOpen) {
           setTimeout(() => {
@@ -752,6 +879,8 @@ Note: When user mentions a party name in Hindi (like सुरेश, राम,
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       setIsPlaying(false);
+      // Stop interrupt wake word listening
+      stopInterruptWakeWordListening();
       // Resume appropriate listening after stopping speech
       setTimeout(() => {
         if (!isOpen) {
@@ -906,6 +1035,9 @@ Note: When user mentions a party name in Hindi (like सुरेश, राम,
       }
       if (wakeWordRecognitionRef.current) {
         wakeWordRecognitionRef.current.stop();
+      }
+      if (interruptWakeWordRecognitionRef.current) {
+        interruptWakeWordRecognitionRef.current.stop();
       }
     };
   }, []);
