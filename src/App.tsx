@@ -40,6 +40,7 @@ import ItemWiseSales from "./pages/reports/ItemWiseSales";
 import ItemWisePurchase from './pages/reports/ItemWisePurchase';
 import BillsDeliveryRegister from './pages/BillsDeliveryRegister';
 import GodownStockRegister from './pages/reports/GodownStockRegister';
+import ItemWiseStockRegister from './pages/reports/ItemWiseStockRegister';
 import CashBook from './pages/reports/CashBook';
 import PartyLedger from './pages/reports/PartyLedger';
 import PrintGodownStock from './pages/print/PrintGodownStock';
@@ -184,6 +185,12 @@ const AppRoutes = () => (
       <Route path="/reports/godown-stock-register" element={
         <ProtectedRoute requiredAccess="Reports">
           <GodownStockRegister />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/reports/item-wise-stock-register" element={
+        <ProtectedRoute requiredAccess="Reports">
+          <ItemWiseStockRegister />
         </ProtectedRoute>
       } />
       

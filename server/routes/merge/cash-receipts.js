@@ -629,16 +629,19 @@ router.post('/sync', async (req, res) => {
               const smsMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${amount.toFixed(2)} on Date ${formattedDate} Regards Ekta Enterprises`;
 
               // Make TextLocal API call
-              const textLocalResponse = await axios.get('https://api.textlocal.in/send/', {
+              const textLocalResponse = await axios.get('https://control.arihantglobal.in/fe/api/v1/send', {
                 params: {
-                  apikey: 'NmE0ODYyNDEzNDUzNWE2MTRhNTQ1YTQ1NDc0ZjRlNmE=',
-                  sender: 'EKTAEN',
-                  numbers: mobileNumber.replace(/\D/g, ''), // Remove non-digit characters
-                  message: encodeURIComponent(smsMessage)
+                  username: 'ektaenterprises.trans',
+                  password: 'sbe3d',
+                  dltPrincipalEntityId: '1501397800000015092',
+                  from: 'EKTAEN',
+                  to: "91" + mobileNumber.replace(/\D/g, ''), // Remove non-digit characters
+                  text: smsMessage,
+                  unicode: false,
                 }
               });
 
-              if (textLocalResponse.data && textLocalResponse.data.status === 'success') {
+              if (textLocalResponse.data && textLocalResponse.data.statusCode == 200) {
                 console.log(`[Cash Receipts Sync] TextLocal SMS sent successfully for Receipt: ${receiptNo}. Response: ${JSON.stringify(textLocalResponse.data)}`);
               } else {
                 console.warn(`[Cash Receipts Sync] TextLocal SMS API call for Receipt: ${receiptNo} failed. Response: ${JSON.stringify(textLocalResponse.data)}`);
