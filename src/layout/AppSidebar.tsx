@@ -177,6 +177,7 @@ const fmcgItems: NavItem[] = [
       { name: "Item Wise Sales", path: "/reports/item-wise-sales", pro: false },
       { name: "Item Wise Purchase", path: "/reports/item-wise-purchase", pro: false },
       { name: "Godown Stock Register", path: "/reports/godown-stock-register", pro: false },
+      { name: "Item Wise Stock Register", path: "/reports/item-wise-stock-register", pro: false },
       { name: "Bills Delivery Register", path: "/reports/bills-delivery-register", pro: false },
       { name: "Cash Book", path: "/reports/cash-book", pro: false },
       { name: "Party Ledger", path: "/reports/party-ledger", pro: false },
