@@ -43,6 +43,7 @@ import GodownStockRegister from './pages/reports/GodownStockRegister';
 import ItemWiseStockRegister from './pages/reports/ItemWiseStockRegister';
 import CashBook from './pages/reports/CashBook';
 import PartyLedger from './pages/reports/PartyLedger';
+import VanLoading from './pages/reports/VanLoading';
 import PrintGodownStock from './pages/print/PrintGodownStock';
 import PushNotifications from './pages/push-notifications/PushNotifications';
 // import AnimatedLogo from '../components/AnimatedLogo';
@@ -209,6 +210,12 @@ const AppRoutes = () => (
       <Route path="/reports/party-ledger" element={
         <ProtectedRoute requiredAccess="Reports">
           <PartyLedger />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/reports/van-loading" element={
+        <ProtectedRoute requiredAccess="Reports">
+          <VanLoading />
         </ProtectedRoute>
       } />
       

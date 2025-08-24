@@ -331,4 +331,147 @@ router.get('/bill-details/:series/:billNo', async (req, res) => {
     }
 });
 
-module.exports = router; 
+// Route for van loading report
+router.get('/van-loading', async (req, res) => {
+    const { billNumbers, unit, companyCodes } = req.query;
+
+    if (!billNumbers) {
+        return res.status(400).json({ message: 'Bill numbers are required' });
+    }
+
+    // Parse company codes if provided
+    let companyCodesArr;
+    if (companyCodes) {
+        try {
+            companyCodesArr = String(companyCodes)
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
+            if (companyCodesArr.length === 0) companyCodesArr = undefined;
+        } catch (e) {
+            console.error('Error parsing companyCodes:', e);
+            companyCodesArr = undefined;
+        }
+    }
+
+    try {
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+        }
+
+        const billDtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
+        const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
+
+        const billDtlData = JSON.parse(await fs.readFile(billDtlPath, 'utf8'));
+        const cmplData = JSON.parse(await fs.readFile(cmplPath, 'utf8'));
+
+        // Create party details map
+        const partyDetailsMap = cmplData.reduce((acc, party) => {
+            acc[party.C_CODE] = { name: party.C_NAME, place: party.C_PLACE };
+            return acc;
+        }, {});
+
+        // Parse bill numbers (format: "A-23,B-45")
+        const billFilters = billNumbers.split(',').map(bill => {
+            const [series, billNo] = bill.trim().split('-');
+            return { series: series.trim(), billNo: billNo.trim() };
+        });
+
+        // Filter bill details based on provided bill numbers
+        let filteredData = billDtlData.filter(item => {
+            return billFilters.some(filter => {
+                // Use BILL2 field instead of BILL field
+                const bill2Value = item.BILL2 ? item.BILL2.trim() : '';
+                // BILL2 format is "SERIES-    NUMBER" where NUMBER is right-aligned with spaces
+                // Total length after dash should be 5 characters
+                const paddedBillNo = filter.billNo.padStart(5, ' ');
+                const expectedBill2 = `${filter.series}-${paddedBillNo}`;
+                return bill2Value === expectedBill2;
+            });
+        });
+
+        // Apply company filter if specified
+        if (companyCodesArr && companyCodesArr.length > 0) {
+            filteredData = filteredData.filter(item => {
+                if (item.CODE && item.CODE.length >= 2) {
+                    const itemCompanyCode = String(item.CODE).substring(0, 2).toUpperCase();
+                    return companyCodesArr.includes(itemCompanyCode);
+                }
+                return false;
+            });
+        }
+
+        // Apply unit filter if specified
+        if (unit && unit.toUpperCase() !== 'ALL') {
+            filteredData = filteredData.filter(item => 
+                item.UNIT && item.UNIT.toLowerCase() === unit.toLowerCase()
+            );
+        }
+
+        // Group data by SKU (CODE) for heatmap visualization
+        const skuData = {};
+        filteredData.forEach(item => {
+            const sku = item.CODE;
+            if (!skuData[sku]) {
+                skuData[sku] = {
+                    code: sku,
+                    product: item.PRODUCT || 'N/A',
+                    totalQty: 0,
+                    totalBoxes: 0,
+                    totalPcs: 0,
+                    unit: item.UNIT,
+                    multF: item.MULT_F || 1,
+                    details: []
+                };
+            }
+
+            const qty = parseFloat(item.QTY) || 0;
+            const free = parseFloat(item.FREE) || 0;
+            const totalItemQty = qty + free;
+
+            // Accumulate unit-wise without converting between units
+            const unitNorm = (item.UNIT || '').toString().trim().toLowerCase();
+            if (unitNorm === 'box' || unitNorm === 'b') {
+                skuData[sku].totalBoxes += totalItemQty;
+            } else {
+                // Treat any non-box unit as pieces (e.g., PCS, PC, PIECE)
+                skuData[sku].totalPcs += totalItemQty;
+            }
+
+            // Add detail for tooltip
+            const partyInfo = partyDetailsMap[item.C_CODE] || { name: item.C_CODE, place: '' };
+            const formattedDate = item.DATE ? formatDateToDDMMYYYY(new Date(item.DATE)).replace(/-/g, '/') : 'N/A';
+            skuData[sku].details.push({
+                date: formattedDate,
+                partyName: partyInfo.name,
+                qty: totalItemQty,
+                unit: item.UNIT,
+                series: item.SERIES,
+                billNo: item.BILL
+            });
+        });
+
+        // Convert to array and sort by total quantity (for heatmap intensity)
+        const reportData = Object.values(skuData).map(sku => ({
+            sku: sku.code,
+            itemName: sku.product,
+            totalQtyBoxes: Math.round(sku.totalBoxes * 100) / 100,
+            totalQtyPcs: Math.round(sku.totalPcs),
+            // Total quantity used for heatmap intensity: boxes converted to pieces using multF + direct pieces
+            totalQty: (sku.totalBoxes * (sku.multF || 1)) + sku.totalPcs,
+            details: sku.details
+        })).sort((a, b) => b.totalQty - a.totalQty);
+
+        res.json(reportData);
+    } catch (error) {
+        console.error('Error processing van loading report:', error);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ message: 'Required data files not found' });
+        } else {
+            res.status(500).json({ message: 'Failed to generate van loading report' });
+        }
+    }
+});
+
+module.exports = router;
