@@ -712,6 +712,61 @@ router.get('/dbf-invoice-data/:series/:billNo', async (req, res) => {
   }
 });
 
+// Van Loading PDF Generation Endpoint
+router.post('/van-loading', async (req, res) => {
+  try {
+    const { htmlContent, filename } = req.body;
+    
+    if (!htmlContent) {
+      return res.status(400).json({ message: 'HTML content is required' });
+    }
+    
+    const pdfFilename = filename || `van-loading-${Date.now()}.pdf`;
+    const pdfDir = path.join(__dirname, '..', '..', 'db', 'pdfs');
+    const pdfPath = path.join(pdfDir, pdfFilename);
+    
+    console.log(`[Van Loading PDF] Generating PDF: ${pdfPath}`);
+    
+    const browser = await puppeteer.launch(puppeteerOptions);
+    const page = await browser.newPage();
+    
+    // Set content and wait for any dynamic content to load
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    
+    // Generate PDF with appropriate settings for reports
+    await page.pdf({
+      path: pdfPath,
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '20px',
+        right: '20px',
+        bottom: '20px',
+        left: '20px'
+      }
+    });
+    
+    await browser.close();
+    
+    const relativePdfPath = `/db/pdfs/${pdfFilename}`;
+    console.log(`[Van Loading PDF] PDF generated successfully: ${relativePdfPath}`);
+    
+    res.status(200).json({
+      message: 'Van loading PDF generated successfully',
+      pdfPath: relativePdfPath,
+      filename: pdfFilename
+    });
+    
+  } catch (error) {
+    console.error('[Van Loading PDF] Error generating PDF:', error);
+    res.status(500).json({
+      message: 'Failed to generate van loading PDF',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 // Export both the router and the function
 module.exports = {
   router,
