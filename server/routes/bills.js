@@ -6,6 +6,7 @@ const csv = require('fast-csv');
 require('dotenv').config();
 
 const billsDeliveryStatePath = path.join(__dirname, '..', 'db', 'BillsDeliveryRegister.json');
+const vanLoadingHistoryPath = path.join(__dirname, '..', 'db', 'VanLoadingHistory.json');
 const dbPath = path.join(__dirname, '..', 'db');
 
 function formatDateToDDMMYYYY(date) {
@@ -332,6 +333,78 @@ router.get('/bill-details/:series/:billNo', async (req, res) => {
 });
 
 // Route for van loading report
+// Route to store van loading history
+router.post('/van-loading-history', async (req, res) => {
+    const { billNumbers } = req.body;
+    
+    if (!billNumbers) {
+        return res.status(400).json({ message: 'Bill numbers are required' });
+    }
+
+    try {
+        let history = [];
+        try {
+            const data = await fs.readFile(vanLoadingHistoryPath, 'utf8');
+            const content = JSON.parse(data);
+            if (Array.isArray(content)) {
+                history = content;
+            }
+        } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+        }
+
+        const currentDate = formatDateToDDMMYYYY(new Date());
+        const billList = billNumbers.split(',').map(bill => bill.trim()).filter(Boolean);
+        
+        // Add each bill to history if not already present for today
+        billList.forEach(billNumber => {
+            const existingEntry = history.find(entry => 
+                entry.billNumber === billNumber && entry.date === currentDate
+            );
+            
+            if (!existingEntry) {
+                history.push({
+                    billNumber: billNumber,
+                    date: currentDate,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
+        await fs.writeFile(vanLoadingHistoryPath, JSON.stringify(history, null, 2));
+        res.json({ message: 'Van loading history saved successfully' });
+    } catch (error) {
+        console.error('Error saving van loading history:', error);
+        res.status(500).json({ message: 'Failed to save van loading history' });
+    }
+});
+
+// Route to check van loading history for a specific bill
+router.get('/van-loading-history/:billNumber', async (req, res) => {
+    const { billNumber } = req.params;
+    
+    try {
+        let history = [];
+        try {
+            const data = await fs.readFile(vanLoadingHistoryPath, 'utf8');
+            const content = JSON.parse(data);
+            if (Array.isArray(content)) {
+                history = content;
+            }
+        } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+        }
+
+        const billHistory = history.filter(entry => entry.billNumber === billNumber)
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        res.json(billHistory);
+    } catch (error) {
+        console.error('Error fetching van loading history:', error);
+        res.status(500).json({ message: 'Failed to fetch van loading history' });
+    }
+});
+
 router.get('/van-loading', async (req, res) => {
     const { billNumbers, unit, companyCodes } = req.query;
 
