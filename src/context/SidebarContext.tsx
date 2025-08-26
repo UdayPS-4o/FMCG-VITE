@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 
 type SidebarContextType = {
   isExpanded: boolean;
@@ -26,6 +27,7 @@ export const useSidebar = () => {
 export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const location = useLocation();
   const [isExpanded, setIsExpanded] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -49,6 +51,13 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
       window.removeEventListener("resize", handleResize);
     };
   }, []);
+
+  // Auto-collapse sidebar when Van Loading page is accessed
+  useEffect(() => {
+    if (location.pathname === '/reports/van-loading') {
+      setIsExpanded(false);
+    }
+  }, [location.pathname]);
 
   const toggleSidebar = () => {
     setIsExpanded((prev) => !prev);

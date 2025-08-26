@@ -54,6 +54,9 @@ const VanLoadingContent: React.FC = () => {
   const [hasAdminAccess, setHasAdminAccess] = useState<boolean>(false);
   const [hoveredItem, setHoveredItem] = useState<VanLoadingItem | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  // Pinned tooltip state
+  const [pinnedItem, setPinnedItem] = useState<VanLoadingItem | null>(null);
+  const [pinnedPosition, setPinnedPosition] = useState({ x: 0, y: 0 });
   // Company filter state
   const [companyOptions, setCompanyOptions] = useState<Option[]>([]);
   const [selectedCompanyCodes, setSelectedCompanyCodes] = useState<string[]>([]);
@@ -82,19 +85,38 @@ const VanLoadingContent: React.FC = () => {
     return `${series}-${number}`;
   };
 
-  // Verify from server if a bill exists in BILLDTL
-  const verifyBillExists = async (token: string): Promise<boolean> => {
+  // Verify from server if a bill exists in BILLDTL and check van loading history
+  const verifyBillExists = async (token: string): Promise<{ exists: boolean; history: any[] }> => {
     try {
       const [series, billStr] = token.split('-');
       const billNo = parseInt(billStr, 10);
-      const resp = await fetch(`${constants.baseURL}/api/bill-details/${encodeURIComponent(series)}/${encodeURIComponent(billNo)}` , {
+      
+      // Check if bill exists
+      const billResp = await fetch(`${constants.baseURL}/api/bill-details/${encodeURIComponent(series)}/${encodeURIComponent(billNo)}` , {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       });
-      if (!resp.ok) return false;
-      const arr = await resp.json();
-      return Array.isArray(arr) && arr.length > 0;
+      let exists = false;
+      if (billResp.ok) {
+        const arr = await billResp.json();
+        exists = Array.isArray(arr) && arr.length > 0;
+      }
+      
+      // Check van loading history
+      let history = [];
+      try {
+        const historyResp = await fetch(`${constants.baseURL}/api/van-loading-history/${encodeURIComponent(token)}`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        });
+        if (historyResp.ok) {
+          history = await historyResp.json();
+        }
+      } catch (e) {
+        console.warn('Failed to fetch van loading history:', e);
+      }
+      
+      return { exists, history };
     } catch {
-      return false;
+      return { exists: false, history: [] };
     }
   };
 
@@ -191,21 +213,29 @@ const VanLoadingContent: React.FC = () => {
       if (lastProcessedTokenRef.current === candidateNorm) return;
 
       if (earlierNorms.includes(candidateNorm)) {
-         // Duplicate: drop the just-entered token
+         // Session duplicate: drop the just-entered token
          const newJoined = earlierNorms.join(', ');
          setBillNumbers(newJoined ? `${newJoined}, ` : '');
          setStatusType('duplicate');
-         setStatusMsg(`Duplicate bill: ${candidateNorm}`);
+         setStatusMsg(`Duplicate bill no - ${candidateNorm}`);
          // Auto-fetch even on duplicate to keep report in sync
          handleFetchReport(newJoined ? `${newJoined}, ` : '');
        } else {
          // Success: add/normalize the token and ensure trailing comma+space
          const newJoined = [...earlierNorms, candidateNorm].join(', ');
          setBillNumbers(`${newJoined}, `);
-         const exists = await verifyBillExists(candidateNorm);
+         const { exists, history } = await verifyBillExists(candidateNorm);
          if (exists) {
-           setStatusType('success');
-           setStatusMsg(`Added: ${candidateNorm}`);
+           if (history && history.length > 0) {
+             // Bill exists and has history - show when it was last used
+             const lastUsed = history[0]; // Most recent entry
+             setStatusType('duplicate');
+             setStatusMsg(`Bill ${candidateNorm} was added in van loading dated ${lastUsed.date}`);
+           } else {
+             // Bill exists but no history
+             setStatusType('success');
+             setStatusMsg(`Added: ${candidateNorm}`);
+           }
          } else {
            setStatusType('not_accepted');
            setStatusMsg(`Bill not found: ${candidateNorm}`);
@@ -292,6 +322,20 @@ const VanLoadingContent: React.FC = () => {
       if (signal.aborted) return;
 
       setReportData(data);
+      
+      // Save van loading history after successful report generation
+      try {
+        await fetch(`${constants.baseURL}/api/van-loading-history`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+          body: JSON.stringify({ billNumbers: effectiveBills.replace(/,\s*$/, '') }),
+        });
+      } catch (historyErr) {
+        console.warn('Failed to save van loading history:', historyErr);
+      }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error("Error fetching van loading report:", err);
@@ -337,17 +381,54 @@ const VanLoadingContent: React.FC = () => {
 
   // Handle mouse events for tooltip
   const handleMouseEnter = (item: VanLoadingItem, event: React.MouseEvent) => {
-    setHoveredItem(item);
-    setMousePosition({ x: event.clientX, y: event.clientY });
+    if (!pinnedItem) {
+      setHoveredItem(item);
+      setMousePosition({ x: event.clientX, y: event.clientY });
+    }
   };
 
   const handleMouseMove = (event: React.MouseEvent) => {
-    setMousePosition({ x: event.clientX, y: event.clientY });
+    if (!pinnedItem) {
+      setMousePosition({ x: event.clientX, y: event.clientY });
+    }
   };
 
   const handleMouseLeave = () => {
-    setHoveredItem(null);
+    if (!pinnedItem) {
+      setHoveredItem(null);
+    }
   };
+
+  // Handle tile click to pin/unpin tooltip
+  const handleTileClick = (item: VanLoadingItem, event: React.MouseEvent) => {
+    if (pinnedItem && pinnedItem.sku === item.sku) {
+      // Unpin if clicking the same item
+      setPinnedItem(null);
+      setHoveredItem(null);
+    } else {
+      // Pin the clicked item
+      setPinnedItem(item);
+      setPinnedPosition({ x: event.clientX, y: event.clientY });
+      setHoveredItem(null);
+    }
+  };
+
+  // Handle clicking outside to unpin tooltip
+  const handleDocumentClick = (event: MouseEvent) => {
+    const target = event.target as Element;
+    if (!target.closest('.tooltip-container') && !target.closest('[data-sku-tile]')) {
+      setPinnedItem(null);
+      setHoveredItem(null);
+    }
+  };
+
+  // Add document click listener for unpinning
+  useEffect(() => {
+    if (pinnedItem) {
+      document.addEventListener('click', handleDocumentClick);
+      return () => document.removeEventListener('click', handleDocumentClick);
+    }
+  }, [pinnedItem]);
 
   const handlePrintReport = () => {
     if (reportData.length === 0) {
@@ -727,6 +808,175 @@ const VanLoadingContent: React.FC = () => {
      };
    };
 
+  // Save PDF function
+  const handleSavePDF = async () => {
+    if (reportData.length === 0) return;
+    
+    try {
+      setLoading(true);
+      
+      // Generate HTML content similar to print report
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Van Loading Report</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 0;
+              padding: 20px;
+              font-size: 10px;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 20px;
+              border-bottom: 2px solid #333;
+              padding-bottom: 10px;
+            }
+            .header h1 {
+              margin: 0;
+              font-size: 18px;
+              color: #333;
+            }
+            .filters {
+              margin-bottom: 15px;
+              font-size: 9px;
+              background-color: #f5f5f5;
+              padding: 8px;
+              border-radius: 4px;
+            }
+            .report-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 20px;
+            }
+            .report-table th,
+            .report-table td {
+              border: 1px solid #ddd;
+              padding: 6px;
+              text-align: left;
+              font-size: 8px;
+            }
+            .report-table th {
+              background-color: #f2f2f2;
+              font-weight: bold;
+              text-align: center;
+            }
+            .sku-header {
+              background-color: #e8f4f8;
+              font-weight: bold;
+            }
+            .party-name {
+              font-weight: bold;
+              background-color: #f9f9f9;
+            }
+            .qty-cell {
+              text-align: center;
+              font-weight: bold;
+            }
+            .summary {
+              margin-top: 15px;
+              font-size: 10px;
+              font-weight: bold;
+              text-align: center;
+              background-color: #f0f0f0;
+              padding: 10px;
+              border-radius: 4px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Van Loading Report</h1>
+            <div>Generated on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</div>
+          </div>
+          
+          <div class="filters">
+            <strong>Bill Numbers:</strong> ${billNumbers.replace(/,\s*$/, '')} | 
+            <strong>Unit Filter:</strong> ${unitFilter} |
+            ${selectedCompanyCodes.length > 0 ? ` <strong>Companies:</strong> ${selectedCompanyCodes.join(', ')}` : ''}
+          </div>
+          
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th style="width: 120px;">SKU</th>
+                <th style="width: 200px;">Item Name</th>
+                <th style="width: 80px;">Total Qty</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${reportData.map(item => `
+                <tr>
+                  <td class="sku-header">${item.sku}</td>
+                  <td>${item.itemName}</td>
+                  <td class="qty-cell">
+                    ${unitFilter === 'Box' ? `${item.totalQtyBoxes} Box` :
+                      unitFilter === 'Pcs' ? `${item.totalQtyPcs} Pcs` :
+                      item.totalQtyBoxes > 0 && item.totalQtyPcs > 0
+                        ? `${item.totalQtyBoxes}B + ${item.totalQtyPcs}P`
+                        : item.totalQtyBoxes > 0
+                          ? `${item.totalQtyBoxes}B`
+                          : `${item.totalQtyPcs}P`}
+                  </td>
+                  <td>
+                    ${item.details.map(detail => 
+                      `${detail.partyName} (${detail.series}-${detail.billNo}): ${detail.qty} ${detail.unit}`
+                    ).join('<br>')}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="summary">
+            <strong>Total SKUs: ${reportData.length} | Total Records: ${reportData.reduce((sum, item) => sum + item.details.length, 0)}</strong>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      const filename = `van-loading-${new Date().toISOString().split('T')[0]}-${Date.now()}.pdf`;
+      
+      const response = await fetch(`${constants.baseURL}/api/generate-pdf/van-loading`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ htmlContent, filename }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+      
+      const result = await response.json();
+      
+      // Open the PDF in a new tab
+      window.open(`${constants.baseURL}${result.pdfPath}`, '_blank');
+      
+      setStatusMsg('PDF saved successfully!');
+      setStatusType('success');
+      
+    } catch (error) {
+      console.error('Error saving PDF:', error);
+      setStatusMsg('Failed to save PDF. Please try again.');
+      setStatusType('not_accepted');
+    } finally {
+      setLoading(false);
+      
+      // Clear status message after 3 seconds
+      setTimeout(() => {
+        setStatusMsg('');
+        setStatusType(null);
+      }, 3000);
+    }
+  };
+
   // Auto-fetch report when bill numbers (or filters) change and a token is completed
   useEffect(() => {
     if (reportFetchDebounceRef.current) clearTimeout(reportFetchDebounceRef.current);
@@ -877,6 +1127,14 @@ const VanLoadingContent: React.FC = () => {
         >
           Print Chart Format
         </button>
+        
+        <button
+          onClick={handleSavePDF}
+          disabled={reportData.length === 0 || loading}
+          className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Generating...' : 'Save PDF'}
+        </button>
       </div>
 
       {/* Error Display */}
@@ -901,7 +1159,7 @@ const VanLoadingContent: React.FC = () => {
               Van Loading Heatmap ({reportData.length} SKUs)
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Hover over each SKU for detailed information
+              Hover over each SKU for detailed information. Click to pin tooltip, click outside to unpin.
             </p>
           </div>
           
@@ -910,8 +1168,12 @@ const VanLoadingContent: React.FC = () => {
               {reportData.map((item, index) => (
                 <div
                   key={`${item.sku}-${index}`}
-                  className={"p-3 min-h-[120px] rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg"}
+                  className={`p-3 min-h-[120px] rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${
+                    pinnedItem && pinnedItem.sku === item.sku ? 'ring-2 ring-blue-500' : ''
+                  }`}
                   style={getTileStyle(index, reportData.length)}
+                  data-sku-tile
+                  onClick={(e) => handleTileClick(item, e)}
                   onMouseEnter={(e) => handleMouseEnter(item, e)}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
@@ -946,51 +1208,101 @@ const VanLoadingContent: React.FC = () => {
       )}
 
       {/* Tooltip */}
-      {hoveredItem && (
+      {(hoveredItem || pinnedItem) && (
         <div
-          className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4 max-w-md pointer-events-none"
-          style={{
-            left: mousePosition.x + 10,
-            top: mousePosition.y - 10,
-            transform: mousePosition.x > window.innerWidth - 300 ? 'translateX(-100%)' : 'none'
-          }}
+          className={`fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-3 sm:p-4 tooltip-container ${
+            pinnedItem ? 'pointer-events-auto' : 'pointer-events-none'
+          }`}
+          style={(() => {
+            const item = pinnedItem || hoveredItem;
+            const x = pinnedPosition?.x || mousePosition.x;
+            const y = pinnedPosition?.y || mousePosition.y;
+            
+            // Mobile-first responsive calculations
+            const isMobile = window.innerWidth < 640;
+            const margin = isMobile ? 8 : 10;
+            const tooltipWidth = isMobile ? Math.min(window.innerWidth - (margin * 2), 300) : 320;
+            const tooltipHeight = 300;
+            
+            let left = x + margin;
+            let top = y - margin;
+            
+            // Ensure tooltip stays within viewport with proper margins
+            if (left + tooltipWidth > window.innerWidth - margin) {
+              left = Math.max(margin, x - tooltipWidth - margin);
+            }
+            if (left < margin) {
+              left = margin;
+            }
+            if (top + tooltipHeight > window.innerHeight - margin) {
+              top = Math.max(margin, y - tooltipHeight - margin);
+            }
+            if (top < margin) {
+              top = margin;
+            }
+            
+            // For mobile, center horizontally if tooltip is too wide
+            if (isMobile && tooltipWidth >= window.innerWidth - (margin * 2)) {
+              left = margin;
+            }
+            
+            return {
+              left: `${left}px`,
+              top: `${top}px`,
+              width: isMobile ? `${tooltipWidth}px` : 'auto',
+              maxWidth: isMobile ? `${tooltipWidth}px` : '320px'
+            };
+          })()}
         >
+          {pinnedItem && (
+            <button
+              onClick={() => {
+                setPinnedItem(null);
+                setPinnedPosition(null);
+              }}
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              ✕
+            </button>
+          )}
+          
           <div className="font-semibold text-gray-800 dark:text-white mb-2">
-            {hoveredItem.sku} - {hoveredItem.itemName}
+            {(pinnedItem || hoveredItem)?.sku} - {(pinnedItem || hoveredItem)?.itemName}
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">
             {(() => {
-              const b = hoveredItem.totalQtyBoxes;
-              const p = hoveredItem.totalQtyPcs;
+              const item = pinnedItem || hoveredItem;
+              const b = item?.totalQtyBoxes || 0;
+              const p = item?.totalQtyPcs || 0;
               if (b > 0 && p > 0) return `Total: ${b} Boxes + ${p} Pcs`;
               if (b > 0) return `Total: ${b} Boxes`;
               return `Total: ${p} Pcs`;
             })()}
           </div>
           
-          <div className="max-h-48 overflow-y-auto">
-            <table className="w-full text-xs">
+          <div className="max-h-48 overflow-y-auto overflow-x-auto">
+            <table className="w-full text-xs min-w-full">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-600">
-                  <th className="text-left py-1 px-2 text-gray-700 dark:text-gray-300">Date</th>
-                  <th className="text-left py-1 px-2 text-gray-700 dark:text-gray-300">Bill No.</th>
-                  <th className="text-left py-1 px-2 text-gray-700 dark:text-gray-300">Party</th>
-                  <th className="text-right py-1 px-2 text-gray-700 dark:text-gray-300">Qty</th>
+                  <th className="text-left py-1 px-1 sm:px-2 text-gray-700 dark:text-gray-300">Date</th>
+                  <th className="text-left py-1 px-1 sm:px-2 text-gray-700 dark:text-gray-300">Bill No.</th>
+                  <th className="text-left py-1 px-1 sm:px-2 text-gray-700 dark:text-gray-300">Party</th>
+                  <th className="text-right py-1 px-1 sm:px-2 text-gray-700 dark:text-gray-300">Qty</th>
                 </tr>
               </thead>
               <tbody>
-                {hoveredItem.details.map((detail, idx) => (
+                {(pinnedItem || hoveredItem)?.details.map((detail, idx) => (
                   <tr key={idx} className="border-b border-gray-100 dark:border-gray-700">
-                    <td className="py-1 px-2 text-gray-800 dark:text-gray-200">
+                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200">
                       {detail.date}
                     </td>
-                    <td className="py-1 px-2 text-gray-800 dark:text-gray-200">
+                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200">
                       {`${detail.series}-${detail.billNo}`}
                     </td>
-                    <td className="py-1 px-2 text-gray-800 dark:text-gray-200 truncate" title={detail.partyName}>
+                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200 truncate" title={detail.partyName}>
                       {detail.partyName}
                     </td>
-                    <td className="py-1 px-2 text-right text-gray-800 dark:text-gray-200">
+                    <td className="py-1 px-1 sm:px-2 text-right text-gray-800 dark:text-gray-200">
                       {detail.qty} {detail.unit}
                     </td>
                   </tr>
