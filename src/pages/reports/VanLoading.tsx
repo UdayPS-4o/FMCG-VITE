@@ -10,6 +10,7 @@ import RadioSm from '../../components/form/input/RadioSm';
 interface VanLoadingItem {
   sku: string;
   itemName: string;
+  mrp: number | null;
   totalQtyBoxes: number;
   totalQtyPcs: number;
   totalQty: number;
@@ -46,7 +47,7 @@ interface Option { value: string; text: string }
 // Content component that uses the context
 const VanLoadingContent: React.FC = () => {
   const [billNumbers, setBillNumbers] = useState<string>('');
-  const [unitFilter, setUnitFilter] = useState<'All' | 'Box' | 'Pcs'>('All');
+  const [unitFilter, setUnitFilter] = useState<'All' | 'Box' | 'Pcs'>('Box');
   const [reportData, setReportData] = useState<VanLoadingItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +61,9 @@ const VanLoadingContent: React.FC = () => {
   // Company filter state
   const [companyOptions, setCompanyOptions] = useState<Option[]>([]);
   const [selectedCompanyCodes, setSelectedCompanyCodes] = useState<string[]>([]);
+  // Bill details dialog state
+  const [showBillDialog, setShowBillDialog] = useState(false);
+  const [billDetails, setBillDetails] = useState<any[]>([]);
 
   // Keep focus on the Bill Numbers input
   const billInputRef = useRef<InputRefHandle>(null);
@@ -69,6 +73,38 @@ const VanLoadingContent: React.FC = () => {
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastProcessedTokenRef = useRef<string | null>(null);
   const reportFetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Sort report data alphabetically by SKU
+  const sortedReportData = useMemo(() => {
+    return [...reportData].sort((a, b) => a.sku.localeCompare(b.sku));
+  }, [reportData]);
+  
+  // Fetch bill details for dialog
+  const fetchBillDetails = async () => {
+    const bills = billNumbers.split(',').filter(bill => bill.trim());
+    if (bills.length === 0) return;
+    
+    try {
+      const response = await fetch(`${constants.baseURL}/api/bill-details-full`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ billNumbers: bills.map(b => b.trim()) }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setBillDetails(data);
+        setShowBillDialog(true);
+      } else {
+        console.error('Failed to fetch bill details');
+      }
+    } catch (error) {
+      console.error('Error fetching bill details:', error);
+    }
+  };
   
   // Scan status message
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -407,8 +443,12 @@ const VanLoadingContent: React.FC = () => {
       setHoveredItem(null);
     } else {
       // Pin the clicked item
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      // Use viewport coordinates directly for consistent positioning
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
       setPinnedItem(item);
-      setPinnedPosition({ x: event.clientX, y: event.clientY });
+      setPinnedPosition({ x, y });
       setHoveredItem(null);
     }
   };
@@ -447,6 +487,7 @@ const VanLoadingContent: React.FC = () => {
     const groupedItems: { [itemName: string]: {
       itemName: string;
       code: string;
+      mrp: number | null;
       totalQty: number;
       unit: string;
       details: Array<{
@@ -465,6 +506,7 @@ const VanLoadingContent: React.FC = () => {
         groupedItems[item.itemName] = {
           itemName: item.itemName,
           code: item.sku,
+          mrp: item.mrp,
           totalQty: 0,
           unit: item.details[0]?.unit || 'PCS',
           details: []
@@ -553,8 +595,8 @@ const VanLoadingContent: React.FC = () => {
         
         ${sortedGroups.map(group => `
            <div style="margin-bottom: 30px;">
-             <h3 style="background-color: #e0e0e0; padding: 8px; margin: 0; font-size: 12px; font-weight: bold;">
-               ${group.code} - ${group.itemName} (Total: ${group.totalQty.toFixed(2)} ${group.unit})
+             <h3 style="background-color: #e0e0e0; padding: 8px; margin: 0; font-size: 14px; font-weight: bold;">
+               ${group.code} - ${group.itemName}${group.mrp ? ` - MRP: ₹${group.mrp}` : ''} (Total: ${group.totalQty.toFixed(2)} ${group.unit})
              </h3>
              <table>
                <thead>
@@ -654,12 +696,12 @@ const VanLoadingContent: React.FC = () => {
     });
 
     // Get all unique items for table headers
-    const allItems = Array.from(new Set(reportData.map(item => `${item.sku}|${item.itemName}`)))
+    const allItems = Array.from(new Set(reportData.map(item => `${item.sku}|${item.itemName}|${item.mrp || ''}`)))
       .map(itemStr => {
-        const [sku, itemName] = itemStr.split('|');
-        return { sku, itemName };
+        const [sku, itemName, mrp] = itemStr.split('|');
+        return { sku, itemName, mrp: mrp ? parseFloat(mrp) : null };
       })
-      .sort((a, b) => a.sku.localeCompare(b.sku));
+      .sort((a: VanLoadingItem, b: VanLoadingItem) => a.sku.localeCompare(b.sku));
 
     const printContent = `
       <!DOCTYPE html>
@@ -769,8 +811,9 @@ const VanLoadingContent: React.FC = () => {
               <th rowspan="2" style="width: 120px;">BILL NO / DATE</th>
               ${allItems.map(item => `
                 <th class="item-header">
-                  <div>${item.sku}</div>
-                  <div>${item.itemName}</div>
+                  <div>${(item as VanLoadingItem).sku}</div>
+                  <div>${(item as VanLoadingItem).itemName}</div>
+                  ${(item as VanLoadingItem).mrp ? `<div style="font-size: 10px; color: #646;">MRP: ₹${(item as VanLoadingItem).mrp}</div>` : ''}
                 </th>
               `).join('')}
             </tr>
@@ -781,7 +824,7 @@ const VanLoadingContent: React.FC = () => {
                 <td style="font-weight: bold; padding: 8px;">${partyName}</td>
                 <td style="padding: 8px; font-size: 7px; line-height: 1.2;">${Array.from(new Set(Array.from(partyItems.values()).flatMap(item => item.billNumbers))).join('<br>')}</td>
                 ${allItems.map(item => {
-                  const itemKey = `${item.sku}-${item.itemName}`;
+                  const itemKey = `${(item as VanLoadingItem).sku}-${(item as VanLoadingItem).itemName}`;
                   const itemInfo = partyItems.get(itemKey);
                   return `<td class="qty-cell">${itemInfo ? itemInfo.totalQty : '-'}</td>`;
                 }).join('')}
@@ -904,6 +947,7 @@ const VanLoadingContent: React.FC = () => {
               <tr>
                 <th style="width: 120px;">SKU</th>
                 <th style="width: 200px;">Item Name</th>
+                <th style="width: 120px;">MRP</th>
                 <th style="width: 80px;">Total Qty</th>
                 <th>Details</th>
               </tr>
@@ -913,6 +957,7 @@ const VanLoadingContent: React.FC = () => {
                 <tr>
                   <td class="sku-header">${item.sku}</td>
                   <td>${item.itemName}</td>
+                  <td class="qty-cell">${item.mrp ? `₹${item.mrp}` : 'N/A'}</td>
                   <td class="qty-cell">
                     ${unitFilter === 'Box' ? `${item.totalQtyBoxes} Box` :
                       unitFilter === 'Pcs' ? `${item.totalQtyPcs} Pcs` :
@@ -1047,7 +1092,13 @@ const VanLoadingContent: React.FC = () => {
             Comma will be added automatically after each complete bill number
           </p>
           <p className="mt-1 font-bold text-gray-800 dark:text-gray-200">
-            Total Bills: {billNumbers.split(',').filter(bill => bill.trim()).length}
+            <span 
+              className="cursor-pointer hover:text-blue-600 hover:underline"
+              onClick={fetchBillDetails}
+              title="Click to view bill details"
+            >
+              Total Bills: {billNumbers.split(',').filter(bill => bill.trim()).length}
+            </span>
           </p>
           {statusMsg && (
             <div className="hidden" aria-hidden="true">
@@ -1165,13 +1216,13 @@ const VanLoadingContent: React.FC = () => {
           
           <div className="p-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
-              {reportData.map((item, index) => (
+              {sortedReportData.map((item, index) => (
                 <div
                   key={`${item.sku}-${index}`}
                   className={`p-3 min-h-[120px] rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${
                     pinnedItem && pinnedItem.sku === item.sku ? 'ring-2 ring-blue-500' : ''
                   }`}
-                  style={getTileStyle(index, reportData.length)}
+                  style={getTileStyle(index, sortedReportData.length)}
                   data-sku-tile
                   onClick={(e) => handleTileClick(item, e)}
                   onMouseEnter={(e) => handleMouseEnter(item, e)}
@@ -1181,8 +1232,13 @@ const VanLoadingContent: React.FC = () => {
                   <div className="text-xs font-semibold truncate" title={item.sku}>
                     {item.sku}
                   </div>
-                  <div className="text-xs mt-1 whitespace-normal break-words" title={item.itemName}>
+                  <div className="text-xs mt-1 whitespace-normal break-words" title={`${item.itemName}${item.mrp ? ` - MRP: ₹${item.mrp}` : ''}`}>
                     {item.itemName}
+                    {item.mrp && (
+                      <div className="text-xs text-white mt-1">
+                        MRP: ₹{item.mrp}
+                      </div>
+                    )}
                   </div>
                   <div className="text-sm font-bold mt-2">
                     {unitFilter === 'Box' ? `${item.totalQtyBoxes} Box` :
@@ -1215,42 +1271,84 @@ const VanLoadingContent: React.FC = () => {
           }`}
           style={(() => {
             const item = pinnedItem || hoveredItem;
-            const x = pinnedPosition?.x || mousePosition.x;
-            const y = pinnedPosition?.y || mousePosition.y;
+            const x = pinnedItem ? pinnedPosition.x : mousePosition.x;
+            const y = pinnedItem ? pinnedPosition.y : mousePosition.y;
             
             // Mobile-first responsive calculations
             const isMobile = window.innerWidth < 640;
-            const margin = isMobile ? 8 : 10;
-            const tooltipWidth = isMobile ? Math.min(window.innerWidth - (margin * 2), 300) : 320;
-            const tooltipHeight = 300;
+            const isTablet = window.innerWidth >= 640 && window.innerWidth < 1024;
+            const margin = isMobile ? 12 : 16;
             
+            // Dynamic tooltip dimensions based on screen size
+            const tooltipWidth = isMobile 
+              ? Math.min(window.innerWidth - (margin * 2), 280) 
+              : isTablet 
+                ? 300 
+                : 320;
+            
+            // Estimate tooltip height based on content
+            const baseHeight = 120; // Header + total info
+            const detailsHeight = Math.min((pinnedItem || hoveredItem)?.details.length || 0, 6) * 32; // Max 6 rows visible
+            const tooltipHeight = baseHeight + detailsHeight + (isMobile ? 20 : 40); // Extra padding
+            
+            // Get viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            // Calculate initial position (prefer bottom-right)
             let left = x + margin;
-            let top = y - margin;
+            let top = y + margin;
             
-            // Ensure tooltip stays within viewport with proper margins
-            if (left + tooltipWidth > window.innerWidth - margin) {
-              left = Math.max(margin, x - tooltipWidth - margin);
+            // Horizontal positioning logic
+            if (left + tooltipWidth > viewportWidth - margin) {
+              // Try positioning to the left
+              left = x - tooltipWidth - margin;
+              
+              // If still doesn't fit, center it horizontally
+              if (left < margin) {
+                left = Math.max(margin, (viewportWidth - tooltipWidth) / 2);
+              }
             }
+            
+            // Ensure tooltip doesn't go off the left edge
             if (left < margin) {
               left = margin;
             }
-            if (top + tooltipHeight > window.innerHeight - margin) {
-              top = Math.max(margin, y - tooltipHeight - margin);
-            }
-            if (top < margin) {
-              top = margin;
+            
+            // Vertical positioning logic
+            if (top + tooltipHeight > viewportHeight - margin) {
+              // Try positioning above
+              top = y - tooltipHeight - margin;
+              
+              // If still doesn't fit above, position it to fit within viewport
+              if (top < margin) {
+                // Calculate best vertical position
+                const availableHeight = viewportHeight - (margin * 2);
+                if (tooltipHeight <= availableHeight) {
+                  // Center vertically if tooltip fits
+                  top = (viewportHeight - tooltipHeight) / 2;
+                } else {
+                  // Position at top with scrollable content
+                  top = margin;
+                }
+              }
             }
             
-            // For mobile, center horizontally if tooltip is too wide
-            if (isMobile && tooltipWidth >= window.innerWidth - (margin * 2)) {
-              left = margin;
-            }
+            // Final bounds checking
+            left = Math.max(margin, Math.min(left, viewportWidth - tooltipWidth - margin));
+            top = Math.max(margin, Math.min(top, viewportHeight - tooltipHeight - margin));
+            
+            // For very small screens, use full width with margins
+            const finalWidth = isMobile && viewportWidth < 360 
+              ? viewportWidth - (margin * 2)
+              : tooltipWidth;
             
             return {
               left: `${left}px`,
               top: `${top}px`,
-              width: isMobile ? `${tooltipWidth}px` : 'auto',
-              maxWidth: isMobile ? `${tooltipWidth}px` : '320px'
+              width: `${finalWidth}px`,
+              maxWidth: `${finalWidth}px`,
+              maxHeight: isMobile ? `${Math.min(tooltipHeight, viewportHeight - (margin * 2))}px` : 'auto'
             };
           })()}
         >
@@ -1280,9 +1378,9 @@ const VanLoadingContent: React.FC = () => {
             })()}
           </div>
           
-          <div className="max-h-48 overflow-y-auto overflow-x-auto">
+          <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: 'calc(100% - 80px)' }}>
             <table className="w-full text-xs min-w-full">
-              <thead>
+              <thead className="sticky top-0 bg-white dark:bg-gray-800">
                 <tr className="border-b border-gray-200 dark:border-gray-600">
                   <th className="text-left py-1 px-1 sm:px-2 text-gray-700 dark:text-gray-300">Date</th>
                   <th className="text-left py-1 px-1 sm:px-2 text-gray-700 dark:text-gray-300">Bill No.</th>
@@ -1293,22 +1391,76 @@ const VanLoadingContent: React.FC = () => {
               <tbody>
                 {(pinnedItem || hoveredItem)?.details.map((detail, idx) => (
                   <tr key={idx} className="border-b border-gray-100 dark:border-gray-700">
-                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200">
+                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200 text-xs">
                       {detail.date}
                     </td>
-                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200">
+                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200 text-xs">
                       {`${detail.series}-${detail.billNo}`}
                     </td>
-                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200 truncate" title={detail.partyName}>
+                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200 truncate text-xs" title={detail.partyName}>
                       {detail.partyName}
                     </td>
-                    <td className="py-1 px-1 sm:px-2 text-right text-gray-800 dark:text-gray-200">
+                    <td className="py-1 px-1 sm:px-2 text-right text-gray-800 dark:text-gray-200 text-xs">
                       {detail.qty} {detail.unit}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Bill Details Dialog */}
+      {showBillDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-600">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Bill Details</h2>
+              <button
+                onClick={() => setShowBillDialog(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 overflow-auto max-h-[calc(80vh-80px)]">
+              <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
+                <thead>
+                  <tr className="bg-gray-100 dark:bg-gray-700">
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-gray-800 dark:text-white">Bill Date</th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-gray-800 dark:text-white">Bill No.</th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-gray-800 dark:text-white">Party Name</th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-800 dark:text-white">Net Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {billDetails.map((bill, index) => (
+                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-white">
+                        {bill.DATE ? new Date(bill.DATE).toLocaleDateString('en-GB') : 'N/A'}
+                      </td>
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-white">
+                        {bill.BILL_BB || 'N/A'}
+                      </td>
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-white">
+                        {bill.C_NAME || 'N/A'}
+                      </td>
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-800 dark:text-white">
+                        ₹{bill.N_B_AMT ? bill.N_B_AMT.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {billDetails.length === 0 && (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  No bill details found.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
