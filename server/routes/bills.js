@@ -332,6 +332,46 @@ router.get('/bill-details/:series/:billNo', async (req, res) => {
     }
 });
 
+// Route to get full bill details for dialog
+router.post('/bill-details-full', async (req, res) => {
+    const { billNumbers } = req.body;
+
+    if (!billNumbers || !Array.isArray(billNumbers)) {
+        return res.status(400).json({ message: 'Bill numbers array is required' });
+    }
+
+    try {
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+        }
+        const billPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'bill.json');
+        const data = await fs.readFile(billPath, 'utf8');
+        const allBills = JSON.parse(data);
+
+        // Parse bill numbers and filter bills
+        const billFilters = billNumbers.map(bill => {
+            const [series, billNo] = bill.split('-');
+            return { series: series?.trim(), billNo: billNo?.trim() };
+        }).filter(filter => filter.series && filter.billNo);
+
+        const filteredBills = allBills.filter(bill => {
+            return billFilters.some(filter => {
+                return bill.SERIES === filter.series && bill.BILL === Number(filter.billNo);
+            });
+        });
+
+        res.json(filteredBills);
+     } catch (error) {
+         console.error('Error fetching bill.json:', error);
+         if (error.code === 'ENOENT') {
+             res.status(404).json({ message: `bill.json not found at ${error.path}` });
+         } else {
+             res.status(500).json({ message: 'Failed to fetch bill data' });
+         }
+     }
+ });
+
 // Route for van loading report
 // Route to store van loading history
 router.post('/van-loading-history', async (req, res) => {
@@ -435,15 +475,21 @@ router.get('/van-loading', async (req, res) => {
 
         const billDtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
         const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
+        const pmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'pmpl.json');
 
         const billDtlData = JSON.parse(await fs.readFile(billDtlPath, 'utf8'));
         const cmplData = JSON.parse(await fs.readFile(cmplPath, 'utf8'));
+        const pmplData = JSON.parse(await fs.readFile(pmplPath, 'utf8'));
 
         // Create party details map
         const partyDetailsMap = cmplData.reduce((acc, party) => {
             acc[party.C_CODE] = { name: party.C_NAME, place: party.C_PLACE };
             return acc;
         }, {});
+
+        // Create PMPL map for MRP lookup
+        const pmplMap = new Map();
+        pmplData.forEach(p => pmplMap.set(p.CODE, p));
 
         // Parse bill numbers (format: "A-23,B-45")
         const billFilters = billNumbers.split(',').map(bill => {
@@ -526,15 +572,21 @@ router.get('/van-loading', async (req, res) => {
         });
 
         // Convert to array and sort by total quantity (for heatmap intensity)
-        const reportData = Object.values(skuData).map(sku => ({
-            sku: sku.code,
-            itemName: sku.product,
-            totalQtyBoxes: Math.round(sku.totalBoxes * 100) / 100,
-            totalQtyPcs: Math.round(sku.totalPcs),
-            // Total quantity used for heatmap intensity: boxes converted to pieces using multF + direct pieces
-            totalQty: (sku.totalBoxes * (sku.multF || 1)) + sku.totalPcs,
-            details: sku.details
-        })).sort((a, b) => b.totalQty - a.totalQty);
+        const reportData = Object.values(skuData).map(sku => {
+            const pmplItem = pmplMap.get(sku.code);
+            const mrp = pmplItem ? pmplItem.MRP1 : null;
+            
+            return {
+                sku: sku.code,
+                itemName: sku.product,
+                mrp: mrp,
+                totalQtyBoxes: Math.round(sku.totalBoxes * 100) / 100,
+                totalQtyPcs: Math.round(sku.totalPcs),
+                // Total quantity used for heatmap intensity: boxes converted to pieces using multF + direct pieces
+                totalQty: (sku.totalBoxes * (sku.multF || 1)) + sku.totalPcs,
+                details: sku.details
+            };
+        }).sort((a, b) => b.totalQty - a.totalQty);
 
         res.json(reportData);
     } catch (error) {

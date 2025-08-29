@@ -16,6 +16,7 @@ const dateRangeOptions = [
   { value: 'last7days', label: 'Last 7 Days' },
   { value: 'thisMonth', label: 'This Month' },
   { value: 'lastMonth', label: 'Last Month' },
+  { value: 'currentFY', label: 'Current FY' },
   { value: 'custom', label: 'Custom Range' },
 ];
 
@@ -72,7 +73,12 @@ const CashBook: React.FC = () => {
   const printRef = React.useRef<HTMLDivElement>(null);
 
   // Function to format date as YYYY-MM-DD
-  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+  const formatDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Handle date range selection
   useEffect(() => {
@@ -103,6 +109,25 @@ const CashBook: React.FC = () => {
       case 'lastMonth':
         setFromDate(formatDate(lastMonthStart));
         setToDate(formatDate(lastMonthEnd));
+        break;
+      case 'currentFY':
+        // Financial Year: April 1 to March 31
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth(); // 0-based (0 = January, 3 = April)
+        
+        let fyStartYear, fyEndYear;
+        if (currentMonth >= 3) { // April (3) to December (11)
+          fyStartYear = currentYear;
+          fyEndYear = currentYear + 1;
+        } else { // January (0) to March (2)
+          fyStartYear = currentYear - 1;
+          fyEndYear = currentYear;
+        }
+        
+        const fyStart = new Date(fyStartYear, 3, 1); // April 1
+        const fyEnd = new Date(fyEndYear, 2, 31); // March 31
+        setFromDate(formatDate(fyStart));
+        setToDate(formatDate(fyEnd));
         break;
       case 'custom':
         // Keep custom range as is
