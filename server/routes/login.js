@@ -66,7 +66,8 @@ app.get('/api/checkIsAuth', (req, res) => {
               smCode: user.smCode,
               defaultSeries: user.defaultSeries,
               godownAccess: user.godownAccess,
-              canSelectSeries: user.canSelectSeries
+              canSelectSeries: user.canSelectSeries,
+              allowPastDateEntries: user.allowPastDateEntries
             }
           });
         } else {
@@ -113,7 +114,12 @@ app.post('/api/login', async (req, res) => {
           username: user.username,
           routeAccess: user.routeAccess,
           powers: user.powers,
-          subgroup: user.subgroup
+          subgroups: user.subgroups,
+          smCode: user.smCode,
+          defaultSeries: user.defaultSeries,
+          godownAccess: user.godownAccess,
+          canSelectSeries: user.canSelectSeries,
+          allowPastDateEntries: user.allowPastDateEntries
         }
       });
     } else {

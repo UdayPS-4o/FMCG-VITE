@@ -31,6 +31,7 @@ interface User {
   };
   godownAccess?: string[];
   canSelectSeries?: boolean;
+  allowPastDateEntries?: boolean;
 }
 
 interface SubGroup {
@@ -85,6 +86,7 @@ const AddUser: React.FC = () => {
   const [defaultReportsSeries, setDefaultReportsSeries] = useState<string>('');
   const [canSelectSeries, setCanSelectSeries] = useState<boolean>(false);
   const [godownAccess, setGodownAccess] = useState<string[]>([]);
+  const [allowPastDateEntries, setAllowPastDateEntries] = useState<boolean>(false);
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -128,6 +130,9 @@ const AddUser: React.FC = () => {
         
         // Handle series selection permission
         setCanSelectSeries(userToEdit.canSelectSeries !== false);
+        
+        // Handle past date entries permission
+        setAllowPastDateEntries(userToEdit.allowPastDateEntries === true);
         
         // Handle godown access rights
         if (userToEdit.godownAccess) {
@@ -340,7 +345,8 @@ const AddUser: React.FC = () => {
           reports: defaultReportsSeries || undefined,
         },
         canSelectSeries,
-        godownAccess
+        godownAccess,
+        allowPastDateEntries
       };
       
       if (isEdit && userId) {
@@ -425,6 +431,7 @@ const AddUser: React.FC = () => {
     setDefaultReportsSeries('');
     setCanSelectSeries(false);
     setGodownAccess([]);
+    setAllowPastDateEntries(false);
     setIsEdit(false);
     setUserId(null);
     setFormKey(prevKey => prevKey + 1);
@@ -688,6 +695,18 @@ const AddUser: React.FC = () => {
                     Allow selecting different series
                   </label>
                 </div>
+                <div className="flex items-center space-x-2 mb-4">
+                  <input
+                    type="checkbox"
+                    id="allowPastDateEntries"
+                    checked={allowPastDateEntries}
+                    onChange={(e) => setAllowPastDateEntries(e.target.checked)}
+                    className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                  />
+                  <label htmlFor="allowPastDateEntries" className="text-gray-700 dark:text-gray-300">
+                    Add past date entries
+                  </label>
+                </div>
               </div>
               <div className="mt-6 flex justify-end space-x-4">
                 <button
@@ -723,4 +742,4 @@ const AddUser: React.FC = () => {
   );
 };
 
-export default AddUser; 
+export default AddUser;

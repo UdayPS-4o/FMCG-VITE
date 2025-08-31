@@ -36,6 +36,7 @@ export interface User {
   };
   godownAccess?: string[];
   canSelectSeries?: boolean;
+  allowPastDateEntries?: boolean;
 }
 
 // Helper functions to handle the transition from subgroup to subgroups

@@ -649,6 +649,7 @@ const GodownTransfer: React.FC = () => {
                 onChange={handleDateChange}
                 dateFormatType="dd-mm-yyyy"
                 required
+                minDate={useAuth().user?.allowPastDateEntries ? undefined : new Date()}
               />
             </div>
             <div>
