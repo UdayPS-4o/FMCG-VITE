@@ -649,7 +649,8 @@ const VanLoadingContent: React.FC = () => {
     // Wait for content to load then print
     printWindow.onload = () => {
       printWindow.print();
-      printWindow.close();
+      // Don't automatically close - let user close manually or handle print events
+      // printWindow.close();
     };
   };
 
@@ -721,7 +722,7 @@ const VanLoadingContent: React.FC = () => {
           
           body {
             font-family: Arial, sans-serif;
-            font-size: 10px;
+            font-size: 14px;
             line-height: 1.2;
             margin: 0;
             padding: 10px;
@@ -736,13 +737,13 @@ const VanLoadingContent: React.FC = () => {
           
           .header h1 {
             margin: 0;
-            font-size: 16px;
+            font-size: 20px;
             font-weight: bold;
           }
           
           .filters {
             margin-bottom: 10px;
-            font-size: 9px;
+            font-size: 12px;
           }
           
           .chart-table {
@@ -762,7 +763,7 @@ const VanLoadingContent: React.FC = () => {
           .chart-table th {
             background-color: #f0f0f0;
             font-weight: bold;
-            font-size: 8px;
+            font-size: 11px;
           }
           
           .party-header {
@@ -776,7 +777,7 @@ const VanLoadingContent: React.FC = () => {
             min-width: 60px;
             max-width: 80px;
             text-align: center;
-            font-size: 7px;
+            font-size: 10px;
             line-height: 1.1;
           }
           
@@ -787,7 +788,7 @@ const VanLoadingContent: React.FC = () => {
           
           .summary {
             margin-top: 10px;
-            font-size: 9px;
+            font-size: 12px;
             font-weight: bold;
           }
         </style>
@@ -830,6 +831,18 @@ const VanLoadingContent: React.FC = () => {
                 }).join('')}
               </tr>
             `).join('')}
+            <tr style="background-color: #d0d0d0; font-weight: bold; border-top: 2px solid #333;">
+              <td colspan="2" style="text-align: center; padding: 8px; font-size: 11px;">TOTAL QTY</td>
+              ${allItems.map(item => {
+                const itemKey = `${(item as VanLoadingItem).sku}-${(item as VanLoadingItem).itemName}`;
+                let totalQty = 0;
+                Array.from(partyItemsMap.values()).forEach(partyItems => {
+                  const itemInfo = partyItems.get(itemKey);
+                  if (itemInfo) totalQty += itemInfo.totalQty;
+                });
+                return `<td class="qty-cell" style="background-color: #d0d0d0; font-weight: bold;">${totalQty > 0 ? totalQty : '-'}</td>`;
+              }).join('')}
+            </tr>
           </tbody>
         </table>
         
@@ -847,7 +860,8 @@ const VanLoadingContent: React.FC = () => {
     // Wait for content to load then print
     printWindow.onload = () => {
        printWindow.print();
-       printWindow.close();
+       // Don't automatically close - let user close manually or handle print events
+       // printWindow.close();
      };
    };
 
