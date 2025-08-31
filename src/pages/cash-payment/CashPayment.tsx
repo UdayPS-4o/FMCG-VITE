@@ -852,6 +852,7 @@ const CashPayment: React.FC = () => {
                   placeholderText="DD-MM-YYYY"
                   required
                   className="w-full"
+                  minDate={user?.allowPastDateEntries ? undefined : new Date()}
                 />
 
                 <div className="mt-4">
@@ -1005,4 +1006,4 @@ const CashPayment: React.FC = () => {
   );
 };
 
-export default CashPayment; 
+export default CashPayment;

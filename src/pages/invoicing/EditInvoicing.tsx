@@ -707,6 +707,7 @@ const EditInvoicingContent: React.FC<{
                 dateFormatType="dd-mm-yyyy"
                 required
                 autoComplete="off"
+                minDate={useAuth().user?.allowPastDateEntries ? undefined : new Date()}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1093,4 +1094,4 @@ const EditInvoicing: React.FC = () => {
   );
 };
 
-export default EditInvoicing; 
+export default EditInvoicing;

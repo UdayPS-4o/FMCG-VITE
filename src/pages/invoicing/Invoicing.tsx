@@ -43,6 +43,7 @@ interface User {
   defaultSeries?: { billing?: string };
   godownAccess: string[];
   canSelectSeries?: boolean;
+  allowPastDateEntries?: boolean;
 }
 
 // Define a type for the invoice draft
@@ -903,6 +904,7 @@ const InvoicingContent: React.FC = () => {
                 onChange={handleDateChange}
                 dateFormatType="dd-mm-yyyy"
                 required
+                minDate={user?.allowPastDateEntries ? undefined : new Date()}
                 // ref={dateRef} // Add if direct focus needed
               />
             </div>
@@ -1222,4 +1224,4 @@ const Invoicing: React.FC = () => {
   );
 };
 
-export default Invoicing; 
+export default Invoicing;

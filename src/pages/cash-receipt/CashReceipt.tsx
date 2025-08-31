@@ -1037,6 +1037,7 @@ const CashReceipt: React.FC = () => {
                   placeholderText="DD-MM-YYYY"
                   required
                   className="w-full"
+                  minDate={user?.allowPastDateEntries ? undefined : new Date()}
                 />
                 
                 <div className="mt-4">
