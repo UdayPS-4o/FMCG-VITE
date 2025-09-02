@@ -24,6 +24,7 @@
     "node-dbf": "^0.4.0",
     "node-xlsx": "^0.23.0",
     "npm": "^10.5.0",
+    "pdf-parse": "^1.1.1",
     "puppeteer": "^24.10.0",
     "shapefile": "^0.6.6",
     "socket.io": "^4.7.5",

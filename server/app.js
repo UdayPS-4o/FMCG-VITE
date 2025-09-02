@@ -52,8 +52,8 @@ app.use(morgan('dev'));
 app.use(cookieParser());
 
 const spawn = require('child_process').spawn;// app.use(express.static(80/public'));
-app.use(bodyParser.json()); // for parsing application/json
-app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
+app.use(bodyParser.json({ limit: '50mb' })); // for parsing application/json with increased limit for images
+app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' })); // for parsing application/x-www-form-urlencoded
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -120,6 +120,9 @@ app.use('/api/merge/cash-receipts', cashReceiptsMergeRoutes);
 
 const approvalRoutes = require('./routes/approval');
 app.use('/api', approvalRoutes);
+
+const attendanceRoutes = require('./routes/attendance');
+app.use(attendanceRoutes);
 
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);

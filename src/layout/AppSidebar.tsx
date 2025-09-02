@@ -83,6 +83,23 @@ const BellIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const AttendanceIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+    />
+  </svg>
+);
+
 interface SubNavItem {
   name: string;
   path: string;
@@ -111,7 +128,35 @@ interface User {
   } | null;
 }
 
+// Create an admin attendance icon
+const AdminAttendanceIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+    />
+  </svg>
+);
+
 const fmcgItems: NavItem[] = [
+  {
+    icon: <AttendanceIcon />,
+    name: "Attendance",
+    path: "/attendance",
+  },
+  {
+    icon: <AdminAttendanceIcon />,
+    name: "Admin Attendance",
+    path: "/admin/attendance",
+  },
   {
     icon: <UserIcon />,
     name: "Account Master",
@@ -182,6 +227,7 @@ const fmcgItems: NavItem[] = [
       { name: "Cash Book", path: "/reports/cash-book", pro: false },
       { name: "Party Ledger", path: "/reports/party-ledger", pro: false },
       { name: "Print Van Loading", path: "/reports/van-loading", pro: false },
+      { name: "PNB Stock Statement", path: "/reports/pnb-stock-statement", pro: false },
     ],
   }
 ];
@@ -282,6 +328,15 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
 
       // Filter main menu items with direct paths
       if (item.path) {
+        // Show different attendance options based on user role
+        if (item.name === "Attendance") {
+          // Show attendance marking page only for non-admin users
+          return !user.routeAccess.includes('Admin');
+        }
+        if (item.name === "Admin Attendance") {
+          // Show admin attendance portal only for admin users
+          return user.routeAccess.includes('Admin');
+        }
         if (item.name === "Account Master" && !user.routeAccess.includes('Account Master')) return false;
         if (item.name === "Invoicing" && !user.routeAccess.includes('Invoicing')) return false;
         if (item.name === "Godown Transfer" && !user.routeAccess.includes('Godown Transfer')) return false;

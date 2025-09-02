@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
+const XLSX = require('xlsx');
 const { getDbfData } = require('./utilities'); // Assuming utilities are in the same directory or adjust path
 require('dotenv').config();
 
@@ -826,6 +827,421 @@ router.get('/purchase-filter-options', async (req, res) => {
     } catch (error) {
         console.error('Error fetching dynamic purchase filter options:', error);
         res.status(500).json({ message: 'Error fetching filter options', error: error.message });
+    }
+});
+
+// GET /api/pnb-stock-statement - PNB Stock Statement Report
+router.get('/pnb-stock-statement', async (req, res) => {
+    try {
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+        }
+
+        // Read required JSON files
+        const billdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'billdtl.json');
+        const purdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'purdtl.json');
+        const transferPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'transfer.json');
+        const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
+        const stockPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'stock.json');
+
+        // Read all files
+        const [billdtlData, purdtlData, transferData, cmplData, stockData] = await Promise.all([
+            fs.readFile(billdtlPath, 'utf8').then(data => JSON.parse(data)),
+            fs.readFile(purdtlPath, 'utf8').then(data => JSON.parse(data)),
+            fs.readFile(transferPath, 'utf8').then(data => JSON.parse(data)),
+            fs.readFile(cmplPath, 'utf8').then(data => JSON.parse(data)),
+            fs.readFile(stockPath, 'utf8').then(data => JSON.parse(data))
+        ]);
+
+        // Process stock data
+        const stockMap = new Map();
+        stockData.forEach(item => {
+            if (item.CODE) {
+                stockMap.set(item.CODE, {
+                    opening: parseFloat(item.OPENING || 0),
+                    purchase: parseFloat(item.PURCHASE || 0),
+                    sales: parseFloat(item.SALES || 0),
+                    transfer: parseFloat(item.TRANSFER || 0),
+                    closing: parseFloat(item.CLOSING || 0),
+                    product: item.PRODUCT || 'Unknown Product'
+                });
+            }
+        });
+
+        // Calculate current stock from billdtl, purdtl, and transfer
+        const itemStockMap = new Map();
+        
+        // Process bill details (sales - reduce stock)
+        billdtlData.forEach(item => {
+            if (item.CODE && item.QTY) {
+                const code = item.CODE;
+                const qty = parseFloat(item.QTY) || 0;
+                if (!itemStockMap.has(code)) {
+                    itemStockMap.set(code, {
+                        code: code,
+                        product: item.PRODUCT || stockMap.get(code)?.product || 'Unknown Product',
+                        sales: 0,
+                        purchases: 0,
+                        transfers: 0
+                    });
+                }
+                itemStockMap.get(code).sales += qty;
+            }
+        });
+
+        // Process purchase details (purchases - increase stock)
+        purdtlData.forEach(item => {
+            if (item.CODE && item.QTY) {
+                const code = item.CODE;
+                const qty = parseFloat(item.QTY) || 0;
+                if (!itemStockMap.has(code)) {
+                    itemStockMap.set(code, {
+                        code: code,
+                        product: item.PRODUCT || stockMap.get(code)?.product || 'Unknown Product',
+                        sales: 0,
+                        purchases: 0,
+                        transfers: 0
+                    });
+                }
+                itemStockMap.get(code).purchases += qty;
+            }
+        });
+
+        // Process transfer details
+        transferData.forEach(item => {
+            if (item.CODE && item.QTY) {
+                const code = item.CODE;
+                const qty = parseFloat(item.QTY) || 0;
+                if (!itemStockMap.has(code)) {
+                    itemStockMap.set(code, {
+                        code: code,
+                        product: item.PRODUCT || stockMap.get(code)?.product || 'Unknown Product',
+                        sales: 0,
+                        purchases: 0,
+                        transfers: 0
+                    });
+                }
+                itemStockMap.get(code).transfers += qty;
+            }
+        });
+
+        // Generate stock data with current stock calculation
+        const stockDataResult = [];
+        for (const [code, data] of itemStockMap) {
+            const stockInfo = stockMap.get(code);
+            const currentStock = stockInfo ? stockInfo.closing : (data.purchases + data.transfers - data.sales);
+            
+            if (currentStock > 0) {
+                stockDataResult.push({
+                    code: code,
+                    product: data.product,
+                    currentStock: currentStock,
+                    unit: 'PCS' // Default unit
+                });
+            }
+        }
+
+        // Process debtor balances from CMPL.json
+        const debtorData = [];
+        cmplData.forEach(company => {
+            const balance = parseFloat(company.CUR_BAL || company.CB_VAL || 0);
+            const drCr = company.DR || '';
+            
+            // Only include debtors (DR balances) with positive amounts
+            if (drCr === 'DR' && balance > 0) {
+                debtorData.push({
+                    code: company.C_CODE || 'Unknown',
+                    name: company.C_NAME || 'Unknown Company',
+                    balance: balance
+                });
+            }
+        });
+
+        // Calculate summary data
+        const totalSales = billdtlData.reduce((sum, item) => {
+            return sum + (parseFloat(item.AMOUNT || item.AMT || 0));
+        }, 0);
+
+        const totalPurchases = purdtlData.reduce((sum, item) => {
+            return sum + (parseFloat(item.AMOUNT || item.AMT || 0));
+        }, 0);
+
+        const summary = {
+            totalSales: totalSales,
+            totalPurchases: totalPurchases,
+            totalStockItems: stockDataResult.length,
+            totalDebtors: debtorData.length
+        };
+
+        // Sort data
+        stockDataResult.sort((a, b) => a.code.localeCompare(b.code));
+        debtorData.sort((a, b) => a.code.localeCompare(b.code));
+
+        res.json({
+            stockData: stockDataResult,
+            debtorData: debtorData,
+            summary: summary
+        });
+
+    } catch (error) {
+        console.error('Error generating PNB stock statement:', error);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ message: 'Required data files not found', error: error.message });
+        } else {
+            res.status(500).json({ message: 'Failed to generate PNB stock statement', error: error.message });
+        }
+    }
+});
+
+// POST /api/reports/pnb-stock-statement/excel - Generate Excel file
+router.post('/pnb-stock-statement/excel', async (req, res) => {
+    try {
+        const { stockData, debtorData, summaryData } = req.body;
+        
+        if (!stockData || !debtorData || !summaryData) {
+            return res.status(400).json({ message: 'Missing required data for Excel generation' });
+        }
+
+        // Read the template Excel file
+        const templatePath = path.join(__dirname, '../../0490008700003292_072025.xlsm');
+        let workbook;
+        
+        try {
+            const templateBuffer = await fs.readFile(templatePath);
+            workbook = XLSX.read(templateBuffer, { type: 'buffer' });
+workbook = XLSX.read(templateBuffer, { type: 'buffer', bookVBA: true, cellStyles: true, cellNF: true, cellDates: true });
+         } catch (error) {
+            console.error('Error reading template file:', error);
+            // Create a new workbook if template is not found
+            workbook = XLSX.utils.book_new();
+            
+            // Create basic structure similar to template
+            const basicInfoSheet = XLSX.utils.aoa_to_sheet([
+                ['Name of the Borrower', 'EKTA ENTEPRISES'],
+                ['CBS Customer ID', 'C00000968'],
+                ['A/c Number', '0490008700003292'],
+                ['Branch IFSC', 'PUNB0049000'],
+                ['Facility', 'CC'],
+                ['Sanctioned Limit (in Absolute Rs.)', '39000000'],
+                ['Periodicity', 'Monthly'],
+                ['Period ended', 'July'],
+                ['Year', new Date().getFullYear()],
+                [],
+                ['Signature of Borrower'],
+                [],
+                ['*Yellow Colour cells are input fields']
+            ]);
+            XLSX.utils.book_append_sheet(workbook, basicInfoSheet, 'Basic Info');
+        }
+
+        // Sheet 2: Inventory Details - Preserve existing format and add data
+        const inventorySheetName = 'Inventory Details';
+        let inventorySheet;
+        
+        if (workbook.SheetNames.includes(inventorySheetName)) {
+            // Get existing sheet to preserve formatting
+            inventorySheet = workbook.Sheets[inventorySheetName];
+            
+            // Find the starting row for data (after headers)
+            // Look for the row with "Sr. NO." to determine data start
+            let dataStartRow = 15; // Default fallback
+            const range = XLSX.utils.decode_range(inventorySheet['!ref']);
+            
+            for (let row = 0; row <= range.e.r; row++) {
+                const cellRef = XLSX.utils.encode_cell({ r: row, c: 0 });
+                const cell = inventorySheet[cellRef];
+                if (cell && cell.v && cell.v.toString().includes('Sr. NO.')) {
+                    dataStartRow = row + 1;
+                    break;
+                }
+            }
+            
+            // Add stock data starting from the identified row
+            stockData.forEach((item, index) => {
+                const rowIndex = dataStartRow + index;
+                
+                // Add data to specific cells while preserving formatting
+                const cells = [
+                    { col: 0, value: index + 1 }, // Sr. NO.
+                    { col: 1, value: 'Main Godown' }, // Where Lying
+                    { col: 2, value: item.product }, // Particular of Goods
+                    { col: 3, value: item.currentStock }, // Quantity
+                    { col: 4, value: 0 }, // Rate - to be filled manually
+                    { col: 5, value: 0 }, // Value - calculated as Qty * Rate
+                    { col: 6, value: '' } // Remarks
+                ];
+                
+                cells.forEach(({ col, value }) => {
+                    const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col });
+                    const destCell = inventorySheet[cellRef] || {};
+                    // Copy style from the template's first data row to preserve formatting
+                    const styleRef = XLSX.utils.encode_cell({ r: dataStartRow, c: col });
+                    const styleCell = inventorySheet[styleRef];
+                    if (styleCell && styleCell.s) destCell.s = styleCell.s;
+                    if (styleCell && styleCell.z) destCell.z = styleCell.z;
+                    destCell.v = value;
+                    destCell.t = typeof value === 'number' ? 'n' : 's';
+                    inventorySheet[cellRef] = destCell;
+                });
+            });
+            
+            // Update the sheet range to include new data
+            const newRange = XLSX.utils.decode_range(inventorySheet['!ref']);
+            newRange.e.r = Math.max(newRange.e.r, dataStartRow + stockData.length - 1);
+            inventorySheet['!ref'] = XLSX.utils.encode_range(newRange);
+        } else {
+            // Fallback: create new sheet if template doesn't exist
+            const inventoryData = [
+                ['Particular', '', '', '', '', '', 'Value (in Absolute Rs)', '', '*Yellow Colour cells are input fields'],
+                ['Inventory received on Job work (1)', '', '', '', '', '', '', '', '*All values are to be filled in absolute terms'],
+                ['Inventory procured under LC (2)'],
+                ['Obsolete Inventory (3)', '', '', '', '', '', '', '', '', '', 'Raw Material'],
+                ['Sub Total (1+2+3)', '', '', '', '', '', '0', '', '', '', 'Stores'],
+                ['', '', '', '', '', '', '', '', '', '', 'Stock in Progress'],
+                ['Sr. NO.', 'Where Lying', 'Particular of Goods', 'Quantity', 'Rate  (in Absolute Rs)', 'Value (in Absolute Rs)', 'Remarks (if any)', '', '', '', 'Finished Goods'],
+            ];
+
+            // Add stock data to inventory sheet
+            stockData.forEach((item, index) => {
+                inventoryData.push([
+                    index + 1,
+                    'Main Godown', // Default location
+                    item.product,
+                    item.currentStock,
+                    0, // Rate - to be filled manually
+                    0, // Value - calculated as Qty * Rate
+                    '', // Remarks
+                    '', '', '', 'Spares'
+                ]);
+            });
+
+            // Add total row
+            inventoryData.push(['Total', '', '', '', '', '0']);
+
+            inventorySheet = XLSX.utils.aoa_to_sheet(inventoryData);
+            XLSX.utils.book_append_sheet(workbook, inventorySheet, inventorySheetName);
+        }
+
+        // Sheet 3: Debtor Details - Preserve existing format and add data
+        const debtorSheetName = 'Debtor Details';
+        let debtorSheet;
+        
+        if (workbook.SheetNames.includes(debtorSheetName)) {
+            // Get existing sheet to preserve formatting
+            debtorSheet = workbook.Sheets[debtorSheetName];
+            
+            // Find the starting row for debtor data (after headers)
+            // Look for the row with "Name of Debtors" to determine data start
+            let dataStartRow = 20; // Default fallback
+            const range = XLSX.utils.decode_range(debtorSheet['!ref']);
+            
+            for (let row = 0; row <= range.e.r; row++) {
+                const cellRef = XLSX.utils.encode_cell({ r: row, c: 0 });
+                const cell = debtorSheet[cellRef];
+                if (cell && cell.v && cell.v.toString().includes('Name of Debtors')) {
+                    dataStartRow = row + 1;
+                    break;
+                }
+            }
+            
+            // Add debtor data starting from the identified row
+            debtorData.forEach((debtor, index) => {
+                const rowIndex = dataStartRow + index;
+                
+                // Add data to specific cells while preserving formatting
+                const cells = [
+                    { col: 0, value: debtor.name }, // Name of Debtors
+                    { col: 1, value: '' }, // Invoice No - to be filled
+                    { col: 2, value: '' }, // Date of Invoice - to be filled
+                    { col: 3, value: '' }, // LEI/GST/PAN - to be filled
+                    { col: 4, value: debtor.balance }, // Upto 3 months
+                    { col: 5, value: 0 }, // > 3 months upto 6 months
+                    { col: 6, value: 0 }, // > 6 months upto 1 year
+                    { col: 7, value: 0 }, // More Than 1 Year
+                    { col: 8, value: debtor.balance } // Total
+                ];
+                
+                cells.forEach(({ col, value }) => {
+                    const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col });
+                    const destCell = debtorSheet[cellRef] || {};
+                    // Copy style from the template's first data row to preserve formatting
+                    const styleRef = XLSX.utils.encode_cell({ r: dataStartRow, c: col });
+                    const styleCell = debtorSheet[styleRef];
+                    if (styleCell && styleCell.s) destCell.s = styleCell.s;
+                    if (styleCell && styleCell.z) destCell.z = styleCell.z;
+                    destCell.v = value;
+                    destCell.t = typeof value === 'number' ? 'n' : 's';
+                    debtorSheet[cellRef] = destCell;
+                });
+            });
+            
+            // Update the sheet range to include new data
+            const newRange = XLSX.utils.decode_range(debtorSheet['!ref']);
+            newRange.e.r = Math.max(newRange.e.r, dataStartRow + debtorData.length - 1);
+            debtorSheet['!ref'] = XLSX.utils.encode_range(newRange);
+        } else {
+            // Fallback: create new sheet if template doesn't exist
+            const debtorSheetData = [
+                ['Advances taken through Bills/Oustanding under Bils discounted', '', '', '', '', '', '', '', 'Value In Absolute Rs.', '', '', 'Yellow Colour cells are input fields'],
+                ['', '', '', '', '', '', '', '', '', '', '', '*All values are to be filled in absolute terms'],
+                [],
+                ['Upto 3 months'],
+                ['> 3 months upto 6 months'],
+                ['> 6 months upto 1 year'],
+                ['More Than 1 Year'],
+                ['Total', '', '', '', '', '', '', '', '0'],
+                [],
+                ['Debtors (receivables including bills)', '', '', '', 'in Absolute Rs.'],
+                ['Name of Debtors', 'Invoice No.', 'Date of Invoice', 'LEI No./GST No./PAN of Debtor', 'Upto 3 months', '> 3 months upto 6 months', '> 6 months upto 1 year', 'More Than 1 Year', 'Total']
+            ];
+
+            // Add debtor data
+            debtorData.forEach((debtor) => {
+                debtorSheetData.push([
+                    debtor.name,
+                    '', // Invoice No - to be filled
+                    '', // Date of Invoice - to be filled
+                    '', // LEI/GST/PAN - to be filled
+                    debtor.balance, // Assuming all balances are upto 3 months
+                    0, // > 3 months upto 6 months
+                    0, // > 6 months upto 1 year
+                    0, // More Than 1 Year
+                    debtor.balance // Total
+                ]);
+            });
+
+            debtorSheet = XLSX.utils.aoa_to_sheet(debtorSheetData);
+            XLSX.utils.book_append_sheet(workbook, debtorSheet, debtorSheetName);
+        }
+
+        // Save the updated workbook back to the original template file
+        const excelBuffer = XLSX.write(workbook, { 
+            type: 'buffer', 
+            bookType: 'xlsm',
+            compression: true,
+            bookVBA: true // Preserve VBA macros when writing
+        });
+
+        // Ensure a generated output directory exists and write there to preserve the original template
+        const outputDir = path.join(__dirname, '../../generated');
+        await fs.mkdir(outputDir, { recursive: true });
+        const timeStamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const outputPath = path.join(outputDir, `PNB_Stock_Statement_${timeStamp}.xlsm`);
+
+        // Write the updated data to the new output file (do not overwrite the template)
+        await fs.writeFile(outputPath, excelBuffer);
+
+        // Send success response
+        res.json({ 
+            message: 'Excel file updated successfully', 
+            filePath: outputPath,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('Error generating Excel file:', error);
+        res.status(500).json({ message: 'Failed to generate Excel file', error: error.message });
     }
 });
 
