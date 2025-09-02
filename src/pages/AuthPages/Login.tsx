@@ -31,8 +31,8 @@ const Login: React.FC = () => {
           if (data.authenticated && data.user) {
             // Store user details in localStorage
             localStorage.setItem('user', JSON.stringify(data.user));
-            // If user is authenticated, redirect to /account-master
-            window.location.href = '/account-master';
+            // If user is authenticated, redirect to /attendance
+            window.location.href = '/attendance';
           }
         } else {
           // If token is invalid, remove it and user details
@@ -107,8 +107,8 @@ const Login: React.FC = () => {
             console.error('Error fetching user details after login:', authErr);
           }
 
-          // If login is successful, redirect to /account-master
-          navigate('/account-master');
+          // If login is successful, redirect to /attendance
+          navigate('/attendance');
         } else {
           setError('Login failed. Please check your credentials.');
         }
@@ -187,4 +187,4 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login; 
+export default Login;

@@ -44,8 +44,12 @@ import ItemWiseStockRegister from './pages/reports/ItemWiseStockRegister';
 import CashBook from './pages/reports/CashBook';
 import PartyLedger from './pages/reports/PartyLedger';
 import VanLoading from './pages/reports/VanLoading';
+import PNBStockStatement from './pages/reports/PNBStockStatement';
 import PrintGodownStock from './pages/print/PrintGodownStock';
 import PushNotifications from './pages/push-notifications/PushNotifications';
+import Attendance from './pages/attendance/Attendance';
+import AttendanceHistory from './pages/attendance/AttendanceHistory';
+import AdminAttendance from './pages/attendance/AdminAttendance';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -219,6 +223,12 @@ const AppRoutes = () => (
         </ProtectedRoute>
       } />
       
+      <Route path="/reports/pnb-stock-statement" element={
+        <ProtectedRoute requiredAccess="Reports">
+          <PNBStockStatement />
+        </ProtectedRoute>
+      } />
+      
       {/* Edit Pages */}
       <Route path="/account-master/edit/:id" element={
         <ProtectedRoute requiredAccess="Account Master">
@@ -303,6 +313,23 @@ const AppRoutes = () => (
       <Route path="/push-notifications" element={
         <ProtectedRoute requiredAccess="Admin">
           <PushNotifications />
+        </ProtectedRoute>
+      } />
+      
+      {/* Attendance Routes */}
+      <Route path="/attendance" element={
+        <ProtectedRoute>
+          <Attendance />
+        </ProtectedRoute>
+      } />
+      <Route path="/attendance/history" element={
+        <ProtectedRoute>
+          <AttendanceHistory />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/attendance" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <AdminAttendance />
         </ProtectedRoute>
       } />
     </Route>
