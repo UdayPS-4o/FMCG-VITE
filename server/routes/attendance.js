@@ -61,56 +61,156 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
   try {
     const { id, userId, userName, date, time, location, selfieData, status } = req.body;
     
-    // Debug logging
-    console.log('Attendance marking request:');
-    console.log('req.user.userId:', req.user.userId, 'type:', typeof req.user.userId);
-    console.log('body.userId:', userId, 'type:', typeof userId);
-    console.log('Comparison result:', req.user.userId !== userId);
-    console.log('Strict equality:', req.user.userId === userId);
-    console.log('Loose equality:', req.user.userId == userId);
+    // Comprehensive debug logging for production debugging
+    console.log('=== ATTENDANCE MARKING REQUEST START ===');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Request headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Request body:', JSON.stringify({
+      id: id ? 'present' : 'missing',
+      userId: userId,
+      userName: userName ? 'present' : 'missing',
+      date: date,
+      time: time,
+      location: location ? 'present' : 'missing',
+      selfieData: selfieData ? `present (${selfieData.length} chars)` : 'missing',
+      status: status
+    }, null, 2));
+    console.log('JWT decoded user:', JSON.stringify(req.user, null, 2));
+    console.log('User ID comparison:');
+    console.log('  req.user.userId:', req.user.userId, 'type:', typeof req.user.userId);
+    console.log('  body.userId:', userId, 'type:', typeof userId);
+    console.log('  Strict equality (===):', req.user.userId === userId);
+    console.log('  Loose equality (==):', req.user.userId == userId);
+    console.log('  String comparison:', String(req.user.userId) === String(userId));
+    console.log('  Number comparison:', Number(req.user.userId) === Number(userId));
     
     // Verify the user making the request matches the attendance record
-    // Use loose equality to handle potential type differences
-    if (req.user.userId != userId) {
-      console.log('Authorization failed - user ID mismatch');
-      return res.status(403).json({ success: false, message: 'Unauthorized to mark attendance for this user' });
+    // Handle potential type differences between JWT token and request body
+    const jwtUserId = req.user.userId;
+    const requestUserId = userId;
+    const userIdMatch = (Number(jwtUserId) === Number(requestUserId)) || (String(jwtUserId) === String(requestUserId));
+    
+    console.log('Authorization check:');
+    console.log('  JWT User ID (converted to number):', Number(jwtUserId));
+    console.log('  Request User ID (converted to number):', Number(requestUserId));
+    console.log('  User ID match result:', userIdMatch);
+    
+    if (!userIdMatch) {
+      console.log('❌ AUTHORIZATION FAILED - User ID mismatch');
+      console.log('  Expected:', jwtUserId, '(type:', typeof jwtUserId, ')');
+      console.log('  Received:', requestUserId, '(type:', typeof requestUserId, ')');
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Unauthorized to mark attendance for this user',
+        debug: {
+          expectedUserId: jwtUserId,
+          receivedUserId: requestUserId,
+          expectedType: typeof jwtUserId,
+          receivedType: typeof requestUserId
+        }
+      });
     }
     
-    console.log('Authorization passed - proceeding with attendance marking');
+    console.log('✅ AUTHORIZATION PASSED - Proceeding with attendance marking');
+
+    // Validate required fields
+    const requiredFields = { id, userId, userName, date, time, location, selfieData, status };
+    const missingFields = [];
+    
+    for (const [field, value] of Object.entries(requiredFields)) {
+      if (!value || (typeof value === 'string' && value.trim() === '')) {
+        missingFields.push(field);
+      }
+    }
+    
+    if (missingFields.length > 0) {
+      console.log('❌ VALIDATION FAILED - Missing required fields:', missingFields);
+      return res.status(400).json({
+        success: false,
+        message: `Missing required fields: ${missingFields.join(', ')}`,
+        missingFields: missingFields
+      });
+    }
+    
+    // Validate location object structure
+    if (!location.latitude || !location.longitude) {
+      console.log('❌ VALIDATION FAILED - Invalid location data');
+      return res.status(400).json({
+        success: false,
+        message: 'Location must include latitude and longitude',
+        receivedLocation: location
+      });
+    }
+    
+    console.log('✅ VALIDATION PASSED - All required fields present');
 
     // Check if attendance already marked for today
     const attendanceDir = path.join(__dirname, '..', 'db', 'attendance');
     const attendanceFilePath = path.join(attendanceDir, 'records.json');
     
+    console.log('📁 Checking attendance directory:', attendanceDir);
+    
     // Ensure directory exists
-    await ensureDirectoryExistence(attendanceDir);
+    try {
+      await ensureDirectoryExistence(attendanceDir);
+      console.log('✅ Attendance directory ensured');
+    } catch (error) {
+      console.log('❌ Failed to ensure attendance directory:', error.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to access attendance storage',
+        error: error.message
+      });
+    }
     
     let attendanceRecords = [];
     
     try {
+      console.log('📖 Reading attendance records from:', attendanceFilePath);
       const data = await fs.readFile(attendanceFilePath, 'utf8');
       attendanceRecords = JSON.parse(data);
+      console.log('✅ Successfully loaded', attendanceRecords.length, 'existing attendance records');
     } catch (error) {
-      // File doesn't exist yet, start with empty array
-      attendanceRecords = [];
+      if (error.code === 'ENOENT') {
+        console.log('📝 Attendance file does not exist, starting with empty array');
+        attendanceRecords = [];
+      } else {
+        console.log('❌ Failed to read attendance records:', error.message);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to read attendance records',
+          error: error.message
+        });
+      }
     }
 
     // Check if user already marked attendance for this date
+    console.log('🔍 Checking for existing attendance record for user', userId, 'on date', date);
     const existingRecord = attendanceRecords.find(record => 
-      record.userId === userId && record.date === date
+      Number(record.userId) === Number(userId) && record.date === date
     );
 
     if (existingRecord) {
+      console.log('❌ DUPLICATE ATTENDANCE - User already marked attendance for today');
+      console.log('  Existing record:', JSON.stringify(existingRecord, null, 2));
       return res.status(400).json({ 
         success: false, 
-        message: 'Attendance already marked for today' 
+        message: 'Attendance already marked for today',
+        existingRecord: {
+          id: existingRecord.id,
+          time: existingRecord.time,
+          status: existingRecord.status
+        }
       });
     }
+    
+    console.log('✅ No existing attendance found - proceeding with new record');
 
     // Create attendance record
     const attendanceRecord = {
       id,
-      userId,
+      userId: Number(userId), // Ensure userId is stored as number for consistency
       userName,
       date,
       time,
@@ -120,22 +220,78 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
       timestamp: new Date().toISOString()
     };
 
+    console.log('📝 Creating new attendance record:', JSON.stringify({
+      id: attendanceRecord.id,
+      userId: attendanceRecord.userId,
+      userName: attendanceRecord.userName,
+      date: attendanceRecord.date,
+      time: attendanceRecord.time,
+      status: attendanceRecord.status,
+      timestamp: attendanceRecord.timestamp,
+      locationPresent: !!attendanceRecord.location,
+      selfieDataLength: attendanceRecord.selfieData ? attendanceRecord.selfieData.length : 0
+    }, null, 2));
+
     attendanceRecords.push(attendanceRecord);
 
     // Save to file
-    await fs.writeFile(attendanceFilePath, JSON.stringify(attendanceRecords, null, 2));
+    try {
+      console.log('💾 Saving attendance records to file...');
+      await fs.writeFile(attendanceFilePath, JSON.stringify(attendanceRecords, null, 2));
+      console.log('✅ Attendance records saved successfully');
+    } catch (error) {
+      console.log('❌ Failed to save attendance records:', error.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to save attendance record',
+        error: error.message
+      });
+    }
 
     // Update user's current location
-    await updateUserLocation(userId, userName, location);
+    try {
+      console.log('📍 Updating user location...');
+      await updateUserLocation(userId, userName, location);
+      console.log('✅ User location updated successfully');
+    } catch (error) {
+      console.log('⚠️ Failed to update user location (attendance still recorded):', error.message);
+      // Don't fail the entire request if location update fails
+    }
 
+    console.log('🎉 ATTENDANCE MARKED SUCCESSFULLY');
+    console.log('=== ATTENDANCE MARKING REQUEST END ===');
+    
     res.status(200).json({ 
       success: true, 
       message: 'Attendance marked successfully',
-      record: attendanceRecord
+      record: {
+        id: attendanceRecord.id,
+        userId: attendanceRecord.userId,
+        userName: attendanceRecord.userName,
+        date: attendanceRecord.date,
+        time: attendanceRecord.time,
+        status: attendanceRecord.status,
+        timestamp: attendanceRecord.timestamp
+      }
     });
   } catch (error) {
-    console.error('Error marking attendance:', error);
-    res.status(500).json({ success: false, message: 'Failed to mark attendance' });
+    console.log('❌ CRITICAL ERROR in attendance marking:');
+    console.log('  Error message:', error.message);
+    console.log('  Error stack:', error.stack);
+    console.log('  Error name:', error.name);
+    console.log('  Request body at time of error:', JSON.stringify(req.body, null, 2));
+    console.log('  User from JWT at time of error:', JSON.stringify(req.user, null, 2));
+    console.log('=== ATTENDANCE MARKING REQUEST END (ERROR) ===');
+    
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to mark attendance - server error',
+      error: {
+        message: error.message,
+        name: error.name,
+        timestamp: new Date().toISOString()
+      }
+    });
   }
 });
 
