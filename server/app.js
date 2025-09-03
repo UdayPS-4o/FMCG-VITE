@@ -30,13 +30,23 @@ app.use(
         // Add any other domain that needs access
       ];
       
+      // Enhanced CORS logging for production debugging
+      console.log('=== CORS DEBUG ===');
+      console.log('Request Origin:', origin);
+      console.log('NODE_ENV:', process.env.NODE_ENV);
+      console.log('Allowed Origins:', allowedOrigins);
+      
       // Allow requests with no origin (like mobile apps, curl, postman)
-      if (!origin) return callback(null, true);
+      if (!origin) {
+        console.log('CORS: Allowing request with no origin');
+        return callback(null, true);
+      }
       
       if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+        console.log('CORS: Origin allowed');
         callback(null, true);
       } else {
-        console.log('Blocked by CORS:', origin);
+        console.log('CORS: Blocked origin:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     },
