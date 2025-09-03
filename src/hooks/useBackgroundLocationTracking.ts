@@ -114,24 +114,32 @@ export const useBackgroundLocationTracking = (): UseBackgroundLocationTracking =
   // Enable background location tracking
   const enableBackgroundTracking = useCallback(async (): Promise<boolean> => {
     try {
+      console.log('Attempting to enable background tracking...');
+      
       if (!isAuthenticated) {
+        const errorMsg = 'User must be authenticated to enable background tracking';
+        console.error(errorMsg);
         setBackgroundState(prev => ({
           ...prev,
-          error: 'User must be authenticated to enable background tracking'
+          error: errorMsg
         }));
         return false;
       }
 
+      console.log('User is authenticated, requesting permissions...');
       // Request permissions first
       const permissionsGranted = await requestBackgroundPermissions();
       if (!permissionsGranted) {
+        console.error('Permissions not granted');
         return false;
       }
 
+      console.log('Permissions granted, starting background tracking...');
       // Start background tracking
       const success = await backgroundLocationService.startTracking();
       
       if (success) {
+        console.log('Background tracking started successfully');
         setBackgroundState(prev => ({
           ...prev,
           isBackgroundTrackingEnabled: true,
@@ -151,14 +159,17 @@ export const useBackgroundLocationTracking = (): UseBackgroundLocationTracking =
         console.log('Background location tracking enabled successfully');
         return true;
       } else {
+        const errorMsg = 'Failed to start background location tracking';
+        console.error(errorMsg);
         setBackgroundState(prev => ({
           ...prev,
-          error: 'Failed to start background location tracking'
+          error: errorMsg
         }));
         return false;
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to enable background tracking';
+      console.error('Error enabling background tracking:', error);
       setBackgroundState(prev => ({
         ...prev,
         error: errorMessage,

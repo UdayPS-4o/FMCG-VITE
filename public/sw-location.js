@@ -1,7 +1,7 @@
 // Service Worker for Background Location Tracking
 
 const CACHE_NAME = 'location-tracker-v1';
-const API_BASE_URL = 'http://localhost:3000'; // This should match your backend URL
+const API_BASE_URL = 'http://localhost:8000'; // This should match your backend URL
 
 let locationTrackingInterval = null;
 let updateInterval = 60000; // Default 1 minute
