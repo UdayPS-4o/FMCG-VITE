@@ -42,13 +42,21 @@ class BackgroundLocationService {
   // Register service worker for background tasks
   private async registerServiceWorker(): Promise<void> {
     try {
-      this.serviceWorkerRegistration = await navigator.serviceWorker.register('/sw-location.js');
+      // Force update of service worker to get latest version
+      this.serviceWorkerRegistration = await navigator.serviceWorker.register('/sw-location.js', {
+        updateViaCache: 'none'
+      });
       console.log('Location service worker registered successfully');
+      
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+      console.log('Service worker is ready');
       
       // Listen for messages from service worker
       navigator.serviceWorker.addEventListener('message', this.handleServiceWorkerMessage.bind(this));
     } catch (error) {
       console.error('Service worker registration failed:', error);
+      throw error;
     }
   }
 

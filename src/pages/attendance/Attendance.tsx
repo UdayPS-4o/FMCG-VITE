@@ -359,6 +359,42 @@ const Attendance: React.FC = () => {
     navigate('/attendance/history');
   };
 
+  // Debug function to clear service worker cache
+  const clearServiceWorkerCache = async () => {
+    try {
+      console.log('Clearing service worker cache...');
+      
+      // Unregister all service workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (let registration of registrations) {
+          await registration.unregister();
+          console.log('Service worker unregistered:', registration);
+        }
+      }
+      
+      // Clear all caches
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(cacheName => caches.delete(cacheName))
+        );
+        console.log('All caches cleared');
+      }
+      
+      setToast({ message: 'Service worker cache cleared! Please refresh the page.', type: 'success' });
+      
+      // Reload the page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error clearing service worker cache:', error);
+      setToast({ message: 'Failed to clear cache: ' + (error instanceof Error ? error.message : 'Unknown error'), type: 'error' });
+    }
+  };
+
   // Show loading state while authentication is being checked
   if (loading) {
     return (
@@ -510,6 +546,20 @@ const Attendance: React.FC = () => {
                       ❌ {backgroundState.error}
                     </div>
                   )}
+                  
+                  {/* Debug button for clearing service worker cache */}
+                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+                    <button
+                      onClick={clearServiceWorkerCache}
+                      className="text-xs px-3 py-1 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      title="Clear service worker cache and reload page"
+                    >
+                      🔧 Clear Cache & Reload
+                    </button>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Use this if the Enable button is not working
+                    </p>
+                  </div>
                 </div>
               </div>
 
