@@ -49,8 +49,24 @@ const ensureAttendanceDirectories = async () => {
   const attendanceDir = path.join(__dirname, '..', 'db', 'attendance');
   const locationsDir = path.join(__dirname, '..', 'db', 'locations');
   
-  await ensureDirectoryExistence(attendanceDir);
-  await ensureDirectoryExistence(locationsDir);
+  // Create directories directly since ensureDirectoryExistence expects file paths
+  try {
+    await fs.mkdir(attendanceDir, { recursive: true });
+    console.log('✅ Attendance directory created/verified:', attendanceDir);
+  } catch (error) {
+    if (error.code !== 'EEXIST') {
+      console.error('❌ Failed to create attendance directory:', error);
+    }
+  }
+  
+  try {
+    await fs.mkdir(locationsDir, { recursive: true });
+    console.log('✅ Locations directory created/verified:', locationsDir);
+  } catch (error) {
+    if (error.code !== 'EEXIST') {
+      console.error('❌ Failed to create locations directory:', error);
+    }
+  }
 };
 
 // Initialize directories
@@ -64,6 +80,12 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
     // Comprehensive debug logging for production debugging
     console.log('=== ATTENDANCE MARKING REQUEST START ===');
     console.log('Timestamp:', new Date().toISOString());
+    console.log('Environment Check:', {
+      NODE_ENV: process.env.NODE_ENV,
+      JWT_SECRET_SET: process.env.JWT_SECRET ? 'YES' : 'NO',
+      JWT_SECRET_VALUE: process.env.JWT_SECRET || 'USING_DEFAULT',
+      PORT: process.env.PORT
+    });
     console.log('Request headers:', JSON.stringify(req.headers, null, 2));
     console.log('Request body keys:', Object.keys(req.body));
     console.log('Request body:', JSON.stringify({
@@ -939,6 +961,48 @@ app.delete('/api/attendance/admin/delete-record', verifyToken, requireAdmin, asy
   } catch (error) {
     console.error('Error deleting attendance record:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// Test endpoint for debugging JWT authentication in production
+app.get('/api/test-auth', (req, res) => {
+  console.log('=== AUTH TEST ENDPOINT ===');
+  console.log('Environment:', {
+    NODE_ENV: process.env.NODE_ENV,
+    JWT_SECRET_SET: process.env.JWT_SECRET ? 'YES' : 'NO',
+    JWT_SECRET_LENGTH: (process.env.JWT_SECRET || 'your-secret-key-here').length,
+    FRONTEND_URL: process.env.FRONTEND_URL
+  });
+  
+  const token = req.headers.authorization && req.headers.authorization.split(' ')[1];
+  console.log('Token present:', !!token);
+  
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      console.log('Token decoded successfully:', { userId: decoded.userId, username: decoded.username });
+      res.json({
+        success: true,
+        message: 'Authentication working',
+        user: req.user ? { id: req.user.id, username: req.user.username } : 'No user attached',
+        tokenValid: true,
+        environment: process.env.NODE_ENV || 'development'
+      });
+    } catch (error) {
+      console.log('Token verification failed:', error.message);
+      res.status(401).json({
+        success: false,
+        message: 'Token verification failed',
+        error: error.message,
+        environment: process.env.NODE_ENV || 'development'
+      });
+    }
+  } else {
+    res.status(401).json({
+      success: false,
+      message: 'No token provided',
+      environment: process.env.NODE_ENV || 'development'
+    });
   }
 });
 
