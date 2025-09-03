@@ -7,6 +7,7 @@ import constants from '../../constants';
 import Toast from '../../components/ui/toast/Toast';
 import useLocationTracking from '../../hooks/useLocationTracking';
 import useAttendanceCheck from '../../hooks/useAttendanceCheck';
+import useBackgroundLocationTracking from '../../hooks/useBackgroundLocationTracking';
 
 interface LocationData {
   latitude: number;
@@ -50,6 +51,13 @@ const Attendance: React.FC = () => {
   const { hasMarkedToday } = useAttendanceCheck();
 
   const { lastPosition, isTracking, startTracking, stopTracking, getCurrentLocation } = useLocationTracking();
+  const { 
+    backgroundState, 
+    enableBackgroundTracking, 
+    disableBackgroundTracking, 
+    setBackgroundUpdateInterval,
+    requestBackgroundPermissions 
+  } = useBackgroundLocationTracking();
 
   useEffect(() => {
     // Start continuous location tracking
@@ -448,6 +456,60 @@ const Attendance: React.FC = () => {
                    }`}>
                      {location ? '📍 Location Detected' : '❌ Location Required'}
                   </span>
+                </div>
+              </div>
+
+              {/* Background Location Tracking Status */}
+              <div className="mb-6">
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                      🌍 Continuous Location Tracking
+                    </h4>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      backgroundState.isBackgroundTrackingEnabled 
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                    }`}>
+                      {backgroundState.isBackgroundTrackingEnabled ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                    {backgroundState.isBackgroundTrackingEnabled 
+                      ? 'Your location is being tracked continuously, even when the app is not in use. This ensures accurate attendance monitoring.'
+                      : 'Enable continuous tracking to monitor your location even when the app is closed or in the background.'}
+                  </p>
+                  
+                  {backgroundState.isBackgroundTrackingSupported ? (
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-blue-600 dark:text-blue-400">
+                        {backgroundState.lastBackgroundUpdate && (
+                          <span>Last update: {backgroundState.lastBackgroundUpdate.toLocaleTimeString()}</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={backgroundState.isBackgroundTrackingEnabled ? disableBackgroundTracking : enableBackgroundTracking}
+                        className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${
+                          backgroundState.isBackgroundTrackingEnabled
+                            ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
+                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
+                        }`}
+                      >
+                        {backgroundState.isBackgroundTrackingEnabled ? 'Disable' : 'Enable'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
+                      ⚠️ Background tracking not fully supported in this browser. Location will only be tracked when the app is active.
+                    </div>
+                  )}
+                  
+                  {backgroundState.error && (
+                    <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mt-2">
+                      ❌ {backgroundState.error}
+                    </div>
+                  )}
                 </div>
               </div>
 
