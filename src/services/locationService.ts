@@ -135,7 +135,10 @@ class LocationService {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ location })
+        body: JSON.stringify({ 
+          location,
+          source: 'foreground'
+        })
       });
 
       if (!response.ok) {

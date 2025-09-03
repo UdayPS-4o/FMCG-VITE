@@ -32,6 +32,8 @@ interface UserLocation {
     timestamp: number;
   } | null;
   lastUpdated: string;
+  source?: string;
+  isBackgroundTracking?: boolean;
 }
 
 interface SalaryAddition {
@@ -310,19 +312,49 @@ const AdminAttendance: React.FC = () => {
 
   const getLocationStatus = (location: UserLocation) => {
     if (!location.currentLocation) {
-      return { status: 'No Location', color: 'text-gray-500', bgColor: 'bg-gray-100' };
+      return { 
+        status: 'No Location', 
+        color: 'text-gray-500', 
+        bgColor: 'bg-gray-100',
+        icon: '❌',
+        description: 'No location data available'
+      };
     }
     
     const lastUpdated = new Date(location.lastUpdated);
     const now = new Date();
     const diffMinutes = (now.getTime() - lastUpdated.getTime()) / (1000 * 60);
+    const isBackgroundTracking = location.isBackgroundTracking || false;
+    const source = location.source || 'unknown';
     
     if (diffMinutes < 5) {
-      return { status: 'Online', color: 'text-green-800', bgColor: 'bg-green-100' };
+      return { 
+        status: isBackgroundTracking ? 'Online (BG)' : 'Online', 
+        color: 'text-green-800', 
+        bgColor: 'bg-green-100',
+        icon: isBackgroundTracking ? '🌍' : '📍',
+        description: isBackgroundTracking 
+          ? `Active with background tracking (${source})` 
+          : 'Active with foreground tracking'
+      };
     } else if (diffMinutes < 30) {
-      return { status: 'Recent', color: 'text-yellow-800', bgColor: 'bg-yellow-100' };
+      return { 
+        status: isBackgroundTracking ? 'Recent (BG)' : 'Recent', 
+        color: 'text-yellow-800', 
+        bgColor: 'bg-yellow-100',
+        icon: isBackgroundTracking ? '🟡' : '🟠',
+        description: isBackgroundTracking 
+          ? `Recently active with background tracking (${Math.round(diffMinutes)}m ago)` 
+          : `Recently active (${Math.round(diffMinutes)}m ago)`
+      };
     } else {
-      return { status: 'Offline', color: 'text-red-800', bgColor: 'bg-red-100' };
+      return { 
+        status: 'Offline', 
+        color: 'text-red-800', 
+        bgColor: 'bg-red-100',
+        icon: '🔴',
+        description: `Last seen ${Math.round(diffMinutes)}m ago${isBackgroundTracking ? ' (had background tracking)' : ''}`
+      };
     }
   };
 
@@ -1108,9 +1140,15 @@ const AdminAttendance: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color}`}>
-                              {status.status}
-                            </span>
+                            <div className="flex flex-col space-y-1">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color}`}>
+                                <span className="mr-1">{status.icon}</span>
+                                {status.status}
+                              </span>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {status.description}
+                              </div>
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             {location.currentLocation ? (

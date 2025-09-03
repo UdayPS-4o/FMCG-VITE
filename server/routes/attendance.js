@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const { ensureDirectoryExistence } = require('./utilities');
+const { sendNotificationToAdmins } = require('./push');
 
 require('dotenv').config();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
@@ -280,6 +281,42 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
       // Don't fail the entire request if location update fails
     }
 
+    // Send push notification to admins about attendance marking
+    try {
+      console.log('📱 Sending push notification to admins...');
+      
+      // Format date and time in DD/MM/YYYY HH:MM:SS AM format
+      const attendanceDate = new Date(attendanceRecord.timestamp);
+      const formattedDate = attendanceDate.toLocaleDateString('en-GB'); // DD/MM/YYYY format
+      const formattedTime = attendanceDate.toLocaleTimeString('en-US', { 
+        hour12: true, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+      }); // HH:MM:SS AM/PM format
+      
+      const notificationPayload = {
+        title: 'Attendance Marked',
+        message: `${userName} marked attendance as ${status.toUpperCase()} on ${formattedDate} at ${formattedTime}`,
+        data: {
+          url: '/admin/attendance',
+          endpoint: 'attendance',
+          id: attendanceRecord.id,
+          userId: userId,
+          userName: userName,
+          date: formattedDate,
+          time: formattedTime,
+          status: status
+        }
+      };
+      
+      sendNotificationToAdmins(notificationPayload);
+      console.log('✅ Push notification sent to admins successfully');
+    } catch (notificationError) {
+      console.log('⚠️ Failed to send push notification to admins:', notificationError.message);
+      // Don't fail the entire request if notification fails
+    }
+
     console.log('🎉 ATTENDANCE MARKED SUCCESSFULLY');
     console.log('=== ATTENDANCE MARKING REQUEST END ===');
     
@@ -444,7 +481,7 @@ app.get('/api/attendance/admin/locations', verifyToken, requireAdmin, async (req
 // Update user location (continuous tracking)
 app.post('/api/attendance/location/update', verifyToken, async (req, res) => {
   try {
-    const { location } = req.body;
+    const { location, source } = req.body;
     const userId = req.user.userId;
     
     // Get user name
@@ -457,9 +494,24 @@ app.post('/api/attendance/location/update', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
-    await updateUserLocation(userId, user.name, location);
+    // Log background tracking updates for monitoring
+    if (source === 'background' || source === 'service-worker') {
+      console.log(`📍 Background location update from user ${user.name} (${userId}):`, {
+        source,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy,
+        timestamp: location.timestamp
+      });
+    }
     
-    res.status(200).json({ success: true, message: 'Location updated successfully' });
+    await updateUserLocation(userId, user.name, location, source);
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Location updated successfully',
+      source: source || 'foreground'
+    });
   } catch (error) {
     console.error('Error updating location:', error);
     res.status(500).json({ success: false, message: 'Failed to update location' });
@@ -467,10 +519,11 @@ app.post('/api/attendance/location/update', verifyToken, async (req, res) => {
 });
 
 // Helper function to update user location
-const updateUserLocation = async (userId, userName, location) => {
+const updateUserLocation = async (userId, userName, location, source = 'foreground') => {
   try {
     const locationsDir = path.join(__dirname, '..', 'db', 'locations');
     const locationsFilePath = path.join(locationsDir, 'current.json');
+    const historyFilePath = path.join(locationsDir, 'history.json');
     
     // Ensure directory exists
     await ensureDirectoryExistence(locationsDir);
@@ -487,12 +540,15 @@ const updateUserLocation = async (userId, userName, location) => {
     
     // Find existing location record for user
     const existingIndex = locations.findIndex(loc => loc.userId === userId);
+    const now = new Date().toISOString();
     
     const locationRecord = {
       userId,
       userName,
       currentLocation: location,
-      lastUpdated: new Date().toISOString()
+      lastUpdated: now,
+      source: source,
+      isBackgroundTracking: source === 'background' || source === 'service-worker'
     };
     
     if (existingIndex >= 0) {
@@ -504,6 +560,40 @@ const updateUserLocation = async (userId, userName, location) => {
     }
     
     await fs.writeFile(locationsFilePath, JSON.stringify(locations, null, 2));
+    
+    // Also store in history for tracking patterns
+    let history = [];
+    try {
+      const historyData = await fs.readFile(historyFilePath, 'utf8');
+      history = JSON.parse(historyData);
+    } catch (error) {
+      // File doesn't exist, start with empty array
+      history = [];
+    }
+    
+    // Add to history (keep last 1000 entries per user to prevent file from growing too large)
+    const historyRecord = {
+      userId,
+      userName,
+      location,
+      timestamp: now,
+      source,
+      isBackgroundTracking: source === 'background' || source === 'service-worker'
+    };
+    
+    history.push(historyRecord);
+    
+    // Keep only last 1000 entries per user
+    const userHistory = history.filter(h => h.userId === userId);
+    if (userHistory.length > 1000) {
+      // Remove oldest entries for this user
+      const otherUsersHistory = history.filter(h => h.userId !== userId);
+      const recentUserHistory = userHistory.slice(-1000);
+      history = [...otherUsersHistory, ...recentUserHistory];
+    }
+    
+    await fs.writeFile(historyFilePath, JSON.stringify(history, null, 2));
+    
   } catch (error) {
     console.error('Error updating user location:', error);
     throw error;
