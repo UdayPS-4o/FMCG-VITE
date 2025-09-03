@@ -141,7 +141,7 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
     const missingFields = [];
     
     for (const [field, value] of Object.entries(requiredFields)) {
-      if (!value || (typeof value === 'string' && value.trim() === '')) {
+      if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
         missingFields.push(field);
       }
     }

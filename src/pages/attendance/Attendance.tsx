@@ -329,10 +329,10 @@ const Attendance: React.FC = () => {
       if (response.ok) {
         setToast({ message: 'Attendance marked successfully!', type: 'success' });
         setCapturedImage(null);
-        // Immediately navigate to dashboard after successful attendance
+        // Immediately navigate to account master after successful attendance
         // Using window.location for hard navigation to bypass state issues
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          window.location.href = '/account-master';
         }, 1000);
       } else {
         const errorData = await response.json();
