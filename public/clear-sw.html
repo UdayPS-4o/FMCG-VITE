@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Service Worker Cache</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Service Worker Cache Cleaner</h1>
+        <p>This tool helps clear the service worker cache to fix location tracking issues.</p>
+        
+        <button onclick="clearServiceWorker()">Clear Service Worker</button>
+        <button onclick="clearAllCache()">Clear All Cache</button>
+        <button onclick="reloadPage()">Reload Main App</button>
+        
+        <div id="status" style="margin-top: 20px;"></div>
+        
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Click "Clear Service Worker" to unregister the old service worker</li>
+            <li>Click "Clear All Cache" to clear browser cache</li>
+            <li>Click "Reload Main App" to go back to the attendance page</li>
+            <li>Try enabling background location tracking again</li>
+        </ol>
+    </div>
+
+    <script>
+        const status = document.getElementById('status');
+        
+        async function clearServiceWorker() {
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        await registration.unregister();
+                    }
+                    status.innerHTML = '<div class="success">✅ Service worker cleared successfully!</div>';
+                } else {
+                    status.innerHTML = '<div class="error">❌ Service workers not supported</div>';
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function clearAllCache() {
+            try {
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(
+                        cacheNames.map(cacheName => caches.delete(cacheName))
+                    );
+                    status.innerHTML = '<div class="success">✅ All cache cleared successfully!</div>';
+                } else {
+                    status.innerHTML = '<div class="error">❌ Cache API not supported</div>';
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        function reloadPage() {
+            window.location.href = '/attendance';
+        }
+    </script>
+</body>
+</html>

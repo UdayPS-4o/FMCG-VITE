@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
 const XLSX = require('xlsx');
+const axios = require('axios');
 const { getDbfData } = require('./utilities'); // Assuming utilities are in the same directory or adjust path
 require('dotenv').config();
 
@@ -1243,6 +1244,329 @@ workbook = XLSX.read(templateBuffer, { type: 'buffer', bookVBA: true, cellStyles
         console.error('Error generating Excel file:', error);
         res.status(500).json({ message: 'Failed to generate Excel file', error: error.message });
     }
+});
+
+// GET /api/reports/gstr2a-purchase-data - Load purchase data for GSTR2A matching
+router.get('/gstr2a-purchase-data', async (req, res) => {
+    try {
+        const { month } = req.query;
+        
+        if (!month || month.length !== 6) {
+            return res.status(400).json({ message: 'Month parameter is required in MMYYYY format (e.g., 082025)' });
+        }
+        
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+        }
+        
+        const purPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'pur.json');
+        const cashPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CASH.json');
+        
+        // Read purchase data from both files
+        const purData = JSON.parse(await fs.readFile(purPath, 'utf8'));
+        const cashData = JSON.parse(await fs.readFile(cashPath, 'utf8'));
+        
+        // Filter data for the specified month
+        const monthStr = month.substring(0, 2);
+        const yearStr = month.substring(2, 6);
+        
+        const filteredPurData = purData.filter(record => {
+            if (!record.PBILLDATE) return false;
+            
+            const recordDate = new Date(record.PBILLDATE);
+            const recordMonth = String(recordDate.getMonth() + 1).padStart(2, '0');
+            const recordYear = String(recordDate.getFullYear());
+            
+            return recordMonth === monthStr && recordYear === yearStr;
+        });
+        
+        const filteredCashData = cashData.filter(record => {
+            if (!record.DATE) return false;
+            
+            const recordDate = new Date(record.DATE);
+            const recordMonth = String(recordDate.getMonth() + 1).padStart(2, '0');
+            const recordYear = String(recordDate.getFullYear());
+            
+            return recordMonth === monthStr && recordYear === yearStr;
+        });
+        
+        // Create a map of cash data by bill number for quick lookup
+        const cashMap = new Map();
+        filteredCashData.forEach(record => {
+            const billKey = record.BILL;
+            if (billKey) {
+                if (!cashMap.has(billKey)) {
+                    cashMap.set(billKey, []);
+                }
+                cashMap.get(billKey).push(record);
+            }
+        });
+        
+        // Transform data to include GST details from CASH.json
+        const transformedData = filteredPurData.map(record => {
+            const billNumber = record.PBILL;
+            const cashRecords = cashMap.get(billNumber) || [];
+            
+            // Calculate taxable value from CASH records where C_CODE starts with 'GG'
+            const totalTaxableValue = cashRecords.reduce((sum, cashRecord) => {
+                if (cashRecord.C_CODE && cashRecord.C_CODE.startsWith('GG')) {
+                    const taxableValue = parseFloat(cashRecord.DR) || 0;
+                    return sum + taxableValue;
+                }
+                return sum;
+            }, 0);
+            
+            // Calculate GST amounts from CASH records
+            // VG codes for CGST/SGST and VI codes for IGST
+            const totalGSTAmount = cashRecords.reduce((sum, cashRecord) => {
+                if (cashRecord.C_CODE && 
+                    (cashRecord.C_CODE.startsWith('VG') || cashRecord.C_CODE.startsWith('VI'))) {
+                    const gstAmount = parseFloat(cashRecord.DR) || 0;
+                    return sum + gstAmount;
+                }
+                return sum;
+            }, 0);
+            
+            // Separate CGST/SGST and IGST amounts for detailed breakdown
+            const cgstSgstAmount = cashRecords.reduce((sum, cashRecord) => {
+                if (cashRecord.C_CODE && cashRecord.C_CODE.startsWith('VG')) {
+                    const gstAmount = parseFloat(cashRecord.DR) || 0;
+                    return sum + gstAmount;
+                }
+                return sum;
+            }, 0);
+            
+            const igstAmount = cashRecords.reduce((sum, cashRecord) => {
+                if (cashRecord.C_CODE && cashRecord.C_CODE.startsWith('VI')) {
+                    const gstAmount = parseFloat(cashRecord.DR) || 0;
+                    return sum + gstAmount;
+                }
+                return sum;
+            }, 0);
+            
+            return {
+                PBILL: record.PBILL || '',
+                PBILLDATE: record.PBILLDATE || '',
+                C_CST: record.C_CST || '',
+                N_B_AMT: record.N_B_AMT || 0,
+                C_CODE: record.C_CODE || '',
+                PRODUCT: record.PRODUCT || '',
+                QTY: record.QTY || 0,
+                RATE: record.RATE || 0,
+                AMT: record.AMT || 0,
+                // GST details from CASH.json
+                TOTAL_GST_AMOUNT: parseFloat(totalGSTAmount.toFixed(2)),
+                TOTAL_TAXABLE_VALUE: parseFloat(totalTaxableValue.toFixed(2)),
+                CGST_SGST_AMOUNT: parseFloat(cgstSgstAmount.toFixed(2)),
+                IGST_AMOUNT: parseFloat(igstAmount.toFixed(2)),
+                CASH_RECORDS: cashRecords.filter(cr => 
+                    cr.C_CODE && (cr.C_CODE.startsWith('GG') || cr.C_CODE.startsWith('VG') || cr.C_CODE.startsWith('VI'))
+                )
+            };
+        });
+        
+        console.log(`[GSTR2A-PURCHASE-DATA] Loaded ${transformedData.length} purchase records with GST details from CASH.json for month ${month}`);
+        
+        res.json(transformedData);
+        
+    } catch (error) {
+        console.error('Error loading GSTR2A purchase data:', error);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ message: 'Purchase data files not found. Please check the DBF folder path.' });
+        } else if (error instanceof SyntaxError) {
+            res.status(500).json({ message: 'Error parsing purchase data files.' });
+        } else {
+            res.status(500).json({ message: 'Failed to load purchase data for GSTR2A matching.' });
+        }
+    }
+});
+
+// GST API Proxy Routes
+// Route to request OTP from GST API
+router.post('/gst-otp-request', async (req, res) => {
+  try {
+    const { gstin, username, aspid, password } = req.body;
+    
+    const response = await axios.get(
+      `http://gstapi.charteredinfo.com/taxpayerapi/dec/v1.0/authenticate?action=OTPREQUEST&gstin=${gstin}&username=${username}`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'aspid': aspid,
+          'password': password
+        },
+        timeout: 30000 // 30 second timeout
+      }
+    );
+    
+    res.json(response.data);
+  } catch (error) {
+    console.error('GST OTP Request Error:', error.message);
+    if (error.response) {
+      console.error('GST API Response:', error.response.status, error.response.data);
+    }
+    res.status(500).json({ 
+      error: 'Failed to request OTP from GST API',
+      details: error.message 
+    });
+  }
+});
+
+// Route to get auth token from GST API
+router.post('/gst-auth-token', async (req, res) => {
+  try {
+    const { gstin, username, otp, aspid, password } = req.body;
+    
+    const response = await axios.get(
+      `http://gstapi.charteredinfo.com/taxpayerapi/dec/v1.0/authenticate?action=AUTHTOKEN&gstin=${gstin}&username=${username}&OTP=${otp}`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'aspid': aspid,
+          'password': password
+        },
+        timeout: 30000
+      }
+    );
+    
+    res.json(response.data);
+  } catch (error) {
+    console.error('GST Auth Token Error:', error.message);
+    if (error.response) {
+      console.error('GST API Response:', error.response.status, error.response.data);
+    }
+    res.status(500).json({ 
+      error: 'Failed to get auth token from GST API',
+      details: error.message 
+    });
+  }
+});
+
+// Route to download GSTR2A data from GST API
+router.post('/gst-download-gstr2a', async (req, res) => {
+  try {
+    const { action, gstin, ret_period, authtoken, username, aspid, password } = req.body;
+    
+    const response = await axios.get(
+      `http://gstapi.charteredinfo.com/taxpayerapi/dec/v2.0/returns/gstr2a?action=${action}&gstin=${gstin}&username=${username}&ret_period=${ret_period}`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'aspid': aspid,
+          'password': password,
+          'authtoken': authtoken
+        },
+        timeout: 60000 // 60 second timeout for data download
+      }
+    );
+    
+    res.json(response.data);
+  } catch (error) {
+    console.error('GST GSTR2A Download Error:', error.message);
+    if (error.response) {
+      console.error('GST API Response:', error.response.status, error.response.data);
+    }
+    res.status(500).json({ 
+      error: 'Failed to download GSTR2A data from GST API',
+      details: error.message 
+    });
+  }
+});
+
+// GSTR2A File Management Routes
+// Route to save GSTR2A data to dedicated folder
+router.post('/gstr2a-save-file', async (req, res) => {
+  try {
+    const { month, fileType, data } = req.body; // fileType: 'B2B' or 'CDN'
+    
+    if (!month || !fileType || !data) {
+      return res.status(400).json({ error: 'Missing required parameters: month, fileType, data' });
+    }
+    
+    // Create month-specific folder
+    const monthFolder = path.join(__dirname, '../../public/gstr2a-data', month);
+    await fs.mkdir(monthFolder, { recursive: true });
+    
+    // Save file
+    const fileName = `gstr2a${fileType}${month}.json`;
+    const filePath = path.join(monthFolder, fileName);
+    
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+    
+    console.log(`[GSTR2A-SAVE] Saved ${fileName} to ${monthFolder}`);
+    res.json({ success: true, filePath: `/gstr2a-data/${month}/${fileName}` });
+    
+  } catch (error) {
+    console.error('Error saving GSTR2A file:', error);
+    res.status(500).json({ error: 'Failed to save GSTR2A file', details: error.message });
+  }
+});
+
+// Route to load GSTR2A data from dedicated folder
+router.get('/gstr2a-load-file/:month/:fileType', async (req, res) => {
+  try {
+    const { month, fileType } = req.params; // fileType: 'B2B' or 'CDN'
+    
+    const fileName = `gstr2a${fileType}${month}.json`;
+    const filePath = path.join(__dirname, '../../public/gstr2a-data', month, fileName);
+    
+    try {
+      const fileContent = await fs.readFile(filePath, 'utf8');
+      const data = JSON.parse(fileContent);
+      
+      console.log(`[GSTR2A-LOAD] Loaded ${fileName} from month folder ${month}`);
+      res.json(data);
+      
+    } catch (fileError) {
+      if (fileError.code === 'ENOENT') {
+        res.status(404).json({ error: `File not found: ${fileName}` });
+      } else {
+        throw fileError;
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error loading GSTR2A file:', error);
+    res.status(500).json({ error: 'Failed to load GSTR2A file', details: error.message });
+  }
+});
+
+// Route to list available GSTR2A files for a month
+router.get('/gstr2a-list-files/:month', async (req, res) => {
+  try {
+    const { month } = req.params;
+    
+    const monthFolder = path.join(__dirname, '../../public/gstr2a-data', month);
+    
+    try {
+      const files = await fs.readdir(monthFolder);
+      const gstr2aFiles = files.filter(file => file.startsWith('gstr2a') && file.endsWith('.json'));
+      
+      const fileInfo = gstr2aFiles.map(file => {
+        const fileType = file.includes('B2B') ? 'B2B' : file.includes('CDN') ? 'CDN' : 'Unknown';
+        return {
+          fileName: file,
+          fileType,
+          filePath: `/gstr2a-data/${month}/${file}`
+        };
+      });
+      
+      console.log(`[GSTR2A-LIST] Found ${fileInfo.length} files for month ${month}`);
+      res.json({ files: fileInfo });
+      
+    } catch (dirError) {
+      if (dirError.code === 'ENOENT') {
+        res.json({ files: [] }); // No folder exists yet
+      } else {
+        throw dirError;
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error listing GSTR2A files:', error);
+    res.status(500).json({ error: 'Failed to list GSTR2A files', details: error.message });
+  }
 });
 
 module.exports = router;

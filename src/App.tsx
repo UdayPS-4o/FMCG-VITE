@@ -50,6 +50,7 @@ import PushNotifications from './pages/push-notifications/PushNotifications';
 import Attendance from './pages/attendance/Attendance';
 import AttendanceHistory from './pages/attendance/AttendanceHistory';
 import AdminAttendance from './pages/attendance/AdminAttendance';
+import GSTR2AMatching from './pages/reports/GSTR2AMatching';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -226,6 +227,12 @@ const AppRoutes = () => (
       <Route path="/reports/pnb-stock-statement" element={
         <ProtectedRoute requiredAccess="Reports">
           <PNBStockStatement />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/reports/gstr2a-matching" element={
+        <ProtectedRoute requiredAccess="Reports">
+          <GSTR2AMatching />
         </ProtectedRoute>
       } />
       

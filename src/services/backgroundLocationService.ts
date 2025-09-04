@@ -28,10 +28,8 @@ class BackgroundLocationService {
         this.setupFallbackTracking();
       }
 
-      // Request persistent notification permission for background tracking
-      if ('Notification' in window && Notification.permission === 'default') {
-        await Notification.requestPermission();
-      }
+      // Note: Notification permissions are handled separately for admin users only
+      // Regular location tracking does not require notifications
 
     } catch (error) {
       console.error('Error initializing background tracking:', error);

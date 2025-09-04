@@ -228,6 +228,7 @@ const fmcgItems: NavItem[] = [
       { name: "Party Ledger", path: "/reports/party-ledger", pro: false },
       { name: "Print Van Loading", path: "/reports/van-loading", pro: false },
       { name: "PNB Stock Statement", path: "/reports/pnb-stock-statement", pro: false },
+      { name: "GSTR - Match Pur. B2B with GSTR2A", path: "/reports/gstr2a-matching", pro: false },
     ],
   }
 ];

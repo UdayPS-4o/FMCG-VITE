@@ -87,12 +87,14 @@ export const useBackgroundLocationTracking = (): UseBackgroundLocationTracking =
         return false;
       }
 
-      // Request notification permission (for background tracking indication)
-      if ('Notification' in window) {
+      // Request notification permission only for admin users
+      if ('Notification' in window && (user as any)?.role === 'admin') {
         const notificationPermission = await Notification.requestPermission();
         if (notificationPermission === 'denied') {
-          console.warn('Notification permission denied, background tracking may be limited');
+          console.warn('Notification permission denied for admin user');
         }
+      } else if ((user as any)?.role !== 'admin') {
+        console.log('Skipping notification permission request for non-admin user');
       }
 
       // Check if background sync is supported

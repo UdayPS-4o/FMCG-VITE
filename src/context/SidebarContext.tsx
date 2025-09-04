@@ -52,9 +52,9 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  // Auto-collapse sidebar when Van Loading page is accessed
+  // Auto-collapse sidebar when Van Loading or GSTR2A Matching page is accessed
   useEffect(() => {
-    if (location.pathname === '/reports/van-loading') {
+    if (location.pathname === '/reports/van-loading' || location.pathname === '/reports/gstr2a-matching') {
       setIsExpanded(false);
     }
   }, [location.pathname]);
