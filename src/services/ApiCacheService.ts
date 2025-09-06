@@ -1,5 +1,5 @@
 interface CacheEntry {
-  data: any;
+  data: unknown;
   hash: string;
   timestamp: number;
 }
@@ -63,7 +63,7 @@ class ApiCacheService {
     }
   }
   
-  async set(url: string, data: any, hash: string): Promise<void> {
+  async set(url: string, data: unknown, hash: string): Promise<void> {
     try {
       const db = await this.initDb();
       return new Promise((resolve, reject) => {
@@ -84,7 +84,7 @@ class ApiCacheService {
     }
   }
   
-  async fetchWithCache(url: string, options: RequestInit = {}): Promise<any> {
+  async fetchWithCache(url: string, options: RequestInit = {}): Promise<unknown> {
     try {
       // Try to get from cache first
       const cacheEntry = await this.get(url);
@@ -156,4 +156,4 @@ class ApiCacheService {
 }
 
 // Create a singleton instance
-export const apiCache = new ApiCacheService(); 
+export const apiCache = new ApiCacheService();

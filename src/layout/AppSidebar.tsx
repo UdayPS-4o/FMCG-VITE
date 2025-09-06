@@ -8,7 +8,8 @@ import {
   CashReceiptIcon,
   CashPaymentIcon,
   InvoiceIcon,
-  WarehouseIcon
+  WarehouseIcon,
+  DashboardIcon
 } from '../components/icons';
 import { useSidebar } from "../context/SidebarContext";
 import constants from '../constants';
@@ -147,6 +148,11 @@ const AdminAttendanceIcon: React.FC<{ className?: string }> = ({ className }) =>
 );
 
 const fmcgItems: NavItem[] = [
+  {
+    icon: <DashboardIcon />,
+    name: "Dashboard",
+    path: "/dashboard",
+  },
   {
     icon: <AttendanceIcon />,
     name: "Attendance",
@@ -338,6 +344,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
           // Show admin attendance portal only for admin users
           return user.routeAccess.includes('Admin');
         }
+        if (item.name === "Dashboard" && !user.routeAccess.includes('Dashboard')) return false;
         if (item.name === "Account Master" && !user.routeAccess.includes('Account Master')) return false;
         if (item.name === "Invoicing" && !user.routeAccess.includes('Invoicing')) return false;
         if (item.name === "Godown Transfer" && !user.routeAccess.includes('Godown Transfer')) return false;

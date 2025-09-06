@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import React, { ReactNode } from "react";
 
 // Props for Table
 interface TableProps {
@@ -28,6 +28,13 @@ interface TableRowProps {
 interface TableCellProps {
   children: ReactNode; // Cell content
   isHeader?: boolean; // If true, renders as <th>, otherwise <td>
+  className?: string; // Optional className for styling
+  colSpan?: number; // Number of columns the cell should span
+}
+
+// Props for TableHead (alias for TableCell with isHeader=true)
+interface TableHeadProps {
+  children: ReactNode; // Cell content
   className?: string; // Optional className for styling
   colSpan?: number; // Number of columns the cell should span
 }
@@ -63,4 +70,13 @@ const TableCell: React.FC<TableCellProps> = ({
   return <CellTag className={` ${className}`} colSpan={colSpan}>{children}</CellTag>;
 };
 
-export { Table, TableHeader, TableBody, TableRow, TableCell };
+// TableHead Component (alias for TableCell with isHeader=true)
+const TableHead: React.FC<TableHeadProps> = ({
+  children,
+  className,
+  colSpan,
+}) => {
+  return <th className={` ${className}`} colSpan={colSpan}>{children}</th>;
+};
+
+export { Table, TableHeader, TableBody, TableRow, TableCell, TableHead };

@@ -3,6 +3,23 @@ import Input from '../../components/form/input/Input';
 import constants from '../../constants';
 import useGoBack from '../../hooks/useGoBack';
 
+// Define User type
+interface User {
+  id: number;
+  name: string;
+  username: string;
+  routeAccess: string[];
+  powers: string[];
+  subgroups: any[];
+  smCode?: string;
+  defaultSeries?: { 
+    billing?: string;
+    reports?: string; 
+  };
+  godownAccess: string[];
+  canSelectSeries?: boolean;
+}
+
 // Define interfaces for GSTR2A data structures
 interface GSTR2AB2BRecord {
   ctin: string;
@@ -98,6 +115,23 @@ interface ComparisonResult {
 
 const GSTR2AMatching: React.FC = () => {
   const goBack = useGoBack();
+  const [user, setUser] = useState<User | null>(null);
+  const [hasAdminAccess, setHasAdminAccess] = useState<boolean>(false);
+  
+  // Check user access on component mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        setUser(userData);
+        // Check if user has admin access
+        setHasAdminAccess(userData.routeAccess && userData.routeAccess.includes('Admin'));
+      } catch (e) {
+        console.error("Failed to parse user data from localStorage", e);
+      }
+    }
+  }, []);
   
   // Custom back navigation for internal steps
   const handleBackNavigation = () => {
@@ -660,6 +694,52 @@ const GSTR2AMatching: React.FC = () => {
     link.click();
     document.body.removeChild(link);
   };
+  
+  // Check if user has admin access
+  if (!hasAdminAccess) {
+    return (
+      <div className="container mx-auto p-4">
+        <div className="flex items-center mb-6">
+          <button
+            onClick={goBack}
+            className="mr-4 p-2 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+            title="Go back"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">GSTR2A Matching</h1>
+        </div>
+        
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
+          <div className="flex justify-center mb-4">
+            <svg className="w-16 h-16 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-red-800 dark:text-red-200 mb-2">Access Denied</h2>
+          <p className="text-red-600 dark:text-red-300 mb-4">
+            You don't have permission to access this report. This report is restricted to admin users only.
+          </p>
+          <p className="text-sm text-red-500 dark:text-red-400">
+            Please contact your administrator if you believe you should have access to this report.
+          </p>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="container mx-auto p-4">

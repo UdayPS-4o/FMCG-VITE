@@ -84,13 +84,16 @@ app.use(loginRoutes);
 app.use(stockRoutes);
 // Register reports routes
 const reportRoutes = require('./routes/reports');
-app.use('/api/reports', reportRoutes);  // this is the main route for the reports 
+app.use('/api/reports', reportRoutes);  // this is the main route for the reports
 
-  
+// Register dashboard routes
 // set middleware to check if user is logged in
 // Apply this BEFORE routes that need authentication
 const middleware = require('./routes/middleware');
 app.use(middleware);
+
+const dashboardRoutes = require('./routes/dashboard');
+app.use('/api/dashboard', dashboardRoutes);
 
 // Register push notification routes
 const { router: pushRouter } = require('./routes/push');
