@@ -240,23 +240,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const getFirstAccessibleRoute = (): string => {
     if (!user) return '/login';
     
-    // Define route mappings from routeAccess to actual routes
-    const routeMappings = {
-      'Admin': '/add-user',
-      'Account Master': '/account-master',
-      'Invoicing': '/invoicing',
-      'Godown Transfer': '/godown-transfer',
-      'Cash Receipts': '/cash-receipt',
-      'Cash Payments': '/cash-payment'
-    };
-    
-    // Find the first route the user has access to
-    for (const access of user.routeAccess) {
-      const route = routeMappings[access as keyof typeof routeMappings];
-      if (route) return route;
-    }
-    
-    return '/login'; // Fallback to login if no access
+    // Dashboard is accessible to all authenticated users
+    return '/dashboard';
   };
 
   // Add a function to refresh user data without logging out

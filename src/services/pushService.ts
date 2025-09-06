@@ -11,7 +11,7 @@ if (!VAPID_PUBLIC_KEY) {
 export const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding)
-        .replace(/\-/g, '+')
+        .replace(/-/g, '+')
         .replace(/_/g, '/');
 
     const rawData = window.atob(base64);
@@ -53,4 +53,4 @@ export const sendPushNotification = async (userId: string, title: string, messag
         console.error('Error sending push notification:', error);
         throw error;
     }
-}; 
+};

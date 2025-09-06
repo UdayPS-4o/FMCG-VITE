@@ -47,6 +47,7 @@ interface SmOption {
 const AddUser: React.FC = () => {
   const [routeAccessOptions] = useState<string[]>([
     'Admin',
+    'Dashboard',
     'Account Master',
     'Invoicing',
     'Cash Receipts',

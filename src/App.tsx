@@ -51,6 +51,7 @@ import Attendance from './pages/attendance/Attendance';
 import AttendanceHistory from './pages/attendance/AttendanceHistory';
 import AdminAttendance from './pages/attendance/AdminAttendance';
 import GSTR2AMatching from './pages/reports/GSTR2AMatching';
+import Home from './pages/Dashboard/Home';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -106,6 +107,13 @@ const AppRoutes = () => (
         </ProtectedRoute>
       }
     >
+      {/* Dashboard route */}
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <Home />
+        </ProtectedRoute>
+      } />
+      
       {/* Main routes */}
       <Route path="/account-master" element={
         <ProtectedRoute requiredAccess="Account Master">

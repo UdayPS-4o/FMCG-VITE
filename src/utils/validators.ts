@@ -9,7 +9,7 @@ export const validateGSTIN = (gstin: string): boolean => {
 
 // GSTIN checksum algorithm
 export const checkGSTINChecksum = (g: string): boolean => {
-  let a = 65, b = 55, c = 36;
+  const a = 65, b = 55, c = 36;
   
   // Modified implementation that avoids redeclaration issues
   const lastChar = g[14];
@@ -136,7 +136,7 @@ export const validateFSSAI = (fssai: string): true | string => {
 };
 
 // Function to fetch GSTIN details from API
-export const fetchGSTINDetails = async (gstin: string): Promise<any> => {
+export const fetchGSTINDetails = async (gstin: string): Promise<unknown> => {
   try {
     const response = await fetch(`https://udayps.com/api/gst/?gstin=${gstin}`);
     const data = await response.json();
@@ -145,4 +145,4 @@ export const fetchGSTINDetails = async (gstin: string): Promise<any> => {
     console.error("Error fetching GSTIN details:", error);
     return null;
   }
-}; 
+};
