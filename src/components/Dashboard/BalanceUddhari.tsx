@@ -1,10 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { fetchWithAuth } from '@/lib/api';
-import { useAuth, hasMultipleSubgroups } from '@/contexts/AuthContext';
-import { Loader2, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import { useAuth, hasMultipleSubgroups } from '../../contexts/AuthContext';
 import PartyLedgerDialog from './PartyLedgerDialog';
+import constants from '../../constants';
+
+// Create API_BASE_URL from constants for backward compatibility
+const API_BASE_URL = constants.baseURL;
+
+// Local icon components
+const Loader2: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24" {...props}>
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+);
+
+const Eye: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+  </svg>
+);
+
+const EyeOff: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+  </svg>
+);
+
+const ChevronDown: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+  </svg>
+);
+
+const ChevronRight: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+  </svg>
+);
 
 interface BalanceEntry {
   partycode: string;
@@ -27,6 +62,8 @@ interface PartyBalance {
   balanceType: 'DR' | 'CR';
   subgroupCode?: string;
   subgroupName?: string;
+  // Added: maximum days past due among pending bills for this party
+  daysPast?: number;
 }
 
 interface SubgroupBalance {
@@ -55,7 +92,13 @@ const BalanceUddhari: React.FC = () => {
       
       try {
         // Fetch balance data
-        const balanceResponse = await fetchWithAuth('/json/balance');
+        const balanceResponse = await fetch(`${API_BASE_URL}/json/balance`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
         if (!balanceResponse.ok) {
           throw new Error('Failed to fetch balance data');
         }
@@ -113,21 +156,39 @@ const BalanceUddhari: React.FC = () => {
     
     try {
       // Fetch balance data
-      const balanceResponse = await fetchWithAuth('/json/balance');
+      const balanceResponse = await fetch(`${API_BASE_URL}/json/balance`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       if (!balanceResponse.ok) {
         throw new Error('Failed to fetch balance data');
       }
       const balanceData: BalanceResponse = await balanceResponse.json();
       
       // Fetch party information
-      const partyResponse = await fetchWithAuth('/cmpl');
+      const partyResponse = await fetch(`${API_BASE_URL}/cmpl`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       if (!partyResponse.ok) {
         throw new Error('Failed to fetch party data');
       }
       const partyData: PartyInfo[] = await partyResponse.json();
       
       // Fetch subgroup information
-      const subgroupResponse = await fetchWithAuth('/slink/subgrp');
+      const subgroupResponse = await fetch(`${API_BASE_URL}/slink/subgrp`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       if (!subgroupResponse.ok) {
         throw new Error('Failed to fetch subgroup data');
       }
@@ -201,36 +262,82 @@ const BalanceUddhari: React.FC = () => {
           total += balanceAmount;
         }
       });
-      
-      // Sort by balance amount descending
-      processedBalances.sort((a, b) => b.balance - a.balance);
+
+      // Batch fetch max days for all parties using the new batch API
+      const getBatchPartyMaxDays = async (partyCodes: string[]): Promise<Record<string, number>> => {
+        try {
+          const partyCodesParam = partyCodes.join(',');
+          const resp = await fetch(`${API_BASE_URL}/api/reports/balance-slip-batch?partyCodes=${encodeURIComponent(partyCodesParam)}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          if (!resp.ok) {
+            console.error('Batch balance slip API failed:', resp.status, resp.statusText);
+            return {};
+          }
+          const data = await resp.json();
+          const results: Record<string, number> = {};
+          if (data.success && data.data) {
+            for (const [partyCode, info] of Object.entries(data.data)) {
+              results[partyCode] = (info as any).maxDays || 0;
+            }
+          }
+          return results;
+        } catch (e) {
+          console.error('Failed to fetch batch balance slip data:', e);
+          return {};
+        }
+      };
+
+      // Get all party codes for batch processing
+      const allPartyCodes = processedBalances.map(p => p.partyCode);
+      const daysPastMap = await getBatchPartyMaxDays(allPartyCodes);
+
+      // Enrich with daysPast (max days) and sort by days past desc then by balance desc
+      const enrichedBalances: PartyBalance[] = processedBalances.map(p => ({
+        ...p,
+        daysPast: daysPastMap[p.partyCode] || 0
+      }));
+
+      // Sort parties by days past (desc), then balance (desc)
+      enrichedBalances.sort((a, b) => {
+        const da = a.daysPast ?? 0;
+        const db = b.daysPast ?? 0;
+        if (db !== da) return db - da;
+        return b.balance - a.balance;
+      });
       
       // Group by subgroups if user has multiple subgroups or is admin
       if (hasMultipleSubgroups(user) || isAdmin) {
-        const subgroupMap = new Map<string, PartyBalance[]>();
+        const subgroupMap2 = new Map<string, PartyBalance[]>();
         
-        processedBalances.forEach(balance => {
+        enrichedBalances.forEach(balance => {
           const key = balance.subgroupCode || 'Unknown';
-          if (!subgroupMap.has(key)) {
-            subgroupMap.set(key, []);
+          if (!subgroupMap2.has(key)) {
+            subgroupMap2.set(key, []);
           }
-          subgroupMap.get(key)!.push(balance);
+          subgroupMap2.get(key)!.push(balance);
         });
         
         const groupedSubgroups: SubgroupBalance[] = [];
-        subgroupMap.forEach((parties, subgroupCode) => {
+        subgroupMap2.forEach((parties, subgroupCode) => {
           const subgroupTotal = parties.reduce((sum, party) => sum + party.balance, 0);
-          const subgroupName = parties[0]?.subgroupName || subgroupCode;
+          const subgroupNameVal = parties[0]?.subgroupName || subgroupCode;
           
           groupedSubgroups.push({
             subgroupCode,
-            subgroupName,
-            parties: parties.sort((a, b) => b.balance - a.balance),
+            subgroupName: subgroupNameVal,
+            parties: parties.sort((a, b) => {
+              const da = a.daysPast ?? 0; const db = b.daysPast ?? 0;
+              if (db !== da) return db - da;
+              return b.balance - a.balance;
+            }),
             totalBalance: subgroupTotal
           });
         });
         
-        // Sort subgroups by total balance descending
+        // Sort subgroups by total balance descending (keeping existing behavior)
         groupedSubgroups.sort((a, b) => b.totalBalance - a.totalBalance);
         setSubgroupBalances(groupedSubgroups);
         
@@ -238,7 +345,7 @@ const BalanceUddhari: React.FC = () => {
         setExpandedSubgroups(new Set());
       }
       
-      setPartyBalances(processedBalances);
+      setPartyBalances(enrichedBalances);
       setTotalBalance(total);
       
     } catch (err) {

@@ -45,6 +45,26 @@ interface ReportData {
   isOpeningBalance?: boolean;
 }
 
+interface BalanceSlipData {
+  billDate: string;
+  narration: string;
+  billNo: string;
+  dr: number;
+  billdr: number;
+  days: number;
+  balance: number;
+  balanceType: 'CR' | 'DR';
+}
+
+interface BalanceSlipResponse {
+  success: boolean;
+  data: BalanceSlipData[];
+  partyName: string;
+  partyCode: string;
+  finalBalance: number;
+  totalPendingAmount: number;
+}
+
 interface PartyLedgerDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -60,8 +80,13 @@ const PartyLedgerDialog: React.FC<PartyLedgerDialogProps> = ({
 }) => {
   const [reportData, setReportData] = useState<ReportData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [balanceSlipData, setBalanceSlipData] = useState<BalanceSlipData[]>([]);
+  const [balanceSlipLoading, setBalanceSlipLoading] = useState(false);
+  const [showBalanceSlip, setShowBalanceSlip] = useState(false);
+  const [balanceSlipInfo, setBalanceSlipInfo] = useState<{ finalBalance: number; totalPendingAmount: number }>({ finalBalance: 0, totalPendingAmount: 0 });
   const { user } = useAuth();
   const printRef = useRef<HTMLDivElement>(null);
+  const balanceSlipPrintRef = useRef<HTMLDivElement>(null);
   
   // Date range state - default to Current FY
   const [fromDate, setFromDate] = useState('');
@@ -189,10 +214,56 @@ const PartyLedgerDialog: React.FC<PartyLedgerDialogProps> = ({
     }).format(amount);
   };
 
+  // Handle Balance Slip
+  const handleBalanceSlip = async () => {
+    if (!partyCode) return;
+    
+    setBalanceSlipLoading(true);
+    try {
+      const response = await fetch(`${constants.baseURL}/api/reports/balance-slip?partyCode=${partyCode}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
+      const result: BalanceSlipResponse = await response.json();
+      
+      if (result.success && result.data) {
+        setBalanceSlipData(result.data);
+        setBalanceSlipInfo({
+          finalBalance: result.finalBalance,
+          totalPendingAmount: result.totalPendingAmount
+        });
+        setShowBalanceSlip(true);
+      }
+    } catch (error) {
+      console.error('Error generating balance slip:', error);
+    } finally {
+      setBalanceSlipLoading(false);
+    }
+  };
+
   // Print function
   const handlePrint = () => {
     if (printRef.current) {
       const printContent = printRef.current.innerHTML;
+      const originalContent = document.body.innerHTML;
+      
+      document.body.innerHTML = printContent;
+      window.print();
+      document.body.innerHTML = originalContent;
+      window.location.reload();
+    }
+  };
+
+  // Print Balance Slip function
+  const handlePrintBalanceSlip = () => {
+    if (balanceSlipPrintRef.current) {
+      const printContent = balanceSlipPrintRef.current.innerHTML;
       const originalContent = document.body.innerHTML;
       
       document.body.innerHTML = printContent;
@@ -257,7 +328,14 @@ const PartyLedgerDialog: React.FC<PartyLedgerDialogProps> = ({
             </div>
           </div>
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end space-x-2">
+            <button
+              onClick={handleBalanceSlip}
+              disabled={balanceSlipLoading || !partyCode}
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-green-300"
+            >
+              {balanceSlipLoading ? 'Loading...' : 'Balance Slip'}
+            </button>
             <button
               onClick={handleGenerateReport}
               disabled={loading}
@@ -352,6 +430,99 @@ const PartyLedgerDialog: React.FC<PartyLedgerDialogProps> = ({
         {!loading && reportData.length === 0 && fromDate && toDate && (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             No data found for the selected period.
+          </div>
+        )}
+
+        {/* Balance Slip Modal */}
+        {showBalanceSlip && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Balance Slip</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={handlePrintBalanceSlip}
+                      className="flex items-center bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                    >
+                      <FaPrint className="mr-1" /> Print
+                    </button>
+                    <button
+                      onClick={() => setShowBalanceSlip(false)}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div ref={balanceSlipPrintRef} className="p-4">
+                  <div className="text-center mb-6">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">BALANCE SLIP</h2>
+                    <p className="text-gray-700 dark:text-gray-300 mt-2">
+                      Party: {partyName} ({partyCode})
+                    </p>
+                    <p className="text-gray-700 dark:text-gray-300">
+                      Date: {new Date().toLocaleDateString('en-GB')}
+                    </p>
+                  </div>
+
+                  {balanceSlipData.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
+                        <thead>
+                          <tr className="bg-gray-100 dark:bg-gray-700">
+                            <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Bill Date</th>
+                            <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Narration</th>
+                            <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-left text-gray-900 dark:text-white">Bill No</th>
+                            <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">DR</th>
+                            <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Bill DR</th>
+                            <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Days</th>
+                            <th className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">Balance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {balanceSlipData.map((item, index) => (
+                            <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                              <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.billDate}</td>
+                              <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.narration}</td>
+                              <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">{item.billNo}</td>
+                              <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
+                                {formatCurrency(item.dr)}
+                              </td>
+                              <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
+                                {formatCurrency(item.billdr)}
+                              </td>
+                              <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">{item.days}</td>
+                              <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
+                                {formatCurrency(item.balance)} {item.balanceType}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-gray-100 dark:bg-gray-700 font-semibold">
+                            <td colSpan={3} className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">Total</td>
+                            <td className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
+                              {formatCurrency(balanceSlipInfo.totalPendingAmount)}
+                            </td>
+                            <td colSpan={3} className="py-2 px-3 border border-gray-300 dark:border-gray-600 text-right text-gray-900 dark:text-white">
+                              Final Balance: {formatCurrency(Math.abs(balanceSlipInfo.finalBalance))} {balanceSlipInfo.finalBalance >= 0 ? 'CR' : 'DR'}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      No pending bills found for this party.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

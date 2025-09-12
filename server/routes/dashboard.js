@@ -473,13 +473,23 @@ router.get('/balance-uddhari', async (req, res) => {
 // NEW: GET /api/dashboard/unbilled-customers - Customers by days since last bill grouped by subgroup
 router.get('/unbilled-customers', async (req, res) => {
   try {
+    console.log('=== UNBILLED CUSTOMERS API CALLED ===');
+    console.log('User:', req.user?.name, 'ID:', req.user?.id);
+    console.log('User subgroups:', req.user?.subgroups);
+    console.log('User routeAccess:', req.user?.routeAccess);
+    
     const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
     
     // Get user subgroups from authenticated user (req.user is set by middleware)
     const userSubgroups = req.user?.subgroups || [];
+    const isAdmin = req.user?.routeAccess?.includes('Admin');
     
-    // If user has no subgroups, return empty result
-    if (!userSubgroups || userSubgroups.length === 0) {
+    console.log('Is Admin:', isAdmin);
+    console.log('User subgroups length:', userSubgroups.length);
+    
+    // If user has no subgroups and is not admin, return empty result
+    if (!isAdmin && (!userSubgroups || userSubgroups.length === 0)) {
+      console.log('Returning empty result for non-admin user with no subgroups');
       return res.json({ subgroups: [] });
     }
     
@@ -526,31 +536,26 @@ router.get('/unbilled-customers', async (req, res) => {
 
     // Create a map of subgroup prefixes to subgroup info
     const subgroupMap = new Map();
-    userSubgroups.forEach(sg => {
-      const code = sg.subgroupCode || sg;
-      if (typeof code === 'string' && code.length >= 2) {
-        const prefix = code.substring(0, 2).toUpperCase();
-        subgroupMap.set(prefix, {
-          title: sg.title || code,
-          subgroupCode: code,
-          prefix: prefix
-        });
-      }
-    });
+    
+    if (isAdmin) {
+      // For admin users, we'll dynamically discover subgroups from customer data
+      // This will be populated later when processing customer data
+    } else {
+      // For regular users, use their assigned subgroups
+      userSubgroups.forEach(sg => {
+        const code = sg.subgroupCode || sg;
+        if (typeof code === 'string' && code.length >= 2) {
+          const prefix = code.substring(0, 2).toUpperCase();
+          subgroupMap.set(prefix, {
+            title: sg.title || code,
+            subgroupCode: code,
+            prefix: prefix
+          });
+        }
+      });
+    }
 
     const today = new Date();
-    const subgroupResults = new Map();
-
-    // Initialize subgroup results
-    subgroupMap.forEach((subgroupInfo, prefix) => {
-      subgroupResults.set(prefix, {
-        ...subgroupInfo,
-        last7: [],
-        last15: [],
-        last30: [],
-        counts: { last7: 0, last15: 0, last30: 0, total: 0 }
-      });
-    });
 
     const pushCustomer = (subgroupPrefix, bucket, c, lastDate) => {
       const payload = {
@@ -568,15 +573,65 @@ router.get('/unbilled-customers', async (req, res) => {
       }
     };
 
+    // For admin users, dynamically discover subgroups from customer data
+    if (isAdmin) {
+      console.log('Admin user detected, discovering subgroups from customer data...');
+      console.log('CMPL data length:', cmplData.length);
+      
+      // Define excluded subgroups for admin users (same as BalanceUddhari.tsx)
+      const excludedSubgroups = ['CL', 'EE', 'FA', 'CT', 'AA', 'GG', 'BB', 'SB', 'FC', 'PL', 'DZ', 'VG', 'VI'];
+      
+      const discoveredSubgroups = new Set();
+      for (const c of cmplData) {
+        if (!c || !c.C_CODE) continue;
+        const pref = c.C_CODE.substring(0, 2).toUpperCase();
+        
+        // Skip excluded subgroups for admin users
+        if (excludedSubgroups.includes(pref)) continue;
+        
+        if (pref.length === 2 && !discoveredSubgroups.has(pref)) {
+          discoveredSubgroups.add(pref);
+          subgroupMap.set(pref, {
+            title: pref,
+            subgroupCode: pref,
+            prefix: pref
+          });
+        }
+      }
+      console.log('Discovered subgroups (after exclusions):', Array.from(discoveredSubgroups));
+      console.log('Excluded subgroups:', excludedSubgroups);
+      console.log('SubgroupMap size:', subgroupMap.size);
+    }
+
+    // Initialize subgroup results after subgroup discovery
+    const subgroupResults = new Map();
+    subgroupMap.forEach((subgroupInfo, prefix) => {
+      subgroupResults.set(prefix, {
+        ...subgroupInfo,
+        last7: [],
+        last15: [],
+        last30: [],
+        counts: { last7: 0, last15: 0, last30: 0, total: 0 }
+      });
+    });
+
+    console.log('Starting customer processing...');
+    console.log('SubgroupResults initialized for:', Array.from(subgroupResults.keys()));
+    
+    let processedCustomers = 0;
+    let matchedCustomers = 0;
+    
     const CMPL_CHUNK = 1000;
     for (let i = 0; i < cmplData.length; i += CMPL_CHUNK) {
       const cmplChunk = cmplData.slice(i, i + CMPL_CHUNK);
       for (const c of cmplChunk) {
         if (!c || !c.C_CODE) continue;
+        processedCustomers++;
         
         // Get the prefix and check if it matches any user subgroup
         const pref = c.C_CODE.substring(0, 2).toUpperCase();
         if (!subgroupMap.has(pref)) continue;
+        matchedCustomers++;
         
         const lastDate = lastBilledMap.get(c.C_CODE) || null;
         if (!lastDate) {
@@ -597,6 +652,11 @@ router.get('/unbilled-customers', async (req, res) => {
       }
     }
 
+    console.log('Customer processing completed:');
+    console.log('- Processed customers:', processedCustomers);
+    console.log('- Matched customers:', matchedCustomers);
+    console.log('- SubgroupResults after processing:', Array.from(subgroupResults.entries()).map(([key, value]) => ({ key, total: value.counts.total })));
+
     // Sort each bucket by daysSince desc (more stale first) for each subgroup
     subgroupResults.forEach((subgroupResult) => {
       subgroupResult.last7.sort((a, b) => (b.daysSince ?? 0) - (a.daysSince ?? 0));
@@ -608,6 +668,9 @@ router.get('/unbilled-customers', async (req, res) => {
     const subgroupsArray = Array.from(subgroupResults.values())
       .filter(sg => sg.counts.total > 0)
       .sort((a, b) => b.counts.total - a.counts.total); // Sort by total count desc
+
+    console.log('Final subgroups array length:', subgroupsArray.length);
+    console.log('Subgroups with data:', subgroupsArray.map(sg => ({ title: sg.title, total: sg.counts.total })));
 
     res.json({ subgroups: subgroupsArray });
   } catch (error) {
