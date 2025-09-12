@@ -80,6 +80,17 @@ interface StoredSalaryCalculation {
   calculatedBy: number;
 }
 
+interface UserActivityLog {
+  id: string;
+  userId: number;
+  userName: string;
+  page: string;
+  action: string;
+  timestamp: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
 const AdminAttendance: React.FC = () => {
   const navigate = useNavigate();
   const { user, hasAccess } = useAuth();
@@ -168,6 +179,9 @@ const AdminAttendance: React.FC = () => {
   const [printSlipModal, setPrintSlipModal] = useState<StoredSalaryCalculation | null>(null);
   const [showStoredSalaries, setShowStoredSalaries] = useState<{ [key: number]: boolean }>({});
   const [visibleSalarySlips, setVisibleSalarySlips] = useState<{ [key: string]: boolean }>({});
+  const [userActivityModal, setUserActivityModal] = useState<{ userId: number; userName: string } | null>(null);
+  const [userActivityLogs, setUserActivityLogs] = useState<UserActivityLog[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   useEffect(() => {
     // Check if user has admin access
@@ -564,6 +578,66 @@ const AdminAttendance: React.FC = () => {
 
   const handlePrintSlip = (salary: StoredSalaryCalculation) => {
     setPrintSlipModal(salary);
+  };
+
+  const fetchUserActivityLogs = async (userId: number) => {
+    setActivityLoading(true);
+    try {
+      // Mock data for demonstration - replace with actual API call
+      const mockLogs: UserActivityLog[] = [
+        {
+          id: '1',
+          userId: userId,
+          userName: users.find(u => u.id === userId)?.name || 'Unknown',
+          page: 'Dashboard',
+          action: 'Viewed dashboard',
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          ipAddress: '192.168.1.100'
+        },
+        {
+          id: '2',
+          userId: userId,
+          userName: users.find(u => u.id === userId)?.name || 'Unknown',
+          page: 'Attendance',
+          action: 'Checked in',
+          timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+          ipAddress: '192.168.1.100'
+        },
+        {
+          id: '3',
+          userId: userId,
+          userName: users.find(u => u.id === userId)?.name || 'Unknown',
+          page: 'Profile',
+          action: 'Updated profile information',
+          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+          ipAddress: '192.168.1.100'
+        },
+        {
+          id: '4',
+          userId: userId,
+          userName: users.find(u => u.id === userId)?.name || 'Unknown',
+          page: 'Reports',
+          action: 'Generated monthly report',
+          timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+          ipAddress: '192.168.1.100'
+        }
+      ];
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setUserActivityLogs(mockLogs);
+    } catch (error) {
+      console.error('Error fetching user activity logs:', error);
+      setToast({ message: 'Failed to fetch user activity logs', type: 'error' });
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const handleUserActivityClick = async (userId: number, userName: string) => {
+    setUserActivityModal({ userId, userName });
+    await fetchUserActivityLogs(userId);
   };
 
   // Functions for managing salary slip visibility to users
@@ -1037,7 +1111,12 @@ const AdminAttendance: React.FC = () => {
                               <React.Fragment key={record.id}>
                                 <tr className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                   <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                                    {record.userName}
+                                    <button
+                                      onClick={() => handleUserActivityClick(record.userId, record.userName)}
+                                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors duration-200 text-left font-medium"
+                                    >
+                                      {record.userName}
+                                    </button>
                                     <div className="text-xs text-gray-500 dark:text-gray-400">
                                       ID: {record.userId}
                                     </div>
@@ -1134,7 +1213,12 @@ const AdminAttendance: React.FC = () => {
                       return (
                         <tr key={location.userId} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                            {location.userName}
+                            <button
+                              onClick={() => handleUserActivityClick(location.userId, location.userName)}
+                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors duration-200 text-left font-medium"
+                            >
+                              {location.userName}
+                            </button>
                             <div className="text-xs text-gray-500 dark:text-gray-400">
                               ID: {location.userId}
                             </div>
@@ -1553,6 +1637,146 @@ const AdminAttendance: React.FC = () => {
                   className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg"
                 >
                   🖨️ Print
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Activity Modal */}
+      {userActivityModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  👤 User Activity - {userActivityModal.userName}
+                </h3>
+                <button
+                  onClick={() => {
+                    setUserActivityModal(null);
+                    setUserActivityLogs([]);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="mb-4 flex items-center space-x-4">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filter:</span>
+                <label className="inline-flex items-center">
+                  <input 
+                    type="checkbox" 
+                    className="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        // Filter logs for today
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const filteredLogs = userActivityLogs.filter(log => {
+                          const logDate = new Date(log.timestamp);
+                          return logDate >= today;
+                        });
+                        setUserActivityLogs(filteredLogs);
+                      } else {
+                        // Reset filter by refetching all logs
+                        fetchUserActivityLogs(userActivityModal.userId);
+                      }
+                    }}
+                  />
+                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Today</span>
+                </label>
+                <label className="inline-flex items-center">
+                  <input 
+                    type="checkbox" 
+                    className="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        // Filter logs for last week
+                        const lastWeek = new Date();
+                        lastWeek.setDate(lastWeek.getDate() - 7);
+                        const filteredLogs = userActivityLogs.filter(log => {
+                          const logDate = new Date(log.timestamp);
+                          return logDate >= lastWeek;
+                        });
+                        setUserActivityLogs(filteredLogs);
+                      } else {
+                        // Reset filter by refetching all logs
+                        fetchUserActivityLogs(userActivityModal.userId);
+                      }
+                    }}
+                  />
+                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Last Week</span>
+                </label>
+              </div>
+              
+              <div className="max-h-[60vh] overflow-y-auto">
+                {activityLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-3 text-gray-600 dark:text-gray-400">Loading activity logs...</span>
+                  </div>
+                ) : userActivityLogs.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-gray-400 text-6xl mb-4">📋</div>
+                    <p className="text-gray-500 dark:text-gray-400">No activity logs found for this user.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {userActivityLogs.map((log) => (
+                      <div key={log.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border-l-4 border-blue-500">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                {log.page}
+                              </span>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                {log.action}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              🕒 {new Date(log.timestamp).toLocaleString()}
+                            </p>
+                            {log.ipAddress && (
+                              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                🌐 IP: {log.ipAddress}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-400 dark:text-gray-500">
+                            {(() => {
+                              const now = new Date();
+                              const logTime = new Date(log.timestamp);
+                              const diffMs = now.getTime() - logTime.getTime();
+                              const diffMins = Math.floor(diffMs / (1000 * 60));
+                              const diffHours = Math.floor(diffMins / 60);
+                              const diffDays = Math.floor(diffHours / 24);
+                              
+                              if (diffMins < 1) return 'Just now';
+                              if (diffMins < 60) return `${diffMins}m ago`;
+                              if (diffHours < 24) return `${diffHours}h ago`;
+                              return `${diffDays}d ago`;
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => {
+                    setUserActivityModal(null);
+                    setUserActivityLogs([]);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg dark:bg-gray-600 dark:text-gray-300 dark:hover:bg-gray-500 transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>
