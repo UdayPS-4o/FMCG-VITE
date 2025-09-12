@@ -7,16 +7,19 @@ import {
   CashPaymentIcon,
   WarehouseIcon
 } from '../../components/icons';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface NavItem {
   icon: React.ReactNode;
   name: string;
   path: string;
+  requiredAccess: string;
 }
 
 const BottomNav: React.FC = () => {
   const location = useLocation();
   const [isMobile, setIsMobile] = useState(false);
+  const { hasAccess } = useAuth();
   
   // Check if we're on mobile
   useEffect(() => {
@@ -42,28 +45,36 @@ const BottomNav: React.FC = () => {
       icon: <UserIcon />,
       name: "Account",
       path: "/account-master",
+      requiredAccess: "Account Master",
     },
     {
       icon: <InvoiceIcon />,
       name: "Invoicing",
       path: "/invoicing",
+      requiredAccess: "Invoicing",
     },
     {
       icon: <WarehouseIcon />,
       name: "Godown",
       path: "/godown-transfer",
+      requiredAccess: "Godown Transfer",
     },
     {
       icon: <CashReceiptIcon />,
       name: "Receipt",
       path: "/cash-receipt",
+      requiredAccess: "Cash Receipts",
     },
     {
       icon: <CashPaymentIcon />,
       name: "Payment",
       path: "/cash-payment",
+      requiredAccess: "Cash Payments",
     }
   ];
+
+  // Filter items based on user access
+  const accessibleNavItems = mobileNavItems.filter(item => hasAccess(item.requiredAccess));
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -88,7 +99,7 @@ const BottomNav: React.FC = () => {
         style={{ zIndex: 99999 }}
       >
         <div className="flex justify-between items-center px-2 py-3">
-          {mobileNavItems.map((item) => (
+          {accessibleNavItems.map((item) => (
             <Link
               key={item.name}
               to={item.path}
@@ -113,4 +124,4 @@ const BottomNav: React.FC = () => {
   );
 };
 
-export default BottomNav; 
+export default BottomNav;
