@@ -1,0 +1,12 @@
+
+[
+    {
+        "id": "test-638934429563895404",
+        "recipientId": 2,
+        "recipientName": "ADMIN",
+        "sentBy": 0,
+        "sentAt": "2025-09-14T10:35:56.3915307+05:30",
+        "isRead": false,
+        "message": "This is a test message from admin to verify the notification system is working correctly!"
+    }
+]

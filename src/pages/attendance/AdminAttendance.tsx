@@ -91,6 +91,17 @@ interface UserActivityLog {
   userAgent?: string;
 }
 
+interface MessageData {
+  id: string;
+  recipientId: number;
+  recipientName: string;
+  message: string;
+  photoAttachment?: string;
+  sentAt: string;
+  sentBy: number;
+  isRead: boolean;
+}
+
 const AdminAttendance: React.FC = () => {
   const navigate = useNavigate();
   const { user, hasAccess } = useAuth();
@@ -182,6 +193,19 @@ const AdminAttendance: React.FC = () => {
   const [userActivityModal, setUserActivityModal] = useState<{ userId: number; userName: string } | null>(null);
   const [userActivityLogs, setUserActivityLogs] = useState<UserActivityLog[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
+  
+  // Message state management
+  const [messageModal, setMessageModal] = useState<{ userId: number; userName: string } | null>(null);
+  const [messageData, setMessageData] = useState<{
+    message: string;
+    photoAttachment: File | null;
+    photoPreview: string | null;
+  }>({
+    message: '',
+    photoAttachment: null,
+    photoPreview: null
+  });
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
     // Check if user has admin access
@@ -583,45 +607,56 @@ const AdminAttendance: React.FC = () => {
   const fetchUserActivityLogs = async (userId: number) => {
     setActivityLoading(true);
     try {
-      // Mock data for demonstration - replace with actual API call
-      const mockLogs: UserActivityLog[] = [
-        {
-          id: '1',
+      const user = users.find(u => u.id === userId);
+      const userName = user?.name || 'Unknown';
+      
+      // Generate user-specific logs based on selected date and user ID
+      const selectedDateObj = new Date(selectedDate);
+      const baseTimestamp = selectedDateObj.getTime();
+      
+      // Create different activity patterns based on user ID
+       const activityPatterns = {
+         dashboard: ['Viewed dashboard', 'Checked notifications', 'Reviewed alerts'],
+         attendance: ['Checked in', 'Checked out', 'Updated attendance status', 'Viewed attendance history'],
+         profile: ['Updated profile information', 'Changed password', 'Updated contact details'],
+         reports: ['Generated Employee Attendance Report', 'Downloaded Monthly Payroll Report', 'Viewed Sales Analytics Dashboard', 'Created Quarterly Performance Report', 'Exported Daily Activity Summary'],
+         invoicing: ['Created new invoice', 'Updated invoice status', 'Sent invoice to client'],
+         inventory: ['Updated stock levels', 'Added new product', 'Checked inventory status']
+       };
+      
+      const pages = Object.keys(activityPatterns);
+      const mockLogs: UserActivityLog[] = [];
+      
+      // Generate 3-8 random activities for the selected date
+      const numActivities = 3 + (userId % 6); // Different number of activities per user
+      
+      for (let i = 0; i < numActivities; i++) {
+        const randomPage = pages[Math.floor((userId * i + i) % pages.length)];
+        const actions = activityPatterns[randomPage as keyof typeof activityPatterns];
+        const randomAction = actions[Math.floor((userId + i) % actions.length)];
+        
+        // Generate timestamps throughout the selected date
+        const hourOffset = 8 + (i * 2) + (userId % 3); // Start from 8 AM, spread throughout day
+        const minuteOffset = (userId * 7 + i * 13) % 60; // Different minutes for each user
+        const activityTimestamp = new Date(baseTimestamp + (hourOffset * 60 * 60 * 1000) + (minuteOffset * 60 * 1000));
+        
+        // Generate different IP addresses based on user ID
+        const ipVariation = (userId % 50) + 100;
+        const ipAddress = `192.168.1.${ipVariation}`;
+        
+        mockLogs.push({
+          id: `${userId}_${i}`,
           userId: userId,
-          userName: users.find(u => u.id === userId)?.name || 'Unknown',
-          page: 'Dashboard',
-          action: 'Viewed dashboard',
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '192.168.1.100'
-        },
-        {
-          id: '2',
-          userId: userId,
-          userName: users.find(u => u.id === userId)?.name || 'Unknown',
-          page: 'Attendance',
-          action: 'Checked in',
-          timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '192.168.1.100'
-        },
-        {
-          id: '3',
-          userId: userId,
-          userName: users.find(u => u.id === userId)?.name || 'Unknown',
-          page: 'Profile',
-          action: 'Updated profile information',
-          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          ipAddress: '192.168.1.100'
-        },
-        {
-          id: '4',
-          userId: userId,
-          userName: users.find(u => u.id === userId)?.name || 'Unknown',
-          page: 'Reports',
-          action: 'Generated monthly report',
-          timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-          ipAddress: '192.168.1.100'
-        }
-      ];
+          userName: userName,
+          page: randomPage.charAt(0).toUpperCase() + randomPage.slice(1),
+          action: randomAction,
+          timestamp: activityTimestamp.toISOString(),
+          ipAddress: ipAddress
+        });
+      }
+      
+      // Sort logs by timestamp (newest first)
+      mockLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       
       // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -744,6 +779,101 @@ const AdminAttendance: React.FC = () => {
       setVisibleSalarySlips(visibility);
     }
   };
+
+  // Message handling functions
+  const handleSendMessageClick = (userId: number, userName: string) => {
+    setMessageModal({ userId, userName });
+    setMessageData({
+      message: '',
+      photoAttachment: null,
+      photoPreview: null
+    });
+  };
+
+  const handlePhotoAttachment = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        setToast({ message: 'Photo size must be less than 5MB', type: 'error' });
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setMessageData(prev => ({
+          ...prev,
+          photoAttachment: file,
+          photoPreview: e.target?.result as string
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removePhotoAttachment = () => {
+    setMessageData(prev => ({
+      ...prev,
+      photoAttachment: null,
+      photoPreview: null
+    }));
+  };
+
+  const sendMessage = async () => {
+    if (!messageModal || (!messageData.message.trim() && !messageData.photoAttachment)) {
+      setToast({ message: 'Please enter a message or attach a photo', type: 'error' });
+      return;
+    }
+
+    setSendingMessage(true);
+    try {
+      // Simulate API call with delay for realistic UX
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Mock successful message sending
+      // In a real implementation, this would send to the backend API
+      const messagePayload = {
+        recipientId: messageModal.userId,
+        recipientName: messageModal.userName,
+        message: messageData.message.trim(),
+        photoAttachment: messageData.photoPreview || null, // Use the actual photo data URL
+        sentAt: new Date().toISOString(),
+        sentBy: user?.id || 0, // Use actual admin user ID from auth context
+        isRead: false
+      };
+      
+      // Store message in localStorage for demo purposes
+      // In production, this would be handled by the backend
+      const existingMessages = JSON.parse(localStorage.getItem('userMessages') || '[]');
+      const newMessage = {
+        id: Date.now().toString(),
+        ...messagePayload
+      };
+      existingMessages.push(newMessage);
+      localStorage.setItem('userMessages', JSON.stringify(existingMessages));
+      
+      // Manually trigger storage event for same-window notification updates
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'userMessages',
+        newValue: JSON.stringify(existingMessages),
+        storageArea: localStorage
+      }));
+      
+      console.log('Message sent:', newMessage);
+
+      setToast({ message: `Message sent to ${messageModal.userName} successfully!`, type: 'success' });
+      setMessageModal(null);
+      setMessageData({
+        message: '',
+        photoAttachment: null,
+        photoPreview: null
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setToast({ message: 'Failed to send message. Please try again.', type: 'error' });
+    } finally {
+       setSendingMessage(false);
+     }
+   };
 
   const loadSalarySlipVisibility = async () => {
     await loadSalarySlipVisibilityForSalaries(storedSalaries);
@@ -1152,6 +1282,13 @@ const AdminAttendance: React.FC = () => {
 
                                 <td className="px-6 py-4">
                                   <div className="flex space-x-2">
+                                    <button
+                                      onClick={() => handleSendMessageClick(record.userId, record.userName)}
+                                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
+                                      title="Send message to user"
+                                    >
+                                      💬 Message
+                                    </button>
                                     <button
                                       onClick={() => openLocationInMaps(record.location.latitude, record.location.longitude)}
                                       className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 font-medium"
@@ -1778,6 +1915,123 @@ const AdminAttendance: React.FC = () => {
                 >
                   Close
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Message Modal */}
+      {messageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  💬 Send Message to {messageModal.userName}
+                </h3>
+                <button
+                  onClick={() => {
+                    setMessageModal(null);
+                    setMessageData({ message: '', photoAttachment: null, photoPreview: null });
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Message Text Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Message
+                  </label>
+                  <textarea
+                    value={messageData.message}
+                    onChange={(e) => setMessageData(prev => ({ ...prev, message: e.target.value }))}
+                    placeholder="Type your message here..."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-blue-400 resize-none"
+                  />
+                </div>
+
+                {/* Photo Attachment */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Photo Attachment (Optional)
+                  </label>
+                  
+                  {messageData.photoPreview ? (
+                    <div className="relative">
+                      <img
+                        src={messageData.photoPreview}
+                        alt="Photo preview"
+                        className="w-full h-32 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                      />
+                      <button
+                        onClick={removePhotoAttachment}
+                        className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm transition-colors"
+                        title="Remove photo"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoAttachment}
+                        className="hidden"
+                        id="photo-upload"
+                      />
+                      <label
+                        htmlFor="photo-upload"
+                        className="cursor-pointer flex flex-col items-center space-y-2"
+                      >
+                        <div className="text-gray-400 text-2xl">📷</div>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          Click to attach a photo
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-500">
+                          Max size: 5MB
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    onClick={() => {
+                      setMessageModal(null);
+                      setMessageData({ message: '', photoAttachment: null, photoPreview: null });
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg dark:bg-gray-600 dark:text-gray-300 dark:hover:bg-gray-500 transition-colors"
+                    disabled={sendingMessage}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendMessage}
+                    disabled={sendingMessage || (!messageData.message.trim() && !messageData.photoAttachment)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                  >
+                    {sendingMessage ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>📤</span>
+                        <span>Send Message</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

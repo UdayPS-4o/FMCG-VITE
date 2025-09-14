@@ -181,8 +181,8 @@ export default function Home() {
     return (
       <>
         <PageMeta
-          title="React.js Ecommerce Dashboard | Ekta-Enterprises - React.js Admin Dashboard Template"
-          description="This is React.js Ecommerce Dashboard page for Ekta-Enterprises - React.js Tailwind CSS Admin Dashboard Template"
+          title=" Dashboard | Ekta-Enterprises "
+          description="This is Dashboard page for Ekta-Enterprises Admin Dashboard Template"
         />
         <DashboardSkeletonLoader />
       </>
@@ -192,8 +192,8 @@ export default function Home() {
   return (
     <>
       <PageMeta
-        title="React.js Ecommerce Dashboard | Ekta-Enterprises - React.js Admin Dashboard Template"
-        description="This is React.js Ecommerce Dashboard page for Ekta-Enterprises - React.js Tailwind CSS Admin Dashboard Template"
+        title="Dashboard | Ekta-Enterprises "
+        description="This is Dashboard page for Ekta-Enterprises Admin Dashboard Template"
       />
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         {/* Balance Uddhari KPI - Full width at top */}
