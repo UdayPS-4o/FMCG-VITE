@@ -5,6 +5,7 @@ import AppHeader from "./AppHeader";
 import AppSidebar from "./AppSidebar";
 import BottomNav from "../components/navigation/BottomNav";
 import useAttendanceCheck from "../hooks/useAttendanceCheck";
+import GlobalMessageNotification from "../components/common/GlobalMessageNotification";
 
 const LayoutContent: React.FC = () => {
   const { isExpanded, isHovered, isMobileOpen, toggleMobileSidebar } = useSidebar();
@@ -84,6 +85,9 @@ const LayoutContent: React.FC = () => {
 
   return (
     <div className="min-h-screen xl:flex bg-gray-50 dark:bg-gray-900">
+      {/* Global Message Notification - appears on all pages */}
+      <GlobalMessageNotification />
+      
       {/* Only show sidebar if attendance is marked or on attendance/login pages */}
       {!shouldHideNavigation && (
         <div>
@@ -99,7 +103,9 @@ const LayoutContent: React.FC = () => {
         <AppHeader />
         <div className={`mx-auto w-full max-w-(--breakpoint-2xl) flex-1 
           ${isDesktop ? "p-4 md:p-6 pb-16 lg:pb-4" : "p-2 pt-0 pb-20"}
-          ${!shouldHideNavigation && (isExpanded || isHovered) ? "lg:pt-6" : "lg:pt-4"}`}>
+          ${!shouldHideNavigation && (isExpanded || isHovered) ? "lg:pt-6" : "lg:pt-4"}`}
+          style={{ paddingTop: '4rem' }}
+        >
           <Outlet />
         </div>
         {/* Only show bottom navigation if attendance is marked or on attendance/login pages */}
