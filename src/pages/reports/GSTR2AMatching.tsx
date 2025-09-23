@@ -39,8 +39,8 @@ interface GSTR2AB2BRecord {
       txval: number;
       rt: number;
       iamt: number;
-      camt: number;
-      samt: number;
+      camt?: number;
+      samt?: number;
       csamt: number;
     };
   }>;
@@ -64,8 +64,8 @@ interface GSTR2ACDNRecord {
       txval: number;
       rt: number;
       iamt: number;
-      camt: number;
-      samt: number;
+      camt?: number;
+      samt?: number;
       csamt: number;
     };
   }>;
@@ -169,6 +169,19 @@ const GSTR2AMatching: React.FC = () => {
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
   const [purchaseData, setPurchaseData] = useState<PurchaseRecord[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  
+  // Calculate B2B totals
+  const calculateB2BTotals = () => {
+    const allItems = gstr2aB2BData.flatMap(record => record.itms || []);
+    return {
+      totalValue: gstr2aB2BData.reduce((sum, record) => sum + (record.val || 0), 0),
+      totalTaxableValue: allItems.reduce((sum, item) => sum + (item.itm_det?.txval || 0), 0),
+      totalIGST: allItems.reduce((sum, item) => sum + (item.itm_det?.iamt || 0), 0),
+      totalCGST: allItems.reduce((sum, item) => sum + (item.itm_det?.camt || 0), 0),
+      totalSGST: allItems.reduce((sum, item) => sum + (item.itm_det?.samt || 0), 0),
+      totalCESS: allItems.reduce((sum, item) => sum + (item.itm_det?.csamt || 0), 0)
+    };
+  };
   
   // Validate month format (MMYYYY)
   const validateMonth = (monthStr: string): boolean => {
@@ -436,6 +449,8 @@ const GSTR2AMatching: React.FC = () => {
               ctin: supplier.ctin
             }))
           );
+          console.log('Flattened B2B data sample:', b2bData.slice(0, 2));
+          console.log('First B2B record itms:', b2bData[0]?.itms);
           setGstr2aB2BData(b2bData);
           setSelectedSections(prev => ({ ...prev, b2b: true }));
           filesFound = true;
@@ -507,7 +522,14 @@ const GSTR2AMatching: React.FC = () => {
       setPurchaseData(purchaseData);
       
       // Perform comparison
+      console.log('=== STARTING COMPARISON ===');
+      console.log('Purchase data length:', purchaseData?.length);
+      console.log('GSTR2A B2B data length:', gstr2aB2BData?.length);
+      console.log('GSTR2A CDN data length:', gstr2aCDNData?.length);
+      console.log('Month:', month);
+      
       const results = performComparison(gstr2aB2BData, gstr2aCDNData, purchaseData, month);
+      console.log('Comparison results:', results);
       setComparisonResults(results);
       setCurrentStep('comparison');
     } catch (err) {
@@ -519,12 +541,52 @@ const GSTR2AMatching: React.FC = () => {
   };
   
   // Comparison logic
+  // Test function to verify calculation logic
+  const testCalculationLogic = () => {
+    console.log('=== TESTING CALCULATION LOGIC ===');
+    
+    // Sample data from actual GSTR2A file
+    const sampleRecord = {
+      "itms": [{"num": 1, "itm_det": {"csamt": 0, "rt": 18, "txval": 52573.59, "iamt": 9463.23}}],
+      "val": 62036.82,
+      "inv_typ": "R",
+      "pos": "23",
+      "idt": "05-08-2025",
+      "rchrg": "N",
+      "inum": "M10261025591",
+      "ctin": "27AABCG3365J1ZI"
+    };
+    
+    console.log('Sample record:', sampleRecord);
+    console.log('Sample record itms:', sampleRecord.itms);
+    
+    const taxableValue = sampleRecord.itms?.reduce((sum, item) => sum + (item.itm_det?.txval || 0), 0) || 0;
+    const gstAmount = sampleRecord.itms?.reduce((sum, item) => 
+      sum + (item.itm_det?.iamt || 0) + (item.itm_det?.csamt || 0), 0) || 0;
+    
+    console.log('Calculated taxable value:', taxableValue);
+    console.log('Calculated GST amount:', gstAmount);
+    console.log('Expected taxable value: 52573.59');
+    console.log('Expected GST amount: 9463.23');
+    console.log('Calculation working:', taxableValue === 52573.59 && gstAmount === 9463.23);
+  };
+
   const performComparison = (
     b2bData: GSTR2AB2BRecord[],
     cdnData: GSTR2ACDNRecord[],
     purchaseData: PurchaseRecord[],
     month: string
   ): ComparisonResult[] => {
+    console.log('=== INSIDE PERFORMCOMPARISON ===');
+    console.log('B2B data received:', b2bData?.length, 'records');
+    console.log('CDN data received:', cdnData?.length, 'records');
+    console.log('Purchase data received:', purchaseData?.length, 'records');
+    console.log('First B2B record sample:', b2bData?.[0]);
+    console.log('First B2B record itms:', b2bData?.[0]?.itms);
+    
+    // Run test
+    testCalculationLogic();
+    
     const results: ComparisonResult[] = [];
     const tolerance = 2.00; // Rs. 2.00 tolerance for value comparison
     
@@ -585,9 +647,15 @@ const GSTR2AMatching: React.FC = () => {
         // Invoice value comparison removed as per user request
         
         // Calculate GSTR2A taxable value and GST amount
-        const gstr2aTaxableValue = gstr2aRecord.itms.reduce((sum, item) => sum + item.itm_det.txval, 0);
-        const gstr2aGSTAmount = gstr2aRecord.itms.reduce((sum, item) => 
-          sum + item.itm_det.iamt + item.itm_det.camt + item.itm_det.samt + item.itm_det.csamt, 0);
+        console.log('GSTR2A Record (Both case) for debugging:', gstr2aRecord);
+        console.log('GSTR2A Record (Both case) itms array:', gstr2aRecord.itms);
+        
+        const gstr2aTaxableValue = gstr2aRecord.itms?.reduce((sum, item) => sum + (item.itm_det?.txval || 0), 0) || 0;
+        const gstr2aGSTAmount = gstr2aRecord.itms?.reduce((sum, item) => 
+          sum + (item.itm_det?.iamt || 0) + (item.itm_det?.camt || 0) + (item.itm_det?.samt || 0) + (item.itm_det?.csamt || 0), 0) || 0;
+        
+        console.log('Calculated gstr2aTaxableValue (Both case):', gstr2aTaxableValue);
+        console.log('Calculated gstr2aGSTAmount (Both case):', gstr2aGSTAmount);
         
         // Get purchase taxable value and GST amount
         const purchaseTaxableValue = purchaseRecord.TOTAL_TAXABLE_VALUE || 0;
@@ -619,23 +687,44 @@ const GSTR2AMatching: React.FC = () => {
           purchaseRecord
         });
       } else if (gstr2aRecord) {
-        // Only in GSTR2A
+        // Only in GSTR2A - Calculate GST amounts from itms array
+        console.log('GSTR2A Record for debugging:', gstr2aRecord);
+        console.log('GSTR2A Record itms array:', gstr2aRecord.itms);
+        
+        const gstr2aTaxableValue = gstr2aRecord.itms?.reduce((sum, item) => sum + (item.itm_det?.txval || 0), 0) || 0;
+        const gstr2aGSTAmount = gstr2aRecord.itms?.reduce((sum, item) => 
+          sum + (item.itm_det?.iamt || 0) + (item.itm_det?.camt || 0) + (item.itm_det?.samt || 0) + (item.itm_det?.csamt || 0), 0) || 0;
+        
+        console.log('Calculated gstr2aTaxableValue:', gstr2aTaxableValue);
+        console.log('Calculated gstr2aGSTAmount:', gstr2aGSTAmount);
+        
         results.push({
           invoiceNumber: 'inum' in gstr2aRecord ? gstr2aRecord.inum : gstr2aRecord.nt_num,
           invoiceDate: 'idt' in gstr2aRecord ? gstr2aRecord.idt : gstr2aRecord.nt_dt,
           partyGST: gstr2aRecord.ctin,
           invoiceValue: gstr2aRecord.val,
+          gstr2aTaxableValue,
+          gstr2aGSTAmount,
           source: 'GSTR2A',
           status: 'Missing in Purchase',
           gstr2aRecord
         });
       } else if (purchaseRecord) {
-        // Only in Purchase
+        // Only in Purchase - Missing in GSTR2A
+        // Purchase data should be populated, GSTR2A fields should be empty
+        const purchaseTaxableValue = purchaseRecord.TOTAL_TAXABLE_VALUE || 0;
+        const purchaseGSTAmount = purchaseRecord.TOTAL_GST_AMOUNT || 0;
+        
         results.push({
           invoiceNumber: purchaseRecord.PBILL,
           invoiceDate: new Date(purchaseRecord.PBILLDATE).toLocaleDateString('en-GB'),
           partyGST: purchaseRecord.C_CST,
           invoiceValue: purchaseRecord.N_B_AMT || 0,
+          purchaseTaxableValue,
+          purchaseGSTAmount,
+          // GSTR2A fields are intentionally left undefined (empty) since record is missing in GSTR2A
+          gstr2aTaxableValue: undefined,
+          gstr2aGSTAmount: undefined,
           source: 'Purchase',
           status: 'Missing in GSTR2A',
           purchaseRecord
@@ -952,28 +1041,59 @@ const GSTR2AMatching: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
-                  {gstr2aB2BData.flatMap((record, recordIndex) => 
-                    record.itms?.map((item, itemIndex) => (
-                      <tr key={`${recordIndex}-${itemIndex}`}>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inum}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.idt}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.pos}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inv_typ}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.rchrg}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.srctyp}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.irngendate}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.txval?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.rt?.toFixed(2) || '0.00'}%</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.iamt?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.camt?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.samt?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.csamt?.toFixed(2) || '0.00'}</td>
-                      </tr>
-                    )) || []
-                  )}
-                </tbody>
+                   {gstr2aB2BData.flatMap((record, recordIndex) => 
+                     record.itms?.map((item, itemIndex) => (
+                       <tr key={`${recordIndex}-${itemIndex}`}>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inum}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.idt}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.pos}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inv_typ}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.rchrg}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.srctyp}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.irngendate}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.txval?.toFixed(2) || '0.00'}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.rt?.toFixed(2) || '0.00'}%</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.iamt?.toFixed(2) || '0.00'}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.camt?.toFixed(2) || '0.00'}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.samt?.toFixed(2) || '0.00'}</td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.csamt?.toFixed(2) || '0.00'}</td>
+                       </tr>
+                     )) || []
+                   )}
+                   {/* Total Row for B2B Data */}
+                   {gstr2aB2BData.length > 0 && (() => {
+                     const totals = calculateB2BTotals();
+                     return (
+                       <tr className="bg-green-50 dark:bg-green-900 font-semibold border-t-2 border-green-200 dark:border-green-700">
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={3}>
+                           <strong>TOTAL</strong>
+                         </td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                           <strong>{totals.totalValue.toFixed(2)}</strong>
+                         </td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={5}></td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                           <strong>{totals.totalTaxableValue.toFixed(2)}</strong>
+                         </td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100"></td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                           <strong>{totals.totalIGST.toFixed(2)}</strong>
+                         </td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                           <strong>{totals.totalCGST.toFixed(2)}</strong>
+                         </td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                           <strong>{totals.totalSGST.toFixed(2)}</strong>
+                         </td>
+                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                           <strong>{totals.totalCESS.toFixed(2)}</strong>
+                         </td>
+                       </tr>
+                     );
+                   })()}
+                 </tbody>
               </table>
             )}
             
@@ -1139,6 +1259,39 @@ const GSTR2AMatching: React.FC = () => {
                     </td>
                   </tr>
                 ))}
+                {/* Total Row for Comparison Results */}
+                {comparisonResults.filter(result => statusFilter === 'All' || result.status === statusFilter).length > 0 && (() => {
+                  const totals = {
+                    totalInvoiceValue: comparisonResults.reduce((sum, result) => sum + (result.invoiceValue || 0), 0),
+                    totalGstr2aTaxableValue: comparisonResults.reduce((sum, result) => sum + (result.gstr2aTaxableValue || 0), 0),
+                    totalPurchaseTaxableValue: comparisonResults.reduce((sum, result) => sum + (result.purchaseTaxableValue || 0), 0),
+                    totalGstr2aGSTAmount: comparisonResults.reduce((sum, result) => sum + (result.gstr2aGSTAmount || 0), 0),
+                    totalPurchaseGSTAmount: comparisonResults.reduce((sum, result) => sum + (result.purchaseGSTAmount || 0), 0)
+                  };
+                  return (
+                    <tr className="bg-green-50 dark:bg-green-900 font-semibold border-t-2 border-green-200 dark:border-green-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={3}>
+                        <strong>TOTAL</strong>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                        <strong>{totals.totalInvoiceValue.toFixed(2)}</strong>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                        <strong>{totals.totalGstr2aTaxableValue.toFixed(2)}</strong>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                        <strong>{totals.totalPurchaseTaxableValue.toFixed(2)}</strong>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                        <strong>{totals.totalGstr2aGSTAmount.toFixed(2)}</strong>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                        <strong>{totals.totalPurchaseGSTAmount.toFixed(2)}</strong>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={2}></td>
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
