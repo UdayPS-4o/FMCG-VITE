@@ -11,7 +11,8 @@ const PUBLIC_API_PATHS = [
   '/api/generate-pdf/', 
   '/api/internal/invoice-data/',
   '/api/push/subscribe',
-  '/api/approve-from-notification'
+  '/api/approve-from-notification',
+  '/api/test-details/'
 ];
 
 // Extract JWT token from Authorization header

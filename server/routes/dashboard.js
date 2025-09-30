@@ -581,6 +581,23 @@ router.get('/unbilled-customers', async (req, res) => {
       // Define excluded subgroups for admin users (same as BalanceUddhari.tsx)
       const excludedSubgroups = ['CL', 'EE', 'FA', 'CT', 'AA', 'GG', 'BB', 'SB', 'FC', 'PL', 'DZ', 'VG', 'VI'];
       
+      // Get subgroup data to find full titles
+      let subgroupData = [];
+      try {
+        // Filter CMPL data for subgroup entries (ending with 000)
+        const subgroupEntries = cmplData.filter(item => 
+          item && item.M_GROUP === 'DT' && item.C_CODE && item.C_CODE.endsWith('000')
+        );
+        
+        subgroupData = subgroupEntries.map(item => ({
+          title: `${item.C_NAME} | ${item.C_CODE.slice(2)}`,
+          subgroupCode: item.C_CODE,
+          prefix: item.C_CODE.substring(0, 2).toUpperCase()
+        }));
+      } catch (error) {
+        console.error('Error processing subgroup data:', error);
+      }
+      
       const discoveredSubgroups = new Set();
       for (const c of cmplData) {
         if (!c || !c.C_CODE) continue;
@@ -591,9 +608,13 @@ router.get('/unbilled-customers', async (req, res) => {
         
         if (pref.length === 2 && !discoveredSubgroups.has(pref)) {
           discoveredSubgroups.add(pref);
+          
+          // Find the full subgroup info from subgroupData
+          const fullSubgroupInfo = subgroupData.find(sg => sg.prefix === pref);
+          
           subgroupMap.set(pref, {
-            title: pref,
-            subgroupCode: pref,
+            title: fullSubgroupInfo ? fullSubgroupInfo.title : pref,
+            subgroupCode: fullSubgroupInfo ? fullSubgroupInfo.subgroupCode : pref,
             prefix: pref
           });
         }

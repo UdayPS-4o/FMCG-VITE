@@ -101,6 +101,23 @@ const AttendanceIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const HamburgerIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M4 6h16M4 12h16M4 18h16"
+    />
+  </svg>
+);
+
 interface SubNavItem {
   name: string;
   path: string;
@@ -244,7 +261,7 @@ const navItems: NavItem[] = [];
 const othersItems: NavItem[] = [];
 
 const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
-  const { isExpanded, isMobileOpen, isHovered, setIsHovered, toggleMobileSidebar } = useSidebar();
+  const { isExpanded, isMobileOpen, isHovered, setIsHovered, toggleMobileSidebar, toggleSidebar } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -642,15 +659,22 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         }
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
         lg:translate-x-0`}
-      onMouseEnter={() => !isExpanded && setIsHovered(true)}
+      onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
-        className={`py-4 lg:py-8 flex invisible ${
+        className={`py-4 lg:py-8 flex ${
           !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
         }`}
       >
-    
+        {/* Hamburger icon button - only visible on desktop */}
+        <button
+          onClick={toggleSidebar}
+          className="hidden lg:flex items-center justify-center p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors duration-200"
+          aria-label="Toggle sidebar"
+        >
+          <HamburgerIcon className="w-5 h-5" />
+        </button>
       </div>
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar flex-grow">
         <nav className="mb-6">
