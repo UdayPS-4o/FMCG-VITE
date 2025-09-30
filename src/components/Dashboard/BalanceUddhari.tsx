@@ -245,10 +245,26 @@ const BalanceUddhari: React.FC = () => {
         if (balanceType === 'DR' && balanceAmount > 0) {
           const partyName = partyMap.get(balance.partycode) || balance.partycode;
           const partyPrefix = balance.partycode.substring(0, 2).toUpperCase();
-          const subgroupCode = user.subgroups?.find(sg => 
-            sg.subgroupCode?.substring(0, 2).toUpperCase() === partyPrefix
-          )?.subgroupCode || partyPrefix;
-          const subgroupName = subgroupMap.get(subgroupCode) || subgroupCode;
+          
+          // For admin users, find the full subgroup code from subgroupData
+          // For regular users, use their assigned subgroups
+          let subgroupCode: string;
+          let subgroupName: string;
+          
+          if (isAdmin) {
+            // Find the full subgroup code that starts with the party prefix
+            const matchingSubgroup = subgroupData.find((sg: any) => 
+              sg.subgroupCode?.substring(0, 2).toUpperCase() === partyPrefix
+            );
+            subgroupCode = matchingSubgroup?.subgroupCode || partyPrefix;
+            subgroupName = matchingSubgroup?.title || partyPrefix;
+          } else {
+            // For regular users, use their assigned subgroups
+            subgroupCode = user.subgroups?.find(sg => 
+              sg.subgroupCode?.substring(0, 2).toUpperCase() === partyPrefix
+            )?.subgroupCode || partyPrefix;
+            subgroupName = subgroupMap.get(subgroupCode) || subgroupCode;
+          }
           
           processedBalances.push({
             partyCode: balance.partycode,
