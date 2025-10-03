@@ -6,6 +6,24 @@ import { ThemeToggleButton } from "../components/common/ThemeToggleButton";
 import UserDropdown from "../components/header/UserDropdown";
 import constants from "../constants";
 
+// Hamburger Menu Icon Component
+const HamburgerIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M4 6h16M4 12h16M4 18h16"
+    />
+  </svg>
+);
+
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -16,7 +34,7 @@ const AppHeader: React.FC = () => {
   const applicationMenuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
 
-  const { isMobileOpen } = useSidebar();
+  const { isMobileOpen, toggleMobileSidebar } = useSidebar();
 
   // Fetch user data when component mounts
   useEffect(() => {
@@ -232,6 +250,14 @@ const AppHeader: React.FC = () => {
       <div className="flex flex-col items-center justify-between grow lg:flex-row lg:px-6">
         <div className="flex items-center justify-between w-full gap-2 px-3 py-1 sm:py-2 lg:py-3 border-b border-gray-200 dark:border-gray-800 sm:gap-4 lg:justify-between lg:border-b-0 lg:px-0 lg:py-4">
 
+          {/* Mobile Hamburger Menu Button */}
+          <button
+            onClick={toggleMobileSidebar}
+            className="flex items-center justify-center w-10 h-10 text-gray-700 rounded-lg lg:hidden hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+            aria-label="Toggle mobile sidebar"
+          >
+            <HamburgerIcon className="w-6 h-6" />
+          </button>
 
           <Link to="/" className="lg:hidden invisible">
             <img
