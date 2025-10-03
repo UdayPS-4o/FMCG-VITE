@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import React, { useState, useEffect, useRef } from "react";
 import AppHeader from "./AppHeader";
 import AppSidebar from "./AppSidebar";
+import Backdrop from "./Backdrop";
 import BottomNav from "../components/navigation/BottomNav";
 import useAttendanceCheck from "../hooks/useAttendanceCheck";
 import GlobalMessageNotification from "../components/common/GlobalMessageNotification";
@@ -87,6 +88,9 @@ const LayoutContent: React.FC = () => {
     <div className="min-h-screen xl:flex bg-gray-50 dark:bg-gray-900">
       {/* Global Message Notification - appears on all pages */}
       <GlobalMessageNotification />
+      
+      {/* Mobile backdrop for sidebar */}
+      {!shouldHideNavigation && <Backdrop />}
       
       {/* Only show sidebar if attendance is marked or on attendance/login pages */}
       {!shouldHideNavigation && (
