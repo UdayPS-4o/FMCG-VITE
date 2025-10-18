@@ -5,6 +5,7 @@ import PageMeta from "../../components/common/PageMeta";
 import useAuth from "../../hooks/useAuth";
 import constants from '../../constants';
 import Toast from '../../components/ui/toast/Toast';
+import { PulseLoadAnimation } from '../../components/ui/loading';
 
 interface AttendanceRecord {
   id: string;
@@ -1197,7 +1198,7 @@ const AdminAttendance: React.FC = () => {
               {/* Loading State */}
               {loading && (
                 <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+                  <PulseLoadAnimation size="md" />
                   <p className="text-gray-600 dark:text-gray-400 mt-4">Loading attendance records...</p>
                 </div>
               )}
@@ -1852,7 +1853,7 @@ const AdminAttendance: React.FC = () => {
               <div className="max-h-[60vh] overflow-y-auto">
                 {activityLoading ? (
                   <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <PulseLoadAnimation size="sm" />
                     <span className="ml-3 text-gray-600 dark:text-gray-400">Loading activity logs...</span>
                   </div>
                 ) : userActivityLogs.length === 0 ? (

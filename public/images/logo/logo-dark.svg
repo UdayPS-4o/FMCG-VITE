@@ -1,0 +1,19 @@
+<svg width="200" height="80" viewBox="0 0 200 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Ekta Enterprises Logo - Dark Mode -->
+  <g id="ekta-logo-dark">
+    <!-- Main logo circle with "ee" design -->
+    <circle cx="40" cy="40" r="35" fill="none" stroke="#ffffff" stroke-width="3"/>
+    
+    <!-- Left "e" -->
+    <path d="M20 25 Q15 25 15 30 Q15 35 20 35 L30 35 M15 40 L25 40 M20 45 Q15 45 15 50 Q15 55 20 55 L30 55" 
+          fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+    
+    <!-- Right "e" -->
+    <path d="M50 25 Q45 25 45 30 Q45 35 50 35 L60 35 M45 40 L55 40 M50 45 Q45 45 45 50 Q45 55 50 55 L60 55" 
+          fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+    
+    <!-- Company name -->
+    <text x="90" y="30" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff">Ekta</text>
+    <text x="90" y="50" font-family="Arial, sans-serif" font-size="12" fill="#ffffff">Enterprises</text>
+  </g>
+</svg>

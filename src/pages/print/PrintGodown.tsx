@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import constants from '../../constants';
 import PageMeta from "../../components/common/PageMeta";
+import Toast from '../../components/ui/toast/Toast';
+import { PulseLoadAnimation } from '../../components/ui/loading';
 
 const itemsPerPage = 30;
 
@@ -82,7 +84,7 @@ export default function PrintGodown() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-500"></div>
+        <PulseLoadAnimation size="md" />
       </div>
     );
   }
