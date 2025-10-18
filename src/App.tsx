@@ -9,6 +9,7 @@ import NotFound from "./pages/OtherPage/NotFound";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import MetaController from "./components/common/MetaController";
+import { PulseLoadAnimation } from "./components/ui/loading";
 import AccountMaster from "./pages/account-master/AccountMaster";
 import Invoicing from "./pages/invoicing/Invoicing";
 import DatabaseAccountMaster from "./pages/database/AccountMaster";
@@ -72,7 +73,7 @@ const ProtectedRoute = ({ children, requiredAccess }: { children: React.ReactNod
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <PulseLoadAnimation size="lg" />
       </div>
     );
   }

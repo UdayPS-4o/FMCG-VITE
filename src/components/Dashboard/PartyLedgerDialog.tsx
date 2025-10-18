@@ -4,6 +4,7 @@ import { FaPrint } from 'react-icons/fa';
 import useAuth from '../../hooks/useAuth';
 import constants from '../../constants';
 import apiCache from '../../utils/apiCache';
+import { PulseLoadAnimation } from '../ui/loading';
 
 interface PartyOption {
   value: string;
@@ -422,7 +423,7 @@ const PartyLedgerDialog: React.FC<PartyLedgerDialogProps> = ({
 
         {loading && (
           <div className="flex justify-center items-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <PulseLoadAnimation size="sm" />
             <span className="ml-2 text-gray-600 dark:text-gray-400">Loading report...</span>
           </div>
         )}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import constants from '../../constants';
 import PageMeta from '../../components/common/PageMeta';
 import Toast from '../../components/ui/toast/Toast';
+import { PulseLoadAnimation } from '../../components/ui/loading';
 
 // Interfaces for TypeScript type safety
 interface CompanyInfo {
@@ -335,7 +336,7 @@ const PrintInvoicing: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <PulseLoadAnimation size="md" />
       </div>
     );
   }
