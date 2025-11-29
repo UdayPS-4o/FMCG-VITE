@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, forwardRef } from "react";
 
 interface TextareaProps {
   placeholder?: string; // Placeholder text
@@ -9,9 +9,10 @@ interface TextareaProps {
   disabled?: boolean; // Disabled state
   error?: boolean; // Error state
   hint?: string; // Hint text to display
+  autoResize?: boolean;
 }
 
-const TextArea: React.FC<TextareaProps> = ({
+const TextArea = forwardRef<HTMLTextAreaElement, TextareaProps>(({ 
   placeholder = "Enter your message", // Default placeholder
   rows = 3, // Default number of rows
   value = "", // Default value
@@ -20,12 +21,24 @@ const TextArea: React.FC<TextareaProps> = ({
   disabled = false, // Disabled state
   error = false, // Error state
   hint = "", // Default hint text
-}) => {
+  autoResize = true,
+}, ref) => {
+  const localRef = useRef<HTMLTextAreaElement>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (onChange) {
       onChange(e.target.value);
     }
   };
+
+  useEffect(() => {
+    const el = localRef.current;
+    if (!el) return;
+    if (autoResize) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [value, autoResize]);
 
   let textareaClasses = `w-full rounded-lg border px-4 py-2.5 text-sm shadow-theme-xs focus:outline-hidden ${className} `;
 
@@ -46,6 +59,12 @@ const TextArea: React.FC<TextareaProps> = ({
         onChange={handleChange}
         disabled={disabled}
         className={textareaClasses}
+        style={{ overflow: "hidden", resize: "none" }}
+        ref={(el) => {
+          localRef.current = el;
+          if (typeof ref === "function") ref(el);
+          else if (ref && typeof ref === "object") (ref as any).current = el;
+        }}
       />
       {hint && (
         <p
@@ -58,6 +77,6 @@ const TextArea: React.FC<TextareaProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default TextArea;
