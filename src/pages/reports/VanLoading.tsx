@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import Input, { InputRefHandle } from '../../components/form/input/Input';
+import TextArea from '../../components/form/input/TextArea';
 import { useInvoiceContext } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import constants from '../../constants';
@@ -65,8 +65,7 @@ const VanLoadingContent: React.FC = () => {
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [billDetails, setBillDetails] = useState<any[]>([]);
 
-  // Keep focus on the Bill Numbers input
-  const billInputRef = useRef<InputRefHandle>(null);
+  const billTextRef = useRef<HTMLTextAreaElement>(null);
 
   const fetchAbortControllerRef = useRef<AbortController | null>(null);
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -293,8 +292,7 @@ const VanLoadingContent: React.FC = () => {
 
   // When bill input loses focus (due to clicking elsewhere), refocus shortly after
   const handleBillInputBlur = () => {
-    // Allow the click on other controls to complete, then refocus
-    setTimeout(() => billInputRef.current?.focus(), 120);
+    setTimeout(() => billTextRef.current?.focus(), 120);
   };
 
   // Auto-add comma after user stops typing (using debounce)
@@ -1091,20 +1089,14 @@ const VanLoadingContent: React.FC = () => {
           <label htmlFor="billNumbers" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Bill Numbers (e.g., A-23, B-45)
           </label>
-          <Input
-            id="billNumbers"
-            type="text"
-            value={billNumbers}
-            onChange={(e) => handleBillNumberChange(e.target.value)}
+          <TextArea
             placeholder="Enter bill numbers (A-23, B-45, ...)"
-            variant="outlined"
-            ref={billInputRef}
-            onBlur={handleBillInputBlur}
-            // Removed onKeyDown handler since it's not defined
+            rows={2}
+            value={billNumbers}
+            onChange={(v) => handleBillNumberChange(v)}
+            hint="Comma will be added automatically after each complete bill number"
+            ref={billTextRef}
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Comma will be added automatically after each complete bill number
-          </p>
           <p className="mt-1 font-bold text-gray-800 dark:text-gray-200">
             <span 
               className="cursor-pointer hover:text-blue-600 hover:underline"
@@ -1155,8 +1147,19 @@ const VanLoadingContent: React.FC = () => {
 
         {/* Company Filter */}
         <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Company Filter</label>
+            <button
+              type="button"
+              onClick={() => setSelectedCompanyCodes([])}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+              disabled={selectedCompanyCodes.length === 0}
+            >
+              Clear All
+            </button>
+          </div>
           <MultiSelect
-            label="Company Filter"
+            label=""
             options={companyOptions}
             value={selectedCompanyCodes}
             onChange={(vals: string[]) => setSelectedCompanyCodes(vals)}
