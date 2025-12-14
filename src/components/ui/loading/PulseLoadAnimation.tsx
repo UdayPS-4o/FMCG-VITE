@@ -12,22 +12,22 @@ const PulseLoadAnimation: React.FC<PulseLoadAnimationProps> = ({
   // Size configurations
   const sizeConfig = {
     sm: {
-      container: 'w-16 h-20',
-      logo: 'w-12 h-6',
+    container: 'w-26 h-28',
+      logo: 'w-20 h-10',
       dots: 'w-1.5 h-1.5',
-      dotsContainer: 'gap-1 mt-2'
+      dotsContainer: 'gap-1 mt-3'
     },
     md: {
-      container: 'w-24 h-28',
-      logo: 'w-20 h-8',
+      container: 'w-28 h-32',
+      logo: 'w-24 h-12',
       dots: 'w-2 h-2',
-      dotsContainer: 'gap-1.5 mt-3'
+      dotsContainer: 'gap-1.5 mt-4'
     },
     lg: {
-      container: 'w-32 h-36',
-      logo: 'w-28 h-12',
+      container: 'w-36 h-40',
+      logo: 'w-32 h-16',
       dots: 'w-3 h-3',
-      dotsContainer: 'gap-2 mt-4'
+      dotsContainer: 'gap-2 mt-5'
     }
   };
 

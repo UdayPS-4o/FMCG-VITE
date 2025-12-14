@@ -5,6 +5,7 @@ import InvoiceProvider from '../../contexts/InvoiceProvider';
 import constants from '../../constants';
 import MultiSelect from '../../components/form/MultiSelect';
 import RadioSm from '../../components/form/input/RadioSm';
+import Badge from '../../components/ui/badge/Badge';
 
 // Define the structure of van loading data
 interface VanLoadingItem {
@@ -72,6 +73,31 @@ const VanLoadingContent: React.FC = () => {
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastProcessedTokenRef = useRef<string | null>(null);
   const reportFetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function normalizeBillToken(raw: string): string | null {
+    const cleaned = String(raw).trim().replace(/\s*[-/]\s*/, '-');
+    const match = cleaned.match(/^([A-Za-z]+)[-/](\d+)$/);
+    if (!match) return null;
+    const series = match[1].toUpperCase();
+    const number = String(parseInt(match[2], 10));
+    if (!series || !number || Number.isNaN(Number(number))) return null;
+    return `${series}-${number}`;
+  }
+  const chipBills = useMemo(() => {
+    const segments = billNumbers.split(',');
+    const normalized = segments
+      .map(s => normalizeBillToken((s || '').trim()))
+      .filter(Boolean) as string[];
+    const unique = Array.from(new Set(normalized));
+    return unique;
+  }, [billNumbers]);
+
+  const removeBill = (token: string) => {
+    const remaining = chipBills.filter(b => b !== token);
+    const newJoined = remaining.join(', ');
+    const newVal = newJoined ? `${newJoined}, ` : '';
+    setBillNumbers(newVal);
+    handleFetchReport(newVal);
+  };
   
   // Sort report data alphabetically by SKU
   const sortedReportData = useMemo(() => {
@@ -109,16 +135,7 @@ const VanLoadingContent: React.FC = () => {
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [statusType, setStatusType] = useState<'success' | 'duplicate' | 'not_accepted' | null>(null);
 
-  // Normalize a raw bill token like " a- 23 " or " a/23 " => "A-23"; returns null if not a complete valid token
-  const normalizeBillToken = (raw: string): string | null => {
-    const cleaned = String(raw).trim().replace(/\s*[-/]\s*/, '-');
-    const match = cleaned.match(/^([A-Za-z]+)[-/](\d+)$/);
-    if (!match) return null;
-    const series = match[1].toUpperCase();
-    const number = String(parseInt(match[2], 10));
-    if (!series || !number || Number.isNaN(Number(number))) return null;
-    return `${series}-${number}`;
-  };
+  
 
   // Verify from server if a bill exists in BILLDTL and check van loading history
   const verifyBillExists = async (token: string): Promise<{ exists: boolean; history: any[] }> => {
@@ -1103,9 +1120,10 @@ const VanLoadingContent: React.FC = () => {
               onClick={fetchBillDetails}
               title="Click to view bill details"
             >
-              Total Bills: {billNumbers.split(',').filter(bill => bill.trim()).length}
+              Total Bills: {chipBills.length}
             </span>
           </p>
+          {/* Chips moved to full-width row below within the grid */}
           {statusMsg && (
             <div className="hidden" aria-hidden="true">
               {statusMsg}
@@ -1168,6 +1186,32 @@ const VanLoadingContent: React.FC = () => {
             matchThreshold={0.7}
           />
         </div>
+        {chipBills.length > 0 && (
+          <div className="col-span-1 md:col-span-3 mt-2">
+            <div className="flex flex-wrap gap-2 w-full">
+              {chipBills.map((b) => (
+                <Badge
+                  key={b}
+                  variant="light"
+                  color="info"
+                  size="md"
+                  endIcon={
+                    <button
+                      aria-label={`Remove ${b}`}
+                      title="Remove"
+                      onClick={(e) => { e.stopPropagation(); removeBill(b); }}
+                      className="inline-flex items-center justify-center rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 w-5 h-5"
+                    >
+                      ×
+                    </button>
+                  }
+                >
+                  {b}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
