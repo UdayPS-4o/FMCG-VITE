@@ -2,6 +2,7 @@
 app.get([
   '/account-master/*',
   '/invoicing/*',
+  '/purchases/*',
   '/db/account-master/*',
   '/db/invoicing/*',
   '/cash-receipts/*',
@@ -23,4 +24,4 @@ app.get('/db/invoicing/edit/:id', (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-// Place this before the static middleware for other paths 
+// Place this before the static middleware for other paths

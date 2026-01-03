@@ -6,26 +6,20 @@ import { TableSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader
 import { useNavigate } from 'react-router-dom';
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
+import { useAuth } from '../../contexts/AuthContext';
+import EditOldBillsDialog from '../../components/dialogs/EditOldBillsDialog';
 
 const Invoicing: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
   const [selectedBills, setSelectedBills] = useState<any[]>([]);
-  const tableRef = useRef<{ refreshData: () => Promise<void> }>(null);
+  const [isEditOldBillsDialogOpen, setIsEditOldBillsDialogOpen] = useState(false);
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
     type: 'success' | 'error' | 'info';
   }>({ visible: false, message: '', type: 'info' });
-
-  useEffect(() => {
-    // Simulate loading delay for demo purposes
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1000);
-    
-    return () => clearTimeout(timer);
-  }, []);
+  const navigate = useNavigate();
+  const tableRef = useRef<{ refreshData: () => Promise<void> }>(null);
+  const { hasAccess } = useAuth();
   
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ visible: true, message, type });
@@ -108,19 +102,34 @@ const Invoicing: React.FC = () => {
         <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Invoicing Database</h2>
-            <button
-              onClick={handlePrintAllSelected}
-              disabled={selectedBills.length === 0}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${selectedBills.length === 0 ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700'}`}
-              title="Print all selected bills"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                <rect x="6" y="14" width="12" height="8"></rect>
-              </svg>
-              Print All Selected ({selectedBills.length})
-            </button>
+            <div className="flex gap-3">
+              {hasAccess('Admin') && (
+                <button
+                  onClick={() => setIsEditOldBillsDialogOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
+                  title="Edit old bills from previous system"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                  Edit Old Bills
+                </button>
+              )}
+              <button
+                onClick={handlePrintAllSelected}
+                disabled={selectedBills.length === 0}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${selectedBills.length === 0 ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700'}`}
+                title="Print all selected bills"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                Print All Selected ({selectedBills.length})
+              </button>
+            </div>
           </div>
           <DatabaseTable 
             ref={tableRef}
@@ -140,6 +149,12 @@ const Invoicing: React.FC = () => {
           isVisible={toast.visible}
         />
       )}
+      
+      {/* Edit Old Bills Dialog */}
+      <EditOldBillsDialog
+        isOpen={isEditOldBillsDialogOpen}
+        onClose={() => setIsEditOldBillsDialogOpen(false)}
+      />
     </div>
   );
 };

@@ -3,6 +3,7 @@ const app = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
 const { getCmplData } = require('./utilities');
+const { saveDataToJsonFile, ensureDirectoryExistence } = require('./utilities');
 const baseURL = 'http://localhost:8000';
 const jwt = require('jsonwebtoken');
 
@@ -210,16 +211,35 @@ app.post('/approve', verifyToken, async (req, res) => {
         ? 'id'
         : null;
 
-    const approvedjson = json.filter((item) => {
-      const itemIdValue = String(item[id]).toLowerCase();
-      return approved.some((approvedValue) => itemIdValue.includes(approvedValue.toLowerCase()));
-    });
+    const toLower = (v) => String(v ?? '').toLowerCase();
+    const matchApproved = (item) => {
+      if (endpoint === 'purchases') {
+        const inv = item.invoice || {};
+        const candidates = [
+          item.pbillno,
+          item.PBILLNO,
+          item.bill,
+          item.BILL,
+          item.createdAt,
+          inv.number,
+          inv.billNo,
+        ]
+          .map(toLower)
+          .filter(Boolean);
+        return approved.some((av) => {
+          const a = toLower(av);
+          return candidates.some((c) => c.includes(a));
+        });
+      } else {
+        const itemIdValue = toLower(item[id]);
+        return approved.some((approvedValue) => itemIdValue.includes(toLower(approvedValue)));
+      }
+    };
+
+    const approvedjson = json.filter((item) => matchApproved(item));
 
     // Delete the approved items from the original json
-    const remainingjson = json.filter((item) => {
-      const itemIdValue = String(item[id]).toLowerCase();
-      return !approved.some((approvedValue) => itemIdValue.includes(approvedValue.toLowerCase()));
-    });
+    const remainingjson = json.filter((item) => !matchApproved(item));
 
     // Save the remaining items back to the original file
     await fs.writeFile(
@@ -254,6 +274,20 @@ app.post('/approve', verifyToken, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.send(error);
+  }
+});
+
+// Create or append a new item record to database/newitem.json
+app.post('/newitem', verifyToken, async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const filePath = path.resolve(__dirname, '../db/newitem.json');
+    await ensureDirectoryExistence(filePath);
+    await saveDataToJsonFile(filePath, payload);
+    res.json({ success: true, saved: payload });
+  } catch (error) {
+    console.error('Error saving new item:', error);
+    res.status(500).json({ success: false, message: 'Failed to save new item' });
   }
 });
 
@@ -348,7 +382,7 @@ app.post('/revert-approved', verifyToken, async (req, res) => {
       });
     }
 
-    // Identify the ID field based on the endpoint
+    // Identify the ID field based on the endpoint or use candidate keys for purchases
     const idField = 
       endpoint == 'account-master' ? 'subgroup' :
       endpoint == 'cash-receipts' ? 'receiptNo' :
@@ -356,8 +390,22 @@ app.post('/revert-approved', verifyToken, async (req, res) => {
       endpoint == 'cash-payments' ? 'voucherNo' :
       endpoint == 'invoicing' ? 'id' : 'id';
     
+    const toLowerStr = (v) => String(v ?? '').toLowerCase();
+    const purchaseKeys = ['pbillno', 'PBILLNO', 'bill', 'BILL', 'createdAt'];
+    const purchaseMatch = (a, b) => {
+      // returns true if any candidate key value equals (case-insensitive)
+      const aVals = purchaseKeys.map(k => toLowerStr(a[k])).filter(Boolean);
+      const bVals = purchaseKeys.map(k => toLowerStr(b[k])).filter(Boolean);
+      if (aVals.length === 0 || bVals.length === 0) return false;
+      // equality match, not substring
+      return aVals.some(av => bVals.includes(av));
+    };
+    
     // Find the records to revert
     const recordsToRevert = approvedData.filter(item => {
+      if (endpoint === 'purchases') {
+        return records.some(record => purchaseMatch(item, record));
+      }
       const itemIdValue = String(item[idField]).toLowerCase();
       return records.some(record => {
         const recordIdValue = String(record[idField]).toLowerCase();
@@ -374,6 +422,9 @@ app.post('/revert-approved', verifyToken, async (req, res) => {
     
     // Remove the reverted records from approved section
     const remainingApproved = approvedData.filter(item => {
+      if (endpoint === 'purchases') {
+        return !records.some(record => purchaseMatch(item, record));
+      }
       const itemIdValue = String(item[idField]).toLowerCase();
       return !records.some(record => {
         const recordIdValue = String(record[idField]).toLowerCase();
@@ -452,16 +503,27 @@ app.post('/delete-approved-records', verifyToken, async (req, res) => {
       });
     }
 
-    // Identify the ID field based on the endpoint
+    // Identify the ID field based on the endpoint or use candidate keys for purchases
     const idField = 
       endpoint == 'account-master' ? 'subgroup' :
       endpoint == 'cash-receipts' ? 'receiptNo' :
       endpoint == 'godown' ? 'id' :
       endpoint == 'cash-payments' ? 'voucherNo' :
       endpoint == 'invoicing' ? 'id' : 'id';
+    const toLowerStr = (v) => String(v ?? '').toLowerCase();
+    const purchaseKeys = ['pbillno', 'PBILLNO', 'bill', 'BILL', 'createdAt'];
+    const purchaseMatch = (a, b) => {
+      const aVals = purchaseKeys.map(k => toLowerStr(a[k])).filter(Boolean);
+      const bVals = purchaseKeys.map(k => toLowerStr(b[k])).filter(Boolean);
+      if (aVals.length === 0 || bVals.length === 0) return false;
+      return aVals.some(av => bVals.includes(av));
+    };
     
     // Remove the specified records from approved section
     const remainingApproved = approvedData.filter(item => {
+      if (endpoint === 'purchases') {
+        return !records.some(record => purchaseMatch(item, record));
+      }
       const itemIdValue = String(item[idField]).toLowerCase();
       return !records.some(record => {
         const recordIdValue = String(record[idField]).toLowerCase();

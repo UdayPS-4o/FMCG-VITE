@@ -392,8 +392,8 @@ class DBFFile {
   _recordToBuffer(record) {
     const buffer = Buffer.alloc(this.recordLength);
     
-    // Set deletion flag (not deleted)
-    buffer[0] = 0x20; // Space character
+    // Set deletion flag (0x20 not deleted, 0x2A deleted)
+    buffer[0] = record && record._deleted ? 0x2A : 0x20;
     
     let offset = 1;
     
@@ -404,6 +404,20 @@ class DBFFile {
     }
     
     return buffer;
+  }
+
+  /**
+   * Mark a record as deleted in-place by index (0-based)
+   * @param {number} index
+   */
+  async markRecordDeleted(index) {
+    if (!this.fileHandle) {
+      throw new Error('DBF file not open');
+    }
+    const position = this.headerLength + (index * this.recordLength);
+    const flagBuffer = Buffer.alloc(1);
+    flagBuffer[0] = 0x2A; // Deleted flag
+    await this.fileHandle.write(flagBuffer, 0, 1, position);
   }
 
   /**

@@ -131,6 +131,8 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
 
   // Add state for total amount
   const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [nextPurBill, setNextPurBill] = useState<number | null>(null);
+  const [purDbfRecords, setPurDbfRecords] = useState<any[]>([]);
 
   // Add event handler for clicking outside
   useEffect(() => {
@@ -224,6 +226,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       const endpointAccessMap: Record<string, string> = {
         'account-master': 'Account Master',
         'invoicing': 'Invoicing',
+        'purchases': 'Purchases',
         'godown-transfer': 'Godown Transfer',
         'godown': 'Godown Transfer', // Keep both for flexibility?
         'cash-receipts': 'Cash Receipts',
@@ -241,6 +244,29 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       }
       
       const data = await fetchProducts(point); // Fetch all data
+      
+      // Compute next purchase BILL from PUR.json when endpoint is purchases
+      if (point === 'purchases') {
+        try {
+          const token = localStorage.getItem('token');
+          const resp = await fetch(`${constants.baseURL}/api/dbf/PUR.json`, {
+            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+          });
+          if (resp.ok) {
+            const arr = await resp.json();
+            setPurDbfRecords(Array.isArray(arr) ? arr : []);
+            let maxBill = 0;
+            (arr || []).forEach((r: any) => {
+              const b = parseInt(String(r.BILL || 0), 10);
+              if (!isNaN(b) && b > maxBill) maxBill = b;
+            });
+            setNextPurBill(maxBill + 1);
+          }
+        } catch (e) {
+          console.warn('Failed to compute next purchase BILL');
+          setNextPurBill(null);
+        }
+      }
       
       // Filter data based on user role and smCode
       let filteredData = data;
@@ -525,6 +551,15 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     }
     return true;
   });
+  
+  // Inject PBill No. column for purchases endpoint
+  const effectiveHeaders = React.useMemo(() => {
+    if (endpoint === 'purchases') {
+      const hasPBill = visibleHeaders.includes('PBillNo');
+      return hasPBill ? visibleHeaders : ['PBillNo', ...visibleHeaders];
+    }
+    return visibleHeaders;
+  }, [visibleHeaders, endpoint]);
 
   const handlePrint = (id: string) => {
     if (!endpoint) {
@@ -542,7 +577,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
 
-  const handleEdit = (row: Record<string, any>) => {
+  const handleEdit = async (row: Record<string, any>) => {
     if (!endpoint) {
       toast.error('Endpoint is required');
       return;
@@ -556,6 +591,40 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     
     // Add more debugging for all row data
     console.log('Full row data being edited:', row);
+    
+    // For purchases, prefer BILL as the identifier
+    if (endpoint === 'purchases') {
+      // If the row already has a bill field, use it
+      const billFromRow = row.bill || row.BILL;
+      if (billFromRow) {
+        navigate(`/purchases/edit/${billFromRow}`);
+        return;
+      }
+      // Try to resolve BILL from PUR.json using invoice number/date and supplier code
+      let resolvedBill: string | null = null;
+      try {
+        const invObj = row.invoice || {};
+        const invNum = invObj.number || invObj.billNo || row.invoiceNumber || row.billNo || '';
+        const invDate = invObj.date || row.invoiceDate || '';
+        const code = row.supplierCode || row.party || row.C_CODE || '';
+        const candidates = purDbfRecords.filter((r: any) => {
+          const pb = String(r.PBILL || '').trim();
+          const c = String(r.C_CODE || '').trim();
+          if (pb !== String(invNum).trim()) return false;
+          if (code && c && c !== String(code).trim()) return false;
+          return true;
+        });
+        if (candidates.length > 0) {
+          resolvedBill = String(candidates[0].BILL || '');
+        }
+      } catch (e) {
+        resolvedBill = null;
+      }
+      if (resolvedBill) {
+        navigate(`/purchases/edit/${resolvedBill}`);
+        return;
+      }
+    }
     
     const editUrl = generateEditUrl(endpoint, row);
     console.log('Navigating to edit URL:', editUrl);
@@ -760,6 +829,9 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
         const data = await fetchProducts(endpoint);
         setRows(data);
         setSelectedItems([]);
+        if (endpoint === 'purchases') {
+          navigate('/approved/purchases');
+        }
         
         // Call the onApproveSuccess callback if provided
         if (onApproveSuccess) {
@@ -881,6 +953,15 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
     if (endpoint === 'cash-receipts' && row.receiptNo) return String(row.receiptNo);
     if (endpoint === 'cash-payments' && row.voucherNo) return String(row.voucherNo);
     if (endpoint === 'account-master' && row.subgroup) return String(row.subgroup);
+    if (endpoint === 'purchases') {
+      if (row.pbillno) return String(row.pbillno);
+      if (row.PBILLNO) return String(row.PBILLNO);
+      if (row.bill) return String(row.bill);
+      if (row.BILL) return String(row.BILL);
+      if (row.createdAt) return String(row.createdAt);
+      const inv = row.invoice;
+      if (inv && (inv.number || inv.billNo)) return String(inv.number || inv.billNo);
+    }
     
     // First try standard ID fields
     if (row.id) return String(row.id);
@@ -1000,6 +1081,10 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
         
       case 'employee':
         return `/create-employee/edit/${selectedRow.CODE || ''}`;
+        
+      case 'purchases':
+        // Use createdAt as identifier fallback
+        return `/purchases/edit/${selectedRow.id || selectedRow._id || selectedRow.createdAt || ''}`;
         
       default:
         const defaultId = selectedRow.id || selectedRow._id || '';
@@ -1251,7 +1336,7 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                       />
                     </TableCell>
                     
-                    {visibleHeaders.map((header) => (
+                    {effectiveHeaders.map((header) => (
                       <TableCell 
                         key={header}
                         className="px-4 py-3 font-medium text-sm text-gray-900 dark:text-gray-100 cursor-pointer"
@@ -1318,8 +1403,32 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                             />
                           </TableCell>
                           
-                          {visibleHeaders.map((header) => {
+                          {effectiveHeaders.map((header) => {
                             // Create a cell with or without hover handlers
+                            if (header === 'PBillNo' && endpoint === 'purchases') {
+                              const invObj = row.invoice || {};
+                              const invNum = invObj.number || invObj.billNo || row.invoiceNumber || row.billNo || '';
+                              const code = row.supplierCode || row.party || row.C_CODE || '';
+                              let billVal = row.bill || row.BILL || '';
+                              if (!billVal && invNum) {
+                                const match = purDbfRecords.find((r: any) => {
+                                  const pb = String(r.PBILL || '').trim();
+                                  const c = String(r.C_CODE || '').trim();
+                                  if (pb !== String(invNum).trim()) return false;
+                                  if (code && c && c !== String(code).trim()) return false;
+                                  return true;
+                                });
+                                if (match) billVal = String(match.BILL || '');
+                              }
+                              return (
+                                <TableCell 
+                                  key={`${rowIndex}-PBillNo`}
+                                  className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
+                                >
+                                  {billVal}
+                                </TableCell>
+                              );
+                            }
                             if (header === 'items') {
                               return (
                                 <TableCell 
@@ -1403,6 +1512,51 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                             }
                             
                             // Default rendering for other fields
+                            // Special formatting for Purchases endpoint
+                            if (endpoint === 'purchases') {
+                              // Format invoice object
+                              if (header.toLowerCase() === 'invoice') {
+                                const inv = row[header];
+                                let text = '';
+                                if (inv && typeof inv === 'object') {
+                                  const num = inv.number || inv.billNo || '';
+                                  const dt = inv.date || '';
+                                  text = [num, dt].filter(Boolean).join(' | ');
+                                } else {
+                                  text = String(inv || '');
+                                }
+                                return (
+                                  <TableCell 
+                                    key={`${rowIndex}-${header}`}
+                                    className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
+                                  >
+                                    {text}
+                                  </TableCell>
+                                );
+                              }
+                              // Format totals object
+                              if (header.toLowerCase() === 'totals') {
+                                const totals = row[header];
+                                let text = '';
+                                if (totals && typeof totals === 'object') {
+                                  const totalVal = totals.total ?? totals.grandTotal ?? '';
+                                  const formatted = typeof totalVal === 'number' 
+                                    ? totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                    : String(totalVal);
+                                  text = formatted ? `₹${formatted}` : '';
+                                } else {
+                                  text = String(totals || '');
+                                }
+                                return (
+                                  <TableCell 
+                                    key={`${rowIndex}-${header}`}
+                                    className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
+                                  >
+                                    {text}
+                                  </TableCell>
+                                );
+                              }
+                            }
                             return (
                               <TableCell 
                                 key={`${rowIndex}-${header}`}

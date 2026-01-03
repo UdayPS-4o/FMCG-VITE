@@ -13,6 +13,10 @@ const AccountMasterApproved: React.FC = () => {
   const [selectedRecords, setSelectedRecords] = useState<any[]>([]);
   const tableRef = useRef<{ refreshData: () => Promise<void> }>(null);
 
+  const getAuthToken = () => {
+    return localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+  };
+
   const handleRecordSelection = (records: any[]) => {
     setSelectedRecords(records);
   };
@@ -25,10 +29,17 @@ const AccountMasterApproved: React.FC = () => {
 
     try {
       setIsSyncing(true);
+      const token = getAuthToken();
+      if (!token) {
+        toast.error('Authentication required');
+        setIsSyncing(false);
+        return;
+      }
       const response = await fetch(`${baseUrl}/api/merge/account-master/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           records: selectedRecords
@@ -48,6 +59,7 @@ const AccountMasterApproved: React.FC = () => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify({
                 endpoint: 'account-master',
@@ -88,10 +100,17 @@ const AccountMasterApproved: React.FC = () => {
 
     try {
       setIsReverting(true);
+      const token = getAuthToken();
+      if (!token) {
+        toast.error('Authentication required');
+        setIsReverting(false);
+        return;
+      }
       const response = await fetch(`${baseUrl}/revert-approved`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           endpoint: 'account-master',
@@ -169,4 +188,4 @@ const AccountMasterApproved: React.FC = () => {
   );
 };
 
-export default AccountMasterApproved; 
+export default AccountMasterApproved;

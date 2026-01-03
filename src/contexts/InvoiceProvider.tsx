@@ -86,10 +86,9 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
       try {
         setLoading(true);
         
-        // Fetch all data sources in parallel with Promise.all
-        const [pmplResponse, stockResponse, godownResponse, partyResponse, balanceResponse, invoiceIdResponse] = await Promise.all([
+        // Fetch master data in parallel (stock fetched in a dedicated effect)
+        const [pmplResponse, godownResponse, partyResponse, balanceResponse, invoiceIdResponse] = await Promise.all([
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
-          apiCache.fetchWithCache<any>(`${constants.baseURL}/api/stock`),
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/godown.json`),
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
           apiCache.fetchWithCache<any>(`${constants.baseURL}/json/balance`),
@@ -111,9 +110,6 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           console.warn('PMPL response is not an array:', pmplResponse);
           setPmplData([]);
         }
-
-        // Process stock data
-        setStockList(stockResponse || {});
 
         // Process godown data
         if (Array.isArray(godownResponse)) {
@@ -234,11 +230,24 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
     }
   }, [user]); // Depend on user but with dataFetched ref to prevent duplicate fetches
 
+  useEffect(() => {
+    const fetchStock = async () => {
+      try {
+        const stockResponse = await apiCache.fetchWithCache<any>(`${constants.baseURL}/api/stock`);
+        setStockList(stockResponse || {});
+      } catch (error) {
+        console.error('Error fetching stock:', error);
+      }
+    };
+    fetchStock();
+  }, []);
+
   return (
     <InvoiceContext.Provider
       value={{
         pmplData,
         stockList,
+        setStockList,
         godownOptions,
         partyOptions,
         smOptions,

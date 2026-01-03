@@ -7,6 +7,14 @@ const path = require('path');
 const morgan = require('morgan');
 const app = express();
 const PORT = process.env.PORT || 8000;
+
+// Ensure DBF folder path is set before loading any modules that depend on it
+if (!process.env.DBF_FOLDER_PATH) {
+  const defaultDbfPath = path.join(__dirname, '..', 'd01-2324');
+  process.env.DBF_FOLDER_PATH = defaultDbfPath;
+  console.log(`[INIT] DBF_FOLDER_PATH not set. Using default: ${defaultDbfPath}`);
+}
+
 const io = require('socket.io');
 const {
   redirect,
@@ -130,6 +138,13 @@ app.use('/api/merge/cash-payments', cashPaymentsMergeRoutes);
 // Register cash receipts merge routes
 const cashReceiptsMergeRoutes = require('./routes/merge/cash-receipts');
 app.use('/api/merge/cash-receipts', cashReceiptsMergeRoutes);
+
+const purchasesMergeRoutes = require('./routes/merge/purchases');
+app.use('/api/merge/purchases', purchasesMergeRoutes);
+
+// Register items merge routes
+const itemsMergeRoutes = require('./routes/merge/items');
+app.use('/api/merge/items', itemsMergeRoutes);
 
 const approvalRoutes = require('./routes/approval');
 app.use('/api', approvalRoutes);

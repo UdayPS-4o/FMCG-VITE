@@ -191,6 +191,11 @@ const fmcgItems: NavItem[] = [
     path: "/invoicing",
   },
   {
+    icon: <InvoiceIcon />,
+    name: "Purchases",
+    path: "/purchases",
+  },
+  {
     icon: <WarehouseIcon />,
     name: "Godown Transfer",
     path: "/godown-transfer",
@@ -221,6 +226,7 @@ const fmcgItems: NavItem[] = [
     subItems: [
       { name: "Account Master", path: "/db/account-master", pro: false },
       { name: "Invoicing", path: "/db/invoicing", pro: false },
+      { name: "Purchases", path: "/db/purchases", pro: false },
       { name: "Godown Transfer", path: "/db/godown-transfer", pro: false },
       { name: "Cash Receipts", path: "/db/cash-receipts", pro: false },
       { name: "Cash Payments", path: "/db/cash-payments", pro: false },
@@ -233,6 +239,7 @@ const fmcgItems: NavItem[] = [
     subItems: [
       { name: "Account Master", path: "/approved/account-master", pro: false },
       { name: "Invoicing", path: "/approved/invoicing", pro: false },
+      { name: "Purchases", path: "/approved/purchases", pro: false },
       { name: "Godown Transfer", path: "/approved/godown-transfer", pro: false },
       { name: "Cash Receipts", path: "/approved/cash-receipts", pro: false },
       { name: "Cash Payments", path: "/approved/cash-payments", pro: false },
@@ -364,6 +371,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         if (item.name === "Dashboard" && !user.routeAccess.includes('Dashboard')) return false;
         if (item.name === "Account Master" && !user.routeAccess.includes('Account Master')) return false;
         if (item.name === "Invoicing" && !user.routeAccess.includes('Invoicing')) return false;
+        if (item.name === "Purchases" && !user.routeAccess.includes('Purchases')) return false;
         if (item.name === "Godown Transfer" && !user.routeAccess.includes('Godown Transfer')) return false;
         if (item.name === "Cash Receipt" && !user.routeAccess.includes('Cash Receipts')) return false;
         if (item.name === "Cash Payment" && !user.routeAccess.includes('Cash Payments')) return false;
@@ -386,6 +394,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
           const accessibleSubItems = item.subItems.filter(subItem => {
             if (subItem.name === "Account Master") return user.routeAccess.includes('Account Master');
             if (subItem.name === "Invoicing") return user.routeAccess.includes('Invoicing');
+            if (subItem.name === "Purchases") return user.routeAccess.includes('Purchases');
             if (subItem.name === "Godown Transfer") return user.routeAccess.includes('Godown Transfer');
             if (subItem.name === "Cash Receipts") return user.routeAccess.includes('Cash Receipts');
             if (subItem.name === "Cash Payments") return user.routeAccess.includes('Cash Payments');
@@ -407,6 +416,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         const filteredSubItems = item.subItems.filter(subItem => {
           if (subItem.name === "Account Master") return user.routeAccess.includes('Account Master');
           if (subItem.name === "Invoicing") return user.routeAccess.includes('Invoicing');
+          if (subItem.name === "Purchases") return user.routeAccess.includes('Purchases');
           if (subItem.name === "Godown Transfer") return user.routeAccess.includes('Godown Transfer');
           if (subItem.name === "Cash Receipts") return user.routeAccess.includes('Cash Receipts');
           if (subItem.name === "Cash Payments") return user.routeAccess.includes('Cash Payments');

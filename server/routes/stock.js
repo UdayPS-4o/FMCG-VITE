@@ -132,6 +132,73 @@ async function calculateCurrentStock() {
   return stock;
 }
 
+async function calculateStockAsOf(targetDateStr) {
+  const salesData = await getSTOCKFILE('billdtl.json');
+  const purchaseData = await getSTOCKFILE('purdtl.json');
+  const transferData = await getSTOCKFILE('transfer.json');
+  const stock = {};
+  const target = moment(targetDateStr, ['DD-MM-YYYY', 'YYYY-MM-DD'], true);
+  if (!target.isValid()) {
+    throw new Error('Invalid date format. Use DD-MM-YYYY');
+  }
+  for (const purchase of purchaseData) {
+    if (!purchase.DATE) continue;
+    const pDate = moment(purchase.DATE, ['DD-MM-YYYY','YYYY-MM-DD']);
+    if (!pDate.isValid() || pDate.isAfter(target)) continue;
+    const { CODE: code, QTY: qty, MULT_F: multF, UNIT: unit, FREE: free, GDN_CODE: gdn, UNIT_NO: unitNo } = purchase;
+    stock[code] = stock[code] || {};
+    stock[code][gdn] = stock[code][gdn] || 0;
+    let qtyInPieces = qty;
+    const isBox = unit === 'BOX' || unit === 'Box' || unitNo === 2;
+    if (isBox) qtyInPieces *= (multF || 1);
+    stock[code][gdn] += qtyInPieces;
+    if (free) stock[code][gdn] += free;
+  }
+  for (const sale of salesData) {
+    if (!sale.DATE) continue;
+    const sDate = moment(sale.DATE, ['DD-MM-YYYY','YYYY-MM-DD']);
+    if (!sDate.isValid() || sDate.isAfter(target)) continue;
+    const { CODE: code, QTY: qty, MULT_F: multF, UNIT: unit, FREE: free, GDN_CODE: gdn, UNIT_NO: unitNo, SERIES } = sale;
+    stock[code] = stock[code] || {};
+    stock[code][gdn] = stock[code][gdn] || 0;
+    let qtyInPieces = qty;
+    const isBox = unit === 'BOX' || unit === 'Box' || unitNo === 2;
+    if (isBox) qtyInPieces *= (multF || 1);
+    const freeQty = free || 0;
+    const seriesCode = String(SERIES || '').toUpperCase();
+    if (seriesCode === 'S') {
+      stock[code][gdn] += qtyInPieces + freeQty; // sales return
+    } else if (seriesCode === 'P') {
+      stock[code][gdn] -= qtyInPieces + freeQty; // purchase return
+    } else {
+      stock[code][gdn] -= qtyInPieces + freeQty; // normal sale
+    }
+  }
+  for (const transfer of transferData) {
+    const tDate = moment(transfer.DATE, ['DD-MM-YYYY','YYYY-MM-DD'], true);
+    if (tDate.isValid() && tDate.isAfter(target)) continue;
+    const { CODE: code, QTY: qty, MULT_F: multF, UNIT: unit, TRF_TO: toGdn, GDN_CODE: fromGdn, UNIT_NO: unitNo } = transfer;
+    const qtyInPieces = (unit === 'BOX' || unit === 'Box' || unitNo === 2) ? qty * (multF || 1) : qty;
+    stock[code] = stock[code] || {};
+    stock[code][fromGdn] = stock[code][fromGdn] || 0;
+    stock[code][toGdn] = stock[code][toGdn] || 0;
+    if (qtyInPieces > 0) {
+      stock[code][fromGdn] -= qtyInPieces;
+      stock[code][toGdn] += qtyInPieces;
+    } else if (qtyInPieces < 0) {
+      const inQty = Math.abs(qtyInPieces);
+      stock[code][fromGdn] += inQty;
+      stock[code][toGdn] -= inQty;
+    }
+  }
+  for (const code in stock) {
+    for (const gdn in stock[code]) {
+      stock[code][gdn] = Math.round(stock[code][gdn]);
+    }
+  }
+  return stock;
+}
+
 router.get('/api/stock', async (req, res) => {
   try {
     const clientHash = req.headers['if-none-match'] || req.query.hash;
@@ -166,6 +233,126 @@ router.get('/api/stock', async (req, res) => {
   }
 });
 
+router.get('/api/stock-as-of', async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) {
+      return res.status(400).json({ error: 'date query parameter is required (DD-MM-YYYY).' });
+    }
+    const stock = await calculateStockAsOf(String(date));
+    return res.json(stock);
+  } catch (err) {
+    console.error('Error calculating stock-as-of:', err);
+    res.status(500).json({ error: 'Failed to calculate stock as of date' });
+  }
+});
+
+function formatDateLocal(dateInput) {
+  const d = moment(String(dateInput), ['DD-MM-YYYY','YYYY-MM-DD'], true);
+  return d.format('YYYY-MM-DD');
+}
+
+async function stockAsOfItem(dateStr, itemCode, godownCode) {
+  const billDtl = await getSTOCKFILE('billdtl.json');
+  const purDtl = await getSTOCKFILE('purdtl.json');
+  const transfer = await getSTOCKFILE('transfer.json');
+  const startDate = moment(dateStr, ['DD-MM-YYYY','YYYY-MM-DD'], true);
+  if (!startDate.isValid()) throw new Error('Invalid date');
+  const asOfStr = formatDateLocal(dateStr);
+  const code = String(itemCode || '').trim().toUpperCase();
+  const gdn = Number(godownCode);
+  let purchases=0, sales=0, salesReturn=0, purReturn=0, trIn=0, trOut=0;
+  for (const p of purDtl) {
+    const pStr = formatDateLocal(p.DATE);
+    if (String(p.CODE).toUpperCase()===code && Number(p.GDN_CODE)===gdn && pStr < asOfStr) {
+      let qty = parseFloat(p.QTY)||0;
+      const multF = parseFloat(p.MULT_F)||1;
+      const unit = String(p.UNIT||'').toUpperCase();
+      const free = parseFloat(p.FREE)||0;
+      const pcs = unit==='BOX' ? qty*multF : qty;
+      purchases += pcs + (free>0?free:0);
+    }
+  }
+  for (const b of billDtl) {
+    const bStr = formatDateLocal(b.DATE);
+    if (String(b.CODE).toUpperCase()===code && Number(b.GDN_CODE)===gdn && bStr < asOfStr) {
+      let qty = parseFloat(b.QTY)||0;
+      const multF = parseFloat(b.MULT_F)||1;
+      const unit = String(b.UNIT||'').toUpperCase();
+      const free = parseFloat(b.FREE)||0;
+      const pcs = unit==='BOX' ? qty*multF : qty;
+      const series = String(b.SERIES||'').toUpperCase();
+      if (series==='S') salesReturn += pcs + (free>0?free:0);
+      else if (series==='P') purReturn += pcs + (free>0?free:0);
+      else sales += pcs + (free>0?free:0);
+    }
+  }
+  for (const t of transfer) {
+    const tStr = formatDateLocal(t.DATE);
+    if (String(t.CODE).toUpperCase()===code && Number(t.GDN_CODE)===gdn && tStr < asOfStr) {
+      const multF = parseFloat(t.MULT_F)||1;
+      const unit = String(t.UNIT||'').toUpperCase();
+      const qty = parseFloat(t.QTY)||0;
+      const pcs = unit==='BOX' ? qty*multF : qty;
+      if (pcs>0) trOut += pcs;
+      else if (pcs<0) trIn += Math.abs(pcs);
+    }
+  }
+  const opening = Math.round(purchases - purReturn + salesReturn + trIn - sales - trOut);
+  let dPurch=0, dSales=0, dSR=0, dPR=0, dIn=0, dOut=0;
+  for (const p of purDtl) {
+    const pStr = formatDateLocal(p.DATE);
+    if (String(p.CODE).toUpperCase()===code && Number(p.GDN_CODE)===gdn && pStr === asOfStr) {
+      const multF = parseFloat(p.MULT_F)||1;
+      const unit = String(p.UNIT||'').toUpperCase();
+      const qty = parseFloat(p.QTY)||0;
+      const free = parseFloat(p.FREE)||0;
+      const pcs = unit==='BOX' ? qty*multF : qty;
+      dPurch += pcs + (free>0?free:0);
+    }
+  }
+  for (const b of billDtl) {
+    const bStr = formatDateLocal(b.DATE);
+    if (String(b.CODE).toUpperCase()===code && Number(b.GDN_CODE)===gdn && bStr === asOfStr) {
+      const multF = parseFloat(b.MULT_F)||1;
+      const unit = String(b.UNIT||'').toUpperCase();
+      const qty = parseFloat(b.QTY)||0;
+      const free = parseFloat(b.FREE)||0;
+      const pcs = unit==='BOX' ? qty*multF : qty;
+      const series = String(b.SERIES||'').toUpperCase();
+      if (series==='S') dSR += pcs + (free>0?free:0);
+      else if (series==='P') dPR += pcs + (free>0?free:0);
+      else dSales += pcs + (free>0?free:0);
+    }
+  }
+  for (const t of transfer) {
+    const tStr = formatDateLocal(t.DATE);
+    if (String(t.CODE).toUpperCase()===code && Number(t.GDN_CODE)===gdn && tStr === asOfStr) {
+      const multF = parseFloat(t.MULT_F)||1;
+      const unit = String(t.UNIT||'').toUpperCase();
+      const qty = parseFloat(t.QTY)||0;
+      const pcs = unit==='BOX' ? qty*multF : qty;
+      if (pcs>0) dOut += pcs;
+      else if (pcs<0) dIn += Math.abs(pcs);
+    }
+  }
+  const balance = Math.round(opening + dPurch + dSR + dIn - dSales - dPR - dOut);
+  return { opening, balance };
+}
+
+router.get('/api/stock-as-of-item', async (req, res) => {
+  try {
+    const { date, itemCode, godownCode } = req.query;
+    if (!date || !itemCode || !godownCode) {
+      return res.status(400).json({ error: 'date, itemCode, godownCode are required' });
+    }
+    const result = await stockAsOfItem(String(date), String(itemCode), String(godownCode));
+    res.json(result);
+  } catch (err) {
+    console.error('Error calculating stock-as-of-item:', err);
+    res.status(500).json({ error: 'Failed to calculate item stock as of date' });
+  }
+});
 router.get('/api/generate-initial-stock-csvs', async (req, res) => {
   try {
     console.log('Generating initial godown-wise stock CSVs...');
