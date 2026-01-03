@@ -14,6 +14,7 @@ interface AutocompleteProps {
   className?: string;
   defaultValue?: string;
   value?: string;
+  inputValue?: string;
   autoComplete?: string;
   disabled?: boolean | object;
   onEnter?: () => void;
@@ -80,6 +81,7 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   className = "",
   defaultValue = "",
   value,
+  inputValue = "",
   autoComplete = "",
   disabled = false,
   onEnter,
@@ -147,7 +149,7 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
         setSearchTerm(option.label);
       } else {
         setSelectedOption(null);
-        setSearchTerm("");
+        setSearchTerm(inputValue || "");
       }
     } else if (defaultValue) {
       const option = options.find(opt => opt.value === defaultValue);
@@ -155,8 +157,16 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
         setSelectedOption(option);
         setSearchTerm(option.label);
       }
+    } else if (inputValue) {
+      setSearchTerm(inputValue);
     }
-  }, [defaultValue, value, options]);
+  }, [defaultValue, value, options, inputValue]);
+
+  useEffect(() => {
+    if (value === undefined && inputValue !== undefined && inputValue !== searchTerm) {
+      setSearchTerm(inputValue);
+    }
+  }, [inputValue, value]);
 
   // Handle click outside to close dropdown
   useEffect(() => {

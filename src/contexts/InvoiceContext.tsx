@@ -28,11 +28,15 @@ export interface ItemData {
   netAmount: string;
   selectedItem: any;
   stockLimit: number;
+  itemCode?: string;    // BILLDTL.CODE - Item Code from original bill
+  itemName?: string;    // BILLDTL.PRODUCT - Item Name from original bill
+  billdtlUnit?: string; // Original UNIT from BILLDTL for reference
 }
 
 export interface InvoiceContextType {
   pmplData: any[];
   stockList: Record<string, any>;
+  setStockList?: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   godownOptions: Option[];
   partyOptions: Option[];
   smOptions: Option[];
@@ -57,6 +61,7 @@ export interface InvoiceContextType {
 export const InvoiceContext = createContext<InvoiceContextType>({
   pmplData: [],
   stockList: {},
+  setStockList: () => {},
   godownOptions: [],
   partyOptions: [],
   smOptions: [],
@@ -78,4 +83,4 @@ export const InvoiceContext = createContext<InvoiceContextType>({
   setItems: () => {},
 });
 
-export const useInvoiceContext = () => useContext(InvoiceContext); 
+export const useInvoiceContext = () => useContext(InvoiceContext);

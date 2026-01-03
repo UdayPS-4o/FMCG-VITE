@@ -32,6 +32,7 @@ interface CollapsibleItemSectionProps {
   // Add new props for inter-item navigation
   onTabToNextItem?: (currentIndex: number) => void;
   onShiftTabToPreviousItem?: (currentIndex: number) => void;
+  isOldBill?: boolean;
 }
 
 // Define handle types for the ref exposed by CollapsibleItemSection
@@ -56,6 +57,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   // Add new props for inter-item navigation
   onTabToNextItem,
   onShiftTabToPreviousItem,
+  isOldBill = false,
 }, ref) => {
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [initialInteraction, setInitialInteraction] = useState<boolean>(true);
@@ -585,18 +587,26 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
     if (!item.item || !stockList[item.item]) {
       return [];
     }
-    // Map over godownOptions (which are already filtered by user access)
-    return godownOptions
-      .map(gdnOption => {
-        const stockInGodown = parseInt(stockList[item.item][gdnOption.value] as string, 10) || 0;
-        return {
-          code: gdnOption.value,
-          name: gdnOption.label, // label from godownOptions is just the name
-          stockInGodown: stockInGodown,
-        };
-      })
-      .filter(gdn => gdn.stockInGodown > 0); // Only show godowns where current item has stock > 0
-  }, [item.item, stockList, godownOptions]);
+    const options = godownOptions.map(gdnOption => {
+      const stockInGodown = parseInt(stockList[item.item][gdnOption.value] as string, 10) || 0;
+      return {
+        code: gdnOption.value,
+        name: gdnOption.label,
+        stockInGodown,
+      };
+    });
+    const filtered = isOldBill ? options : options.filter(gdn => gdn.stockInGodown > 0);
+    if (isOldBill && item.godown) {
+      const hasCurrent = filtered.some(g => g.code === item.godown);
+      if (!hasCurrent) {
+        const currentFromAll = options.find(g => g.code === item.godown);
+        if (currentFromAll) {
+          filtered.unshift(currentFromAll);
+        }
+      }
+    }
+    return filtered;
+  }, [item.item, item.godown, stockList, godownOptions, isOldBill]);
 
   const formatDateForTooltip = (isoDateString: string | undefined): string => {
     if (!isoDateString) return 'N/A';
@@ -927,7 +937,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 <Input
                   id={`unit-${index}`}
                   label="Unit"
-                  value={item.unit}
+                  value={item.billdtlUnit || item.unit}
                   disabled
                   variant="outlined"
                   className="pr-10"
@@ -988,7 +998,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
             <div>
               <Input
                 id={`qty-${index}`}
-                label={`QTY (${item.unit || ''})`}
+                label={`QTY (${item.billdtlUnit || item.unit || ''})`}
                 value={item.qty}
                 onChange={(e) => handleFieldChange('qty', e.target.value)}
                 disabled={!item.godown || !item.unit}
@@ -1129,6 +1139,51 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
               />
             </div>
           </div>
+
+          {/* Original Bill Data Section - Only show if we have original bill data */}
+          {(item.itemCode || item.itemName || item.billdtlUnit) && (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Original Bill Data</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {item.itemCode && (
+                  <div>
+                    <Input
+                      id={`itemCode-${index}`}
+                      label="Item Code (Original)"
+                      value={item.itemCode}
+                      disabled
+                      variant="outlined"
+                      className="bg-blue-50 dark:bg-blue-900/20"
+                    />
+                  </div>
+                )}
+                {item.itemName && (
+                  <div>
+                    <Input
+                      id={`itemName-${index}`}
+                      label="Item Name (Original)"
+                      value={item.itemName}
+                      disabled
+                      variant="outlined"
+                      className="bg-blue-50 dark:bg-blue-900/20"
+                    />
+                  </div>
+                )}
+                {item.billdtlUnit && (
+                  <div>
+                    <Input
+                      id={`billdtlUnit-${index}`}
+                      label="Unit (BILLDTL)"
+                      value={item.billdtlUnit}
+                      disabled
+                      variant="outlined"
+                      className="bg-yellow-50 dark:bg-yellow-900/20"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1153,4 +1208,4 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   );
 });
 
-export default CollapsibleItemSection; 
+export default CollapsibleItemSection;

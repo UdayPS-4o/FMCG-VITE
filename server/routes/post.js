@@ -15,7 +15,7 @@ const {
   saveDataToJsonFile,
 } = require('./utilities');
 
-const uniqueIdentifiers = ['receiptNo', 'voucherNo', 'subgroup', 'id'];
+const uniqueIdentifiers = ['receiptNo', 'voucherNo', 'subgroup', 'id', 'bill'];
 
 function formatFormType(formType) {
   if (!formType) return '';

@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
 const csv = require('fast-csv');
+const { DbfSync } = require('../utils/dbf-sync');
 require('dotenv').config();
 
 const billsDeliveryStatePath = path.join(__dirname, '..', 'db', 'BillsDeliveryRegister.json');
@@ -596,6 +597,721 @@ router.get('/van-loading', async (req, res) => {
         } else {
             res.status(500).json({ message: 'Failed to generate van loading report' });
         }
+    }
+});
+
+// Route to search bills with filters for old bill editing
+router.get('/search', async (req, res) => {
+    const { fromDate, toDate, partyName, amount, type } = req.query;
+
+    try {
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+        }
+
+        const billPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'bill.json');
+        const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
+
+        const billData = JSON.parse(await fs.readFile(billPath, 'utf8'));
+        const cmplData = JSON.parse(await fs.readFile(cmplPath, 'utf8'));
+
+        // Create party details map for name lookup
+        const partyDetailsMap = cmplData.reduce((acc, party) => {
+            acc[party.C_CODE] = { name: party.C_NAME, place: party.C_PLACE };
+            return acc;
+        }, {});
+
+        // Filter bills based on search criteria
+        let filteredBills = billData.filter(bill => {
+            // Date filter
+            if (fromDate || toDate) {
+                const billDate = new Date(bill.DATE);
+                if (fromDate) {
+                    const from = new Date(fromDate);
+                    if (billDate < from) return false;
+                }
+                if (toDate) {
+                    const to = new Date(toDate);
+                    to.setHours(23, 59, 59, 999); // Include the entire end date
+                    if (billDate > to) return false;
+                }
+            }
+
+            // Party name filter
+            if (partyName) {
+                const partyInfo = partyDetailsMap[bill.C_CODE];
+                const partyNameToSearch = partyInfo ? partyInfo.name : bill.C_CODE;
+                if (!partyNameToSearch.toLowerCase().includes(partyName.toLowerCase())) {
+                    return false;
+                }
+            }
+
+            // Amount filter
+            if (amount) {
+                const searchAmount = parseFloat(amount);
+                const billAmount = parseFloat(bill.N_B_AMT) || 0;
+                if (Math.abs(billAmount - searchAmount) > 0.01) { // Allow small floating point differences
+                    return false;
+                }
+            }
+
+            // Type filter (Cash/Credit)
+            if (type && type !== 'All') {
+                const billType = bill.CASH === 'Y' ? 'Cash' : 'Credit';
+                if (billType !== type) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        // Transform data for frontend
+        const searchResults = filteredBills.map(bill => {
+            const partyInfo = partyDetailsMap[bill.C_CODE] || { name: bill.C_CODE, place: '' };
+            const billType = bill.CASH === 'Y' ? 'Cash' : 'Credit';
+            
+            return {
+                id: `${bill.SERIES}-${bill.BILL}`, // Unique identifier for navigation
+                billNo: `${bill.SERIES}-${bill.BILL}`,
+                date: bill.DATE,
+                partyName: partyInfo.name,
+                amount: parseFloat(bill.N_B_AMT) || 0,
+                type: billType,
+                series: bill.SERIES,
+                billNumber: bill.BILL,
+                partyCode: bill.C_CODE
+            };
+        });
+
+        // Sort by date (newest first) and then by bill number
+        searchResults.sort((a, b) => {
+            const dateCompare = new Date(b.date) - new Date(a.date);
+            if (dateCompare !== 0) return dateCompare;
+            return b.billNumber - a.billNumber;
+        });
+
+        res.json({
+            success: true,
+            bills: searchResults,
+            total: searchResults.length
+        });
+
+    } catch (error) {
+        console.error('Error searching bills:', error);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ 
+                success: false,
+                message: 'Required data files not found',
+                bills: []
+            });
+        } else {
+            res.status(500).json({ 
+                success: false,
+                message: 'Failed to search bills',
+                bills: []
+            });
+        }
+    }
+});
+
+// Route to get bill details for editing old bills
+router.get('/details/:series/:billNumber', async (req, res) => {
+    const { series, billNumber } = req.params;
+
+    try {
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+        }
+
+        // Helper to read JSON with case-insensitive filename fallback
+        const readJsonSafe = async (...paths) => {
+            for (const p of paths) {
+                try {
+                    const content = await fs.readFile(p, 'utf8');
+                    return JSON.parse(content);
+                } catch (e) {
+                    if (e.code !== 'ENOENT') throw e; // Only ignore missing file; propagate others
+                }
+            }
+            const err = new Error('Required file not found');
+            err.code = 'ENOENT';
+            throw err;
+        };
+
+        // Build candidate paths for upper/lowercase variants
+        const billPathUpper = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILL.json');
+        const billPathLower = path.join(DBF_FOLDER_PATH, 'data', 'json', 'bill.json');
+        const billdtlPathUpper = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
+        const billdtlPathLower = path.join(DBF_FOLDER_PATH, 'data', 'json', 'billdtl.json');
+        const cmplPathUpper = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
+        const cmplPathLower = path.join(DBF_FOLDER_PATH, 'data', 'json', 'cmpl.json');
+        const pmplPathUpper = path.join(DBF_FOLDER_PATH, 'data', 'json', 'PMPL.json');
+        const pmplPathLower = path.join(DBF_FOLDER_PATH, 'data', 'json', 'pmpl.json');
+
+        const billData = await readJsonSafe(billPathUpper, billPathLower);
+        const billdtlData = await readJsonSafe(billdtlPathUpper, billdtlPathLower);
+        const cmplData = await readJsonSafe(cmplPathUpper, cmplPathLower);
+        const pmplData = await readJsonSafe(pmplPathUpper, pmplPathLower);
+        
+        // Read users data for salesman mapping
+        const usersPath = path.join(__dirname, '..', 'db', 'users.json');
+        const usersData = JSON.parse(await fs.readFile(usersPath, 'utf8'));
+
+        // Find the main bill record
+        const mainBill = billData.find(bill => 
+            bill.SERIES === series && bill.BILL.toString() === billNumber.toString()
+        );
+
+        if (!mainBill) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Bill not found' 
+            });
+        }
+
+        // Find all bill detail records for this bill
+        const billDetails = billdtlData.filter(detail => 
+            detail.SERIES === series && detail.BILL.toString() === billNumber.toString()
+        );
+
+        // Create lookup maps
+        const partyDetailsMap = cmplData.reduce((acc, party) => {
+            acc[party.C_CODE] = { name: party.C_NAME, place: party.C_PLACE };
+            return acc;
+        }, {});
+
+        // Use PMPL.json for item name and unit mapping
+        const itemDetailsMap = pmplData.reduce((acc, item) => {
+            const code = item.CODE || item.I_CODE; // fallback if structure differs
+            if (code) {
+                acc[code] = { name: item.PRODUCT || item.PRODUCT_L || code, unit: item.UNIT_1 || 'PCS' };
+            }
+            return acc;
+        }, {});
+
+        // Get party information
+        const partyInfo = partyDetailsMap[mainBill.C_CODE] || { 
+            name: mainBill.C_CODE, 
+            place: '' 
+        };
+
+        // Create lookup map for S/M names using BR_CODE
+        const smDetailsMap = usersData.reduce((acc, user) => {
+            if (user.smCode) {
+                acc[user.smCode] = {
+                    name: user.name,
+                    smCode: user.smCode
+                };
+            }
+            return acc;
+        }, {});
+
+        // Get S/M information from BR_CODE
+        const smInfo = smDetailsMap[mainBill.BR_CODE] || { 
+            name: '', 
+            smCode: mainBill.BR_CODE || ''
+        };
+
+        // Transform bill details to the shape expected by frontend
+        const transformedItems = billDetails.map(detail => {
+            const itemCode = detail.CODE || detail.I_CODE; // Use CODE field from BILLDTL.json
+            const itemInfo = itemDetailsMap[itemCode] || { name: detail.PRODUCT || itemCode, unit: detail.UNIT || 'PCS' };
+            
+            // Calculate amount and net amount from BILLDTL.json structure
+            const qty = detail.QTY || 0;
+            const rate = detail.RATE || 0;
+            const amount = detail.AMT10 || (qty * rate) || 0;
+            const netAmount = detail.NET10 || amount || 0;
+            
+            return {
+                item: itemCode,
+                itemName: detail.PRODUCT || itemInfo.name,
+                itemCode: itemCode, // Separate field for ITEM CODE
+                originalItemName: itemInfo.name, // Original item name from PMPL
+                unit: itemInfo.unit, // Use original unit from PMPL instead of BILLDTL unit
+                billdtlUnit: detail.UNIT || '', // Keep BILLDTL unit for reference
+                qty: qty.toString(),
+                rate: rate.toString(),
+                amount: amount.toString(),
+                netAmount: netAmount.toString(),
+                godown: detail.GDN_CODE || '',
+                stock: '',
+                pack: detail.PACK || '',
+                gst: (detail.GST ?? '').toString(),
+                pcBx: '',
+                mrp: (detail.MRP ?? '').toString(),
+                cess: (detail.CESS_RS ?? 0).toString(),
+                schRs: (detail.SCHEME ?? 0).toString(),
+                sch: (detail.DISCOUNT ?? 0).toString(),
+                cd: (detail.CASH_DIS ?? 0).toString(),
+                selectedItem: null,
+                stockLimit: 0
+            };
+        });
+
+        // Return data in the format expected by the frontend EditInvoicing component
+        const data = {
+            summary: {
+                series: mainBill.SERIES,
+                billNo: mainBill.BILL,
+                date: mainBill.DATE,
+                partyName: partyInfo.name,
+                totalAmount: mainBill.AMOUNT || 0,
+                itemCount: billDetails.length
+            },
+            bill: {
+                DATE: mainBill.DATE,
+                CASH: mainBill.CASH,
+                SM: smInfo.smCode,
+                smName: smInfo.name,
+                REF: mainBill.REF || '',
+                DUE_DAYS: mainBill.DUE_DAYS || 7,
+                C_CODE: mainBill.C_CODE
+            },
+            party: {
+                name: partyInfo.name,
+                place: partyInfo.place || '',
+                address: partyInfo.address || '',
+                gstNo: partyInfo.gstNo || ''
+            },
+            sm: smInfo,
+            details: transformedItems.map(item => ({
+                I_CODE: item.item,
+                CODE: item.item, // Include both for compatibility
+                ITEM_CODE: item.itemCode, // Separate ITEM CODE field
+                ITEM_NAME: item.originalItemName, // Original ITEM NAME from PMPL
+                QTY: parseFloat(item.qty) || 0,
+                RATE: parseFloat(item.rate) || 0,
+                AMOUNT: parseFloat(item.amount) || 0,
+                NET_AMOUNT: parseFloat(item.netAmount) || 0,
+                AMT10: parseFloat(item.amount) || 0,
+                NET10: parseFloat(item.netAmount) || 0,
+                UNIT: item.unit, // Original unit from PMPL
+                BILLDTL_UNIT: item.billdtlUnit, // Unit from BILLDTL for reference
+                GODOWN: item.godown,
+                GDN_CODE: item.godown,
+                GST: parseFloat(item.gst) || 0,
+                CESS: parseFloat(item.cess) || 0,
+                CESS_RS: parseFloat(item.cess) || 0,
+                SCH_RS: parseFloat(item.schRs) || 0,
+                SCHEME: parseFloat(item.schRs) || 0,
+                SCH: parseFloat(item.sch) || 0,
+                DISCOUNT: parseFloat(item.sch) || 0,
+                CD: parseFloat(item.cd) || 0,
+                CASH_DIS: parseFloat(item.cd) || 0,
+                MRP: parseFloat(item.mrp) || 0,
+                PACK: item.pack || '',
+                PRODUCT: item.itemName,
+                productInfo: {
+                    name: item.itemName,
+                    unit: item.unit,
+                    brand: ''
+                }
+            }))
+        };
+
+        return res.json({ success: true, data });
+
+    } catch (error) {
+        console.error('Error fetching bill details:', error);
+        if (error.code === 'ENOENT') {
+            return res.status(404).json({
+                success: false,
+                message: 'Required data files not found'
+            });
+        }
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to fetch bill details'
+        });
+    }
+});
+
+// Route to update old bills with direct DBF merging
+router.post('/update-old-bill', async (req, res) => {
+    const { 
+        series, 
+        billNumber, 
+        date, 
+        cash, 
+        party, 
+        partyName, 
+        sm, 
+        smName, 
+        ref, 
+        dueDays, 
+        items, 
+        total, 
+        originalBill, 
+        originalDetails 
+    } = req.body;
+
+    try {
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+        }
+
+        const billPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'bill.json');
+        const billdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'billdtl.json');
+
+        // Read current data
+        const billData = JSON.parse(await fs.readFile(billPath, 'utf8'));
+        const billdtlData = JSON.parse(await fs.readFile(billdtlPath, 'utf8'));
+
+        // Find and update the main bill record
+        const billIndex = billData.findIndex(bill => 
+            bill.SERIES === series && bill.BILL.toString() === billNumber.toString()
+        );
+
+        if (billIndex === -1) {
+            return res.status(404).json({
+                success: false,
+                message: 'Bill not found'
+            });
+        }
+
+        // Update the main bill record
+        const updatedBill = {
+            ...billData[billIndex],
+            DATE: date,
+            CASH: cash,
+            C_CODE: party,
+            AMOUNT: parseFloat(total) || 0,
+            // Add any other fields that need updating
+        };
+
+        billData[billIndex] = updatedBill;
+
+        // Remove existing bill detail records for this bill
+        const filteredBilldtlData = billdtlData.filter(detail => 
+            !(detail.SERIES === series && detail.BILL.toString() === billNumber.toString())
+        );
+
+        // Add updated bill detail records
+        const newBillDetails = items
+            .filter(item => item.item && item.qty) // Only include items with data
+            .map((item, index) => ({
+                SERIES: series,
+                BILL: parseInt(billNumber),
+                SR: index + 1,
+                I_CODE: item.item,
+                QTY: parseFloat(item.qty) || 0,
+                RATE: parseFloat(item.rate) || 0,
+                AMOUNT: parseFloat(item.amount) || 0,
+                // Add other required fields based on your DBF structure
+                GODOWN: item.godown || '',
+                UNIT: item.unit || '',
+                GST: parseFloat(item.gst) || 0,
+                CESS: parseFloat(item.cess) || 0,
+                SCH_RS: parseFloat(item.schRs) || 0,
+                SCH: parseFloat(item.sch) || 0,
+                CD: parseFloat(item.cd) || 0,
+                NET_AMOUNT: parseFloat(item.netAmount) || 0
+            }));
+
+        const updatedBilldtlData = [...filteredBilldtlData, ...newBillDetails];
+
+        // Write updated data back to JSON files
+        await fs.writeFile(billPath, JSON.stringify(billData, null, 2));
+        await fs.writeFile(billdtlPath, JSON.stringify(updatedBilldtlData, null, 2));
+
+        // Sync JSON changes back to DBF files
+        try {
+            const dbfSync = new DbfSync(DBF_FOLDER_PATH);
+            const syncResult = await dbfSync.syncBillAndBillDtl();
+            console.log(`DBF sync result:`, syncResult);
+        } catch (syncError) {
+            console.error('Error syncing to DBF files:', syncError);
+            // Continue execution - JSON files are updated even if DBF sync fails
+        }
+
+        console.log(`Successfully updated old bill ${series}-${billNumber}`);
+
+        res.json({
+            success: true,
+            message: 'Old bill updated successfully and merged to DBF files',
+            billId: `${series}-${billNumber}`
+        });
+
+    } catch (error) {
+        console.error('Error updating old bill:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update old bill',
+            error: error.message
+        });
+    }
+});
+
+// Save edited bill data to edit.json
+router.post('/save-edit', async (req, res) => {
+    try {
+        const { series, billNo, editData } = req.body;
+        
+        if (!series || !billNo || !editData) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Series, billNo, and editData are required' 
+            });
+        }
+
+        const editJsonPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'edit.json');
+        
+        // Read existing edit.json or create empty array
+        let editJsonData = [];
+        try {
+            const editJsonContent = await fs.readFile(editJsonPath, 'utf8');
+            editJsonData = JSON.parse(editJsonContent);
+        } catch (error) {
+            // File doesn't exist, start with empty array
+            editJsonData = [];
+        }
+
+        // Remove any existing edit for this bill
+        editJsonData = editJsonData.filter(item => 
+            !(item.series === series && item.billNo.toString() === billNo.toString())
+        );
+
+        // Add the new edit data
+        const editEntry = {
+            series,
+            billNo: billNo.toString(),
+            editData,
+            timestamp: new Date().toISOString()
+        };
+        
+        editJsonData.push(editEntry);
+
+        // Save to edit.json
+        await fs.writeFile(editJsonPath, JSON.stringify(editJsonData, null, 2));
+
+        res.json({
+            success: true,
+            message: 'Edit data saved successfully',
+            editEntry
+        });
+
+    } catch (error) {
+        console.error('Error saving edit data:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to save edit data',
+            error: error.message 
+        });
+    }
+});
+
+// Apply edits from edit.json to DBF files
+router.post('/apply-edits/:series/:billNo', async (req, res) => {
+    try {
+        const { series, billNo } = req.params;
+        
+        const editJsonPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'edit.json');
+        const billPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'bill.json');
+        const billdtlPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'BILLDTL.json');
+
+        // Read edit.json
+        let editJsonData = [];
+        try {
+            const editJsonContent = await fs.readFile(editJsonPath, 'utf8');
+            editJsonData = JSON.parse(editJsonContent);
+        } catch (error) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'No edit data found' 
+            });
+        }
+
+        // Find the edit for this bill
+        const editEntry = editJsonData.find(item => 
+            item.series === series && item.billNo.toString() === billNo.toString()
+        );
+
+        if (!editEntry) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'No edit found for this bill' 
+            });
+        }
+
+        const editData = editEntry.editData;
+
+        // Read current bill and billdtl data
+        const billData = JSON.parse(await fs.readFile(billPath, 'utf8'));
+        const billdtlData = JSON.parse(await fs.readFile(billdtlPath, 'utf8'));
+
+        // Find and update the bill header
+        const billIndex = billData.findIndex(bill => 
+            bill.SERIES === series && bill.BILL.toString() === billNo.toString()
+        );
+
+        if (billIndex !== -1) {
+            // Update bill header fields
+            billData[billIndex] = {
+                ...billData[billIndex],
+                DATE: editData.date || billData[billIndex].DATE,
+                C_CODE: editData.party || billData[billIndex].C_CODE,
+                SM_CODE: editData.sm || billData[billIndex].SM_CODE,
+                REF: editData.ref || billData[billIndex].REF,
+                DUE_DAYS: editData.dueDays || billData[billIndex].DUE_DAYS,
+                CASH: editData.cash || billData[billIndex].CASH,
+                N_B_AMT: parseFloat(editData.total) || billData[billIndex].N_B_AMT
+            };
+        }
+
+        // Remove existing bill detail records for this bill
+        const filteredBilldtlData = billdtlData.filter(detail => 
+            !(detail.SERIES === series && detail.BILL.toString() === billNo.toString())
+        );
+
+        // Add updated bill detail records from edit data
+        const newBillDetails = editData.items
+            .filter(item => item.item && item.qty) // Only include items with data
+            .map((item, index) => ({
+                SERIES: series,
+                BILL: parseInt(billNo),
+                SR: index + 1,
+                DATE: editData.date,
+                CODE: item.item,
+                I_CODE: item.item,
+                QTY: parseFloat(item.qty) || 0,
+                RATE: parseFloat(item.rate) || 0,
+                AMOUNT: parseFloat(item.amount) || 0,
+                AMT10: parseFloat(item.amount) || 0,
+                NET_AMOUNT: parseFloat(item.netAmount) || 0,
+                NET10: parseFloat(item.netAmount) || 0,
+                GODOWN: item.godown || '',
+                GDN_CODE: item.godown || '',
+                UNIT: item.unit || '',
+                GST: parseFloat(item.gst) || 0,
+                CESS: parseFloat(item.cess) || 0,
+                CESS_RS: parseFloat(item.cess) || 0,
+                SCH_RS: parseFloat(item.schRs) || 0,
+                SCHEME: parseFloat(item.schRs) || 0,
+                SCH: parseFloat(item.sch) || 0,
+                DISCOUNT: parseFloat(item.sch) || 0,
+                CD: parseFloat(item.cd) || 0,
+                CASH_DIS: parseFloat(item.cd) || 0,
+                MRP: parseFloat(item.mrp) || 0,
+                PACK: item.pack || '',
+                PRODUCT: item.itemName || ''
+            }));
+
+        const updatedBilldtlData = [...filteredBilldtlData, ...newBillDetails];
+
+        // Write updated data back to JSON files
+        await fs.writeFile(billPath, JSON.stringify(billData, null, 2));
+        await fs.writeFile(billdtlPath, JSON.stringify(updatedBilldtlData, null, 2));
+
+        // Sync JSON changes back to DBF files
+        try {
+            const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH || path.join(__dirname, '..', '..', 'd01-2324');
+            const dbfSync = new DbfSync(DBF_FOLDER_PATH);
+            const syncResult = await dbfSync.syncBillAndBillDtl();
+            console.log(`DBF sync result:`, syncResult);
+        } catch (syncError) {
+            console.error('Error syncing to DBF files:', syncError);
+            // Continue execution - JSON files are updated even if DBF sync fails
+        }
+
+        // Remove the applied edit from edit.json
+        const remainingEdits = editJsonData.filter(item => 
+            !(item.series === series && item.billNo.toString() === billNo.toString())
+        );
+        await fs.writeFile(editJsonPath, JSON.stringify(remainingEdits, null, 2));
+
+        console.log(`Successfully applied edits for bill ${series}-${billNo}`);
+
+        res.json({
+            success: true,
+            message: 'Edits applied successfully to DBF files',
+            updatedBill: billData[billIndex],
+            updatedDetails: newBillDetails
+        });
+
+    } catch (error) {
+        console.error('Error applying edits:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to apply edits',
+            error: error.message 
+        });
+    }
+});
+
+// Get edit data for a specific bill
+router.get('/get-edit/:series/:billNo', async (req, res) => {
+    try {
+        const { series, billNo } = req.params;
+        
+        const editJsonPath = path.join(__dirname, '..', '..', 'd01-2324', 'data', 'json', 'edit.json');
+        
+        let editJsonData = [];
+        try {
+            const editJsonContent = await fs.readFile(editJsonPath, 'utf8');
+            editJsonData = JSON.parse(editJsonContent);
+        } catch (error) {
+            return res.json({ 
+                success: true, 
+                editData: null,
+                message: 'No edit data found' 
+            });
+        }
+
+        // Find the edit for this bill
+        const editEntry = editJsonData.find(item => 
+            item.series === series && item.billNo.toString() === billNo.toString()
+        );
+
+        res.json({
+            success: true,
+            editData: editEntry ? editEntry.editData : null,
+            timestamp: editEntry ? editEntry.timestamp : null
+        });
+
+    } catch (error) {
+        console.error('Error getting edit data:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to get edit data',
+            error: error.message 
+        });
+    }
+});
+
+// Manual DBF synchronization endpoint
+router.post('/sync-dbf', async (req, res) => {
+    try {
+        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+        if (!DBF_FOLDER_PATH) {
+            return res.status(500).json({ 
+                success: false,
+                message: 'DBF_FOLDER_PATH environment variable not set.' 
+            });
+        }
+
+        const dbfSync = new DbfSync(DBF_FOLDER_PATH);
+        const syncResult = await dbfSync.syncBillAndBillDtl();
+
+        console.log('Manual DBF sync completed:', syncResult);
+
+        res.json({
+            success: true,
+            message: 'DBF files synchronized successfully',
+            ...syncResult
+        });
+
+    } catch (error) {
+        console.error('Error during manual DBF sync:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to synchronize DBF files',
+            error: error.message
+        });
     }
 });
 

@@ -13,14 +13,59 @@ let redirect = (url, time) => {
 };
 
 const getDbfData = async (filePath) => {
+  const maxRetries = 5;
+  const baseRetryDelay = 500; // Start with 500ms
+  
+  // Check if file exists first
   try {
-    const orm = new DbfORM(filePath);
-    await orm.open();
-    const records = await orm.findAll();
-    orm.close();
-    return records;
+    await fs.access(filePath);
   } catch (error) {
-    throw new Error(`Error reading DBF file: ${error.message}`);
+    throw new Error(`DBF file not found: ${filePath}`);
+  }
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let orm = null;
+    try {
+      // Check if file is accessible for reading
+      const fileHandle = await fs.open(filePath, 'r');
+      await fileHandle.close();
+      
+      orm = new DbfORM(filePath);
+      await orm.open();
+      const records = await orm.findAll();
+      orm.close();
+      orm = null;
+      return records;
+    } catch (error) {
+      // Always try to close the ORM if it was opened
+      if (orm) {
+        try {
+          orm.close();
+        } catch (closeError) {
+          console.warn(`Error closing DBF ORM: ${closeError.message}`);
+        }
+      }
+      
+      // If file is locked, busy, or permission denied, wait and retry
+      const isRetryableError = error.message.includes('EBUSY') || 
+                              error.message.includes('locked') || 
+                              error.message.includes('EACCES') ||
+                              error.message.includes('EPERM') ||
+                              error.code === 'EBUSY' ||
+                              error.code === 'EACCES' ||
+                              error.code === 'EPERM';
+      
+      if (isRetryableError && attempt < maxRetries) {
+        const retryDelay = baseRetryDelay * attempt; // Exponential backoff
+        console.log(`DBF file access issue (${error.code || 'unknown'}), retrying in ${retryDelay}ms (attempt ${attempt}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        continue;
+      }
+      
+      // If it's not a retryable error or we've exhausted retries
+      console.error(`Failed to read DBF file after ${attempt} attempts:`, error.message);
+      throw new Error(`Error reading DBF file: ${error.message}`);
+    }
   }
 };
 

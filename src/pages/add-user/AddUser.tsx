@@ -50,6 +50,7 @@ const AddUser: React.FC = () => {
     'Dashboard',
     'Account Master',
     'Invoicing',
+    'Purchases',
     'Cash Receipts',
     'Godown Transfer',
     'Database',

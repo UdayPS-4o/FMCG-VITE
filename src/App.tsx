@@ -53,6 +53,9 @@ import AttendanceHistory from './pages/attendance/AttendanceHistory';
 import AdminAttendance from './pages/attendance/AdminAttendance';
 import GSTR2AMatching from './pages/reports/GSTR2AMatching';
 import Home from './pages/Dashboard/Home';
+import NewPurchase from './pages/purchases/NewPurchase';
+import DatabasePurchases from "./pages/database/Purchases";
+import PurchasesApproved from "./pages/approved/PurchasesApproved";
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -141,6 +144,17 @@ const AppRoutes = () => (
           <CashPayment />
         </ProtectedRoute>
       } />
+      <Route path="/purchases" element={<Navigate to="/purchases/new" replace />} />
+      <Route path="/purchases/new" element={
+        <ProtectedRoute>
+          <NewPurchase />
+        </ProtectedRoute>
+      } />
+      <Route path="/purchases/edit/:id" element={
+        <ProtectedRoute>
+          <NewPurchase />
+        </ProtectedRoute>
+      } />
       <Route path="/add-user" element={
         <ProtectedRoute requiredAccess="Admin">
           <AddUser />
@@ -156,6 +170,11 @@ const AppRoutes = () => (
       <Route path="/db/invoicing" element={
         <ProtectedRoute requiredAccess="Invoicing">
           <DatabaseInvoicing />
+        </ProtectedRoute>
+      } />
+      <Route path="/db/purchases" element={
+        <ProtectedRoute>
+          <DatabasePurchases />
         </ProtectedRoute>
       } />
       <Route path="/db/godown-transfer" element={
@@ -308,6 +327,11 @@ const AppRoutes = () => (
       <Route path="/approved/invoicing" element={
         <ProtectedRoute requiredAccess="Admin">
           <InvoicingApproved />
+        </ProtectedRoute>
+      } />
+      <Route path="/approved/purchases" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <PurchasesApproved />
         </ProtectedRoute>
       } />
       <Route path="/approved/godown-transfer" element={

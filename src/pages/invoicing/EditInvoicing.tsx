@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Input, { InputRefHandle } from "../../components/form/input/Input";
@@ -36,10 +36,17 @@ const EditInvoicingContent: React.FC<{
   setAllItems: React.Dispatch<React.SetStateAction<ItemData[]>>;
 }> = ({ invoiceItemsRef, setAllItems }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const dataLoadedRef = useRef(false);
   const invoiceDataRef = useRef<any>(null);
   const { user } = useAuth();
+  
+  // Check if this is old bill editing mode
+  const searchParams = new URLSearchParams(location.search);
+  const isOldBillMode = searchParams.get('mode') === 'old';
+  const urlSeries = searchParams.get('series');
+  const urlBillNumber = searchParams.get('billNumber');
   
   // Get shared invoice data from context
   const { 
@@ -47,6 +54,7 @@ const EditInvoicingContent: React.FC<{
     smOptions, 
     pmplData, 
     stockList, 
+    setStockList,
     loading: dataLoading,
     error: dataError,
     items,
@@ -109,6 +117,125 @@ const EditInvoicingContent: React.FC<{
   // Step 1: Fetch invoice data
   useEffect(() => {
     const fetchInvoiceData = async () => {
+      // Handle old bill editing mode
+      if (isOldBillMode) {
+        if (!urlSeries || !urlBillNumber) {
+          setError('Series and bill number are required for old bill editing');
+          setLoading(false);
+          return;
+        }
+
+        // If we've already loaded the data, don't load it again
+        if (dataLoadedRef.current) {
+          return;
+        }
+
+        try {
+          console.log(`Fetching old bill data for ${urlSeries}-${urlBillNumber}`);
+          const response = await fetch(`${constants.baseURL}/api/details/${urlSeries}/${urlBillNumber}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch bill details: ${response.statusText}`);
+          }
+          
+          const billData = await response.json();
+          console.log('Fetched old bill data:', billData);
+
+          if (!billData.success) {
+            throw new Error(billData.message || 'Failed to fetch bill details');
+          }
+
+          // The API returns the invoice data in billData.data
+          const invoiceData = billData.data;
+          
+          // Validate the invoice data structure
+          if (!invoiceData) {
+            throw new Error('No invoice data received from server');
+          }
+          
+          if (!invoiceData.summary) {
+            throw new Error('Invoice summary data is missing');
+          }
+          
+          if (!invoiceData.bill) {
+            throw new Error('Invoice bill data is missing');
+          }
+          
+          if (!invoiceData.party) {
+            throw new Error('Invoice party data is missing');
+          }
+          
+          if (!invoiceData.details || !Array.isArray(invoiceData.details)) {
+            throw new Error('Invoice details data is missing or invalid');
+          }
+          
+          // Transform the invoice data to match the expected format
+          const transformedData = {
+            series: invoiceData.summary.series || '',
+            billNo: (invoiceData.summary.billNo || '').toString(),
+            date: invoiceData.bill.DATE || '',
+            cash: invoiceData.bill.CASH === 'Y' ? 'Y' : 'N',
+            party: invoiceData.party.name || '',
+            partyName: invoiceData.party.name || '',
+            partyCode: invoiceData.bill.C_CODE || '',
+            sm: invoiceData.bill.SM || '',
+            smName: invoiceData.bill.smName || invoiceData.sm?.name || '',
+            ref: invoiceData.bill.REF || '',
+            dueDays: invoiceData.bill.DUE_DAYS || '7',
+            items: invoiceData.details.map((detail: any) => ({
+              item: detail.I_CODE || '',
+              pmplItemName: detail.productInfo?.name || '',
+              unit: detail.UNIT || detail.productInfo?.unit || '',
+              qty: (detail.QTY || 0).toString(),
+              rate: (detail.RATE || 0).toString(),
+              amount: (detail.AMOUNT || 0).toString(),
+              netAmount: (detail.NET_AMOUNT || detail.AMOUNT || 0).toString(),
+              godown: detail.GODOWN || '',
+              stock: detail.STOCK || '',
+              pack: detail.PACK || '',
+              gst: (detail.GST || '').toString(),
+              pcBx: (detail.PC_BX || '').toString(),
+              mrp: (detail.MRP || '').toString(),
+              cess: (detail.CESS || '').toString(),
+              schRs: (detail.SCH_RS || '').toString(),
+              sch: (detail.SCH || '').toString(),
+              cd: (detail.CD || '').toString(),
+              selectedItem: null,
+              stockLimit: 0,
+              itemCode: detail.ITEM_CODE || '',        // Original item code from BILLDTL
+              billdtlItemName: detail.ITEM_NAME || '',  // Original item name from BILLDTL
+              billdtlUnit: detail.BILLDTL_UNIT || '',  // Original unit from BILLDTL
+              originalDetail: detail                   // Store original detail for reference
+            })),
+            isOldBill: true,
+            originalBill: invoiceData.bill, // Store the original bill for reference
+            originalId: `${invoiceData.summary.series || ''}-${invoiceData.summary.billNo || ''}` // Store the original ID for reference
+          };
+
+          // Store the loaded invoice data in a ref for later use
+          console.log("Storing transformed data:", transformedData);
+          invoiceDataRef.current = transformedData;
+          dataLoadedRef.current = true;
+          setError(null);
+        } catch (err) {
+          console.error('Failed to load old bill:', err);
+          setError(err instanceof Error ? err.message : 'Failed to load old bill');
+          setToast({
+            visible: true,
+            message: 'Failed to load old bill',
+            type: 'error'
+          });
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Regular invoice editing mode
       if (!id) {
         setError('No invoice ID provided');
         setLoading(false);
@@ -185,7 +312,7 @@ const EditInvoicingContent: React.FC<{
     };
 
     fetchInvoiceData();
-  }, [id]);
+  }, [id, isOldBillMode, urlSeries, urlBillNumber]);
 
   // Step 2: Once all data is loaded (invoice data, partyOptions, smOptions, pmplData, stockList),
   // then populate the form
@@ -209,12 +336,20 @@ const EditInvoicingContent: React.FC<{
     // Get the stored invoice data
     const invoiceData = invoiceDataRef.current;
     if (!invoiceData) {
-      console.error("Invoice data not found");
+      console.error("Invoice data not found in ref");
       return;
     }
     
-    // Populate basic form fields
-    setCash(invoiceData.cash === 'true' || invoiceData.cash === true ? 'Y' : 'N');
+    // Validate that invoiceData has the expected structure
+    if (typeof invoiceData !== 'object') {
+      console.error("Invoice data is not an object:", invoiceData);
+      return;
+    }
+    
+    console.log("Populating form with invoice data:", invoiceData);
+    
+    // Populate basic form fields with defensive checks
+    setCash(invoiceData.cash === 'Y' ? 'Y' : 'N');
     setSeries(invoiceData.series || '');
     setBillNo(invoiceData.billNo || '1');
     setRef(invoiceData.ref || '');
@@ -264,17 +399,18 @@ const EditInvoicingContent: React.FC<{
     }
 
     // Set party when party options are available
-    if (invoiceData.party && partyOptions.length > 0) {
+    if (invoiceData.partyCode && partyOptions.length > 0) {
       console.log('Setting party with options:', partyOptions.length);
-      const partyOption = partyOptions.find(p => p.value === invoiceData.party);
+      const partyOption = partyOptions.find(p => p.value === invoiceData.partyCode);
       if (partyOption) {
         console.log('Found matching party option:', partyOption);
         setParty(partyOption);
       } else {
         console.log('Creating placeholder party option');
         const placeholder = {
-          value: invoiceData.party,
-          label: invoiceData.partyName || invoiceData.party
+          value: invoiceData.partyCode,
+          label: invoiceData.partyName || invoiceData.party,
+          gst: invoiceData.party?.gstNo || ''
         };
         setParty(placeholder);
       }
@@ -373,6 +509,32 @@ const EditInvoicingContent: React.FC<{
     // Mark the form as ready to display
     setFormReady(true);
   }, [dataLoading, loading, partyOptions, smOptions, pmplData, stockList, items, updateItem, addItem, removeItem, formReady, setAllItems, invoiceItemsRef]);
+
+  useEffect(() => {
+    const applyStockAsOfDate = async () => {
+      if (!isOldBillMode || !formReady || !date) return;
+      try {
+        if (items && items.length > 0) {
+          const requests = items.map(it => {
+            if (!it.item || !it.godown) return Promise.resolve({ opening: 0, balance: 0, _idx: -1 });
+            return fetch(`${constants.baseURL}/api/stock-as-of-item?date=${encodeURIComponent(date)}&itemCode=${encodeURIComponent(it.item)}&godownCode=${encodeURIComponent(it.godown)}`, {
+              headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+            }).then(r => r.ok ? r.json() : { opening: 0, balance: 0 }).then(data => ({ ...data }));
+          });
+          const results = await Promise.all(requests);
+          const updated = items.map((it, idx) => {
+            const res = results[idx] || { opening: 0, balance: 0 };
+            const balance = typeof res.balance === 'number' ? res.balance : 0;
+            return { ...it, stock: balance.toString(), stockLimit: balance };
+          });
+          setAllItems(updated);
+        }
+      } catch (e) {
+        console.error('Failed to fetch stock as of date:', e);
+      }
+    };
+    applyStockAsOfDate();
+  }, [isOldBillMode, formReady, date]);
 
   const handleAccordionChange = (panel: number) => (_: React.SyntheticEvent, isExpanded: boolean) => {
     setExpandedIndex?.(isExpanded ? panel : -1);
@@ -525,7 +687,75 @@ const EditInvoicingContent: React.FC<{
         ...item,
         selectedItem: undefined
       }));
+
+      // Handle old bill editing with edit.json functionality
+      if (isOldBillMode) {
+        const editData = {
+          date,
+          series: urlSeries,
+          billNo: urlBillNumber,
+          cash,
+          party: party?.value || '',
+          partyName: party?.label || '',
+          sm: sm?.value || '',
+          smName: sm?.label || '',
+          ref,
+          dueDays,
+          items: formattedItems.map(item => ({
+            item: item.item,
+            itemName: item.itemName || '',
+            godown: item.godown,
+            unit: item.unit,
+            rate: item.rate,
+            qty: item.qty,
+            cess: item.cess,
+            schRs: item.schRs,
+            sch: item.sch,
+            cd: item.cd,
+            amount: item.amount,
+            netAmount: item.netAmount,
+            pack: item.pack,
+            gst: item.gst,
+            mrp: item.mrp
+          })),
+          total: calculateTotal()
+        };
+        const applyResponse = await fetch(`${constants.baseURL}/api/update-old-bill-dbffile`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify(editData)
+        });
+
+        if (!applyResponse.ok) {
+          let errorMessage = 'Failed to update old bill';
+          try {
+            const errorData = await applyResponse.text();
+            errorMessage = `Server error: ${errorData || applyResponse.statusText}`;
+          } catch (e) {
+            console.error('Could not parse error response:', e);
+          }
+          throw new Error(errorMessage);
+        }
+
+        const responseData = await applyResponse.json();
+        
+        setToast({
+          visible: true,
+          message: 'Old bill updated successfully',
+          type: 'success',
+        });
+        
+        setTimeout(() => {
+          navigate('/db/invoicing');
+        }, 1500);
+        
+        return;
+      }
       
+      // Regular invoice editing
       const response = await fetch(`${constants.baseURL}/edit/invoicing`, {
         method: 'POST',
         headers: {
@@ -738,19 +968,21 @@ const EditInvoicingContent: React.FC<{
             <div className="flex items-center">
               <div className="flex items-center space-x-2">
                 <span className="text-gray-700 dark:text-gray-300">CREDIT {cash === 'N' ? '(O)' : ''}</span>
-                <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out rounded-full cursor-pointer">
+                <div className="relative inline-block">
                   <input
                     type="checkbox"
                     id="cash-toggle"
-                    className="absolute w-6 h-6 transition duration-200 ease-in-out transform bg-white border rounded-full appearance-none cursor-pointer peer border-gray-300 dark:border-gray-600 checked:right-0 checked:border-brand-500 checked:bg-brand-500 dark:checked:border-brand-400 dark:checked:bg-brand-400"
+                    className="sr-only peer"
                     checked={cash === 'Y'}
                     onChange={toggleCash}
                     autoComplete="off"
                   />
                   <label
                     htmlFor="cash-toggle"
-                    className="block h-full overflow-hidden rounded-full cursor-pointer bg-gray-300 dark:bg-gray-700 peer-checked:bg-brand-100 dark:peer-checked:bg-brand-900"
-                  ></label>
+                    className="block w-14 h-8 rounded-full bg-gray-300 dark:bg-gray-700 transition-colors duration-300 relative peer-checked:bg-green-500"
+                  >
+                    <span className="absolute top-1 left-1 w-6 h-6 rounded-full bg-white dark:bg-gray-900 shadow-sm transition-transform duration-300 peer-checked:translate-x-6"></span>
+                  </label>
                 </div>
                 <span className="text-gray-700 dark:text-gray-300">CASH {cash === 'Y' ? '(O)' : ''}</span>
               </div>
@@ -859,6 +1091,7 @@ const EditInvoicingContent: React.FC<{
               onTabToNextItem={handleTabToNextItem}
               onShiftTabToPreviousItem={handleShiftTabToPreviousItem}
               shouldFocusOnExpand={focusNewItemIndex === index}
+              isOldBill={isOldBillMode}
             />
           ))}
         </div>
@@ -914,7 +1147,7 @@ const EditInvoicingContent: React.FC<{
                 localStorage.removeItem('redirectToPrint');
               }}
             >
-              {isSubmitting ? 'Updating...' : 'Update Invoice'}
+              {isSubmitting ? 'Updating...' : (isOldBillMode ? 'Update Old Invoice' : 'Update Invoice')}
             </button>
             <button
               type="submit"
@@ -991,6 +1224,9 @@ const EditInvoicing: React.FC = () => {
       netAmount: '',
       selectedItem: null,
       stockLimit: 0,
+      itemCode: '',
+      itemName: '',
+      billdtlUnit: '',
     }];
     setItems(newItems);
     // Set the expandedIndex to the new item's index
@@ -1021,6 +1257,9 @@ const EditInvoicing: React.FC = () => {
         netAmount: '',
         selectedItem: null,
         stockLimit: 0,
+        itemCode: '',
+        itemName: '',
+        billdtlUnit: '',
       }]);
     }
   };
@@ -1051,6 +1290,9 @@ const EditInvoicing: React.FC = () => {
           netAmount: '',
           selectedItem: null,
           stockLimit: 0,
+          itemCode: '',
+          itemName: '',
+          billdtlUnit: '',
         });
       }
     }

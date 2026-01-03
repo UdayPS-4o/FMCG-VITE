@@ -136,11 +136,24 @@ process.on("uncaughtException", (err) => {
           console.log(
             `File ${dbfFile} has been modified since last conversion. Processing... :: ${lastModifiedTime} :: ${index[dbfFile]}`
           );
-          const dbData = await getDbfData(dbfFilePath);
-          await fs.writeFile(jsonFilePath, JSON.stringify(dbData, null, 2));
-          index[dbfFile] = lastModifiedTime;
-          await fs.writeFile(indexFilePath, JSON.stringify(index, null, 2));
-          console.log(`Converted ${dbfFile} to ${path.basename(jsonFilePath)}`);
+          
+          try {
+            const dbData = await getDbfData(dbfFilePath);
+            await fs.writeFile(jsonFilePath, JSON.stringify(dbData, null, 2));
+            index[dbfFile] = lastModifiedTime;
+            await fs.writeFile(indexFilePath, JSON.stringify(index, null, 2));
+            console.log(`Converted ${dbfFile} to ${path.basename(jsonFilePath)}`);
+          } catch (dbfError) {
+            // If DBF file is locked or inaccessible, check if JSON file exists
+            try {
+              await fs.access(jsonFilePath);
+              console.warn(`DBF file ${dbfFile} is locked, but JSON file exists. Skipping conversion for now.`);
+              // Don't update the index timestamp so we'll try again later
+            } catch (jsonError) {
+              console.error(`DBF file ${dbfFile} is locked and no JSON backup exists. Error: ${dbfError.message}`);
+              // Still don't update the index, so we'll retry later
+            }
+          }
         }
       }
   
