@@ -29,38 +29,38 @@ const extractToken = (req) => {
 // Middleware to verify JWT token
 const verifyToken = async (req, res, next) => {
   const token = extractToken(req);
-  
+
   if (!token) {
-    return res.status(401).json({ 
-      error: 'Unauthorized', 
-      message: 'Authentication required' 
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Authentication required'
     });
   }
 
   try {
     // Verify JWT token
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
     // Get user from users.json file
     const filePath = path.join(__dirname, "..", "..", "db", "users.json");
     const data = await fs.readFile(filePath, "utf8");
     const users = JSON.parse(data);
     const user = users.find((u) => u.id === decoded.userId);
-    
+
     if (user) {
       req.user = user;
       next();
     } else {
-      res.status(401).json({ 
-        error: 'Unauthorized', 
-        message: 'Invalid or expired authentication token' 
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid or expired authentication token'
       });
     }
   } catch (err) {
     console.error("JWT verification failed:", err);
-    res.status(401).json({ 
-      error: 'Unauthorized', 
-      message: 'Invalid or expired token' 
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Invalid or expired token'
     });
   }
 };
@@ -73,14 +73,14 @@ function generateHash(data) {
 app.get('/json/:file', verifyToken, async (req, res) => {
   const { file } = req.params;
   const clientHash = req.headers['if-none-match'] || req.query.hash;
-  
+
   try {
     let data = (await fs.readFile(`./db/${file}.json`, 'utf8')) || '[]';
     const jsonData = JSON.parse(data);
-    
+
     // Generate hash for the current data
     const currentHash = generateHash(jsonData);
-    
+
     // Set ETag header - With string quotes which is standard for ETags
     const etagValue = `"${currentHash}"`;
     res.set({
@@ -88,16 +88,16 @@ app.get('/json/:file', verifyToken, async (req, res) => {
       'Cache-Control': 'private, max-age=0',
       'Access-Control-Expose-Headers': 'ETag'
     });
-    
+
     console.log(`JSON route: Generated hash for ${file}.json: ${currentHash}, client hash: ${clientHash || 'none'}`);
     console.log(`JSON route: Response headers being set: ETag=${etagValue}`);
-    
+
     // If client sent a hash and it matches, return 304 Not Modified
     if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
       console.log(`Cache hit for ${file}.json`);
       return res.status(304).send('Not Modified');
     }
-    
+
     console.log(`Sending full data for ${file}.json`);
     // Otherwise, send the full data with the hash
     res.json(jsonData);
@@ -112,7 +112,7 @@ app.get('/approved/json/:file', verifyToken, async (req, res) => {
   const { file } = req.params;
   const filePath = `./db/approved/${file}.json`;
   const clientHash = req.headers['if-none-match'] || req.query.hash;
-  
+
   try {
     let data;
     try {
@@ -126,10 +126,10 @@ app.get('/approved/json/:file', verifyToken, async (req, res) => {
         throw readError;
       }
     }
-    
+
     const jsonData = JSON.parse(data);
     const currentHash = generateHash(jsonData);
-    
+
     // Set ETag header - With string quotes which is standard for ETags
     const etagValue = `"${currentHash}"`;
     res.set({
@@ -137,16 +137,16 @@ app.get('/approved/json/:file', verifyToken, async (req, res) => {
       'Cache-Control': 'private, max-age=0',
       'Access-Control-Expose-Headers': 'ETag'
     });
-    
+
     console.log(`Approved JSON route: Generated hash for ${file}.json: ${currentHash}, client hash: ${clientHash || 'none'}`);
     console.log(`Approved JSON route: Response headers being set: ETag=${etagValue}`);
-    
+
     // Check if hash matches - with or without quotes
     if (clientHash && (clientHash === currentHash || clientHash === `"${currentHash}"`)) {
       console.log(`Cache hit for approved/${file}.json`);
       return res.status(304).send('Not Modified');
     }
-    
+
     console.log(`Sending full data for approved/${file}.json`);
     res.json(jsonData);
   } catch (error) {
@@ -189,22 +189,22 @@ app.get('/api/dbf/:file', async (req, res) => {
       'json',
       file.replace('.dbf', '.json').replace('.DBF', '.json'),
     );
-    
+
     console.log(`Processing file request for: ${file}, path: ${filePath}`);
-    
+
     let data = await fs.readFile(filePath, 'utf8');
     let dbfFiles = JSON.parse(data);
 
     let whitelist = [
       'C_NAME', 'C_CODE', 'M_GROUP', 'PRODUCT', 'CODE', 'MRP1', 'STK',
       'PACK', 'GST', 'MULT_F', 'RATE1', 'UNIT_1', 'UNIT_2', 'PL_RATE',
-      'GDN_NAME', 'GDN_CODE', 'QTY', 'UNIT', 'SCH_FROM', 'SCH_TO', 
-      'DISCOUNT', 'TRF_TO', 'ST_CODE', 'ST_NAME', 'partycode', 'result', 
-      'fromGodown', 'toGodown', 'items', 'qty', 'unit', '---------', 
-      'rate', 'amount', 'discount', 'netamount', 'remarks', 'date', 
-      'voucher', 'voucherdate',
+      'GDN_NAME', 'GDN_CODE', 'QTY', 'UNIT', 'SCH_FROM', 'SCH_TO',
+      'DISCOUNT', 'TRF_TO', 'ST_CODE', 'ST_NAME', 'partycode', 'result',
+      'fromGodown', 'toGodown', 'items', 'qty', 'unit', '---------',
+      'rate', 'amount', 'discount', 'netamount', 'remarks', 'date',
+      'voucher', 'voucherdate', 'H_CODE', 'GSTNO', 'GST_TAX',
     ];
-    
+
     // Filter to only keep whitelisted keys
     dbfFiles = dbfFiles.map((entry) => {
       let newEntry = {};
@@ -215,14 +215,14 @@ app.get('/api/dbf/:file', async (req, res) => {
       }
       return newEntry;
     });
-    
+
     dbfFiles = dbfFiles.filter((entry) => entry.C_NAME !== 'OPENING BALANCE');
-    
+
     // Generate hash for filtered data
     const currentHash = generateHash(dbfFiles);
-    
+
     console.log(`Generated hash for ${file}: ${currentHash}, client hash: ${clientHash || 'none'}`);
-    
+
     // Set ETag header - With string quotes which is standard for ETags
     const etagValue = `"${currentHash}"`;
     res.set({
@@ -230,19 +230,19 @@ app.get('/api/dbf/:file', async (req, res) => {
       'Cache-Control': 'private, max-age=0',
       'Access-Control-Expose-Headers': 'ETag'
     });
-    
+
     console.log(`Response headers being set: ETag=${etagValue}`);
-    
+
     // Check if hash matches - Compare with or without quotes for flexibility
     if (clientHash && (
-        clientHash === currentHash || 
-        clientHash === `"${currentHash}"` || 
-        clientHash.replace(/"/g, '') === currentHash
+      clientHash === currentHash ||
+      clientHash === `"${currentHash}"` ||
+      clientHash.replace(/"/g, '') === currentHash
     )) {
       console.log(`Cache hit for ${file}`);
       return res.status(304).send('Not Modified');
     }
-    
+
     console.log(`Sending full data for ${file}`);
     res.json(dbfFiles);
   } catch (error) {
