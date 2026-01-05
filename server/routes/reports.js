@@ -550,19 +550,27 @@ router.get('/item-wise-purchase', async (req, res) => {
         let { fromDate, toDate, itemCodes, partyCode, companyCodes, series, billNumbers, unit, seriesBillFilters } = req.query;
 
         if (itemCodes) {
-            itemCodes = itemCodes.split(',').map(s => s.trim()).filter(Boolean);
+            const codes = Array.isArray(itemCodes) ? itemCodes : String(itemCodes).split(',');
+            itemCodes = codes.map(s => s.trim()).filter(Boolean);
         }
         if (billNumbers) {
-            billNumbers = billNumbers.split(',').map(s => s.trim()).filter(Boolean);
+            const bills = Array.isArray(billNumbers) ? billNumbers : String(billNumbers).split(',');
+            billNumbers = bills.map(s => s.trim()).filter(Boolean);
         }
         if (companyCodes) {
-            companyCodes = companyCodes.split(',').map(s => s.trim()).filter(Boolean);
+            const codes = Array.isArray(companyCodes) ? companyCodes : String(companyCodes).split(',');
+            companyCodes = codes.map(s => s.trim()).filter(Boolean);
             if (companyCodes.length === 0) {
                 companyCodes = undefined;
             }
             console.log('[ITEM-WISE-PURCHASE] Processed companyCodes:', companyCodes);
         }
 
+        if (series) {
+            const sList = Array.isArray(series) ? series : String(series).split(',');
+            series = sList.map(s => s.trim()).filter(Boolean);
+        }
+        
         if (!fromDate || !toDate) {
             return res.status(400).json({ message: 'fromDate and toDate are required' });
         }
@@ -621,6 +629,8 @@ router.get('/item-wise-purchase', async (req, res) => {
             }
         }
 
+        const itemCodeSet = itemCodes ? new Set(itemCodes) : null;
+
         const filteredData = purdtlData.filter(item => {
             const itemDate = new Date(item.DATE);
             if (itemDate < startDate || itemDate > endDate) {
@@ -649,10 +659,10 @@ router.get('/item-wise-purchase', async (req, res) => {
                 });
                 if (!matchesSeries) return false;
             } else if (series) {
-                const seriesList = series.split(',').map(s => s.trim());
+                const seriesList = series;
                 if (!seriesList.includes(item.SERIES)) return false;
                 if (billNumbers && seriesList.length === 1) {
-                    const billNumberSet = new Set(billNumbers.split(',').map(bn => bn.trim()));
+                    const billNumberSet = new Set(billNumbers);
                     if (!billNumberSet.has(String(item.PBILL))) return false;
                 }
             }
@@ -664,9 +674,8 @@ router.get('/item-wise-purchase', async (req, res) => {
                 }
             }
 
-            if (itemCodes) {
-                const itemCodeSet = new Set(itemCodes.split(',').map(code => code.trim()));
-                if (!itemCodeSet.has(item.ICODE)) return false;
+            if (itemCodeSet) {
+                if (!itemCodeSet.has(item.CODE)) return false;
             }
 
             if (unit === 'Box' || unit === 'Pcs') {

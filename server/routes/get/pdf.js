@@ -319,12 +319,12 @@ const mapDbfDataToInvoiceFormat = (billRecord, billDtlRecords, partyRecord, prod
   // Map company info (this could be moved to a config file)
   const company = {
     name: "EKTA ENTERPRISES",
-    gstin: "23AERPJ8334D1Z7",
-    subject: "",
-    fssaiNo: "21421051000295",
+    gstin: "23AJBPS6285R1ZF",
+    subject: "Seoni Jurisdiction",
+    fssaiNo: "11417230000027",
     address: "BUDHWARI BAZAR,GN ROAD SEONI,",
-    phone: "9425174445",
-    officeNo: "07692-220445",
+    phone: "9179174888",
+    officeNo: "07692-220897",
     stateCode: "23"
   };
 
