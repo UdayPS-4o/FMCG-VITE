@@ -83,6 +83,12 @@ const Attendance: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!loading && isAuthenticated && user?.requireMandatoryDocs && hasMarkedToday) {
+      window.location.href = '/mandatory-docs';
+    }
+  }, [loading, isAuthenticated, user?.requireMandatoryDocs, hasMarkedToday]);
+
   // Helper function to get current date in Indian Standard Time
   const getIndianDate = () => {
     const now = new Date();
@@ -338,11 +344,13 @@ const Attendance: React.FC = () => {
       if (response.ok) {
         setToast({ message: 'Attendance marked successfully!', type: 'success' });
         setCapturedImage(null);
-        // Immediately navigate to account master after successful attendance
-        // Using window.location for hard navigation to bypass state issues
         setTimeout(() => {
-          window.location.href = '/account-master';
-        }, 1000);
+          if (user?.requireMandatoryDocs) {
+            window.location.href = '/mandatory-docs';
+          } else {
+            window.location.href = '/account-master';
+          }
+        }, 3000);
       } else {
         const errorData = await response.json();
         console.error('Attendance marking failed:', errorData);

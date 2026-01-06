@@ -1119,8 +1119,8 @@ async function printGodown(req, res) {
 }
 
 const EditUser = async (req, res) => {
-  const { id, name, number, routeAccess, password, powers, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries } = req.body; // Updated to use subgroups
-  console.log('Editing user', id, name, number, routeAccess, powers, password, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries);
+  const { id, name, number, routeAccess, password, powers, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries, requireMandatoryDocs, mandatoryDocsFromDate } = req.body; // Updated to use subgroups
+  console.log('Editing user', id, name, number, routeAccess, powers, password, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries, requireMandatoryDocs, mandatoryDocsFromDate);
 
   try {
     // Read users from users.json file
@@ -1142,6 +1142,8 @@ const EditUser = async (req, res) => {
       user.canSelectSeries = canSelectSeries;
       user.godownAccess = godownAccess;
       user.allowPastDateEntries = allowPastDateEntries;
+      user.requireMandatoryDocs = requireMandatoryDocs;
+      user.mandatoryDocsFromDate = mandatoryDocsFromDate;
 
       // For backward compatibility, also set the legacy subgroup field
       // Set it to the first subgroup in the array or null
@@ -1173,7 +1175,7 @@ app.get('/json/users', async (req, res) => {
 });
 
 app.post('/addUser', async (req, res) => {
-  const { name, number, password, routeAccess, powers, username, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries } = req.body; // Updated to use subgroups
+  const { name, number, password, routeAccess, powers, username, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries, requireMandatoryDocs, mandatoryDocsFromDate } = req.body; // Updated to use subgroups
 
   try {
     let users = await fs.readFile('./db/users.json');
@@ -1204,7 +1206,9 @@ app.post('/addUser', async (req, res) => {
       defaultSeries: defaultSeries,
       canSelectSeries: canSelectSeries,
       godownAccess: godownAccess,
-      allowPastDateEntries: allowPastDateEntries
+      allowPastDateEntries: allowPastDateEntries,
+      requireMandatoryDocs: requireMandatoryDocs,
+      mandatoryDocsFromDate: mandatoryDocsFromDate
     };
 
     // Add new user to users array

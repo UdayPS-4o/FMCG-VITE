@@ -32,6 +32,8 @@ interface User {
   godownAccess?: string[];
   canSelectSeries?: boolean;
   allowPastDateEntries?: boolean;
+  requireMandatoryDocs?: boolean;
+  mandatoryDocsFromDate?: string;
 }
 
 interface SubGroup {
@@ -89,6 +91,8 @@ const AddUser: React.FC = () => {
   const [canSelectSeries, setCanSelectSeries] = useState<boolean>(false);
   const [godownAccess, setGodownAccess] = useState<string[]>([]);
   const [allowPastDateEntries, setAllowPastDateEntries] = useState<boolean>(false);
+  const [requireMandatoryDocs, setRequireMandatoryDocs] = useState<boolean>(false);
+  const [mandatoryDocsFromDate, setMandatoryDocsFromDate] = useState<string>('');
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -133,8 +137,9 @@ const AddUser: React.FC = () => {
         // Handle series selection permission
         setCanSelectSeries(userToEdit.canSelectSeries !== false);
         
-        // Handle past date entries permission
         setAllowPastDateEntries(userToEdit.allowPastDateEntries === true);
+        setRequireMandatoryDocs(userToEdit.requireMandatoryDocs === true);
+        setMandatoryDocsFromDate(userToEdit.mandatoryDocsFromDate || '');
         
         // Handle godown access rights
         if (userToEdit.godownAccess) {
@@ -348,7 +353,9 @@ const AddUser: React.FC = () => {
         },
         canSelectSeries,
         godownAccess,
-        allowPastDateEntries
+        allowPastDateEntries,
+        requireMandatoryDocs,
+        mandatoryDocsFromDate: requireMandatoryDocs ? mandatoryDocsFromDate : undefined
       };
       
       if (isEdit && userId) {
@@ -434,6 +441,8 @@ const AddUser: React.FC = () => {
     setCanSelectSeries(false);
     setGodownAccess([]);
     setAllowPastDateEntries(false);
+    setRequireMandatoryDocs(false);
+    setMandatoryDocsFromDate('');
     setIsEdit(false);
     setUserId(null);
     setFormKey(prevKey => prevKey + 1);
@@ -709,6 +718,32 @@ const AddUser: React.FC = () => {
                     Add past date entries
                   </label>
                 </div>
+                <div className="flex items-center space-x-2 mb-4">
+                  <input
+                    type="checkbox"
+                    id="requireMandatoryDocs"
+                    checked={requireMandatoryDocs}
+                    onChange={(e) => setRequireMandatoryDocs(e.target.checked)}
+                    className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                  />
+                  <label htmlFor="requireMandatoryDocs" className="text-gray-700 dark:text-gray-300">
+                    Mandatory Document submission required
+                  </label>
+                </div>
+                
+                {requireMandatoryDocs && (
+                  <div className="mb-4 pl-6">
+                    <Input
+                      id="mandatoryDocsFromDate"
+                      label="From Date"
+                      type="date"
+                      value={mandatoryDocsFromDate}
+                      onChange={(e) => setMandatoryDocsFromDate(e.target.value)}
+                      variant="outlined"
+                      required={requireMandatoryDocs}
+                    />
+                  </div>
+                )}
               </div>
               <div className="mt-6 flex justify-end space-x-4">
                 <button
