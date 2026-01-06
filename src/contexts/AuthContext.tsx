@@ -37,6 +37,8 @@ export interface User {
   godownAccess?: string[];
   canSelectSeries?: boolean;
   allowPastDateEntries?: boolean;
+  requireMandatoryDocs?: boolean;
+  mandatoryDocsFromDate?: string;
 }
 
 // Helper functions to handle the transition from subgroup to subgroups

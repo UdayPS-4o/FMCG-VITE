@@ -1096,4 +1096,119 @@ app.get('/api/test-auth', (req, res) => {
   }
 });
 
+// Submit mandatory documents
+app.post('/api/docs/submit', verifyToken, async (req, res) => {
+  try {
+    const { userId, days } = req.body;
+
+    // Verify user matches token
+    if (req.user.userId !== userId && req.user.userId !== Number(userId)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const docsDir = path.join(__dirname, '..', 'db', 'mandatory-docs');
+    await fs.mkdir(docsDir, { recursive: true });
+
+    for (const day of days) {
+      const dayDir = path.join(docsDir, userId.toString(), day.date);
+      await fs.mkdir(dayDir, { recursive: true });
+
+      // Helper to save base64
+      const saveBase64 = async (base64Data, filename) => {
+        if (!base64Data) return;
+        // Handle data URI scheme if present
+        const base64Image = base64Data.includes(';base64,') 
+          ? base64Data.split(';base64,').pop() 
+          : base64Data;
+        
+        await fs.writeFile(path.join(dayDir, filename), base64Image, { encoding: 'base64' });
+      };
+
+      if (day.stockRegister) await saveBase64(day.stockRegister, 'stock-register.jpg');
+      if (day.cashBook) await saveBase64(day.cashBook, 'cash-book.jpg');
+      
+      if (day.bankSlips && Array.isArray(day.bankSlips)) {
+        for (let i = 0; i < day.bankSlips.length; i++) {
+          if (day.bankSlips[i]) {
+            await saveBase64(day.bankSlips[i], `bank-slip-${i+1}.jpg`);
+          }
+        }
+      }
+      
+      // Save metadata
+      // Create a clean metadata object without the large base64 strings
+      const metadata = {
+        date: day.date,
+        submittedAt: new Date().toISOString(),
+        files: {
+          stockRegister: !!day.stockRegister,
+          cashBook: !!day.cashBook,
+          bankSlipsCount: day.bankSlips ? day.bankSlips.length : 0
+        }
+      };
+      
+      await fs.writeFile(path.join(dayDir, 'metadata.json'), JSON.stringify(metadata, null, 2));
+    }
+
+    res.status(200).json({ success: true, message: 'Documents submitted successfully' });
+
+  } catch (error) {
+    console.error('Error submitting documents:', error);
+    res.status(500).json({ success: false, message: 'Failed to submit documents' });
+  }
+});
+
+// Check document status for multiple dates
+app.post('/api/docs/status', verifyToken, async (req, res) => {
+  try {
+    const { userId, dates } = req.body;
+    
+    // Authorization check
+    // Allow user to check their own, or admin to check any
+    let isAuthorized = false;
+    
+    if (req.user.userId === userId || req.user.userId === Number(userId)) {
+      isAuthorized = true;
+    } else {
+       // Check if admin
+       const usersFilePath = path.join(__dirname, '..', 'db', 'users.json');
+       try {
+         const usersData = await fs.readFile(usersFilePath, 'utf8');
+         const users = JSON.parse(usersData);
+         const requestUser = users.find(u => u.id === req.user.userId);
+         if (requestUser && requestUser.routeAccess && requestUser.routeAccess.includes('Admin')) {
+            isAuthorized = true;
+         }
+       } catch (e) {
+         console.error('Error reading users file for auth check:', e);
+       }
+    }
+    
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const docsDir = path.join(__dirname, '..', 'db', 'mandatory-docs');
+    const results = {};
+
+    if (Array.isArray(dates)) {
+      for (const date of dates) {
+        const dayDir = path.join(docsDir, userId.toString(), date);
+        try {
+          await fs.access(path.join(dayDir, 'metadata.json'));
+          results[date] = true; // Submitted
+        } catch (e) {
+          results[date] = false; // Not submitted
+        }
+      }
+    }
+
+    res.status(200).json({ success: true, status: results });
+
+  } catch (error) {
+    console.error('Error checking docs status:', error);
+    res.status(500).json({ success: false, message: 'Failed to check status' });
+  }
+});
+
 module.exports = app;

@@ -56,6 +56,7 @@ import Home from './pages/Dashboard/Home';
 import NewPurchase from './pages/purchases/NewPurchase';
 import DatabasePurchases from "./pages/database/Purchases";
 import PurchasesApproved from "./pages/approved/PurchasesApproved";
+import MandatoryDocs from './pages/mandatory-docs/MandatoryDocs';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -380,6 +381,12 @@ const AppRoutes = () => (
     <Route path="/printGodown" element={<PrintGodown />} />
     <Route path="/print" element={<PrintCashReceipt />} />
     <Route path="/printInvoice" element={<PrintInvoicing />} />
+    {/* Mandatory Docs - No sidebar/header */}
+    <Route path="/mandatory-docs" element={
+      <ProtectedRoute>
+        <MandatoryDocs />
+      </ProtectedRoute>
+    } />
 
     {/* Internal route for PDF generation - NO LOGIN REQUIRED */}
     <Route path="/internal/print/invoice/:id" element={<PdfInvoicePrintPage />} />

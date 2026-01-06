@@ -67,7 +67,9 @@ app.get('/api/checkIsAuth', (req, res) => {
               defaultSeries: user.defaultSeries,
               godownAccess: user.godownAccess,
               canSelectSeries: user.canSelectSeries,
-              allowPastDateEntries: user.allowPastDateEntries
+              allowPastDateEntries: user.allowPastDateEntries,
+              requireMandatoryDocs: user.requireMandatoryDocs,
+              mandatoryDocsFromDate: user.mandatoryDocsFromDate
             }
           });
         } else {
@@ -119,7 +121,9 @@ app.post('/api/login', async (req, res) => {
           defaultSeries: user.defaultSeries,
           godownAccess: user.godownAccess,
           canSelectSeries: user.canSelectSeries,
-          allowPastDateEntries: user.allowPastDateEntries
+          allowPastDateEntries: user.allowPastDateEntries,
+          requireMandatoryDocs: user.requireMandatoryDocs,
+          mandatoryDocsFromDate: user.mandatoryDocsFromDate
         }
       });
     } else {
