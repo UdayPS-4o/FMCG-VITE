@@ -10,10 +10,6 @@ import { ChevronLeftIcon } from '../../icons';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Modal } from '../../components/ui/modal';
 import constants from '../../constants';
-import CMPL from '../../../d01-2324/data/json/CMPL.json';
-import PMPL from '../../../d01-2324/data/json/PMPL.json';
-import PUR from '../../../d01-2324/data/json/PUR.json';
-import GODOWNS from '../../../d01-2324/data/json/godown.json';
 
 type ItemRow = {
   description: string;
@@ -134,6 +130,35 @@ const NewPurchase: React.FC = () => {
     return `${dd}-${mm}-${yyyy}`;
   });
 
+  const [pmplData, setPmplData] = useState<any[]>([]);
+  const [cmplData, setCmplData] = useState<any[]>([]);
+  const [purData, setPurData] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const fetchJson = async (file: string) => {
+         try {
+           const res = await fetch(`${constants.baseURL}/api/dbf/${file}`, { headers });
+           if (res.ok) return await res.json();
+         } catch {}
+         return [];
+      };
+
+      const [pData, cData, purRes] = await Promise.all([
+        fetchJson('PMPL.json'),
+        fetchJson('CMPL.json'),
+        fetchJson('PUR.json')
+      ]);
+
+      setPmplData(pData);
+      setCmplData(cData);
+      setPurData(purRes);
+    };
+    fetchData();
+  }, []);
   
   const stateOptions = GST_STATES.map(s => ({ value: s.code, label: `${s.code} - ${s.name}` }));
   const getStateName = (code: string) => GST_STATES.find(s => s.code === code)?.name || '';
@@ -170,7 +195,7 @@ const NewPurchase: React.FC = () => {
     if (!productNorm || !mrpStr) return '';
     const mrpNum = parseFloat(mrpStr);
     if (isNaN(mrpNum)) return '';
-    const data = (PMPL as any[]) || [];
+    const data = pmplData;
     for (const it of data) {
       const p = normalize(String(it.PRODUCT || ''));
       const cand = [it.MRP1, it.MRP_1, it.MRP, it.B_RATE1, it.B_RATE];
@@ -191,7 +216,7 @@ const NewPurchase: React.FC = () => {
 
   const getPmplMetaByCode = (code?: string) => {
     if (!code) return { hsn: '', gstPercent: '' };
-    const data = (PMPL as any[]) || [];
+    const data = pmplData;
     const found = data.find((it) => String(it.CODE || '') === String(code));
     if (!found) return { hsn: '', gstPercent: '' };
     const h = String(found.H_CODE || '').trim();
@@ -260,64 +285,41 @@ const NewPurchase: React.FC = () => {
   const formatINR = useMemo(() => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }), []);
 
   const pmplCompanyOptions = useMemo(() => {
-    const data = (PMPL as any[]) || [];
+    const data = pmplData;
     const prefixes = new Set<string>();
     data.forEach(it => {
       const code = String(it.CODE || '');
       if (code.length >= 2) prefixes.add(code.slice(0, 2));
     });
     return Array.from(prefixes).sort().map(p => ({ value: p, label: p }));
-  }, []);
+  }, [pmplData]);
 
-  const getPurRecords = async (): Promise<any[]> => {
-    const imported = Array.isArray(PUR) ? (PUR as any[]) : [];
-    if (imported.length > 0) return imported;
-    try {
-      const respLocal = await fetch('/d01-2324/data/json/PUR.json');
-      if (respLocal.ok) {
-        const arr = await respLocal.json();
-        if (Array.isArray(arr) && arr.length > 0) return arr;
-      }
-    } catch {}
-    try {
-      const token = localStorage.getItem('token');
-      const respApi = await fetch(`${constants.baseURL}/api/dbf/PUR.json`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-      });
-      if (respApi.ok) {
-        const arr = await respApi.json();
-        if (Array.isArray(arr) && arr.length > 0) return arr;
-      }
-    } catch {}
-    return [];
-  };
+
 
   useEffect(() => {
-    (async () => {
-      const arr = await getPurRecords();
-      if (editingBill) {
-        const row = (arr || []).find((r: any) => String(r.BILL) === String(editingBill));
-        if (row?.BILL_BB) {
-          setPBillBB(String(row.BILL_BB));
-          return;
-        }
+    const arr = purData;
+    if (editingBill) {
+      const row = (arr || []).find((r: any) => String(r.BILL) === String(editingBill));
+      if (row?.BILL_BB) {
+        setPBillBB(String(row.BILL_BB));
+        return;
       }
-      let maxBillNum = 0;
-      (arr || []).forEach((r: any) => {
-        const b = parseInt(String(r.BILL || 0), 10);
-        if (!isNaN(b) && b > maxBillNum) maxBillNum = b;
-        const bbStr = String(r.BILL_BB || '').match(/(\d+)/);
-        if (bbStr) {
-          const bb = parseInt(bbStr[1], 10);
-          if (!isNaN(bb) && bb > maxBillNum) maxBillNum = bb;
-        }
-      });
-      setPBillBB(`P-${maxBillNum + 1}`);
-    })();
-  }, [editingBill]);
+    }
+    let maxBillNum = 0;
+    (arr || []).forEach((r: any) => {
+      const b = parseInt(String(r.BILL || 0), 10);
+      if (!isNaN(b) && b > maxBillNum) maxBillNum = b;
+      const bbStr = String(r.BILL_BB || '').match(/(\d+)/);
+      if (bbStr) {
+        const bb = parseInt(bbStr[1], 10);
+        if (!isNaN(bb) && bb > maxBillNum) maxBillNum = bb;
+      }
+    });
+    setPBillBB(`P-${maxBillNum + 1}`);
+  }, [editingBill, purData]);
 
   const gstGroupOptions = useMemo(() => {
-    const rawArr: any[] = Array.isArray(CMPL) ? (CMPL as any[]) : [];
+    const rawArr: any[] = cmplData;
     return rawArr
       .filter(it => String(it.C_CODE || '').toUpperCase().startsWith('GG'))
       .map(it => {
@@ -326,7 +328,7 @@ const NewPurchase: React.FC = () => {
         const tax = typeof it.GST_TAX === 'number' ? it.GST_TAX : parseFloat(String(it.GST_TAX || '0'));
         return { value: code, label: `${code} - ${name} - ${isNaN(tax) ? '' : `${tax}%`}`, tax: isNaN(tax) ? 0 : tax };
       });
-  }, []);
+  }, [cmplData]);
 
   const gstUnitOptions = useMemo(() => {
     const units = ['PCS','BOX','BOTTLE','JAR','CAN','KG','GMS','LTR','ML','PACK','BAG','DOZEN','TUBE','SACHET'];
@@ -341,7 +343,7 @@ const NewPurchase: React.FC = () => {
     return `${s.slice(0, 4)}••••${s.slice(-2)}`;
   }, [localKey]);
   const pmplItemOptions = useMemo(() => {
-    const data = (PMPL as any[]) || [];
+    const data = pmplData;
     return data.map(it => {
       const code = String(it.CODE || '');
       const name = String(it.PRODUCT || '');
@@ -356,7 +358,7 @@ const NewPurchase: React.FC = () => {
       const label = `${code} | ${name}${mrpVal ? ` (${mrpVal})` : ''}`;
       return { value: code, label };
     });
-  }, []);
+  }, [pmplData]);
   const getItemLabelByCode = (code?: string) => {
     if (!code) return '';
     const opt = pmplItemOptions.find(o => o.value === code);
@@ -365,7 +367,7 @@ const NewPurchase: React.FC = () => {
   const findSupplierByGstin = (gst: string) => {
     if (!gst) return null;
     const g = gst.trim().toUpperCase();
-    const rawArr: any[] = Array.isArray(CMPL) ? (CMPL as any[]) : [];
+    const rawArr: any[] = cmplData;
     const match = rawArr.find(p => {
       const gstno = String((p as any).GSTNO || (p as any).GST || '').trim().toUpperCase();
       return gstno && gstno === g;
@@ -374,7 +376,7 @@ const NewPurchase: React.FC = () => {
     return null;
   };
   const handleItemSelection = (index: number, code: string) => {
-    const data = (PMPL as any[]) || [];
+    const data = pmplData;
     const found = data.find(it => String(it.CODE || '') === String(code));
     setItems(prev => prev.map((row, i) => {
       if (i !== index) return row;
@@ -388,7 +390,7 @@ const NewPurchase: React.FC = () => {
   };
 
   const computeNextItemCode = (prefix: string) => {
-    const data = (PMPL as any[]) || [];
+    const data = pmplData;
     let max = 0;
     data.forEach(it => {
       const code = String(it.CODE || '');
@@ -551,7 +553,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
   };
 
   useEffect(() => {
-    const rawArr: unknown[] = Array.isArray(CMPL) ? (CMPL as unknown[]) : [];
+    const rawArr: unknown[] = cmplData;
     const arr: SupplierRecord[] = rawArr.map((p) => {
       const r = p as Record<string, unknown>;
       const C_CODE = String(r.C_CODE ?? '');
@@ -562,24 +564,9 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     setSupplierList(arr);
     const opts = [{ value: 'manual', label: 'Enter Manually' }, ...arr.map((p) => ({ value: String(p.C_CODE), label: `(${String(p.C_CODE)}) - ${String(p.C_NAME)}` }))];
     setVendorOptions(opts);
-  }, []);
+  }, [cmplData]);
 
   useEffect(() => {
-    // Prefill from local JSON import
-    try {
-      const baseArr: any[] = Array.isArray(GODOWNS) ? (GODOWNS as any[]) : [];
-      if (baseArr.length > 0) {
-        const localOpts = baseArr
-          .filter((g: any) => String(g.ACTIVE || 'Y') === 'Y')
-          .map((g: any) => {
-            const code = String(g.GDN_CODE || '').padStart(2, '0').slice(0, 2);
-            const name = String(g.GDN_NAME || '');
-            return { value: code, label: `${name} (${code})` };
-          });
-        setGodownOptions(localOpts);
-      }
-    } catch {}
-
     // Fetch from API for up-to-date list
     (async () => {
       try {
@@ -747,7 +734,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
       // Determine BILL to use
       let billNo: string | null = editingBill;
       if (!billNo) {
-        const arr = await getPurRecords();
+        const arr = purData;
         let maxBillNum = 0;
         (arr || []).forEach((r: any) => {
           const b = parseInt(String(r.BILL || 0), 10);
