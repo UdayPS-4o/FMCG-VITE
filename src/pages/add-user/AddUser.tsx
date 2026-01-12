@@ -718,32 +718,34 @@ const AddUser: React.FC = () => {
                     Add past date entries
                   </label>
                 </div>
-                <div className="flex items-center space-x-2 mb-4">
-                  <input
-                    type="checkbox"
-                    id="requireMandatoryDocs"
-                    checked={requireMandatoryDocs}
-                    onChange={(e) => setRequireMandatoryDocs(e.target.checked)}
-                    className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
-                  />
-                  <label htmlFor="requireMandatoryDocs" className="text-gray-700 dark:text-gray-300">
-                    Mandatory Document submission required
-                  </label>
-                </div>
-                
-                {requireMandatoryDocs && (
-                  <div className="mb-4 pl-6">
-                    <Input
-                      id="mandatoryDocsFromDate"
-                      label="From Date"
-                      type="date"
-                      value={mandatoryDocsFromDate}
-                      onChange={(e) => setMandatoryDocsFromDate(e.target.value)}
-                      variant="outlined"
-                      required={requireMandatoryDocs}
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="requireMandatoryDocs"
+                      checked={requireMandatoryDocs}
+                      onChange={(e) => setRequireMandatoryDocs(e.target.checked)}
+                      className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
                     />
+                    <label htmlFor="requireMandatoryDocs" className="text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      Mandatory Document submission required
+                    </label>
                   </div>
-                )}
+                  
+                  {requireMandatoryDocs && (
+                    <div className="w-48">
+                      <Input
+                        id="mandatoryDocsFromDate"
+                        label="From Date"
+                        type="date"
+                        value={mandatoryDocsFromDate}
+                        onChange={(e) => setMandatoryDocsFromDate(e.target.value)}
+                        variant="outlined"
+                        required={requireMandatoryDocs}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="mt-6 flex justify-end space-x-4">
                 <button
