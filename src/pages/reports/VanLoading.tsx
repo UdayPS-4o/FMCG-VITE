@@ -1335,82 +1335,48 @@ const VanLoadingContent: React.FC = () => {
             const x = pinnedItem ? pinnedPosition.x : mousePosition.x;
             const y = pinnedItem ? pinnedPosition.y : mousePosition.y;
             
-            // Mobile-first responsive calculations
-            const isMobile = window.innerWidth < 640;
-            const isTablet = window.innerWidth >= 640 && window.innerWidth < 1024;
-            const margin = isMobile ? 12 : 16;
-            
-            // Dynamic tooltip dimensions based on screen size
-            const tooltipWidth = isMobile 
-              ? Math.min(window.innerWidth - (margin * 2), 280) 
-              : isTablet 
-                ? 300 
-                : 320;
-            
-            // Estimate tooltip height based on content
-            const baseHeight = 120; // Header + total info
-            const detailsHeight = Math.min((pinnedItem || hoveredItem)?.details.length || 0, 6) * 32; // Max 6 rows visible
-            const tooltipHeight = baseHeight + detailsHeight + (isMobile ? 20 : 40); // Extra padding
-            
-            // Get viewport dimensions
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
+            const margin = 16; // 16px margin from mouse/edge
             
-            // Calculate initial position (prefer bottom-right)
-            let left = x + margin;
-            let top = y + margin;
+            const isMobile = viewportWidth < 640;
+
+            // Determine quadrants
+            const isRightHalf = x > viewportWidth / 2;
+            const isBottomHalf = y > viewportHeight / 2;
             
-            // Horizontal positioning logic
-            if (left + tooltipWidth > viewportWidth - margin) {
-              // Try positioning to the left
-              left = x - tooltipWidth - margin;
-              
-              // If still doesn't fit, center it horizontally
-              if (left < margin) {
-                left = Math.max(margin, (viewportWidth - tooltipWidth) / 2);
-              }
-            }
-            
-            // Ensure tooltip doesn't go off the left edge
-            if (left < margin) {
-              left = margin;
-            }
-            
-            // Vertical positioning logic
-            if (top + tooltipHeight > viewportHeight - margin) {
-              // Try positioning above
-              top = y - tooltipHeight - margin;
-              
-              // If still doesn't fit above, position it to fit within viewport
-              if (top < margin) {
-                // Calculate best vertical position
-                const availableHeight = viewportHeight - (margin * 2);
-                if (tooltipHeight <= availableHeight) {
-                  // Center vertically if tooltip fits
-                  top = (viewportHeight - tooltipHeight) / 2;
-                } else {
-                  // Position at top with scrollable content
-                  top = margin;
-                }
-              }
-            }
-            
-            // Final bounds checking
-            left = Math.max(margin, Math.min(left, viewportWidth - tooltipWidth - margin));
-            top = Math.max(margin, Math.min(top, viewportHeight - tooltipHeight - margin));
-            
-            // For very small screens, use full width with margins
-            const finalWidth = isMobile && viewportWidth < 360 
-              ? viewportWidth - (margin * 2)
-              : tooltipWidth;
-            
-            return {
-              left: `${left}px`,
-              top: `${top}px`,
-              width: `${finalWidth}px`,
-              maxWidth: `${finalWidth}px`,
-              maxHeight: isMobile ? `${Math.min(tooltipHeight, viewportHeight - (margin * 2))}px` : 'auto'
+            const style: any = {
+              width: 'max-content',
             };
+            
+            // Horizontal positioning
+            if (isMobile) {
+              // On mobile, maximize width availability by anchoring to left with margin
+              style.left = `${margin}px`;
+              style.right = 'auto';
+              style.maxWidth = `${viewportWidth - (margin * 2)}px`;
+            } else if (isRightHalf) {
+              style.right = `${viewportWidth - x + margin}px`;
+              style.left = 'auto';
+              style.maxWidth = `${Math.min(x - (margin * 2), 600)}px`; // Cap width but allow growth
+            } else {
+              style.left = `${x + margin}px`;
+              style.right = 'auto';
+              style.maxWidth = `${Math.min(viewportWidth - x - (margin * 2), 600)}px`;
+            }
+            
+            // Vertical positioning
+            if (isBottomHalf) {
+              style.bottom = `${viewportHeight - y + margin}px`;
+              style.top = 'auto';
+              // style.maxHeight = `${y - (margin * 2)}px`;
+            } else {
+              style.top = `${y + margin}px`;
+              style.bottom = 'auto';
+              // style.maxHeight = `${viewportHeight - y - (margin * 2)}px`;
+            }
+            
+            return style;
           })()}
         >
           {pinnedItem && (
@@ -1439,8 +1405,8 @@ const VanLoadingContent: React.FC = () => {
             })()}
           </div>
           
-          <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: 'calc(100% - 80px)' }}>
-            <table className="w-full text-xs min-w-full">
+          <div className="overflow-y-auto overflow-x-hidden" style={{ maxHeight: '300px' }}>
+            <table className="w-full text-xs">
               <thead className="sticky top-0 bg-white dark:bg-gray-800">
                 <tr className="border-b border-gray-200 dark:border-gray-600">
                   <th className="text-left py-1 px-1 sm:px-2 text-gray-700 dark:text-gray-300">Date</th>
@@ -1458,7 +1424,7 @@ const VanLoadingContent: React.FC = () => {
                     <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200 text-xs">
                       {`${detail.series}-${detail.billNo}`}
                     </td>
-                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200 truncate text-xs" title={detail.partyName}>
+                    <td className="py-1 px-1 sm:px-2 text-gray-800 dark:text-gray-200 text-xs break-words whitespace-normal" title={detail.partyName}>
                       {detail.partyName}
                     </td>
                     <td className="py-1 px-1 sm:px-2 text-right text-gray-800 dark:text-gray-200 text-xs">
