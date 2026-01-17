@@ -98,7 +98,7 @@ const PNBStatement: React.FC = () => {
   }, [user]);
 
   // Access Control
-  if (user && user.role !== 'admin' && !user.routeAccess?.includes('Admin')) {
+  if (user && !user.routeAccess?.includes('Admin')) {
        return <div className="p-4 text-red-500">Access Denied: Admin only area.</div>;
   }
 
