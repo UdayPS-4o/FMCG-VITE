@@ -10,10 +10,7 @@ import { ChevronLeftIcon } from '../../icons';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Modal } from '../../components/ui/modal';
 import constants from '../../constants';
-<<<<<<< HEAD
-=======
 import apiCache from '../../utils/apiCache';
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
 
 type ItemRow = {
   description: string;
@@ -89,6 +86,7 @@ const NewPurchase: React.FC = () => {
   // State for API-fetched data
   const [cmplData, setCmplData] = useState<any[]>([]);
   const [pmplData, setPmplData] = useState<any[]>([]);
+  const [purData, setPurData] = useState<any[]>([]);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -143,40 +141,7 @@ const NewPurchase: React.FC = () => {
     return `${dd}-${mm}-${yyyy}`;
   });
 
-<<<<<<< HEAD
-  const [pmplData, setPmplData] = useState<any[]>([]);
-  const [cmplData, setCmplData] = useState<any[]>([]);
-  const [purData, setPurData] = useState<any[]>([]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const token = localStorage.getItem('token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-      const fetchJson = async (file: string) => {
-         try {
-           const res = await fetch(`${constants.baseURL}/api/dbf/${file}`, { headers });
-           if (res.ok) return await res.json();
-         } catch {}
-         return [];
-      };
-
-      const [pData, cData, purRes] = await Promise.all([
-        fetchJson('PMPL.json'),
-        fetchJson('CMPL.json'),
-        fetchJson('PUR.json')
-      ]);
-
-      setPmplData(pData);
-      setCmplData(cData);
-      setPurData(purRes);
-    };
-    fetchData();
-  }, []);
-  
-=======
-
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
   const stateOptions = GST_STATES.map(s => ({ value: s.code, label: `${s.code} - ${s.name}` }));
   const getStateName = (code: string) => GST_STATES.find(s => s.code === code)?.name || '';
   const getStateLabel = (code: string) => {
@@ -232,11 +197,7 @@ const NewPurchase: React.FC = () => {
   };
 
   const getPmplMetaByCode = (code?: string) => {
-<<<<<<< HEAD
     if (!code) return { hsn: '', gstPercent: '', gstCode: '' };
-=======
-    if (!code) return { hsn: '', gstPercent: '' };
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     const data = pmplData;
     const found = data.find((it) => String(it.CODE || '') === String(code));
     if (!found) return { hsn: '', gstPercent: '', gstCode: '' };
@@ -308,10 +269,7 @@ const NewPurchase: React.FC = () => {
   const formatINR = useMemo(() => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }), []);
 
   const pmplCompanyOptions = useMemo(() => {
-<<<<<<< HEAD
     const data = pmplData;
-=======
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     const prefixes = new Set<string>();
     pmplData.forEach(it => {
       const code = String(it.CODE || '');
@@ -321,8 +279,6 @@ const NewPurchase: React.FC = () => {
   }, [pmplData]);
 
 
-<<<<<<< HEAD
-=======
   const getPurRecords = async (): Promise<any[]> => {
     try {
       const token = localStorage.getItem('token');
@@ -336,7 +292,6 @@ const NewPurchase: React.FC = () => {
     } catch { }
     return [];
   };
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
 
   useEffect(() => {
     const arr = purData;
@@ -361,12 +316,8 @@ const NewPurchase: React.FC = () => {
   }, [editingBill, purData]);
 
   const gstGroupOptions = useMemo(() => {
-<<<<<<< HEAD
     const rawArr: any[] = cmplData;
     return rawArr
-=======
-    return cmplData
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
       .filter(it => String(it.C_CODE || '').toUpperCase().startsWith('GG'))
       .map(it => {
         const code = String(it.C_CODE || '');
@@ -389,12 +340,8 @@ const NewPurchase: React.FC = () => {
     return `${s.slice(0, 4)}••••${s.slice(-2)}`;
   }, [localKey]);
   const pmplItemOptions = useMemo(() => {
-<<<<<<< HEAD
     const data = pmplData;
     return data.map(it => {
-=======
-    return pmplData.map(it => {
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
       const code = String(it.CODE || '');
       const name = String(it.PRODUCT || '');
       let mrpVal = '';
@@ -417,12 +364,8 @@ const NewPurchase: React.FC = () => {
   const findSupplierByGstin = (gst: string) => {
     if (!gst) return null;
     const g = gst.trim().toUpperCase();
-<<<<<<< HEAD
     const rawArr: any[] = cmplData;
     const match = rawArr.find(p => {
-=======
-    const match = cmplData.find(p => {
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
       const gstno = String((p as any).GSTNO || (p as any).GST || '').trim().toUpperCase();
       return gstno && gstno === g;
     });
@@ -430,12 +373,8 @@ const NewPurchase: React.FC = () => {
     return null;
   };
   const handleItemSelection = (index: number, code: string) => {
-<<<<<<< HEAD
     const data = pmplData;
     const found = data.find(it => String(it.CODE || '') === String(code));
-=======
-    const found = pmplData.find(it => String(it.CODE || '') === String(code));
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     setItems(prev => prev.map((row, i) => {
       if (i !== index) return row;
       const desc = String(found?.PRODUCT || row.description);
@@ -466,10 +405,7 @@ const NewPurchase: React.FC = () => {
   };
 
   const computeNextItemCode = (prefix: string) => {
-<<<<<<< HEAD
     const data = pmplData;
-=======
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     let max = 0;
     pmplData.forEach(it => {
       const code = String(it.CODE || '');
@@ -634,7 +570,6 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
 
   // Fetch CMPL and PMPL data from the backend with caching
   useEffect(() => {
-<<<<<<< HEAD
     const rawArr: unknown[] = cmplData;
     const arr: SupplierRecord[] = rawArr.map((p) => {
       const r = p as Record<string, unknown>;
@@ -651,9 +586,6 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
   useEffect(() => {
     // Fetch from API for up-to-date list
     (async () => {
-=======
-    const fetchData = async () => {
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
       try {
         const [cmpl, pmpl, godowns] = await Promise.all([
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
@@ -662,36 +594,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         ]);
 
         if (Array.isArray(cmpl)) {
-          console.log('CMPL data received:', cmpl.length, 'entries');
           setCmplData(cmpl);
-          // Process supplier list from CMPL data
-          // Filter for creditors: M_GROUP === 'CT' OR C_CODE starts with 'CT'
-          // Exclude header entries (codes ending in 000)
-          const arr: SupplierRecord[] = cmpl
-            .filter((p: any) => {
-              const cCode = String(p.C_CODE ?? '').toUpperCase();
-              const mGroup = String(p.M_GROUP ?? '').toUpperCase();
-              const isCreditor = mGroup === 'CT' || cCode.startsWith('CT');
-              const isHeader = cCode.endsWith('000'); // Exclude header entries like CT000
-              return isCreditor && !isHeader;
-            })
-            .map((p: any) => {
-              const C_CODE = String(p.C_CODE ?? '');
-              const C_NAME = String(p.C_NAME ?? '');
-              const GSTNO = p.GSTNO ? String(p.GSTNO) : (p.GST ? String(p.GST) : undefined);
-              return { C_CODE, C_NAME, GSTNO };
-            })
-            .filter((p: SupplierRecord) => p.C_CODE && p.C_NAME);
-          console.log('Filtered suppliers:', arr.length, 'entries');
-          if (arr.length > 0) {
-            console.log('Sample supplier:', arr[0]);
-          }
-          setSupplierList(arr);
-          const opts = [{ value: 'manual', label: 'Enter Manually' }, ...arr.map((p) => ({ value: String(p.C_CODE), label: `(${String(p.C_CODE)}) - ${String(p.C_NAME)}` }))];
-          console.log('Vendor options:', opts.length, 'entries');
-          setVendorOptions(opts);
-        } else {
-          console.error('CMPL data is not an array:', cmpl);
         }
 
         if (Array.isArray(pmpl)) {
@@ -711,8 +614,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
       } catch (err) {
         console.error('Error fetching data:', err);
       }
-    };
-    fetchData();
+    })();
 
     // Clean up expired cache items
     try {
@@ -1103,15 +1005,9 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                   className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm"
                 >Save</button>
               </div>
-<<<<<<< HEAD
-                    </div>
-                  </Modal>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 sm:px-6 py-4">
-=======
             </div>
           </Modal>
-          <div className="flex items-center justify-between px-4 sm:px-6 py-4">
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 sm:px-6 py-4">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Items</h3>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
