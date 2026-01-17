@@ -240,32 +240,32 @@ const PrintBulkCashReceipts: React.FC = () => {
           >
             <div className="receipt">
               <header className="header">
-                <h1 className="text-white print:text-black font-bold text-xxl">Ekta Enterprises</h1>
-                <h2 className="text-white print:text-black text-xl">GSTIN: 23AJBPS6285R1ZF , Mob: 9179174888, 9169164888, 9826623188</h2>
-                <p className="text-white print:text-black text-xl">Budhwari Bazar, Gn Road Seoni, Seoni</p>
+                <h1 className="text-white print:text-black font-bold text-xxxxxxl">Ekta Enterprises</h1>
+                <h2 className="text-white print:text-black text-xxxl">GSTIN: 23AJBPS6285R1ZF , Mob: 9179174888, 9169164888, 9826623188</h2>
+                <p className="text-white print:text-black text-xxxl">Budhwari Bazar, Gn Road Seoni, Seoni</p>
               </header>
               <div className="content">
                 <div className="details border-white print:border-black" style={{ margin: 0, padding: '10px 10px', fontSize: 'larger' }}>
                   <div>
-                    Date: <span>{formatDate(item.date)}</span>
+                    Date: <span className="text-xxxxl">{formatDate(item.date)}</span>
                   </div>
                   <div>
-                    Mode: <span>Cash</span>
+                    Mode: <span className="text-xxxxl">Cash</span>
                   </div>
                   <div>
                     {isReceipt ? (
-                      <span> Receipt No: {item.series}-{item.receiptNo}</span>
+                      <span className="text-xxxxl"> Receipt No: {item.series}-{item.receiptNo}</span>
                     ) : (
-                      <span> Voucher No: {item.voucherNo}</span>
+                      <span className="text-xxxxl"> Voucher No: {item.voucherNo}</span>
                     )}
                   </div>
                 </div>
                 <table className="border-white print:border-black">
                   <thead>
                     <tr>
-                      <th className="border-white print:border-black text-white print:text-black"> Name of A/c Head </th>
+                      <th className="border-white print:border-black text-white print:text-black font-bold text-xxl"> Name of A/c Head </th>
                       <th className="border-white print:border-black text-white print:text-black">Code</th>
-                      <th className="border-white print:border-black text-white print:text-black">Amount</th>
+                      <th className="border-white print:border-black text-white print:text-black font-bold text-xxxl">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
