@@ -46,6 +46,7 @@ import CashBook from './pages/reports/CashBook';
 import PartyLedger from './pages/reports/PartyLedger';
 import VanLoading from './pages/reports/VanLoading';
 import PNBStockStatement from './pages/reports/PNBStockStatement';
+import PNBStatement from './pages/reports/PNBStatement';
 import PrintGodownStock from './pages/print/PrintGodownStock';
 import PushNotifications from './pages/push-notifications/PushNotifications';
 import Attendance from './pages/attendance/Attendance';
@@ -256,6 +257,12 @@ const AppRoutes = () => (
       <Route path="/reports/pnb-stock-statement" element={
         <ProtectedRoute requiredAccess="Reports">
           <PNBStockStatement />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/reports/pnb-statement" element={
+        <ProtectedRoute requiredAccess="Admin">
+          <PNBStatement />
         </ProtectedRoute>
       } />
       
