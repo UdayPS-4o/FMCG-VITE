@@ -198,7 +198,6 @@ app.get('/api/dbf/:file', async (req, res) => {
     let whitelist = [
       'C_NAME', 'C_CODE', 'M_GROUP', 'PRODUCT', 'CODE', 'MRP1', 'STK',
       'PACK', 'GST', 'MULT_F', 'RATE1', 'UNIT_1', 'UNIT_2', 'PL_RATE',
-<<<<<<< HEAD
       'GDN_NAME', 'GDN_CODE', 'QTY', 'UNIT', 'SCH_FROM', 'SCH_TO', 
       'DISCOUNT', 'TRF_TO', 'ST_CODE', 'ST_NAME', 'partycode', 'result', 
       'fromGodown', 'toGodown', 'items', 'qty', 'unit', '---------', 
@@ -207,13 +206,6 @@ app.get('/api/dbf/:file', async (req, res) => {
       // Added missing fields
       'H_CODE', 'BILL', 'BILL_BB', 'MRP', 'MRP_1', 'B_RATE', 'B_RATE1',
       'GSTNO', 'GST_TAX', 'PBILL'
-=======
-      'GDN_NAME', 'GDN_CODE', 'QTY', 'UNIT', 'SCH_FROM', 'SCH_TO',
-      'DISCOUNT', 'TRF_TO', 'ST_CODE', 'ST_NAME', 'partycode', 'result',
-      'fromGodown', 'toGodown', 'items', 'qty', 'unit', '---------',
-      'rate', 'amount', 'discount', 'netamount', 'remarks', 'date',
-      'voucher', 'voucherdate', 'H_CODE', 'GSTNO', 'GST_TAX',
->>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     ];
 
     // Filter to only keep whitelisted keys
