@@ -215,6 +215,10 @@ app.use(formRoutes);
 const postRoutes = require('./routes/post');
 app.use(postRoutes);
 
+// Add purchases merge route
+const purchasesMergeRoutes = require('./routes/merge/purchases');
+app.use(purchasesMergeRoutes);
+
 // Add this route to handle favicon requests
 app.get('/favicon.ico', (req, res) => {
   res.status(204).end(); // Send "No Content" response for favicon requests
