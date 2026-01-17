@@ -258,6 +258,7 @@ const fmcgItems: NavItem[] = [
       { name: "Party Ledger", path: "/reports/party-ledger", pro: false },
       { name: "Print Van Loading", path: "/reports/van-loading", pro: false },
       { name: "PNB Stock Statement", path: "/reports/pnb-stock-statement", pro: false },
+      { name: "PNB Statement", path: "/reports/pnb-statement", pro: false },
       { name: "GSTR - Match Pur. B2B with GSTR2A", path: "/reports/gstr2a-matching", pro: false },
     ],
   }
@@ -386,7 +387,14 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         }
         // Special case for "Reports" section
         if (item.name === "Reports") {
-          return user.routeAccess.includes('Reports');
+          if (!user.routeAccess.includes('Reports')) return false;
+          
+          // Filter reports for non-admins (hide PNB Statement)
+          if (!user.routeAccess.includes('Admin')) {
+            item.subItems = item.subItems.filter(r => r.name !== "PNB Statement");
+          }
+          
+          return true;
         }
 
         // For Database section, filter subitems based on user access

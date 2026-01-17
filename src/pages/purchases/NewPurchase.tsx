@@ -22,6 +22,7 @@ type ItemRow = {
   discPercent: string;
   cdPercent: string;
   gstPercent: string;
+  gstCode?: string;
   godown?: string;
 };
 
@@ -92,6 +93,10 @@ const NewPurchase: React.FC = () => {
   const [entryDate, setEntryDate] = useState(today);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [godownOptions, setGodownOptions] = useState<{ value: string; label: string }[]>([]);
+  const godownOptionsTable = useMemo(() => {
+    return godownOptions.map(o => ({ value: o.value, label: o.value }));
+  }, [godownOptions]);
+
   const [globalGodown, setGlobalGodown] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [localKey, setLocalKey] = useState<string | null>(() => localStorage.getItem('gemini_apikey'));
@@ -179,7 +184,7 @@ const NewPurchase: React.FC = () => {
   const [originalCreatedAt, setOriginalCreatedAt] = useState<string | null>(null);
 
   const addItem = () => {
-    setItems((prev) => [...prev, { description: '', hsn: '', qty: '', rate: '', mrp: '', itemCode: '', discRs: '', discPercent: '', cdPercent: '', gstPercent: '', godown: globalGodown || '' }]);
+    setItems((prev) => [...prev, { description: '', hsn: '', qty: '', rate: '', mrp: '', itemCode: '', discRs: '', discPercent: '', cdPercent: '', gstPercent: '', gstCode: '', godown: globalGodown || '' }]);
   };
 
   const resolveItemCode = (name: string, mrpVal: string) => {
@@ -215,15 +220,16 @@ const NewPurchase: React.FC = () => {
   };
 
   const getPmplMetaByCode = (code?: string) => {
-    if (!code) return { hsn: '', gstPercent: '' };
+    if (!code) return { hsn: '', gstPercent: '', gstCode: '' };
     const data = pmplData;
     const found = data.find((it) => String(it.CODE || '') === String(code));
-    if (!found) return { hsn: '', gstPercent: '' };
+    if (!found) return { hsn: '', gstPercent: '', gstCode: '' };
     const h = String(found.H_CODE || '').trim();
     const gRaw = found.GST;
     const gNum = typeof gRaw === 'number' ? gRaw : parseFloat(String(gRaw || '').trim().replace(/[^0-9.]/g, ''));
     const g = isNaN(gNum) ? '' : String(gNum);
-    return { hsn: h, gstPercent: g };
+    const gstCode = String(found.GST_CODE || found.G_CODE || '').trim();
+    return { hsn: h, gstPercent: g, gstCode };
   };
 
   const updateItem = (index: number, key: keyof ItemRow, value: string) => {
@@ -235,6 +241,7 @@ const NewPurchase: React.FC = () => {
         const meta = getPmplMetaByCode(next.itemCode);
         next.hsn = meta.hsn || next.hsn;
         next.gstPercent = meta.gstPercent || next.gstPercent;
+        next.gstCode = meta.gstCode || next.gstCode;
       }
       return next;
     }));
@@ -384,8 +391,26 @@ const NewPurchase: React.FC = () => {
       const hsn = String(found?.H_CODE || row.hsn);
       const gstVal = found?.GST;
       const gstStr = typeof gstVal === 'number' ? String(gstVal) : String(gstVal || row.gstPercent);
+      const gstCode = String(found?.GST_CODE || found?.G_CODE || row.gstCode || '');
       const mrpStr = found && (typeof found.MRP1 === 'number' ? String(found.MRP1) : String(found.MRP1 || row.mrp));
-      return { ...row, itemCode: code, description: desc, hsn, gstPercent: gstStr, mrp: mrpStr || row.mrp };
+      return { ...row, itemCode: code, description: desc, hsn, gstPercent: gstStr, gstCode, mrp: mrpStr || row.mrp };
+    }));
+  };
+
+  const handleItemDescriptionInput = (index: number, val: string) => {
+    setItems(prev => prev.map((row, i) => {
+      if (i !== index) return row;
+      // If user types, we clear itemCode unless it happens to match a code (which is handled by selection)
+      // Actually, we can check if the typed name matches a product name exactly?
+      // For now, assume typing means editing description.
+      // But we must also check if this description resolves to an item code?
+      // resolveItemCode checks description + MRP.
+      // So here we just update description and clear itemCode.
+      // The updateItem('mrp') or here will re-trigger resolveItemCode logic if we want auto-link.
+      // But resolveItemCode is called in updateItem.
+      // So let's just update description here.
+      
+      return { ...row, description: val, itemCode: '' }; 
     }));
   };
 
@@ -538,6 +563,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             discPercent: String(it.discountPercent ?? ''),
             cdPercent: String(it.cdPercent ?? ''),
             gstPercent: meta.gstPercent || String((it.gstPercent ?? 18)),
+            gstCode: meta.gstCode,
           };
         });
         setItems(mapped);
@@ -621,6 +647,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
           discPercent: String(r.discPercent || ''),
           cdPercent: String(r.cdPercent || ''),
           gstPercent: String(r.gstPercent || ''),
+          gstCode: String(r.gstCode || ''),
         }));
         setItems(mapped);
       }
@@ -815,13 +842,21 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     }
   };
 
+  const [breakdownOverrides, setBreakdownOverrides] = useState<Record<string, string>>({});
+  
+  useEffect(() => {
+    if (Object.keys(breakdownOverrides).length > 0) {
+      setBreakdownOverrides({});
+    }
+  }, [items]);
+  
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <PageMeta title="New Purchase Entry | FMCG Vite Admin Template" description="OCR Assisted Purchase Recording" />
       <PageBreadcrumb pageTitle="New Purchase Entry" />
 
       <div className="container mx-auto px-4 py-2">
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2">
             <button onClick={() => navigate('/purchases')} className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300">
               <ChevronLeftIcon className="w-5 h-5" />
@@ -831,7 +866,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               <p className="text-sm text-gray-600 dark:text-gray-400">OCR Assisted Purchase Recording</p>
             </div>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center w-full lg:w-auto">
             <input ref={fileInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFileSelected} />
             <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1">
               <input
@@ -959,9 +994,9 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               </div>
                     </div>
                   </Modal>
-          <div className="flex items-center justify-between px-4 sm:px-6 py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 sm:px-6 py-4">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Items</h3>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-700 dark:text-gray-300">GDN</span>
                 <Select
@@ -1110,7 +1145,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Disc. %</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">CD%</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Taxable</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">GST %</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">GST Group</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Remove</th>
                 </tr>
@@ -1152,6 +1187,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                           value={row.itemCode || undefined}
                           inputValue={row.itemCode ? getItemLabelByCode(row.itemCode) : row.description}
                           onChange={(val: string) => handleItemSelection(index, val)}
+                          onInputChange={(val: string) => handleItemDescriptionInput(index, val)}
                           className="w-[40ch]"
                         />
                       </td>
@@ -1166,11 +1202,11 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Select
-                          options={godownOptions}
+                          options={godownOptionsTable}
                           value={row.godown || ''}
                           onChange={(val: string) => updateItem(index, 'godown', val.slice(0, 2))}
-                          className="min-w-[180px]"
-                          placeholder="Select Godown"
+                          className="min-w-[80px]"
+                          placeholder="GDN"
                         />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
@@ -1193,21 +1229,31 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
                         {row.itemCode ? (
-                          <Input id={`gst-${index}`} label="GST %" value={row.gstPercent} onChange={(e) => updateItem(index, 'gstPercent', e.target.value)} variant="outlined" disabled className="w-[10ch]" />
+                          <Input id={`gst-${index}`} label="GST Group" value={row.gstCode || row.gstPercent} onChange={(e) => updateItem(index, 'gstPercent', e.target.value)} variant="outlined" disabled className="w-[10ch]" />
                         ) : (
-                          <Select
-                            options={[
-                              { value: '0', label: '0%' },
-                              { value: '5', label: '5%' },
-                              { value: '12', label: '12%' },
-                              { value: '18', label: '18%' },
-                              { value: '28', label: '28%' },
-                            ]}
-                            value={row.gstPercent}
-                            onChange={(val: string) => updateItem(index, 'gstPercent', String(val))}
-                            className="min-w-[100px]"
-                            placeholder="GST %"
-                          />
+                          <div className="relative w-[10ch]">
+                            {row.gstCode ? (
+                              <div 
+                                className="absolute inset-0 flex items-center px-3 text-sm text-gray-900 dark:text-white bg-transparent pointer-events-none z-10"
+                              >
+                                {(() => {
+                                  const g = gstGroupOptions.find(o => o.value === row.gstCode);
+                                  return g ? `${g.tax}%` : '';
+                                })()}
+                              </div>
+                            ) : null}
+                            <Select
+                              options={gstGroupOptions.map(o => ({ value: o.value, label: o.label }))}
+                              value={row.gstCode || ''}
+                              onChange={(val: string) => {
+                                const g = gstGroupOptions.find(o => o.value === val);
+                                const tax = g ? String(g.tax) : '';
+                                setItems(prev => prev.map((r, i) => i === index ? { ...r, gstCode: val, gstPercent: tax } : r));
+                              }}
+                              className={`w-full ${row.gstCode ? 'text-transparent dark:text-transparent' : ''}`}
+                              placeholder="Select"
+                            />
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
@@ -1230,24 +1276,141 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               </tbody>
             </table>
           </div>
-          <div className="px-4 sm:px-6 py-4 flex justify-end">
+          <div className="px-4 sm:px-6 py-4 flex flex-col lg:flex-row justify-between items-start gap-4">
             {(() => {
-              const taxableSum = items.reduce((sum, r) => sum + computeTaxable(r), 0);
-              const gstSum = items.reduce((sum, r) => sum + computeRowGst(r), 0);
-              const cgst = gstSum / 2;
-              const sgst = gstSum / 2;
-              const gross = taxableSum + gstSum;
-              const rounded = Math.round(gross);
-              const roundOff = (rounded - gross);
-              const grandTotal = gross + roundOff;
+              const gstBreakdown: Record<string, { taxable: number; gst: number; rate: number }> = {};
+              items.forEach(row => {
+                const taxable = computeTaxable(row);
+                const gst = computeRowGst(row);
+                const p = parseFloat(row.gstPercent || '0');
+                
+                let code = row.gstCode;
+                if (!code && row.itemCode) {
+                   const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
+                   code = String(found?.GST_CODE || found?.G_CODE || '').trim();
+                }
+                const label = code || `GST ${p}%`;
+                
+                if (!gstBreakdown[label]) gstBreakdown[label] = { taxable: 0, gst: 0, rate: p };
+                gstBreakdown[label].taxable += taxable;
+                gstBreakdown[label].gst += gst;
+              });
+
+              const isInterState = !gstin.startsWith('23');
+              
+              let totalTaxableBreakdown = 0;
+              let totalTaxBreakdown = 0;
+
+              const breakdownRows = Object.entries(gstBreakdown)
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([code, data]) => {
+                  const override = breakdownOverrides[code];
+                  const finalTaxable = override ? parseFloat(override) : data.taxable;
+                  const safeTaxable = isNaN(finalTaxable) ? 0 : finalTaxable;
+                  
+                  // Re-calculate tax based on (new) taxable amount
+                  const finalTax = safeTaxable * (data.rate / 100);
+
+                  totalTaxableBreakdown += safeTaxable;
+                  totalTaxBreakdown += finalTax;
+
+                  return {
+                    code,
+                    rate: data.rate,
+                    taxable: safeTaxable,
+                    tax: finalTax,
+                    originalTaxable: data.taxable
+                  };
+                });
+
+              // Grand Total calculation now uses breakdown sums if available, or item sums?
+              // The user said: "make the table's taxable feild editable... thus change in the cgst and sgst value"
+              // This implies the Grand Total should reflect these edits.
+              
+              const grandTaxable = totalTaxableBreakdown;
+              const grandTax = totalTaxBreakdown;
+              const grandGross = grandTaxable + grandTax;
+              const rounded = Math.round(grandGross);
+              const roundOff = rounded - grandGross;
+              const grandTotal = grandGross + roundOff;
+
               return (
-                <div className="text-right">
-                  <div className="text-sm text-gray-600 dark:text-gray-300">Taxable: {formatINR.format(taxableSum)}</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-300">CGST: {formatINR.format(cgst)}</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-300">SGST: {formatINR.format(sgst)}</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-300">Round Off: {roundOff >= 0 ? '+' : ''}{roundOff.toFixed(2)}</div>
-                  <div className="mt-2 text-xl font-semibold text-gray-900 dark:text-white">Total: {formatINR.format(grandTotal)}</div>
-                </div>
+                <>
+                  <div className="w-full lg:w-auto overflow-x-auto">
+                    <table className="min-w-full text-xs text-left text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+                      <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                        <tr>
+                          <th className="px-3 py-2 border-b dark:border-gray-600">GST Group</th>
+                          <th className="px-3 py-2 border-b dark:border-gray-600 text-right">Taxable</th>
+                          {isInterState ? (
+                            <th className="px-3 py-2 border-b dark:border-gray-600 text-right">IGST</th>
+                          ) : (
+                            <>
+                              <th className="px-3 py-2 border-b dark:border-gray-600 text-right">CGST</th>
+                              <th className="px-3 py-2 border-b dark:border-gray-600 text-right">SGST</th>
+                            </>
+                          )}
+                          <th className="px-3 py-2 border-b dark:border-gray-600 text-right">Total Tax</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {breakdownRows.map((row) => (
+                          <tr key={row.code} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                            <td className="px-3 py-1 border-r dark:border-gray-700 font-medium">{row.code} ({row.rate}%)</td>
+                            <td className="px-3 py-1 border-r dark:border-gray-700 text-right">
+                              <input 
+                                type="text" 
+                                className="w-20 text-right bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none"
+                                value={breakdownOverrides[row.code] ?? row.originalTaxable.toFixed(2)}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (/^\d*\.?\d*$/.test(val)) {
+                                    setBreakdownOverrides(prev => ({ ...prev, [row.code]: val }));
+                                  }
+                                }}
+                              />
+                            </td>
+                            {isInterState ? (
+                              <td className="px-3 py-1 border-r dark:border-gray-700 text-right">{formatINR.format(row.tax)}</td>
+                            ) : (
+                              <>
+                                <td className="px-3 py-1 border-r dark:border-gray-700 text-right">{formatINR.format(row.tax / 2)}</td>
+                                <td className="px-3 py-1 border-r dark:border-gray-700 text-right">{formatINR.format(row.tax / 2)}</td>
+                              </>
+                            )}
+                            <td className="px-3 py-1 text-right">{formatINR.format(row.tax)}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-gray-100 dark:bg-gray-700 font-semibold">
+                          <td className="px-3 py-2 border-r dark:border-gray-600">Total</td>
+                          <td className="px-3 py-2 border-r dark:border-gray-600 text-right">{formatINR.format(grandTaxable)}</td>
+                          {isInterState ? (
+                            <td className="px-3 py-2 border-r dark:border-gray-600 text-right">{formatINR.format(grandTax)}</td>
+                          ) : (
+                            <>
+                              <td className="px-3 py-2 border-r dark:border-gray-600 text-right">{formatINR.format(grandTax / 2)}</td>
+                              <td className="px-3 py-2 border-r dark:border-gray-600 text-right">{formatINR.format(grandTax / 2)}</td>
+                            </>
+                          )}
+                          <td className="px-3 py-2 text-right">{formatINR.format(grandTax)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="text-right w-full lg:w-auto">
+                    <div className="text-sm text-gray-600 dark:text-gray-300">Taxable: {formatINR.format(grandTaxable)}</div>
+                    {isInterState ? (
+                      <div className="text-sm text-gray-600 dark:text-gray-300">IGST: {formatINR.format(grandTax)}</div>
+                    ) : (
+                      <>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">CGST: {formatINR.format(grandTax / 2)}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">SGST: {formatINR.format(grandTax / 2)}</div>
+                      </>
+                    )}
+                    <div className="text-sm text-gray-600 dark:text-gray-300">Round Off: {roundOff >= 0 ? '+' : ''}{roundOff.toFixed(2)}</div>
+                    <div className="mt-2 text-xl font-semibold text-gray-900 dark:text-white">Total: {formatINR.format(grandTotal)}</div>
+                  </div>
+                </>
               );
             })()}
           </div>

@@ -18,6 +18,7 @@ interface AutocompleteProps {
   autoComplete?: string;
   disabled?: boolean | object;
   onEnter?: () => void;
+  onInputChange?: (value: string) => void;
 }
 
 // Define handle types for the ref
@@ -85,6 +86,7 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   autoComplete = "",
   disabled = false,
   onEnter,
+  onInputChange,
 }, ref) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -244,11 +246,15 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
+    const newVal = e.target.value;
+    setSearchTerm(newVal);
     setIsOpen(true);
+    if (onInputChange) {
+      onInputChange(newVal);
+    }
     
     // If search term is empty, clear selection
-    if (e.target.value === "") {
+    if (newVal === "") {
       setSelectedOption(null);
       onChange("");
     }
