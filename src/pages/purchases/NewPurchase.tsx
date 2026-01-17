@@ -10,6 +10,10 @@ import { ChevronLeftIcon } from '../../icons';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Modal } from '../../components/ui/modal';
 import constants from '../../constants';
+<<<<<<< HEAD
+=======
+import apiCache from '../../utils/apiCache';
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
 
 type ItemRow = {
   description: string;
@@ -82,6 +86,10 @@ const NewPurchase: React.FC = () => {
   const [gstin, setGstin] = useState('');
   const [stateVal, setStateVal] = useState('23');
   const [invoiceNo, setInvoiceNo] = useState('INV-001');
+  // State for API-fetched data
+  const [cmplData, setCmplData] = useState<any[]>([]);
+  const [pmplData, setPmplData] = useState<any[]>([]);
+
   const today = useMemo(() => {
     const d = new Date();
     const dd = String(d.getDate()).padStart(2, '0');
@@ -135,6 +143,7 @@ const NewPurchase: React.FC = () => {
     return `${dd}-${mm}-${yyyy}`;
   });
 
+<<<<<<< HEAD
   const [pmplData, setPmplData] = useState<any[]>([]);
   const [cmplData, setCmplData] = useState<any[]>([]);
   const [purData, setPurData] = useState<any[]>([]);
@@ -165,6 +174,9 @@ const NewPurchase: React.FC = () => {
     fetchData();
   }, []);
   
+=======
+
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
   const stateOptions = GST_STATES.map(s => ({ value: s.code, label: `${s.code} - ${s.name}` }));
   const getStateName = (code: string) => GST_STATES.find(s => s.code === code)?.name || '';
   const getStateLabel = (code: string) => {
@@ -220,7 +232,11 @@ const NewPurchase: React.FC = () => {
   };
 
   const getPmplMetaByCode = (code?: string) => {
+<<<<<<< HEAD
     if (!code) return { hsn: '', gstPercent: '', gstCode: '' };
+=======
+    if (!code) return { hsn: '', gstPercent: '' };
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     const data = pmplData;
     const found = data.find((it) => String(it.CODE || '') === String(code));
     if (!found) return { hsn: '', gstPercent: '', gstCode: '' };
@@ -292,9 +308,12 @@ const NewPurchase: React.FC = () => {
   const formatINR = useMemo(() => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }), []);
 
   const pmplCompanyOptions = useMemo(() => {
+<<<<<<< HEAD
     const data = pmplData;
+=======
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     const prefixes = new Set<string>();
-    data.forEach(it => {
+    pmplData.forEach(it => {
       const code = String(it.CODE || '');
       if (code.length >= 2) prefixes.add(code.slice(0, 2));
     });
@@ -302,6 +321,22 @@ const NewPurchase: React.FC = () => {
   }, [pmplData]);
 
 
+<<<<<<< HEAD
+=======
+  const getPurRecords = async (): Promise<any[]> => {
+    try {
+      const token = localStorage.getItem('token');
+      const respApi = await fetch(`${constants.baseURL}/api/dbf/PUR.json`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      });
+      if (respApi.ok) {
+        const arr = await respApi.json();
+        if (Array.isArray(arr) && arr.length > 0) return arr;
+      }
+    } catch { }
+    return [];
+  };
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
 
   useEffect(() => {
     const arr = purData;
@@ -326,8 +361,12 @@ const NewPurchase: React.FC = () => {
   }, [editingBill, purData]);
 
   const gstGroupOptions = useMemo(() => {
+<<<<<<< HEAD
     const rawArr: any[] = cmplData;
     return rawArr
+=======
+    return cmplData
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
       .filter(it => String(it.C_CODE || '').toUpperCase().startsWith('GG'))
       .map(it => {
         const code = String(it.C_CODE || '');
@@ -338,7 +377,7 @@ const NewPurchase: React.FC = () => {
   }, [cmplData]);
 
   const gstUnitOptions = useMemo(() => {
-    const units = ['PCS','BOX','BOTTLE','JAR','CAN','KG','GMS','LTR','ML','PACK','BAG','DOZEN','TUBE','SACHET'];
+    const units = ['PCS', 'BOX', 'BOTTLE', 'JAR', 'CAN', 'KG', 'GMS', 'LTR', 'ML', 'PACK', 'BAG', 'DOZEN', 'TUBE', 'SACHET'];
     return units.map(u => ({ value: u, label: u }));
   }, []);
   const [isApiKeyEditing, setIsApiKeyEditing] = useState<boolean>(false);
@@ -350,8 +389,12 @@ const NewPurchase: React.FC = () => {
     return `${s.slice(0, 4)}••••${s.slice(-2)}`;
   }, [localKey]);
   const pmplItemOptions = useMemo(() => {
+<<<<<<< HEAD
     const data = pmplData;
     return data.map(it => {
+=======
+    return pmplData.map(it => {
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
       const code = String(it.CODE || '');
       const name = String(it.PRODUCT || '');
       let mrpVal = '';
@@ -374,8 +417,12 @@ const NewPurchase: React.FC = () => {
   const findSupplierByGstin = (gst: string) => {
     if (!gst) return null;
     const g = gst.trim().toUpperCase();
+<<<<<<< HEAD
     const rawArr: any[] = cmplData;
     const match = rawArr.find(p => {
+=======
+    const match = cmplData.find(p => {
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
       const gstno = String((p as any).GSTNO || (p as any).GST || '').trim().toUpperCase();
       return gstno && gstno === g;
     });
@@ -383,8 +430,12 @@ const NewPurchase: React.FC = () => {
     return null;
   };
   const handleItemSelection = (index: number, code: string) => {
+<<<<<<< HEAD
     const data = pmplData;
     const found = data.find(it => String(it.CODE || '') === String(code));
+=======
+    const found = pmplData.find(it => String(it.CODE || '') === String(code));
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     setItems(prev => prev.map((row, i) => {
       if (i !== index) return row;
       const desc = String(found?.PRODUCT || row.description);
@@ -415,9 +466,12 @@ const NewPurchase: React.FC = () => {
   };
 
   const computeNextItemCode = (prefix: string) => {
+<<<<<<< HEAD
     const data = pmplData;
+=======
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
     let max = 0;
-    data.forEach(it => {
+    pmplData.forEach(it => {
       const code = String(it.CODE || '');
       if (code.startsWith(prefix)) {
         const suf = parseInt(code.slice(prefix.length), 10);
@@ -578,7 +632,9 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     }
   };
 
+  // Fetch CMPL and PMPL data from the backend with caching
   useEffect(() => {
+<<<<<<< HEAD
     const rawArr: unknown[] = cmplData;
     const arr: SupplierRecord[] = rawArr.map((p) => {
       const r = p as Record<string, unknown>;
@@ -595,20 +651,75 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
   useEffect(() => {
     // Fetch from API for up-to-date list
     (async () => {
+=======
+    const fetchData = async () => {
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
       try {
-        const token = localStorage.getItem('token');
-        const resp = await fetch(`${constants.baseURL}/api/godowns`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
-        if (resp.ok) {
-          const arr = await resp.json();
-          const opts = (arr || []).filter((g: any) => String(g.ACTIVE || 'Y') === 'Y').map((g: any) => {
-            const code = String(g.GDN_CODE || '').padStart(2, '0').slice(0, 2);
-            const name = String(g.GDN_NAME || '');
-            return { value: code, label: `${name} (${code})` };
-          });
+        const [cmpl, pmpl, godowns] = await Promise.all([
+          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
+          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
+          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/godowns`)
+        ]);
+
+        if (Array.isArray(cmpl)) {
+          console.log('CMPL data received:', cmpl.length, 'entries');
+          setCmplData(cmpl);
+          // Process supplier list from CMPL data
+          // Filter for creditors: M_GROUP === 'CT' OR C_CODE starts with 'CT'
+          // Exclude header entries (codes ending in 000)
+          const arr: SupplierRecord[] = cmpl
+            .filter((p: any) => {
+              const cCode = String(p.C_CODE ?? '').toUpperCase();
+              const mGroup = String(p.M_GROUP ?? '').toUpperCase();
+              const isCreditor = mGroup === 'CT' || cCode.startsWith('CT');
+              const isHeader = cCode.endsWith('000'); // Exclude header entries like CT000
+              return isCreditor && !isHeader;
+            })
+            .map((p: any) => {
+              const C_CODE = String(p.C_CODE ?? '');
+              const C_NAME = String(p.C_NAME ?? '');
+              const GSTNO = p.GSTNO ? String(p.GSTNO) : (p.GST ? String(p.GST) : undefined);
+              return { C_CODE, C_NAME, GSTNO };
+            })
+            .filter((p: SupplierRecord) => p.C_CODE && p.C_NAME);
+          console.log('Filtered suppliers:', arr.length, 'entries');
+          if (arr.length > 0) {
+            console.log('Sample supplier:', arr[0]);
+          }
+          setSupplierList(arr);
+          const opts = [{ value: 'manual', label: 'Enter Manually' }, ...arr.map((p) => ({ value: String(p.C_CODE), label: `(${String(p.C_CODE)}) - ${String(p.C_NAME)}` }))];
+          console.log('Vendor options:', opts.length, 'entries');
+          setVendorOptions(opts);
+        } else {
+          console.error('CMPL data is not an array:', cmpl);
+        }
+
+        if (Array.isArray(pmpl)) {
+          setPmplData(pmpl);
+        }
+
+        if (Array.isArray(godowns)) {
+          const opts = godowns
+            .filter((g: any) => String(g.ACTIVE || 'Y') === 'Y')
+            .map((g: any) => {
+              const code = String(g.GDN_CODE || '').padStart(2, '0').slice(0, 2);
+              const name = String(g.GDN_NAME || '');
+              return { value: code, label: `${name} (${code})` };
+            });
           setGodownOptions(opts);
         }
-      } catch {}
-    })();
+      } catch (err) {
+        console.error('Error fetching data:', err);
+      }
+    };
+    fetchData();
+
+    // Clean up expired cache items
+    try {
+      apiCache.clearExpiredCache();
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+    }
   }, []);
 
   useEffect(() => {
@@ -681,7 +792,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             applyPrefill(found);
             setEditingBill(billParam);
           }
-        } catch {}
+        } catch { }
       })();
     }
   }, []);
@@ -756,7 +867,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             return;
           }
         }
-      } catch {}
+      } catch { }
       const token = localStorage.getItem('token');
       // Determine BILL to use
       let billNo: string | null = editingBill;
@@ -886,8 +997,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                 title="Edit API Key"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 20h9"/>
-                  <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
                 </svg>
               </button>
               <button
@@ -905,8 +1016,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                 disabled={!isApiKeyEditing}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V7"/>
-                  <path d="M16 3l5 5L8 21H3v-5L16 3z"/>
+                  <path d="M19 21H5a2 2 0 0 1-2-2V7" />
+                  <path d="M16 3l5 5L8 21H3v-5L16 3z" />
                 </svg>
               </button>
             </div>
@@ -914,7 +1025,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               {selectedFileName || 'No file selected'}
             </div>
             <button onClick={handleUploadClick} disabled={isProcessing} className="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 8h8v8H8z"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M8 8h8v8H8z" /></svg>
               {isProcessing ? 'Processing…' : 'Upload Invoice (OCR)'}
             </button>
             <button onClick={handleSavePurchase} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-medium">Save Purchase</button>
@@ -961,7 +1072,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               <Input id="invoiceNo" label="Invoice Number *" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} variant="outlined" required />
               <DatePicker id="invoiceDate" label="Invoice Date" value={invoiceDate} onChange={setInvoiceDate} dateFormatType="dd-mm-yyyy" variant="outlined" />
               <DatePicker id="entryDate" label="Entry Date" value={entryDate} onChange={setEntryDate} dateFormatType="dd-mm-yyyy" variant="outlined" />
-              <Input id="pbillbb" label="PBILL" value={pBillBB} onChange={() => {}} variant="outlined" disabled />
+              <Input id="pbillbb" label="PBILL" value={pBillBB} onChange={() => { }} variant="outlined" disabled />
             </div>
           </div>
         </div>
@@ -992,9 +1103,15 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                   className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm"
                 >Save</button>
               </div>
+<<<<<<< HEAD
                     </div>
                   </Modal>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 sm:px-6 py-4">
+=======
+            </div>
+          </Modal>
+          <div className="flex items-center justify-between px-4 sm:px-6 py-4">
+>>>>>>> 9d317b2c86f94c57ea4d472085d699bea06fd2fd
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Items</h3>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
@@ -1011,8 +1128,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                 />
               </div>
               <button onClick={addItem} className="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-3 py-2 text-sm font-medium">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-              Add Item
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                Add Item
               </button>
             </div>
           </div>
@@ -1060,31 +1177,31 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       alert('Company, Code, GST Group, and Item Name are required');
                       return;
                     }
-                  const payload = {
-                    CODE: newItemCodeAllocated,
-                    PRODUCT: newItemName,
-                    PACK: newItemPack,
-                    H_CODE: newItemHSN,
-                    BRAND: newItemBrand,
-                    UNIT_1: newItemUnit1,
-                    UNIT_2: newItemUnit2,
-                    PCBX: newItemPcBx,
-                    MRP1: parseFloat(newItemMrp1 || '0') || undefined,
-                    RATE1: parseFloat(newItemRate1 || '0') || undefined,
-                    TRADE1: parseFloat(newItemRate1 || '0') || undefined,
-                    ADDEDON: newItemAddedOn,
-                    G_CODE: newItemCompany,
-                    GST_CODE: newItemGSTCode,
-                    GST: parseFloat(newItemGSTPercent || '0'),
-                    SCH: parseFloat(newItemSchemePercent || '0') || undefined,
-                    SCH_RS_PC: parseFloat(newItemSchemeRsPc || '0') || undefined,
-                    CESS_RS_PC: parseFloat(newItemCessRsPc || '0') || undefined,
-                    MIN_STOCK: parseFloat(newItemMinStock || '0') || undefined,
-                    NOT_STOCK: newItemNotStockItem ? 'Y' : 'N',
-                    EXTRA_DESC: newItemExtraDesc,
-                    C_CODE: newItemGSTCode,
-                    GR_CODE: newItemGSTCode,
-                  };
+                    const payload = {
+                      CODE: newItemCodeAllocated,
+                      PRODUCT: newItemName,
+                      PACK: newItemPack,
+                      H_CODE: newItemHSN,
+                      BRAND: newItemBrand,
+                      UNIT_1: newItemUnit1,
+                      UNIT_2: newItemUnit2,
+                      PCBX: newItemPcBx,
+                      MRP1: parseFloat(newItemMrp1 || '0') || undefined,
+                      RATE1: parseFloat(newItemRate1 || '0') || undefined,
+                      TRADE1: parseFloat(newItemRate1 || '0') || undefined,
+                      ADDEDON: newItemAddedOn,
+                      G_CODE: newItemCompany,
+                      GST_CODE: newItemGSTCode,
+                      GST: parseFloat(newItemGSTPercent || '0'),
+                      SCH: parseFloat(newItemSchemePercent || '0') || undefined,
+                      SCH_RS_PC: parseFloat(newItemSchemeRsPc || '0') || undefined,
+                      CESS_RS_PC: parseFloat(newItemCessRsPc || '0') || undefined,
+                      MIN_STOCK: parseFloat(newItemMinStock || '0') || undefined,
+                      NOT_STOCK: newItemNotStockItem ? 'Y' : 'N',
+                      EXTRA_DESC: newItemExtraDesc,
+                      C_CODE: newItemGSTCode,
+                      GR_CODE: newItemGSTCode,
+                    };
                     try {
                       const token = localStorage.getItem('token');
                       await fetch(`${constants.baseURL}/newitem`, {
@@ -1176,7 +1293,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                                 setShowNewItemModal(true);
                               }}
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
                             </button>
                           </div>
                         )}
@@ -1195,7 +1312,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                         <Input id={`mrp-${index}`} label="MRP" value={row.mrp} onChange={(e) => updateItem(index, 'mrp', e.target.value)} variant="outlined" className="w-[9ch]" />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <Input id={`code-${index}`} label="Item Code" value={row.itemCode} onChange={() => {}} variant="outlined" disabled maxLength={5} className="w-[9ch]" />
+                        <Input id={`code-${index}`} label="Item Code" value={row.itemCode} onChange={() => { }} variant="outlined" disabled maxLength={5} className="w-[9ch]" />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`hsn-${index}`} label="HSN" value={row.hsn} onChange={(e) => updateItem(index, 'hsn', e.target.value)} variant="outlined" disabled={!!row.itemCode} maxLength={8} className="w-[12ch]" />
@@ -1219,10 +1336,10 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                         <Input id={`discRs-${index}`} label="Disc. Rs" value={row.discRs} onChange={(e) => updateItem(index, 'discRs', e.target.value)} variant="outlined" className="w-[8ch]" />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <Input id={`discPercent-${index}`} label="Disc. %" value={row.discPercent} onChange={(e) => updateItem(index, 'discPercent', e.target.value)} variant="outlined" className="w-[7ch]"/>
+                        <Input id={`discPercent-${index}`} label="Disc. %" value={row.discPercent} onChange={(e) => updateItem(index, 'discPercent', e.target.value)} variant="outlined" className="w-[7ch]" />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <Input id={`cdPercent-${index}`} label="CD%" value={row.cdPercent} onChange={(e) => updateItem(index, 'cdPercent', e.target.value)} variant="outlined" className="w-[7ch]"/>
+                        <Input id={`cdPercent-${index}`} label="CD%" value={row.cdPercent} onChange={(e) => updateItem(index, 'cdPercent', e.target.value)} variant="outlined" className="w-[7ch]" />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         {formatINR.format(taxable || 0)}
@@ -1262,11 +1379,11 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <button onClick={() => removeItem(index)} className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700">
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                            <path d="M10 11v6"/>
-                            <path d="M14 11v6"/>
-                            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
                           </svg>
                         </button>
                       </td>
