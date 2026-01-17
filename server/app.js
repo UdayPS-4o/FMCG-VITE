@@ -216,7 +216,6 @@ const postRoutes = require('./routes/post');
 app.use(postRoutes);
 
 // Add purchases merge route
-const purchasesMergeRoutes = require('./routes/merge/purchases');
 app.use(purchasesMergeRoutes);
 
 // Add this route to handle favicon requests
