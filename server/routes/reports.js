@@ -18,6 +18,11 @@ router.use(partyLedgerRoutes);
 // Import Item Wise Stock Register report routes
 const itemWiseStockRegisterRoutes = require('./reports/itemWiseStockRegister');
 router.use(itemWiseStockRegisterRoutes);
+
+// Import PNB Statement routes
+const pnbStatementRoutes = require('./reports/pnbStatement');
+router.use(pnbStatementRoutes);
+
 // Function to parse date strings (YYYY-MM-DD)
 const parseDate = (dateString) => {
   const [year, month, day] = dateString.split('-').map(Number);

@@ -261,9 +261,11 @@ class DBFFile {
   /**
    * Read all records from the DBF file
    * @param {boolean} includeDeleted - Whether to include deleted records
+   * @param {number} limit - Maximum number of records to read (null for all)
+   * @param {number} offset - Number of records to skip
    * @returns {Array} Records from the DBF file
    */
-  async readRecords(includeDeleted = false) {
+  async readRecords(includeDeleted = false, limit = null, offset = 0) {
     if (!this.fileHandle) {
       throw new Error('DBF file not open');
     }
@@ -271,7 +273,15 @@ class DBFFile {
     const records = [];
     const recordBuffer = Buffer.alloc(this.recordLength);
     
-    for (let i = 0; i < this.recordCount; i++) {
+    let start = offset;
+    if (start < 0) start = 0;
+    
+    let end = this.recordCount;
+    if (limit !== null && limit > 0) {
+      end = Math.min(start + limit, this.recordCount);
+    }
+
+    for (let i = start; i < end; i++) {
       const position = this.headerLength + (i * this.recordLength);
       await this.fileHandle.read(recordBuffer, 0, this.recordLength, position);
       

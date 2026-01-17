@@ -1,0 +1,10 @@
+{
+  "website": "https://icorp.pnb.bank.in/corp/AuthenticationController?FORMSGROUP_ID__=AuthenticationFG&__START_TRAN_FLAG__=Y&__FG_BUTTONS__=LOAD&ACTION.LOAD=Y&AuthenticationFG.LOGIN_FLAG=1&BANK_ID=024",
+  "chromePath": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  "port": 80,
+  "background": false,
+  "corp-id": "ekta7568",
+  "user-id": "state128",
+  "password": "Pass@123",
+  "times": ["13:00", "17:00", "21:00"]
+}
