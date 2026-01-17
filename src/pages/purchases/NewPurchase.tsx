@@ -587,10 +587,11 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     // Fetch from API for up-to-date list
     (async () => {
       try {
-        const [cmpl, pmpl, godowns] = await Promise.all([
+        const [cmpl, pmpl, godowns, pur] = await Promise.all([
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
-          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/godowns`)
+          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/godowns`),
+          getPurRecords()
         ]);
 
         if (Array.isArray(cmpl)) {
@@ -599,6 +600,10 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
 
         if (Array.isArray(pmpl)) {
           setPmplData(pmpl);
+        }
+
+        if (Array.isArray(pur)) {
+          setPurData(pur);
         }
 
         if (Array.isArray(godowns)) {
