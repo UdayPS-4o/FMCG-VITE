@@ -139,7 +139,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   const criticalAbortTimeoutRef = useRef<any>(null);
   const isCriticalAbortModeRef = useRef<boolean>(false);
 
-  const GEMINI_API_KEY = 'AIzaSyC-VMGbtv2QYMlCJIZymVOjlGbmQEQD23E';
+  const GEMINI_API_KEY = 'AIzaSyBbCyGTCX1Z2oa-89BINfyNTgllhObdDWQ';
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
   // Debug: Log when props change

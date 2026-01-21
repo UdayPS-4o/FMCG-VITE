@@ -103,6 +103,12 @@ interface MessageData {
   isRead: boolean;
 }
 
+interface MandatoryDocsData {
+  stockRegister: string | null;
+  cashBook: string | null;
+  bankSlips: string[];
+}
+
 const AdminAttendance: React.FC = () => {
   const navigate = useNavigate();
   const { user, hasAccess } = useAuth();
@@ -114,8 +120,21 @@ const AdminAttendance: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'attendance' | 'locations'>('attendance');
-  const [users, setUsers] = useState<{ id: number; name: string; username: string; routeAccess: string[]; isAdmin: boolean }[]>([]);
+  const [users, setUsers] = useState<{ 
+    id: number; 
+    name: string; 
+    username: string; 
+    routeAccess: string[]; 
+    isAdmin: boolean;
+    requireMandatoryDocs?: boolean;
+    mandatoryDocsFromDate?: string;
+  }[]>([]);
   const [salaryModal, setSalaryModal] = useState<{ userId: number; userName: string } | null>(null);
+  
+  // Docs Modal State
+  const [docsModal, setDocsModal] = useState<{ userId: number; userName: string; date: string } | null>(null);
+  const [docsData, setDocsData] = useState<MandatoryDocsData | null>(null);
+  const [docsLoading, setDocsLoading] = useState(false);
   const [salaryData, setSalaryData] = useState<{
     monthlySalary: string;
     weeklyOffDays: number[];
@@ -781,7 +800,38 @@ const AdminAttendance: React.FC = () => {
     }
   };
 
-  // Message handling functions
+  const handleViewDocs = async (userId: number, userName: string, date: string) => {
+    setDocsModal({ userId, userName, date });
+    setDocsData(null);
+    setDocsLoading(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${constants.baseURL}/api/docs/get`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ userId, date })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDocsData(data.docs);
+      } else {
+        setToast({ message: 'No documents found for this date', type: 'error' });
+        // Don't close modal immediately so user sees it opened but empty/error state
+        setDocsData(null); 
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      setToast({ message: 'Failed to fetch documents', type: 'error' });
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
   const handleSendMessageClick = (userId: number, userName: string) => {
     setMessageModal({ userId, userName });
     setMessageData({
@@ -1283,6 +1333,15 @@ const AdminAttendance: React.FC = () => {
 
                                 <td className="px-6 py-4">
                                   <div className="flex space-x-2">
+                                    {users.find(u => u.id === record.userId)?.requireMandatoryDocs && (
+                                       <button
+                                         onClick={() => handleViewDocs(record.userId, record.userName, record.date)}
+                                         className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 font-medium transition-colors"
+                                         title="View mandatory documents"
+                                       >
+                                         📄 View Docs
+                                       </button>
+                                     )}
                                     <button
                                       onClick={() => handleSendMessageClick(record.userId, record.userName)}
                                       className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
@@ -2045,6 +2104,142 @@ const AdminAttendance: React.FC = () => {
           type={toast.type}
           onClose={() => setToast(null)}
         />
+      )}
+
+      {/* Docs Modal */}
+      {docsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Mandatory Documents
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {docsModal.userName} - {formatDate(docsModal.date)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDocsModal(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              {docsLoading ? (
+                <div className="flex justify-center py-12">
+                  <PulseLoadAnimation size="md" />
+                </div>
+              ) : docsData ? (
+                <div className="space-y-6">
+                  {/* Stock Register */}
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
+                    <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                      📦 Physical Stock Register
+                      {!docsData.stockRegister && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Missing</span>}
+                    </h4>
+                    {docsData.stockRegister ? (
+                      <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100">
+                        <img 
+                          src={docsData.stockRegister} 
+                          alt="Stock Register"
+                          className="w-full h-auto max-h-[500px] object-contain"
+                        />
+                        <button
+                          onClick={() => openImageModal(docsData.stockRegister!)}
+                          className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white px-3 py-1 rounded text-sm backdrop-blur-sm"
+                        >
+                          🔍 Full View
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="h-32 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-400">
+                        No image uploaded
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Cash Book */}
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
+                    <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                      💰 Physical Cash Book
+                      {!docsData.cashBook && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Missing</span>}
+                    </h4>
+                    {docsData.cashBook ? (
+                      <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100">
+                        <img 
+                          src={docsData.cashBook} 
+                          alt="Cash Book"
+                          className="w-full h-auto max-h-[500px] object-contain"
+                        />
+                        <button
+                          onClick={() => openImageModal(docsData.cashBook!)}
+                          className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white px-3 py-1 rounded text-sm backdrop-blur-sm"
+                        >
+                          🔍 Full View
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="h-32 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-400">
+                        No image uploaded
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bank Slips */}
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
+                    <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                      🏦 Bank Deposit Slips
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{docsData.bankSlips.length} Slips</span>
+                    </h4>
+                    
+                    {docsData.bankSlips.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {docsData.bankSlips.map((slip, idx) => (
+                          <div key={idx} className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100">
+                            <div className="absolute top-2 left-2 bg-black/50 text-white px-2 py-0.5 rounded text-xs backdrop-blur-sm z-10">
+                              Slip #{idx + 1}
+                            </div>
+                            <img 
+                              src={slip} 
+                              alt={`Bank Slip ${idx + 1}`}
+                              className="w-full h-48 object-cover"
+                            />
+                            <button
+                              onClick={() => openImageModal(slip)}
+                              className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white px-3 py-1 rounded text-sm backdrop-blur-sm"
+                            >
+                              🔍 Full View
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="h-32 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-400">
+                        No bank slips uploaded
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  No document data available
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <button
+                onClick={() => setDocsModal(null)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
