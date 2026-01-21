@@ -613,7 +613,9 @@ app.get('/api/users', verifyToken, requireAdmin, async (req, res) => {
       name: user.name,
       username: user.username,
       routeAccess: user.routeAccess || [],
-      isAdmin: user.routeAccess && user.routeAccess.includes('Admin')
+      isAdmin: user.routeAccess && user.routeAccess.includes('Admin'),
+      requireMandatoryDocs: user.requireMandatoryDocs,
+      mandatoryDocsFromDate: user.mandatoryDocsFromDate
     }));
     
     res.status(200).json({ success: true, users: usersList });
@@ -1208,6 +1210,82 @@ app.post('/api/docs/status', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Error checking docs status:', error);
     res.status(500).json({ success: false, message: 'Failed to check status' });
+  }
+});
+
+// Get mandatory documents for a specific date
+app.post('/api/docs/get', verifyToken, async (req, res) => {
+  try {
+    const { userId, date } = req.body;
+
+    // Authorization check
+    let isAuthorized = false;
+    if (req.user.userId === userId || req.user.userId === Number(userId)) {
+      isAuthorized = true;
+    } else {
+       // Check if admin
+       const usersFilePath = path.join(__dirname, '..', 'db', 'users.json');
+       try {
+         const usersData = await fs.readFile(usersFilePath, 'utf8');
+         const users = JSON.parse(usersData);
+         const requestUser = users.find(u => u.id === req.user.userId);
+         if (requestUser && requestUser.routeAccess && requestUser.routeAccess.includes('Admin')) {
+            isAuthorized = true;
+         }
+       } catch (e) {
+         console.error('Error reading users file for auth check:', e);
+       }
+    }
+
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const docsDir = path.join(__dirname, '..', 'db', 'mandatory-docs');
+    const dayDir = path.join(docsDir, userId.toString(), date);
+
+    try {
+      await fs.access(dayDir);
+    } catch (e) {
+      return res.status(404).json({ success: false, message: 'No documents found for this date' });
+    }
+
+    const docs = {
+      stockRegister: null,
+      cashBook: null,
+      bankSlips: []
+    };
+
+    // Helper to read file as base64
+    const readFileAsBase64 = async (filename) => {
+      try {
+        const filePath = path.join(dayDir, filename);
+        const data = await fs.readFile(filePath, { encoding: 'base64' });
+        return `data:image/jpeg;base64,${data}`;
+      } catch (e) {
+        return null;
+      }
+    };
+
+    docs.stockRegister = await readFileAsBase64('stock-register.jpg');
+    docs.cashBook = await readFileAsBase64('cash-book.jpg');
+
+    // Read bank slips
+    const files = await fs.readdir(dayDir);
+    const bankSlipFiles = files.filter(f => f.startsWith('bank-slip-') && f.endsWith('.jpg')).sort();
+    
+    for (const file of bankSlipFiles) {
+      const slipData = await readFileAsBase64(file);
+      if (slipData) {
+        docs.bankSlips.push(slipData);
+      }
+    }
+
+    res.status(200).json({ success: true, docs });
+
+  } catch (error) {
+    console.error('Error fetching documents:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch documents' });
   }
 });
 
