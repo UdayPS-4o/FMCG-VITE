@@ -170,6 +170,16 @@ const GSTR2AMatching: React.FC = () => {
   const [purchaseData, setPurchaseData] = useState<PurchaseRecord[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+
+  const handleHideColumn = (columnName: string) => {
+    setHiddenColumns(prev => [...prev, columnName]);
+  };
+
+  const handleResetColumns = () => {
+    setHiddenColumns([]);
+  };
+
   // Calculate B2B totals
   const calculateB2BTotals = () => {
     const allItems = gstr2aB2BData.flatMap(record => record.itms || []);
@@ -978,13 +988,23 @@ const GSTR2AMatching: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-white">GSTR2A Data</h2>
-            <button
-              onClick={handleMatchRecords}
-              disabled={loading}
-              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Matching...' : 'Match Records'}
-            </button>
+            <div className="flex space-x-2">
+              {hiddenColumns.length > 0 && (
+                <button
+                  onClick={handleResetColumns}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                >
+                  Reset Columns
+                </button>
+              )}
+              <button
+                onClick={handleMatchRecords}
+                disabled={loading}
+                className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Matching...' : 'Match Records'}
+              </button>
+            </div>
           </div>
           
           {/* Tabs */}
@@ -1023,42 +1043,43 @@ const GSTR2AMatching: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                 <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">GSTIN</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice Number</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Value</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Place of Supply</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Reverse Charge</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Source Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">IRN Gen Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Taxable Value</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Tax Rate</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">IGST</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">CGST</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">SGST</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">CESS</th>
+                    {['GSTIN', 'Invoice Number', 'Invoice Date', 'Value', 'Place of Supply', 'Invoice Type', 'Reverse Charge', 'Source Type', 'IRN Gen Date', 'Taxable Value', 'Tax Rate', 'IGST', 'CGST', 'SGST', 'CESS'].map(header => (
+                      !hiddenColumns.includes(header) && (
+                      <th key={header} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        <div className="flex flex-col items-start">
+                          <button 
+                            onClick={() => handleHideColumn(header)}
+                            className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                            title="Hide column"
+                          >
+                            (-)
+                          </button>
+                          {header}
+                        </div>
+                      </th>
+                      )
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
                    {gstr2aB2BData.flatMap((record, recordIndex) => 
                      record.itms?.map((item, itemIndex) => (
                        <tr key={`${recordIndex}-${itemIndex}`}>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inum}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.idt}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.pos}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inv_typ}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.rchrg}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.srctyp}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.irngendate}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.txval?.toFixed(2) || '0.00'}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.rt?.toFixed(2) || '0.00'}%</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.iamt?.toFixed(2) || '0.00'}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.camt?.toFixed(2) || '0.00'}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.samt?.toFixed(2) || '0.00'}</td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.csamt?.toFixed(2) || '0.00'}</td>
+                         {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>}
+                         {!hiddenColumns.includes('Invoice Number') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inum}</td>}
+                         {!hiddenColumns.includes('Invoice Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.idt}</td>}
+                         {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>}
+                         {!hiddenColumns.includes('Place of Supply') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.pos}</td>}
+                         {!hiddenColumns.includes('Invoice Type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inv_typ}</td>}
+                         {!hiddenColumns.includes('Reverse Charge') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.rchrg}</td>}
+                         {!hiddenColumns.includes('Source Type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.srctyp}</td>}
+                         {!hiddenColumns.includes('IRN Gen Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.irngendate}</td>}
+                         {!hiddenColumns.includes('Taxable Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.txval?.toFixed(2) || '0.00'}</td>}
+                         {!hiddenColumns.includes('Tax Rate') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.rt?.toFixed(2) || '0.00'}%</td>}
+                         {!hiddenColumns.includes('IGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.iamt?.toFixed(2) || '0.00'}</td>}
+                         {!hiddenColumns.includes('CGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.camt?.toFixed(2) || '0.00'}</td>}
+                         {!hiddenColumns.includes('SGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.samt?.toFixed(2) || '0.00'}</td>}
+                         {!hiddenColumns.includes('CESS') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.csamt?.toFixed(2) || '0.00'}</td>}
                        </tr>
                      )) || []
                    )}
@@ -1067,29 +1088,37 @@ const GSTR2AMatching: React.FC = () => {
                      const totals = calculateB2BTotals();
                      return (
                        <tr className="bg-green-50 dark:bg-green-900 font-semibold border-t-2 border-green-200 dark:border-green-700">
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={3}>
-                           <strong>TOTAL</strong>
-                         </td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                         {(() => {
+                             const colSpan = ['GSTIN', 'Invoice Number', 'Invoice Date'].filter(h => !hiddenColumns.includes(h)).length;
+                             return colSpan > 0 ? (
+                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}>
+                                   <strong>TOTAL</strong>
+                                 </td>
+                             ) : null;
+                         })()}
+                         {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                            <strong>{totals.totalValue.toFixed(2)}</strong>
-                         </td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={5}></td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                         </td>}
+                         {/* Spacer for 5 columns: Place of Supply, Invoice Type, Reverse Charge, Source Type, IRN Gen Date */}
+                         {['Place of Supply', 'Invoice Type', 'Reverse Charge', 'Source Type', 'IRN Gen Date'].map(header => 
+                            !hiddenColumns.includes(header) && <td key={header} className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100"></td>
+                         )}
+                         {!hiddenColumns.includes('Taxable Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                            <strong>{totals.totalTaxableValue.toFixed(2)}</strong>
-                         </td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100"></td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                         </td>}
+                         {!hiddenColumns.includes('Tax Rate') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100"></td>}
+                         {!hiddenColumns.includes('IGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                            <strong>{totals.totalIGST.toFixed(2)}</strong>
-                         </td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                         </td>}
+                         {!hiddenColumns.includes('CGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                            <strong>{totals.totalCGST.toFixed(2)}</strong>
-                         </td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                         </td>}
+                         {!hiddenColumns.includes('SGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                            <strong>{totals.totalSGST.toFixed(2)}</strong>
-                         </td>
-                         <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                         </td>}
+                         {!hiddenColumns.includes('CESS') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                            <strong>{totals.totalCESS.toFixed(2)}</strong>
-                         </td>
+                         </td>}
                        </tr>
                      );
                    })()}
@@ -1101,42 +1130,43 @@ const GSTR2AMatching: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                 <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">GSTIN</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Note Number</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Note Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Value</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Place of Supply</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Reverse Charge</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Source Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">IRN Gen Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Taxable Value</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Tax Rate</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">IGST</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">CGST</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">SGST</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">CESS</th>
+                    {['GSTIN', 'Note Number', 'Note Date', 'Value', 'Place of Supply', 'Invoice Type', 'Reverse Charge', 'Source Type', 'IRN Gen Date', 'Taxable Value', 'Tax Rate', 'IGST', 'CGST', 'SGST', 'CESS'].map(header => (
+                      !hiddenColumns.includes(header) && (
+                      <th key={header} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        <div className="flex flex-col items-start">
+                          <button 
+                            onClick={() => handleHideColumn(header)}
+                            className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                            title="Hide column"
+                          >
+                            (-)
+                          </button>
+                          {header}
+                        </div>
+                      </th>
+                      )
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
                   {gstr2aCDNData.flatMap((record, recordIndex) => 
                     record.itms?.map((item, itemIndex) => (
                       <tr key={`${recordIndex}-${itemIndex}`}>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.nt_num}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.nt_dt}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.pos}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inv_typ}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.rchrg}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.srctyp}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.irngendate}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.txval?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.rt?.toFixed(2) || '0.00'}%</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.iamt?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.camt?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.samt?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.csamt?.toFixed(2) || '0.00'}</td>
+                        {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>}
+                        {!hiddenColumns.includes('Note Number') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.nt_num}</td>}
+                        {!hiddenColumns.includes('Note Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.nt_dt}</td>}
+                        {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('Place of Supply') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.pos}</td>}
+                        {!hiddenColumns.includes('Invoice Type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inv_typ}</td>}
+                        {!hiddenColumns.includes('Reverse Charge') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.rchrg}</td>}
+                        {!hiddenColumns.includes('Source Type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.srctyp}</td>}
+                        {!hiddenColumns.includes('IRN Gen Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.irngendate}</td>}
+                        {!hiddenColumns.includes('Taxable Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.txval?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('Tax Rate') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.rt?.toFixed(2) || '0.00'}%</td>}
+                        {!hiddenColumns.includes('IGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.iamt?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('CGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.camt?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('SGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.samt?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('CESS') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.csamt?.toFixed(2) || '0.00'}</td>}
                       </tr>
                     )) || []
                   )}
@@ -1181,7 +1211,15 @@ const GSTR2AMatching: React.FC = () => {
           </div>
           
           {/* Save Button */}
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex justify-end space-x-2">
+            {hiddenColumns.length > 0 && (
+              <button
+                onClick={handleResetColumns}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors duration-200"
+              >
+                Reset Columns
+              </button>
+            )}
             <button
               onClick={handleSaveComparison}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200 flex items-center space-x-2"
@@ -1198,17 +1236,35 @@ const GSTR2AMatching: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Party GST</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice Value</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">GSTR2A Taxable</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Purchase Taxable</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">GSTR2A GST</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Purchase GST</th>
+                  {['Invoice Number', 'Invoice Date', 'Party GST', 'Invoice Value', 'GSTR2A Taxable', 'Purchase Taxable', 'GSTR2A GST', 'Purchase GST'].map(header => (
+                    !hiddenColumns.includes(header) && (
+                      <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        <div className="flex flex-col items-start">
+                          <button 
+                            onClick={() => handleHideColumn(header)}
+                            className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                            title="Hide column"
+                          >
+                            (-)
+                          </button>
+                          {header}
+                        </div>
+                      </th>
+                    )
+                  ))}
+                  {!hiddenColumns.includes('Status') && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     <div className="flex flex-col space-y-1">
-                      <span>Status</span>
+                      <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => handleHideColumn('Status')}
+                            className="text-gray-400 hover:text-red-600 focus:outline-none font-bold"
+                            title="Hide column"
+                          >
+                            (-)
+                          </button>
+                          <span>Status</span>
+                      </div>
                       <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
@@ -1222,7 +1278,21 @@ const GSTR2AMatching: React.FC = () => {
                       </select>
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Details</th>
+                  )}
+                  {!hiddenColumns.includes('Details') && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                        <button 
+                        onClick={() => handleHideColumn('Details')}
+                        className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                        title="Hide column"
+                        >
+                        (-)
+                        </button>
+                        Details
+                    </div>
+                  </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
@@ -1230,15 +1300,15 @@ const GSTR2AMatching: React.FC = () => {
                   .filter(result => statusFilter === 'All' || result.status === statusFilter)
                   .map((result, index) => (
                   <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceDate}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.partyGST}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceValue.toFixed(2)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aTaxableValue?.toFixed(2) || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseTaxableValue?.toFixed(2) || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aGSTAmount?.toFixed(2) || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseGSTAmount?.toFixed(2) || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    {!hiddenColumns.includes('Invoice Number') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceNumber}</td>}
+                    {!hiddenColumns.includes('Invoice Date') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceDate}</td>}
+                    {!hiddenColumns.includes('Party GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.partyGST}</td>}
+                    {!hiddenColumns.includes('Invoice Value') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceValue.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('GSTR2A Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aTaxableValue?.toFixed(2) || '-'}</td>}
+                    {!hiddenColumns.includes('Purchase Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseTaxableValue?.toFixed(2) || '-'}</td>}
+                    {!hiddenColumns.includes('GSTR2A GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aGSTAmount?.toFixed(2) || '-'}</td>}
+                    {!hiddenColumns.includes('Purchase GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseGSTAmount?.toFixed(2) || '-'}</td>}
+                    {!hiddenColumns.includes('Status') && <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         result.status === 'Matched' ? 'bg-green-100 text-green-800' :
                         result.status === 'Mismatched' ? 'bg-yellow-100 text-yellow-800' :
@@ -1247,8 +1317,8 @@ const GSTR2AMatching: React.FC = () => {
                       }`}>
                         {result.status}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                    </td>}
+                    {!hiddenColumns.includes('Details') && <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                       {result.mismatchDetails && (
                         <ul className="list-disc list-inside">
                           {result.mismatchDetails.map((detail, idx) => (
@@ -1256,7 +1326,7 @@ const GSTR2AMatching: React.FC = () => {
                           ))}
                         </ul>
                       )}
-                    </td>
+                    </td>}
                   </tr>
                 ))}
                 {/* Total Row for Comparison Results */}
@@ -1270,25 +1340,35 @@ const GSTR2AMatching: React.FC = () => {
                   };
                   return (
                     <tr className="bg-green-50 dark:bg-green-900 font-semibold border-t-2 border-green-200 dark:border-green-700">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={3}>
-                        <strong>TOTAL</strong>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                      {(() => {
+                          const colSpan = ['Invoice Number', 'Invoice Date', 'Party GST'].filter(h => !hiddenColumns.includes(h)).length;
+                          return colSpan > 0 ? (
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}>
+                                <strong>TOTAL</strong>
+                              </td>
+                          ) : null;
+                      })()}
+                      {!hiddenColumns.includes('Invoice Value') && <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                         <strong>{totals.totalInvoiceValue.toFixed(2)}</strong>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                      </td>}
+                      {!hiddenColumns.includes('GSTR2A Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                         <strong>{totals.totalGstr2aTaxableValue.toFixed(2)}</strong>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                      </td>}
+                      {!hiddenColumns.includes('Purchase Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                         <strong>{totals.totalPurchaseTaxableValue.toFixed(2)}</strong>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                      </td>}
+                      {!hiddenColumns.includes('GSTR2A GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                         <strong>{totals.totalGstr2aGSTAmount.toFixed(2)}</strong>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                      </td>}
+                      {!hiddenColumns.includes('Purchase GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                         <strong>{totals.totalPurchaseGSTAmount.toFixed(2)}</strong>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={2}></td>
+                      </td>}
+                      {(() => {
+                          const colSpan = ['Status', 'Details'].filter(h => !hiddenColumns.includes(h)).length;
+                          return colSpan > 0 ? (
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}></td>
+                          ) : null;
+                      })()}
                     </tr>
                   );
                 })()}

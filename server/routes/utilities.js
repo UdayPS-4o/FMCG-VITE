@@ -89,9 +89,15 @@ const getCmplData = async (req, res) => {
         M_NAME: entry.M_NAME,
         C_CODE: entry.C_CODE,
         C_NAME: entry.C_NAME,
+        GST_TAX: entry.GST_TAX,
+        VAT_TAX: entry.VAT_TAX,
+        CESS_TAX: entry.CESS_TAX,
+        TAXTYPE: entry.TAXTYPE,
+        OTHER_TAX: entry.OTHER_TAX
       };
       if (entry.GSTNO) {
         obj.GST = entry.GSTNO;
+        obj.GSTNO = entry.GSTNO;
       }
       return obj;
     });

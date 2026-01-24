@@ -110,6 +110,16 @@ const ItemWiseSalesContent: React.FC = () => {
   const [selectedCompanyCodes, setSelectedCompanyCodes] = useState<string[]>([]);
   const [companyLoadingError, setCompanyLoadingError] = useState<string | null>(null);
 
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+
+  const handleHideColumn = (columnName: string) => {
+    setHiddenColumns(prev => [...prev, columnName]);
+  };
+
+  const handleResetColumns = () => {
+    setHiddenColumns([]);
+  };
+
   const { pmplData, partyOptions: contextPartyOptions } = useInvoiceContext(); 
   // const itemAutocompleteRef = useRef<AutocompleteRefHandle>(null); // Not for MultiSelect
   const [user, setUser] = useState<User | null>(null);
@@ -1029,6 +1039,14 @@ const ItemWiseSalesContent: React.FC = () => {
           >
             Print Report
           </button>
+          {hiddenColumns.length > 0 && (
+            <button
+              onClick={handleResetColumns}
+              className="w-full max-w-xs inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gray-600 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Reset Columns
+            </button>
+          )}
         </div>
       </div>
 
@@ -1042,16 +1060,27 @@ const ItemWiseSalesContent: React.FC = () => {
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
               {currentTableHeaders.map(header => (
-                <th key={header} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">
-                  {header}
-                </th>
+                !hiddenColumns.includes(header) && (
+                  <th key={header} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">
+                    <div className="flex flex-col items-start">
+                      <button 
+                        onClick={() => handleHideColumn(header)}
+                        className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                        title="Hide column"
+                      >
+                        (-)
+                      </button>
+                      {header}
+                    </div>
+                  </th>
+                )
               ))}
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {processedReportDisplayData.length === 0 && !loading && (
               <tr>
-                <td colSpan={currentTableHeaders.length} className="px-4 py-4 text-sm text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={currentTableHeaders.filter(h => !hiddenColumns.includes(h)).length} className="px-4 py-4 text-sm text-center text-gray-500 dark:text-gray-400">
                   No data available for the selected criteria.
                 </td>
               </tr>
@@ -1062,51 +1091,53 @@ const ItemWiseSalesContent: React.FC = () => {
                 return (
                   <React.Fragment key={`${groupedRow.ItemName}-${index}`}>
                     <tr onClick={() => handleToggleExpand(groupedRow.ItemName)} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">
+                      {!hiddenColumns.includes('Code') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">
                         <span className="mr-2">{expandedItemNames.has(groupedRow.ItemName) ? '-' : '+'}</span>
                         {groupedRow.Code}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{groupedRow.ItemName}</td>
-                      <td className="px-4 py-3 whitespace-pre-line text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.displayQty}</td>
-                      <td className="px-4 py-3 whitespace-pre-line text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.displayFree}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Gross.toFixed(2)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Scheme.toFixed(2)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.NetAmt.toFixed(2)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.GoodsAmt.toFixed(2)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.GSTAmt.toFixed(2)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.FreeV.toFixed(2)}</td>
+                      </td>}
+                      {!hiddenColumns.includes('Item Name') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{groupedRow.ItemName}</td>}
+                      {!hiddenColumns.includes('Qty') && <td className="px-4 py-3 whitespace-pre-line text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.displayQty}</td>}
+                      {!hiddenColumns.includes('Free') && <td className="px-4 py-3 whitespace-pre-line text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.displayFree}</td>}
+                      {!hiddenColumns.includes('Gross') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Gross.toFixed(2)}</td>}
+                      {!hiddenColumns.includes('Scheme') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.Scheme.toFixed(2)}</td>}
+                      {!hiddenColumns.includes('NetAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.NetAmt.toFixed(2)}</td>}
+                      {!hiddenColumns.includes('GoodsAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.GoodsAmt.toFixed(2)}</td>}
+                      {!hiddenColumns.includes('GSTAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.GSTAmt.toFixed(2)}</td>}
+                      {!hiddenColumns.includes('FreeV') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{groupedRow.FreeV.toFixed(2)}</td>}
                     </tr>
                     {expandedItemNames.has(groupedRow.ItemName) && (
                       <>
                         {/* Detail Header Row */}
                         <tr className="bg-gray-200 dark:bg-gray-700/80">
                           {fullTableHeaders.map((header, headerIndex) => (
+                            !hiddenColumns.includes(header) && (
                             <th key={`detail-header-${headerIndex}`} 
                                 className={`px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap ${headerIndex === 0 ? 'pl-8' : ''}`}>
                               {header}
                             </th>
+                            )
                           ))}
                         </tr>
                         {/* Detail Data Rows */}
                         {groupedRow.details.map((detailRow, detailIndex) => (
                           <tr key={`${groupedRow.ItemName}-detail-${detailIndex}`} className="bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-700/70">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 pl-8">{detailRow.Date}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{`${detailRow.Series}-${detailRow.BillNo}`}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Code}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.ItemName}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Party}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Place}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Unit}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Qty.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Free.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Gross.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Scheme.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.SchPct.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.CD.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-700 dark:text-gray-300">{detailRow.NetAmt.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.GoodsAmt.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.GSTAmt.toFixed(2)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.FreeV.toFixed(2)}</td>
+                            {!hiddenColumns.includes('Date') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 pl-8">{detailRow.Date}</td>}
+                            {!hiddenColumns.includes('Bill No.') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{`${detailRow.Series}-${detailRow.BillNo}`}</td>}
+                            {!hiddenColumns.includes('Code') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Code}</td>}
+                            {!hiddenColumns.includes('Item Name') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.ItemName}</td>}
+                            {!hiddenColumns.includes('Party') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Party}</td>}
+                            {!hiddenColumns.includes('Place') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Place}</td>}
+                            {!hiddenColumns.includes('Unit') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{detailRow.Unit}</td>}
+                            {!hiddenColumns.includes('Qty') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Qty.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('Free') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Free.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('Gross') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Gross.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('Scheme') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.Scheme.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('Sch.%') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.SchPct.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('CD') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.CD.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('NetAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-700 dark:text-gray-300">{detailRow.NetAmt.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('GoodsAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.GoodsAmt.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('GSTAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.GSTAmt.toFixed(2)}</td>}
+                            {!hiddenColumns.includes('FreeV') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">{detailRow.FreeV.toFixed(2)}</td>}
                           </tr>
                         ))}
                       </>
@@ -1118,23 +1149,23 @@ const ItemWiseSalesContent: React.FC = () => {
                 const nonGroupedRow = row as SalesReportItem;
                 return (
                   <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Date}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{`${nonGroupedRow.Series}-${nonGroupedRow.BillNo}`}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Code}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.ItemName}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Party}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Place}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Unit}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Qty.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Free.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Gross.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Scheme.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.SchPct.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.CD.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-900 dark:text-gray-100">{nonGroupedRow.NetAmt.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.GoodsAmt.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.GSTAmt.toFixed(2)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.FreeV.toFixed(2)}</td>
+                    {!hiddenColumns.includes('Date') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Date}</td>}
+                    {!hiddenColumns.includes('Bill No.') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{`${nonGroupedRow.Series}-${nonGroupedRow.BillNo}`}</td>}
+                    {!hiddenColumns.includes('Code') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Code}</td>}
+                    {!hiddenColumns.includes('Item Name') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.ItemName}</td>}
+                    {!hiddenColumns.includes('Party') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Party}</td>}
+                    {!hiddenColumns.includes('Place') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Place}</td>}
+                    {!hiddenColumns.includes('Unit') && <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{nonGroupedRow.Unit}</td>}
+                    {!hiddenColumns.includes('Qty') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Qty.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('Free') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Free.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('Gross') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Gross.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('Scheme') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.Scheme.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('Sch.%') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.SchPct.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('CD') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.CD.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('NetAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-gray-900 dark:text-gray-100">{nonGroupedRow.NetAmt.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('GoodsAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.GoodsAmt.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('GSTAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.GSTAmt.toFixed(2)}</td>}
+                    {!hiddenColumns.includes('FreeV') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-200">{nonGroupedRow.FreeV.toFixed(2)}</td>}
                   </tr>
                 );
               }
@@ -1143,31 +1174,34 @@ const ItemWiseSalesContent: React.FC = () => {
           {reportData.length > 0 && (
             <tfoot className="bg-gray-100 dark:bg-gray-700 font-semibold">
               <tr>
-                <td colSpan={groupItems ? 2 : 7} className="px-4 py-3 text-left text-sm text-gray-800 dark:text-gray-100 uppercase whitespace-nowrap">Total</td>
+                {(() => {
+                    const colSpan = (groupItems ? ['Code', 'Item Name'] : ['Date', 'Bill No.', 'Code', 'Item Name', 'Party', 'Place', 'Unit']).filter(h => !hiddenColumns.includes(h)).length;
+                    return colSpan > 0 ? <td colSpan={colSpan} className="px-4 py-3 text-left text-sm text-gray-800 dark:text-gray-100 uppercase whitespace-nowrap">Total</td> : null;
+                })()}
                 {/* Qty Total */}
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Qty.toFixed(2)}</td>
+                {!hiddenColumns.includes('Qty') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Qty.toFixed(2)}</td>}
                 {/* Free Total */}
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Free.toFixed(2)}</td>
+                {!hiddenColumns.includes('Free') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Free.toFixed(2)}</td>}
                 {/* Gross Total */}
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Gross.toFixed(2)}</td>
+                {!hiddenColumns.includes('Gross') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Gross.toFixed(2)}</td>}
                 {/* Scheme Total */}
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Scheme.toFixed(2)}</td>
+                {!hiddenColumns.includes('Scheme') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Scheme.toFixed(2)}</td>}
                 {!groupItems && (
                   <>
                     {/* SchPct - Empty or N/A as it's not a sum - Ensure alignment */}
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">-</td> 
+                    {!hiddenColumns.includes('Sch.%') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">-</td>}
                     {/* CD - Empty or N/A as it's not a sum - Ensure alignment */}
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">-</td> 
+                    {!hiddenColumns.includes('CD') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">-</td>}
                   </>
                 )}
                 {/* NetAmt Total */}
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.NetAmt.toFixed(2)}</td>
+                {!hiddenColumns.includes('NetAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.NetAmt.toFixed(2)}</td>}
                 {/* GoodsAmt Total */}
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.GoodsAmt.toFixed(2)}</td>
+                {!hiddenColumns.includes('GoodsAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.GoodsAmt.toFixed(2)}</td>}
                 {/* GSTAmt Total */}
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.GSTAmt.toFixed(2)}</td>
+                {!hiddenColumns.includes('GSTAmt') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.GSTAmt.toFixed(2)}</td>}
                 {/* FreeV Total */}
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.FreeV.toFixed(2)}</td>
+                {!hiddenColumns.includes('FreeV') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.FreeV.toFixed(2)}</td>}
               </tr>
             </tfoot>
           )}
