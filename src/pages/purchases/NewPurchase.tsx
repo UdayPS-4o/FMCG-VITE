@@ -84,8 +84,11 @@ const NewPurchase: React.FC = () => {
   const [stateVal, setStateVal] = useState('23');
   const [invoiceNo, setInvoiceNo] = useState('INV-001');
   // State for API-fetched data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [cmplData, setCmplData] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pmplData, setPmplData] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [purData, setPurData] = useState<any[]>([]);
 
   const today = useMemo(() => {
@@ -249,8 +252,6 @@ const NewPurchase: React.FC = () => {
   };
 
   const computeTotal = (row: ItemRow) => {
-    const q = parseFloat(row.qty || '0');
-    const r = parseFloat(row.rate || '0');
     const taxable = computeTaxable(row);
     const gst = computeRowGst(row);
     return taxable + gst;
@@ -273,7 +274,6 @@ const NewPurchase: React.FC = () => {
   const formatINR = useMemo(() => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }), []);
 
   const pmplCompanyOptions = useMemo(() => {
-    const data = pmplData;
     const prefixes = new Set<string>();
     pmplData.forEach(it => {
       const code = String(it.CODE || '');
@@ -283,6 +283,7 @@ const NewPurchase: React.FC = () => {
   }, [pmplData]);
 
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getPurRecords = async (): Promise<any[]> => {
     try {
       const token = localStorage.getItem('token');
@@ -293,13 +294,16 @@ const NewPurchase: React.FC = () => {
         const arr = await respApi.json();
         if (Array.isArray(arr) && arr.length > 0) return arr;
       }
-    } catch { }
+    } catch (err) {
+      console.error(err);
+    }
     return [];
   };
 
   useEffect(() => {
     const arr = purData;
     if (editingBill) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const row = (arr || []).find((r: any) => String(r.BILL) === String(editingBill));
       if (row?.BILL_BB) {
         setPBillBB(String(row.BILL_BB));
@@ -307,6 +311,7 @@ const NewPurchase: React.FC = () => {
       }
     }
     let maxBillNum = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (arr || []).forEach((r: any) => {
       const b = parseInt(String(r.BILL || 0), 10);
       if (!isNaN(b) && b > maxBillNum) maxBillNum = b;
@@ -317,9 +322,11 @@ const NewPurchase: React.FC = () => {
       }
     });
     setPBillBB(`P-${maxBillNum + 1}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingBill, purData]);
 
   const gstGroupOptions = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rawArr: any[] = cmplData;
     return rawArr
       .filter(it => String(it.C_CODE || '').toUpperCase().startsWith('GG'))
@@ -368,8 +375,10 @@ const NewPurchase: React.FC = () => {
   const findSupplierByGstin = (gst: string) => {
     if (!gst) return null;
     const g = gst.trim().toUpperCase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rawArr: any[] = cmplData;
     const match = rawArr.find(p => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gstno = String((p as any).GSTNO || (p as any).GST || '').trim().toUpperCase();
       return gstno && gstno === g;
     });
@@ -409,7 +418,6 @@ const NewPurchase: React.FC = () => {
   };
 
   const computeNextItemCode = (prefix: string) => {
-    const data = pmplData;
     let max = 0;
     pmplData.forEach(it => {
       const code = String(it.CODE || '');
@@ -432,6 +440,7 @@ const NewPurchase: React.FC = () => {
       if (!resp.ok) return computeNextItemCode(prefix);
       const arr = await resp.json();
       let max = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (arr || []).forEach((it: any) => {
         const code = String(it.CODE || '');
         if (code.startsWith(prefix)) {
@@ -592,8 +601,11 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     (async () => {
       try {
         const [cmpl, pmpl, godowns, pur] = await Promise.all([
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/godowns`),
           getPurRecords()
         ]);
@@ -612,7 +624,9 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
 
         if (Array.isArray(godowns)) {
           const opts = godowns
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .filter((g: any) => String(g.ACTIVE || 'Y') === 'Y')
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .map((g: any) => {
               const code = String(g.GDN_CODE || '').padStart(2, '0').slice(0, 2);
               const name = String(g.GDN_NAME || '');
@@ -631,6 +645,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     } catch (error) {
       console.error('Error clearing cache:', error);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -638,11 +653,14 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     if (GST_STATES.find(s => s.code === prefix)) {
       setStateVal(prefix);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gstin]);
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const prefill = (location.state as any)?.purchase;
     const editId = params?.id;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const applyPrefill = (p: any) => {
       if (!p) return;
       if (p.bill) setEditingBill(String(p.bill));
@@ -658,6 +676,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
       setEntryDate(String(p.entryDate || entryDate));
       setIsRateInclusive(String(p.rateInclusiveOfGst || 'N') === 'Y');
       if (Array.isArray(p.items)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mapped: ItemRow[] = p.items.map((r: any) => ({
           description: String(r.description || ''),
           hsn: String(r.hsn || ''),
@@ -687,11 +706,14 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
           const purchases = purchasesRes.ok ? await purchasesRes.json() : [];
           const purDbf = purDbfRes.ok ? await purDbfRes.json() : [];
           const billParam = String(editId);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const dbfRow = (purDbf || []).find((r: any) => String(r.BILL) === billParam);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let found = (purchases || []).find((x: any) => String(x.bill) === billParam);
           if (!found && dbfRow) {
             const pbill = String(dbfRow.PBILL || '').trim();
             const pcode = String(dbfRow.C_CODE || '').trim();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             found = (purchases || []).find((x: any) => {
               const invNum = String(x?.invoice?.number || '').trim();
               const sc = String(x?.supplierCode || '').trim();
@@ -703,9 +725,12 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             applyPrefill(found);
             setEditingBill(billParam);
           }
-        } catch { }
+        } catch (err) {
+          console.error(err);
+        }
       })();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleVendorChange = (value: string) => {
@@ -766,6 +791,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         });
         if (respDup.ok) {
           const arrDup = await respDup.json();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const dup = (arrDup || []).find((x: any) => {
             const sameSupp = String(x.supplierCode || '') === String(supplierCode || '');
             const sameInv = String(x?.invoice?.number || '') === String(invoiceNo || '');
@@ -778,13 +804,16 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             return;
           }
         }
-      } catch { }
+      } catch (err) {
+        console.error(err);
+      }
       const token = localStorage.getItem('token');
       // Determine BILL to use
       let billNo: string | null = editingBill;
       if (!billNo) {
         const arr = purData;
         let maxBillNum = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (arr || []).forEach((r: any) => {
           const b = parseInt(String(r.BILL || 0), 10);
           if (!isNaN(b) && b > maxBillNum) maxBillNum = b;
@@ -922,7 +951,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         const err = await res.json().catch(() => ({ message: 'Failed to save purchase' }));
         alert(err.message || 'Failed to save purchase');
       }
-    } catch (e) {
+    } catch {
       alert('Error saving purchase');
     }
   };
@@ -933,6 +962,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     if (Object.keys(breakdownOverrides).length > 0) {
       setBreakdownOverrides({});
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
   
   return (
@@ -1194,7 +1224,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       if (!resp.ok || !data?.success) {
                         alert(data?.message || 'Failed merging item into PMPL.DBF');
                       }
-                    } catch (err) {
+                    } catch {
                       alert('Error while saving or merging new item');
                     }
                     if (newItemRowIndex !== null) {
