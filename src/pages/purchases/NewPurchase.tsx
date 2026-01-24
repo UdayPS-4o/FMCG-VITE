@@ -160,6 +160,10 @@ const NewPurchase: React.FC = () => {
   const [pBillBB, setPBillBB] = useState<string>('');
   const [originalCreatedAt, setOriginalCreatedAt] = useState<string | null>(null);
 
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const handleHideColumn = (col: string) => setHiddenColumns(prev => [...prev, col]);
+  const handleResetColumns = () => setHiddenColumns([]);
+
   const addItem = () => {
     setItems((prev) => [...prev, { description: '', hsn: '', qty: '', rate: '', mrp: '', itemCode: '', discRs: '', discPercent: '', cdPercent: '', gstPercent: '', gstCode: '', godown: globalGodown || '' }]);
   };
@@ -205,7 +209,7 @@ const NewPurchase: React.FC = () => {
     const gRaw = found.GST;
     const gNum = typeof gRaw === 'number' ? gRaw : parseFloat(String(gRaw || '').trim().replace(/[^0-9.]/g, ''));
     const g = isNaN(gNum) ? '' : String(gNum);
-    const gstCode = String(found.GST_CODE || found.G_CODE || '').trim();
+    const gstCode = String(found.GST_CODE || found.GR_CODE || '').trim();
     return { hsn: h, gstPercent: g, gstCode };
   };
 
@@ -378,12 +382,12 @@ const NewPurchase: React.FC = () => {
     setItems(prev => prev.map((row, i) => {
       if (i !== index) return row;
       const desc = String(found?.PRODUCT || row.description);
-      const hsn = String(found?.H_CODE || row.hsn);
+      const hsn = found ? String(found.H_CODE || '') : row.hsn;
       const gstVal = found?.GST;
-      const gstStr = typeof gstVal === 'number' ? String(gstVal) : String(gstVal || row.gstPercent);
-      const gstCode = String(found?.GST_CODE || found?.G_CODE || row.gstCode || '');
+      const gstStr = found ? (gstVal !== undefined && gstVal !== null ? String(gstVal) : '') : row.gstPercent;
+      const gstCode = found ? String(found.GST_CODE || found.GR_CODE || '').trim() : (row.gstCode || '');
       const mrpStr = found && (typeof found.MRP1 === 'number' ? String(found.MRP1) : String(found.MRP1 || row.mrp));
-      return { ...row, itemCode: code, description: desc, hsn, gstPercent: gstStr, gstCode, mrp: mrpStr || row.mrp };
+      return { ...row, itemCode: code, description: desc, hsn, gstPercent: gstStr, gstCode: gstCode || undefined, mrp: mrpStr || row.mrp };
     }));
   };
 
@@ -822,17 +826,80 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             total: total.toFixed(2)
           };
         }),
+        gstBreakdown: (() => {
+          const breakdown: Record<string, { taxable: number; gst: number; rate: number }> = {};
+          items.forEach(row => {
+            const taxable = computeTaxable(row);
+            const gst = computeRowGst(row);
+            const p = parseFloat(row.gstPercent || '0');
+            
+            let code = row.gstCode;
+            if (!code && row.itemCode) {
+               const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
+               code = String(found?.GST_CODE || found?.G_CODE || '').trim();
+            }
+            const label = code || `GST ${p}%`;
+            
+            if (!breakdown[label]) breakdown[label] = { taxable: 0, gst: 0, rate: p };
+            breakdown[label].taxable += taxable;
+            breakdown[label].gst += gst;
+          });
+
+          return Object.entries(breakdown).map(([code, data]) => {
+            const override = breakdownOverrides[code];
+            const finalTaxable = override ? parseFloat(override) : data.taxable;
+            const safeTaxable = isNaN(finalTaxable) ? 0 : finalTaxable;
+            const finalTax = safeTaxable * (data.rate / 100);
+            return {
+              code,
+              rate: data.rate,
+              taxable: Number(safeTaxable.toFixed(2)),
+              tax: Number(finalTax.toFixed(2)),
+              originalTaxable: Number(data.taxable.toFixed(2))
+            };
+          });
+        })(),
         totals: (() => {
-          const taxableSum = items.reduce((sum, r) => sum + computeTaxable(r), 0);
-          const gstSum = items.reduce((sum, r) => sum + computeRowGst(r), 0);
-          const gross = taxableSum + gstSum;
+          // Calculate totals based on breakdown (which handles overrides)
+          const breakdown: Record<string, { taxable: number; gst: number; rate: number }> = {};
+          items.forEach(row => {
+            const taxable = computeTaxable(row);
+            const gst = computeRowGst(row);
+            const p = parseFloat(row.gstPercent || '0');
+            
+            let code = row.gstCode;
+            if (!code && row.itemCode) {
+               const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
+               code = String(found?.GST_CODE || found?.G_CODE || '').trim();
+            }
+            const label = code || `GST ${p}%`;
+            
+            if (!breakdown[label]) breakdown[label] = { taxable: 0, gst: 0, rate: p };
+            breakdown[label].taxable += taxable;
+            breakdown[label].gst += gst;
+          });
+
+          let totalTaxable = 0;
+          let totalTax = 0;
+
+          Object.entries(breakdown).forEach(([code, data]) => {
+            const override = breakdownOverrides[code];
+            const finalTaxable = override ? parseFloat(override) : data.taxable;
+            const safeTaxable = isNaN(finalTaxable) ? 0 : finalTaxable;
+            const finalTax = safeTaxable * (data.rate / 100);
+            
+            totalTaxable += safeTaxable;
+            totalTax += finalTax;
+          });
+
+          const gross = totalTaxable + totalTax;
           const rounded = Math.round(gross);
           const roundOff = rounded - gross;
           const grandTotal = gross + roundOff;
           return {
-            taxable: Number(taxableSum.toFixed(2)),
-            cgst: Number((gstSum / 2).toFixed(2)),
-            sgst: Number((gstSum / 2).toFixed(2)),
+            taxable: Number(totalTaxable.toFixed(2)),
+            cgst: Number((totalTax / 2).toFixed(2)),
+            sgst: Number((totalTax / 2).toFixed(2)),
             roundOff: Number(roundOff.toFixed(2)),
             total: Number(grandTotal.toFixed(2))
           };
@@ -1032,6 +1099,14 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
                 Add Item
               </button>
+              {hiddenColumns.length > 0 && (
+                <button
+                  onClick={handleResetColumns}
+                  className="px-3 py-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium"
+                >
+                  Reset Columns
+                </button>
+              )}
             </div>
           </div>
           <Modal isOpen={showNewItemModal} onClose={() => setShowNewItemModal(false)} className="max-w-2xl">
@@ -1140,31 +1215,94 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             <table className="min-w-full table-auto border-collapse">
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Item Description</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">MRP</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Item Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">HSN</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">GDN</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Qty</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span>Rate</span>
-                      <label className="inline-flex items-center gap-2 cursor-pointer">
-                        <span className="text-[10px]">{isRateInclusive ? 'Inclusive of GST' : 'Exclusive of GST'}</span>
-                        <span className="relative inline-block w-10 h-5">
-                          <input type="checkbox" className="sr-only" checked={isRateInclusive} onChange={(e) => setIsRateInclusive(e.target.checked)} />
-                          <span className={`absolute inset-0 rounded-full ${isRateInclusive ? 'bg-blue-500 dark:bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'}`}></span>
-                          <span className={`absolute top-0 left-0 w-5 h-5 rounded-full bg-white dark:bg-white border border-gray-300 dark:border-gray-600 shadow transform transition ${isRateInclusive ? 'translate-x-5' : ''}`}></span>
-                        </span>
-                      </label>
+                  {!hiddenColumns.includes('Item Description') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Item Description')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Item Description
                     </div>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Disc. Rs</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Disc. %</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">CD%</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Taxable</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">GST Group</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total</th>
+                  </th>}
+                  {!hiddenColumns.includes('HSN') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('HSN')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      HSN
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('MRP') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('MRP')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      MRP
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('Item Code') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Item Code')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Item Code
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('GDN') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('GDN')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      GDN
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('Qty') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Qty')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Qty
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('Rate') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Rate')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      <div className="flex items-center gap-2">
+                        <span>Rate</span>
+                        <label className="inline-flex items-center gap-2 cursor-pointer">
+                          <span className="text-[10px]">{isRateInclusive ? 'Inclusive of GST' : 'Exclusive of GST'}</span>
+                          <span className="relative inline-block w-10 h-5">
+                            <input type="checkbox" className="sr-only" checked={isRateInclusive} onChange={(e) => setIsRateInclusive(e.target.checked)} />
+                            <span className={`absolute inset-0 rounded-full ${isRateInclusive ? 'bg-blue-500 dark:bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'}`}></span>
+                            <span className={`absolute top-0 left-0 w-5 h-5 rounded-full bg-white dark:bg-white border border-gray-300 dark:border-gray-600 shadow transform transition ${isRateInclusive ? 'translate-x-5' : ''}`}></span>
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('Disc. Rs') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Disc. Rs')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Disc. Rs
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('Disc. %') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Disc. %')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Disc. %
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('CD%') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('CD%')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      CD%
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('Taxable') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Taxable')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Taxable
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('GST Group') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('GST Group')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      GST Group
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('Total') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Total')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Total
+                    </div>
+                  </th>}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Remove</th>
                 </tr>
               </thead>
@@ -1174,7 +1312,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                   const total = computeTotal(row);
                   return (
                     <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      {!hiddenColumns.includes('Item Description') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         {(!row.itemCode && row.description?.trim() && row.mrp?.trim()) && (
                           <div className="flex items-center gap-2 mb-1">
                             <div className="text-xs text-orange-600 dark:text-orange-400 font-semibold animate-pulse">*New item*</div>
@@ -1208,17 +1346,17 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                           onInputChange={(val: string) => handleItemDescriptionInput(index, val)}
                           className="w-[40ch]"
                         />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <Input id={`mrp-${index}`} label="MRP" value={row.mrp} onChange={(e) => updateItem(index, 'mrp', e.target.value)} variant="outlined" className="w-[9ch]" />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <Input id={`code-${index}`} label="Item Code" value={row.itemCode} onChange={() => { }} variant="outlined" disabled maxLength={5} className="w-[9ch]" />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      </td>}
+                      {!hiddenColumns.includes('HSN') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`hsn-${index}`} label="HSN" value={row.hsn} onChange={(e) => updateItem(index, 'hsn', e.target.value)} variant="outlined" disabled={!!row.itemCode} maxLength={8} className="w-[12ch]" />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      </td>}
+                      {!hiddenColumns.includes('MRP') && <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <Input id={`mrp-${index}`} label="MRP" value={row.mrp} onChange={(e) => updateItem(index, 'mrp', e.target.value)} variant="outlined" className="w-[9ch]" />
+                      </td>}
+                      {!hiddenColumns.includes('Item Code') && <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <Input id={`code-${index}`} label="Item Code" value={row.itemCode} onChange={() => { }} variant="outlined" disabled maxLength={5} className="w-[9ch]" />
+                      </td>}
+                      {!hiddenColumns.includes('GDN') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Select
                           options={godownOptionsTable}
                           value={row.godown || ''}
@@ -1226,28 +1364,48 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                           className="min-w-[80px]"
                           placeholder="GDN"
                         />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      </td>}
+                      {!hiddenColumns.includes('Qty') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`qty-${index}`} label="Qty" value={row.qty} onChange={(e) => updateItem(index, 'qty', e.target.value)} variant="outlined" className="w-[8ch]" />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      </td>}
+                      {!hiddenColumns.includes('Rate') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`rate-${index}`} label="Rate" value={row.rate} onChange={(e) => updateItem(index, 'rate', e.target.value.replace(/[^0-9.]/g, '').slice(0, 6))} variant="outlined" maxLength={6} className="w-[10ch]" />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      </td>}
+                      {!hiddenColumns.includes('Disc. Rs') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`discRs-${index}`} label="Disc. Rs" value={row.discRs} onChange={(e) => updateItem(index, 'discRs', e.target.value)} variant="outlined" className="w-[8ch]" />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      </td>}
+                      {!hiddenColumns.includes('Disc. %') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`discPercent-${index}`} label="Disc. %" value={row.discPercent} onChange={(e) => updateItem(index, 'discPercent', e.target.value)} variant="outlined" className="w-[7ch]" />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      </td>}
+                      {!hiddenColumns.includes('CD%') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`cdPercent-${index}`} label="CD%" value={row.cdPercent} onChange={(e) => updateItem(index, 'cdPercent', e.target.value)} variant="outlined" className="w-[7ch]" />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                      </td>}
+                      {!hiddenColumns.includes('Taxable') && <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         {formatINR.format(taxable || 0)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      </td>}
+                      {!hiddenColumns.includes('GST Group') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         {row.itemCode ? (
-                          <Input id={`gst-${index}`} label="GST Group" value={row.gstCode || row.gstPercent} onChange={(e) => updateItem(index, 'gstPercent', e.target.value)} variant="outlined" disabled className="w-[10ch]" />
+                          <div className="relative w-[10ch]">
+                            {row.gstCode ? (
+                              <div 
+                                className="absolute inset-0 flex items-center px-3 text-sm text-gray-900 dark:text-white bg-transparent pointer-events-none z-10"
+                              >
+                                {(() => {
+                                  const g = gstGroupOptions.find(o => o.value === row.gstCode);
+                                  return g ? `${g.value}` : row.gstCode;
+                                })()}
+                              </div>
+                            ) : null}
+                            <Input 
+                              id={`gst-${index}`} 
+                              label="GST Group" 
+                              value={row.gstCode || row.gstPercent} 
+                              onChange={(e) => updateItem(index, 'gstPercent', e.target.value)} 
+                              variant="outlined" 
+                              disabled 
+                              className={`w-full ${row.gstCode ? 'text-transparent dark:text-transparent' : ''}`}
+                            />
+                          </div>
                         ) : (
                           <div className="relative w-[10ch]">
                             {row.gstCode ? (
@@ -1273,10 +1431,10 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                             />
                           </div>
                         )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                      </td>}
+                      {!hiddenColumns.includes('Total') && <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         {formatINR.format(total || 0)}
-                      </td>
+                      </td>}
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <button onClick={() => removeItem(index)} className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700">
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -205,7 +205,8 @@ app.get('/api/dbf/:file', async (req, res) => {
       'voucher', 'voucherdate',
       // Added missing fields
       'H_CODE', 'BILL', 'BILL_BB', 'MRP', 'MRP_1', 'B_RATE', 'B_RATE1',
-      'GSTNO', 'GST_TAX', 'PBILL'
+      'GSTNO', 'GST_TAX', 'PBILL',
+      'GST_CODE', 'GR_CODE', 'G_CODE'
     ];
 
     // Filter to only keep whitelisted keys
