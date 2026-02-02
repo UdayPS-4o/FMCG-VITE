@@ -63,18 +63,18 @@ import MandatoryDocs from './pages/mandatory-docs/MandatoryDocs';
 // Root redirect component
 const RootRedirect = () => {
   const { getFirstAccessibleRoute, isAuthenticated } = useAuth();
-  
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  
+
   return <Navigate to={getFirstAccessibleRoute()} replace />;
 };
 
 // Protected Route Component
 const ProtectedRoute = ({ children, requiredAccess }: { children: React.ReactNode, requiredAccess?: string }) => {
   const { isAuthenticated, hasAccess, loading, getFirstAccessibleRoute } = useAuth();
-  
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -82,16 +82,16 @@ const ProtectedRoute = ({ children, requiredAccess }: { children: React.ReactNod
       </div>
     );
   }
-  
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  
+
   if (requiredAccess && !hasAccess(requiredAccess)) {
     // If no access to required route, redirect to the first accessible route
     return <Navigate to={getFirstAccessibleRoute()} replace />;
   }
-  
+
   return <>{children}</>;
 };
 
@@ -99,14 +99,14 @@ const AppRoutes = () => (
   <Routes>
     {/* Root route - redirects to first accessible route */}
     <Route path="/" element={<RootRedirect />} />
-    
+
     {/* Auth Layout */}
     <Route path="/signin" element={<SignIn />} />
     <Route path="/signup" element={<SignUp />} />
     <Route path="/login" element={<Login />} />
-    
+
     {/* Dashboard Layout */}
-    <Route 
+    <Route
       element={
         <ProtectedRoute>
           <AppLayout />
@@ -115,11 +115,11 @@ const AppRoutes = () => (
     >
       {/* Dashboard route */}
       <Route path="/dashboard" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredAccess="Dashboard">
           <Home />
         </ProtectedRoute>
       } />
-      
+
       {/* Main routes */}
       <Route path="/account-master" element={
         <ProtectedRoute requiredAccess="Account Master">
@@ -162,7 +162,7 @@ const AppRoutes = () => (
           <AddUser />
         </ProtectedRoute>
       } />
-      
+
       {/* Database Section */}
       <Route path="/db/account-master" element={
         <ProtectedRoute requiredAccess="Account Master">
@@ -204,74 +204,74 @@ const AppRoutes = () => (
           <DbfPrint />
         </ProtectedRoute>
       } />
-      
+
       {/* Reports Section */}
       <Route path="/reports/item-wise-sales" element={
         <ProtectedRoute requiredAccess="Reports">
           <ItemWiseSales />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/item-wise-purchase" element={
         <ProtectedRoute requiredAccess="Reports">
           <ItemWisePurchase />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/godown-stock-register" element={
         <ProtectedRoute requiredAccess="Reports">
           <GodownStockRegister />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/item-wise-stock-register" element={
         <ProtectedRoute requiredAccess="Reports">
           <ItemWiseStockRegister />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/bills-delivery-register" element={
         <ProtectedRoute requiredAccess="Reports">
           <BillsDeliveryRegister />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/cash-book" element={
         <ProtectedRoute requiredAccess="Reports">
           <CashBook />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/party-ledger" element={
         <ProtectedRoute requiredAccess="Reports">
           <PartyLedger />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/van-loading" element={
         <ProtectedRoute requiredAccess="Reports">
           <VanLoading />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/pnb-stock-statement" element={
         <ProtectedRoute requiredAccess="Reports">
           <PNBStockStatement />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/pnb-statement" element={
         <ProtectedRoute requiredAccess="Admin">
           <PNBStatement />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports/gstr2a-matching" element={
         <ProtectedRoute requiredAccess="Reports">
           <GSTR2AMatching />
         </ProtectedRoute>
       } />
-      
+
       {/* Edit Pages */}
       <Route path="/account-master/edit/:id" element={
         <ProtectedRoute requiredAccess="Account Master">
@@ -303,7 +303,7 @@ const AppRoutes = () => (
           <EditGodownTransfer />
         </ProtectedRoute>
       } />
-      
+
       {/* Add missing edit routes for Cash Receipt and Payment */}
       <Route path="/cash-receipts/edit/:id" element={
         <ProtectedRoute requiredAccess="Cash Receipts">
@@ -325,7 +325,7 @@ const AppRoutes = () => (
           <CashPayment />
         </ProtectedRoute>
       } />
-      
+
       {/* Approved Section */}
       <Route path="/approved/account-master" element={
         <ProtectedRoute requiredAccess="Admin">
@@ -363,7 +363,7 @@ const AppRoutes = () => (
           <PushNotifications />
         </ProtectedRoute>
       } />
-      
+
       {/* Attendance Routes */}
       <Route path="/attendance" element={
         <ProtectedRoute>
@@ -399,7 +399,7 @@ const AppRoutes = () => (
     <Route path="/internal/print/invoice/:id" element={<PdfInvoicePrintPage />} />
     <Route path="/print/bulk-cash-receipts" element={<PrintBulkCashReceipts />} />
     <Route path="/print/godown-stock/:godownCode" element={<PrintGodownStock />} />
-    
+
     {/* Fallback Route */}
     <Route path="*" element={<NotFound />} />
   </Routes>
