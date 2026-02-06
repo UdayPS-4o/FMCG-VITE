@@ -19,7 +19,7 @@ const centerElementInViewport = (element: HTMLElement) => {
   if (!element) return;
   element.scrollIntoView({
     behavior: 'smooth',
-    block: 'center' 
+    block: 'center'
   });
 };
 
@@ -41,19 +41,19 @@ const EditInvoicingContent: React.FC<{
   const dataLoadedRef = useRef(false);
   const invoiceDataRef = useRef<any>(null);
   const { user } = useAuth();
-  
+
   // Check if this is old bill editing mode
   const searchParams = new URLSearchParams(location.search);
   const isOldBillMode = searchParams.get('mode') === 'old';
   const urlSeries = searchParams.get('series');
   const urlBillNumber = searchParams.get('billNumber');
-  
+
   // Get shared invoice data from context
-  const { 
-    partyOptions, 
-    smOptions, 
-    pmplData, 
-    stockList, 
+  const {
+    partyOptions,
+    smOptions,
+    pmplData,
+    stockList,
     setStockList,
     loading: dataLoading,
     error: dataError,
@@ -72,7 +72,7 @@ const EditInvoicingContent: React.FC<{
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showValidationErrors, setShowValidationErrors] = useState<boolean>(false);
-  
+
   // Form state
   const [date, setDate] = useState<string>(convertDateToDDMMYYYY(new Date()));
   const [series, setSeries] = useState<string>('');
@@ -109,7 +109,7 @@ const EditInvoicingContent: React.FC<{
 
   // Initialize/Update collapsibleItemRefs when items change
   useEffect(() => {
-    collapsibleItemRefs.current = items.map((_, i) => 
+    collapsibleItemRefs.current = items.map((_, i) =>
       collapsibleItemRefs.current[i] ?? createRef<CollapsibleItemSectionRefHandle>()
     );
   }, [items]); // Depends on the items array from context
@@ -137,11 +137,11 @@ const EditInvoicingContent: React.FC<{
               'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
           });
-          
+
           if (!response.ok) {
             throw new Error(`Failed to fetch bill details: ${response.statusText}`);
           }
-          
+
           const billData = await response.json();
           console.log('Fetched old bill data:', billData);
 
@@ -151,28 +151,28 @@ const EditInvoicingContent: React.FC<{
 
           // The API returns the invoice data in billData.data
           const invoiceData = billData.data;
-          
+
           // Validate the invoice data structure
           if (!invoiceData) {
             throw new Error('No invoice data received from server');
           }
-          
+
           if (!invoiceData.summary) {
             throw new Error('Invoice summary data is missing');
           }
-          
+
           if (!invoiceData.bill) {
             throw new Error('Invoice bill data is missing');
           }
-          
+
           if (!invoiceData.party) {
             throw new Error('Invoice party data is missing');
           }
-          
+
           if (!invoiceData.details || !Array.isArray(invoiceData.details)) {
             throw new Error('Invoice details data is missing or invalid');
           }
-          
+
           // Transform the invoice data to match the expected format
           const transformedData = {
             series: invoiceData.summary.series || '',
@@ -251,7 +251,7 @@ const EditInvoicingContent: React.FC<{
         // Try both possible endpoints with better error handling
         let invoiceData;
         let response;
-        
+
         try {
           console.log(`Fetching invoice data from ${constants.baseURL}/edit/invoicing/${id}`);
           response = await fetch(`${constants.baseURL}/edit/invoicing/${id}`, {
@@ -259,17 +259,17 @@ const EditInvoicingContent: React.FC<{
               'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
           });
-          
+
           if (!response.ok) {
             console.error(`Primary endpoint failed with status: ${response.status}`);
             throw new Error(`Primary endpoint failed: ${response.statusText}`);
           }
-          
+
           invoiceData = await response.json();
           console.log('Fetched invoice data:', invoiceData);
         } catch (primaryError) {
           console.error('Error with primary endpoint:', primaryError);
-          
+
           try {
             console.log(`Trying fallback endpoint ${constants.baseURL}/invoicing`);
             response = await fetch(`${constants.baseURL}/invoicing`, {
@@ -277,11 +277,11 @@ const EditInvoicingContent: React.FC<{
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
               }
             });
-            
+
             if (!response.ok) {
               throw new Error(`Invoice not found: ${response.statusText}`);
             }
-            
+
             invoiceData = await response.json();
             console.log('Fetched invoice data from fallback:', invoiceData);
           } catch (fallbackError) {
@@ -318,36 +318,36 @@ const EditInvoicingContent: React.FC<{
   // then populate the form
   useEffect(() => {
     // Check if all data is loaded
-    const allDataLoaded = 
-      dataLoadedRef.current && 
-      !dataLoading && 
-      !loading && 
-      partyOptions.length > 0 && 
-      smOptions.length > 0 && 
-      pmplData.length > 0 && 
+    const allDataLoaded =
+      dataLoadedRef.current &&
+      !dataLoading &&
+      !loading &&
+      partyOptions.length > 0 &&
+      smOptions.length > 0 &&
+      pmplData.length > 0 &&
       Object.keys(stockList).length > 0;
-      
+
     if (!allDataLoaded || formReady) {
       return;
     }
-    
+
     console.log("All data loaded, populating form");
-    
+
     // Get the stored invoice data
     const invoiceData = invoiceDataRef.current;
     if (!invoiceData) {
       console.error("Invoice data not found in ref");
       return;
     }
-    
+
     // Validate that invoiceData has the expected structure
     if (typeof invoiceData !== 'object') {
       console.error("Invoice data is not an object:", invoiceData);
       return;
     }
-    
+
     console.log("Populating form with invoice data:", invoiceData);
-    
+
     // Populate basic form fields with defensive checks
     setCash(invoiceData.cash === 'Y' ? 'Y' : 'N');
     setSeries(invoiceData.series || '');
@@ -399,16 +399,17 @@ const EditInvoicingContent: React.FC<{
     }
 
     // Set party when party options are available
-    if (invoiceData.partyCode && partyOptions.length > 0) {
+    const partyVal = invoiceData.partyCode || invoiceData.party;
+    if (partyVal && partyOptions.length > 0) {
       console.log('Setting party with options:', partyOptions.length);
-      const partyOption = partyOptions.find(p => p.value === invoiceData.partyCode);
+      const partyOption = partyOptions.find(p => p.value === partyVal);
       if (partyOption) {
         console.log('Found matching party option:', partyOption);
         setParty(partyOption);
       } else {
         console.log('Creating placeholder party option');
         const placeholder = {
-          value: invoiceData.partyCode,
+          value: partyVal,
           label: invoiceData.partyName || invoiceData.party,
           gst: invoiceData.party?.gstNo || ''
         };
@@ -436,20 +437,20 @@ const EditInvoicingContent: React.FC<{
     // Process items - completely rewrite this section in the second useEffect
     if (invoiceData.items) {
       console.log('Processing invoice items:', typeof invoiceData.items);
-      
+
       let itemsArray;
       try {
-        itemsArray = typeof invoiceData.items === 'string' 
-          ? JSON.parse(invoiceData.items) 
+        itemsArray = typeof invoiceData.items === 'string'
+          ? JSON.parse(invoiceData.items)
           : invoiceData.items;
-          
+
         console.log('Parsed items array length:', itemsArray.length);
-        
+
         // Create all processed items at once
         const processedItems = itemsArray.map((item: any) => {
           // Find the matching PMPL item
           const pmplItem = pmplData.find(p => p.CODE === item.item);
-          
+
           // Calculate stock
           let totalStockForItem = 0;
           if (item.item && stockList[item.item]) {
@@ -494,11 +495,11 @@ const EditInvoicingContent: React.FC<{
             netAmount: item.netAmount || ''
           };
         });
-        
+
         console.log('Created processed items array with length:', processedItems.length);
         // Store all items directly in the parent component state
         setAllItems(processedItems);
-        
+
         // Also store in ref for safety
         invoiceItemsRef.current = processedItems;
       } catch (parseError) {
@@ -596,7 +597,7 @@ const EditInvoicingContent: React.FC<{
     // Create a more detailed validation for items
     let hasInvalidItems = false;
     let itemErrorMessage = '';
-    
+
     if (items.length === 0 || !items.some(item => item.item)) {
       newErrors.items = 'At least one item is required';
       hasInvalidItems = true;
@@ -605,7 +606,7 @@ const EditInvoicingContent: React.FC<{
       // Check each item that has an item code
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        
+
         // Only validate items that have been selected (have an item code)
         if (item.item) {
           if (!item.godown) {
@@ -614,14 +615,14 @@ const EditInvoicingContent: React.FC<{
             setExpandedIndex?.(i); // Expand the problematic item
             break;
           }
-          
+
           if (!item.qty || item.qty === '0') {
             hasInvalidItems = true;
             itemErrorMessage = `Item ${item.item} is missing a quantity`;
             setExpandedIndex?.(i); // Expand the problematic item
             break;
           }
-          
+
           // Validate that quantity doesn't exceed stock limit
           if (parseInt(item.qty) > item.stockLimit) {
             hasInvalidItems = true;
@@ -632,7 +633,7 @@ const EditInvoicingContent: React.FC<{
         }
       }
     }
-    
+
     if (hasInvalidItems) {
       newErrors.items = itemErrorMessage;
     }
@@ -649,19 +650,19 @@ const EditInvoicingContent: React.FC<{
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Set validation messages to be visible
     setShowValidationErrors(true);
-    
+
     if (isSubmitting) {
       console.log('Already submitting, please wait...');
       return;
     }
-    
+
     if (!validateForm()) {
       // Show a more detailed error message based on the specific validation error
       let errorMessage = 'Please fill in all required fields';
-      
+
       if (errors.items) {
         errorMessage = errors.items;
       } else if (errors.party) {
@@ -669,19 +670,19 @@ const EditInvoicingContent: React.FC<{
       } else if (errors.sm) {
         errorMessage = errors.sm;
       }
-      
+
       setToast({
         visible: true,
         message: errorMessage,
         type: 'error'
       });
-      
+
       console.log('Form validation failed');
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     try {
       const formattedItems = items.map(item => ({
         ...item,
@@ -741,20 +742,20 @@ const EditInvoicingContent: React.FC<{
         }
 
         const responseData = await applyResponse.json();
-        
+
         setToast({
           visible: true,
           message: 'Old bill updated successfully',
           type: 'success',
         });
-        
+
         setTimeout(() => {
           navigate('/db/invoicing');
         }, 1500);
-        
+
         return;
       }
-      
+
       // Regular invoice editing
       const response = await fetch(`${constants.baseURL}/edit/invoicing`, {
         method: 'POST',
@@ -778,7 +779,7 @@ const EditInvoicingContent: React.FC<{
           total: calculateTotal()
         })
       });
-      
+
       // Handle duplicate bill number error (409 Conflict)
       if (response.status === 409) {
         const errorData = await response.json();
@@ -787,16 +788,16 @@ const EditInvoicingContent: React.FC<{
           message: errorData.message,
           type: 'error'
         });
-        
+
         // Update the bill number with the suggested number
         if (errorData.suggestedBillNo) {
           setBillNo(errorData.suggestedBillNo);
         }
-        
+
         setIsSubmitting(false);
         return;
       }
-      
+
       if (!response.ok) {
         let errorMessage = 'Failed to update invoice';
         try {
@@ -807,20 +808,20 @@ const EditInvoicingContent: React.FC<{
         }
         throw new Error(errorMessage);
       }
-      
+
       // Get the response data
       const responseData = await response.json();
       const invoiceId = id || responseData.id || responseData._id;
-      
+
       setToast({
         visible: true,
         message: 'Invoice updated successfully',
         type: 'success',
       });
-      
+
       // Store whether we should redirect to print page
       const shouldRedirectToPrint = localStorage.getItem('redirectToPrint') === 'true';
-      
+
       setTimeout(() => {
         if (shouldRedirectToPrint && invoiceId) {
           // Remove the flag from localStorage
@@ -917,14 +918,14 @@ const EditInvoicingContent: React.FC<{
         description="Edit Invoice page in FMCG Vite Admin Template"
       />
       <PageBreadcrumb pageTitle="Edit Invoice" />
-      
-      <Toast         
+
+      <Toast
         message={toast.message}
         type={toast.type}
         isVisible={toast.visible}
         onClose={() => setToast({ ...toast, visible: false })}
       />
-      
+
       <FormComponent onSubmit={handleSubmit} autoComplete="off" className="flex flex-col w-full">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -1059,7 +1060,7 @@ const EditInvoicingContent: React.FC<{
 
         <div className="flex-grow w-full mb-4 mt-6">
           <h2 className="text-xl font-semibold mb-2 dark:text-white">Items</h2>
-          
+
           <div className="relative max-w-md mb-4">
             <Input
               ref={searchItemsRef}
@@ -1116,10 +1117,10 @@ const EditInvoicingContent: React.FC<{
               addItem();
             }}
           >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="18" 
-              height="18" 
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -1296,7 +1297,7 @@ const EditInvoicing: React.FC = () => {
         });
       }
     }
-    
+
     // Check if we're trying to set a duplicate item
     if (newData.item && newData.item !== newItems[index].item) {
       for (let i = 0; i < newItems.length; i++) {
@@ -1307,7 +1308,7 @@ const EditInvoicing: React.FC = () => {
         }
       }
     }
-    
+
     newItems[index] = newData;
     setItems(newItems);
   };
