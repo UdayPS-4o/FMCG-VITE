@@ -1693,10 +1693,10 @@ const AdminAttendance: React.FC = () => {
       {/* Image Modal */}
       {/* Gallery Modal */}
       {galleryState.isOpen && (
-        <div className="fixed inset-0 bg-black/95 flex flex-col z-50">
+        <div className="fixed inset-0 bg-black/95 flex flex-col z-[99999]">
           {/* Header */}
           <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent">
-            <h3 className="text-lg font-semibold text-white px-2">
+            <h3 className="text-lg font-semibold text-white px-2 truncate max-w-[70%]">
               {galleryState.items[galleryState.currentIndex]?.title}
               <span className="ml-2 text-sm font-normal text-gray-300">
                 ({galleryState.currentIndex + 1} / {galleryState.items.length})
@@ -1763,7 +1763,7 @@ const AdminAttendance: React.FC = () => {
           </div>
 
           {/* Controls Toolbar */}
-          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900/90 backdrop-blur-md rounded-full px-6 py-3 flex items-center space-x-6 shadow-2xl border border-white/10 z-20">
+          <div className="absolute bottom-24 md:bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-lg bg-gray-900/90 backdrop-blur-md rounded-full px-4 py-2 md:px-6 md:py-3 flex items-center justify-between md:space-x-6 shadow-2xl border border-white/10 z-20">
             <div className="flex items-center space-x-2 border-r border-white/20 pr-4">
               <button
                 onClick={() => setZoom(z => Math.max(0.2, z - 0.2))}
@@ -1772,7 +1772,7 @@ const AdminAttendance: React.FC = () => {
               >
                 −
               </button>
-              <span className="text-white/80 w-12 text-center text-sm tabular-nums">
+              <span className="text-white/80 w-8 md:w-12 text-center text-xs md:text-sm tabular-nums">
                 {Math.round(zoom * 100)}%
               </span>
               <button
