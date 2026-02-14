@@ -8,6 +8,7 @@ import useAuth from '../../hooks/useAuth';
 import { format, subDays } from 'date-fns';
 import { FaFilePdf, FaPrint } from 'react-icons/fa';
 import { useReactToPrint } from 'react-to-print';
+import useActivityTracker from '../../hooks/useActivityTracker';
 
 // Define date range options
 const dateRangeOptions = [
@@ -47,12 +48,12 @@ interface User {
   powers: string[];
   subgroups: any[];
   smCode?: string;
-  defaultSeries?: { 
+  defaultSeries?: {
     billing?: string;
     cashReceipt?: string;
     cashPayment?: string;
     godown?: string;
-    reports?: string; 
+    reports?: string;
   };
   godownAccess: string[];
   canSelectSeries?: boolean;
@@ -114,7 +115,7 @@ const CashBook: React.FC = () => {
         // Financial Year: April 1 to March 31
         const currentYear = today.getFullYear();
         const currentMonth = today.getMonth(); // 0-based (0 = January, 3 = April)
-        
+
         let fyStartYear, fyEndYear;
         if (currentMonth >= 3) { // April (3) to December (11)
           fyStartYear = currentYear;
@@ -123,7 +124,7 @@ const CashBook: React.FC = () => {
           fyStartYear = currentYear - 1;
           fyEndYear = currentYear;
         }
-        
+
         const fyStart = new Date(fyStartYear, 3, 1); // April 1
         const fyEnd = new Date(fyEndYear, 2, 31); // March 31
         setFromDate(formatDate(fyStart));
@@ -145,18 +146,18 @@ const CashBook: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
+
         // Filter for salesman entries (starting with 'SM' and not ending with '000')
-        const salesmenData = response.data.filter((item: any) => 
+        const salesmenData = response.data.filter((item: any) =>
           item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
         );
-        
+
         // Format the data to match expected structure
         const formattedSalesmen = salesmenData.map((item: any) => ({
           value: item.C_CODE,
           text: `${item.C_NAME} | ${item.C_CODE}`
         }));
-        
+
         setSalesmenOptions(formattedSalesmen);
       } catch (error) {
         console.error('Error fetching salesmen data:', error);
@@ -165,7 +166,7 @@ const CashBook: React.FC = () => {
     };
 
     fetchSalesmenData();
-   }, []);
+  }, []);
 
   // Apply default series from user settings
   useEffect(() => {
@@ -176,6 +177,8 @@ const CashBook: React.FC = () => {
       }
     }
   }, [user]);
+
+  const { logActivity } = useActivityTracker();
 
   const handleFetchReport = async () => {
     setLoading(true);
@@ -190,6 +193,14 @@ const CashBook: React.FC = () => {
         }
       });
       setReportData(response.data);
+
+      // Log report generation
+      logActivity({
+        page: 'Cash Book Report',
+        action: 'Generated Report',
+        duration: 0
+      });
+
     } catch (error) {
       console.error('Error fetching cash book report:', error);
       toast.error('Failed to load cash book report');
@@ -223,18 +234,18 @@ const CashBook: React.FC = () => {
 
   const formatDateToDDMMYYYY = (dateString: string) => {
     if (!dateString) return '';
-    
+
     // If the string is already in DD-MM-YYYY format, return as is
     if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
       return dateString;
     }
-    
+
     // If it's in YYYY-MM-DD format, convert to DD-MM-YYYY
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
       const [year, month, day] = dateString.split('-');
       return `${day}-${month}-${year}`;
     }
-    
+
     // Fallback: try to parse as Date and format
     const date = new Date(dateString);
     if (!isNaN(date.getTime())) {
@@ -243,7 +254,7 @@ const CashBook: React.FC = () => {
       const year = date.getFullYear();
       return `${day}-${month}-${year}`;
     }
-    
+
     return dateString; // Return original if all parsing fails
   };
 

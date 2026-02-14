@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import constants from '../../constants';
+import useActivityTracker from '../../hooks/useActivityTracker';
 
 // Define User type
 interface User {
@@ -10,9 +11,9 @@ interface User {
   powers: string[];
   subgroups: any[];
   smCode?: string;
-  defaultSeries?: { 
+  defaultSeries?: {
     billing?: string;
-    reports?: string; 
+    reports?: string;
   };
   godownAccess: string[];
   canSelectSeries?: boolean;
@@ -40,7 +41,7 @@ interface SummaryData {
 }
 
 const PNBStockStatement: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const { logActivity } = useActivityTracker();
   const [hasAdminAccess, setHasAdminAccess] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +56,6 @@ const PNBStockStatement: React.FC = () => {
     if (storedUser) {
       try {
         const userData = JSON.parse(storedUser);
-        setUser(userData);
         // Check if user has admin access
         setHasAdminAccess(userData.routeAccess && userData.routeAccess.includes('Admin'));
       } catch (e) {
@@ -67,7 +67,7 @@ const PNBStockStatement: React.FC = () => {
   const generateReport = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await fetch(`${constants.baseURL}/api/reports/pnb-stock-statement`, {
         headers: {
@@ -78,13 +78,20 @@ const PNBStockStatement: React.FC = () => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       setStockData(data.stockData || []);
       setDebtorData(data.debtorData || []);
       setSummaryData(data.summary || null);
       setReportGenerated(true);
-      
+
+      // Log report generation
+      logActivity({
+        page: 'PNB Stock Statement',
+        action: 'Generated Report',
+        duration: 0
+      });
+
     } catch (error) {
       console.error('Error generating PNB stock statement:', error);
       setError(error instanceof Error ? error.message : 'Failed to generate report');
@@ -119,10 +126,10 @@ const PNBStockStatement: React.FC = () => {
 
       // Get the JSON response
       const result = await response.json();
-      
+
       // Show success message
       alert(`Excel file updated successfully!\nFile: ${result.filePath}\nTimestamp: ${new Date(result.timestamp).toLocaleString()}`);
-      
+
     } catch (error) {
       console.error('Error saving Excel file:', error);
       alert('Failed to save Excel file. Please try again.');
@@ -336,7 +343,7 @@ const PNBStockStatement: React.FC = () => {
           >
             {loading ? 'Generating...' : 'Generate Report'}
           </button>
-          
+
           {reportGenerated && (
             <>
               <button
@@ -362,7 +369,7 @@ const PNBStockStatement: React.FC = () => {
             </>
           )}
         </div>
-        
+
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
           This report provides a comprehensive view of current stock levels, debtor balances, and business summary.
         </p>

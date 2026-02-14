@@ -6,6 +6,7 @@ import constants from '../../constants';
 import MultiSelect from '../../components/form/MultiSelect';
 import RadioSm from '../../components/form/input/RadioSm';
 import Badge from '../../components/ui/badge/Badge';
+import useActivityTracker from '../../hooks/useActivityTracker';
 
 // Define the structure of van loading data
 interface VanLoadingItem {
@@ -34,9 +35,9 @@ interface User {
   powers: string[];
   subgroups: any[];
   smCode?: string;
-  defaultSeries?: { 
+  defaultSeries?: {
     billing?: string;
-    reports?: string; 
+    reports?: string;
   };
   godownAccess: string[];
   canSelectSeries?: boolean;
@@ -54,6 +55,7 @@ const VanLoadingContent: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState<boolean>(false);
+  const { logActivity } = useActivityTracker();
   const [hoveredItem, setHoveredItem] = useState<VanLoadingItem | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   // Pinned tooltip state
@@ -98,17 +100,17 @@ const VanLoadingContent: React.FC = () => {
     setBillNumbers(newVal);
     handleFetchReport(newVal);
   };
-  
+
   // Sort report data alphabetically by SKU
   const sortedReportData = useMemo(() => {
     return [...reportData].sort((a, b) => a.sku.localeCompare(b.sku));
   }, [reportData]);
-  
+
   // Fetch bill details for dialog
   const fetchBillDetails = async () => {
     const bills = billNumbers.split(',').filter(bill => bill.trim());
     if (bills.length === 0) return;
-    
+
     try {
       const response = await fetch(`${constants.baseURL}/api/bill-details-full`, {
         method: 'POST',
@@ -118,7 +120,7 @@ const VanLoadingContent: React.FC = () => {
         },
         body: JSON.stringify({ billNumbers: bills.map(b => b.trim()) }),
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setBillDetails(data);
@@ -130,21 +132,21 @@ const VanLoadingContent: React.FC = () => {
       console.error('Error fetching bill details:', error);
     }
   };
-  
+
   // Scan status message
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [statusType, setStatusType] = useState<'success' | 'duplicate' | 'not_accepted' | null>(null);
 
-  
+
 
   // Verify from server if a bill exists in BILLDTL and check van loading history
   const verifyBillExists = async (token: string): Promise<{ exists: boolean; history: any[] }> => {
     try {
       const [series, billStr] = token.split('-');
       const billNo = parseInt(billStr, 10);
-      
+
       // Check if bill exists
-      const billResp = await fetch(`${constants.baseURL}/api/bill-details/${encodeURIComponent(series)}/${encodeURIComponent(billNo)}` , {
+      const billResp = await fetch(`${constants.baseURL}/api/bill-details/${encodeURIComponent(series)}/${encodeURIComponent(billNo)}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       });
       let exists = false;
@@ -152,7 +154,7 @@ const VanLoadingContent: React.FC = () => {
         const arr = await billResp.json();
         exists = Array.isArray(arr) && arr.length > 0;
       }
-      
+
       // Check van loading history
       let history = [];
       try {
@@ -165,7 +167,7 @@ const VanLoadingContent: React.FC = () => {
       } catch (e) {
         console.warn('Failed to fetch van loading history:', e);
       }
-      
+
       return { exists, history };
     } catch {
       return { exists: false, history: [] };
@@ -183,7 +185,7 @@ const VanLoadingContent: React.FC = () => {
       } catch (e) {
         console.error("Failed to parse user data from localStorage", e);
       }
-      
+
     }
     return () => {
       if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
@@ -265,36 +267,36 @@ const VanLoadingContent: React.FC = () => {
       if (lastProcessedTokenRef.current === candidateNorm) return;
 
       if (earlierNorms.includes(candidateNorm)) {
-         // Session duplicate: drop the just-entered token
-         const newJoined = earlierNorms.join(', ');
-         setBillNumbers(newJoined ? `${newJoined}, ` : '');
-         setStatusType('duplicate');
-         setStatusMsg(`Duplicate bill no - ${candidateNorm}`);
-         // Auto-fetch even on duplicate to keep report in sync
-         handleFetchReport(newJoined ? `${newJoined}, ` : '');
-       } else {
-         // Success: add/normalize the token and ensure trailing comma+space
-         const newJoined = [...earlierNorms, candidateNorm].join(', ');
-         setBillNumbers(`${newJoined}, `);
-         const { exists, history } = await verifyBillExists(candidateNorm);
-         if (exists) {
-           if (history && history.length > 0) {
-             // Bill exists and has history - show when it was last used
-             const lastUsed = history[0]; // Most recent entry
-             setStatusType('duplicate');
-             setStatusMsg(`Bill ${candidateNorm} was added in van loading dated ${lastUsed.date}`);
-           } else {
-             // Bill exists but no history
-             setStatusType('success');
-             setStatusMsg(`Added: ${candidateNorm}`);
-           }
-         } else {
-           setStatusType('not_accepted');
-           setStatusMsg(`Bill not found: ${candidateNorm}`);
-         }
-         // Trigger auto-fetch after processing this token
-         handleFetchReport(`${newJoined}, `);
-       }
+        // Session duplicate: drop the just-entered token
+        const newJoined = earlierNorms.join(', ');
+        setBillNumbers(newJoined ? `${newJoined}, ` : '');
+        setStatusType('duplicate');
+        setStatusMsg(`Duplicate bill no - ${candidateNorm}`);
+        // Auto-fetch even on duplicate to keep report in sync
+        handleFetchReport(newJoined ? `${newJoined}, ` : '');
+      } else {
+        // Success: add/normalize the token and ensure trailing comma+space
+        const newJoined = [...earlierNorms, candidateNorm].join(', ');
+        setBillNumbers(`${newJoined}, `);
+        const { exists, history } = await verifyBillExists(candidateNorm);
+        if (exists) {
+          if (history && history.length > 0) {
+            // Bill exists and has history - show when it was last used
+            const lastUsed = history[0]; // Most recent entry
+            setStatusType('duplicate');
+            setStatusMsg(`Bill ${candidateNorm} was added in van loading dated ${lastUsed.date}`);
+          } else {
+            // Bill exists but no history
+            setStatusType('success');
+            setStatusMsg(`Added: ${candidateNorm}`);
+          }
+        } else {
+          setStatusType('not_accepted');
+          setStatusMsg(`Bill not found: ${candidateNorm}`);
+        }
+        // Trigger auto-fetch after processing this token
+        handleFetchReport(`${newJoined}, `);
+      }
 
       // Remember last processed token to prevent flicker/repeat
       lastProcessedTokenRef.current = candidateNorm;
@@ -321,7 +323,7 @@ const VanLoadingContent: React.FC = () => {
     const bills = value.split(',');
     if (bills.length > 0) {
       const lastBill = bills[bills.length - 1].trim();
-      
+
       // Check if the last bill matches the pattern (letters-digits)
       if (lastBill.match(/^[A-Za-z]+-\d+$/)) {
         const completedBills = bills.slice(0, -1).concat([lastBill]).join(', ');
@@ -368,12 +370,19 @@ const VanLoadingContent: React.FC = () => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       if (signal.aborted) return;
 
       setReportData(data);
-      
+
+      // Log report generation
+      logActivity({
+        page: 'Van Loading Report',
+        action: 'Generated Report',
+        duration: 0
+      });
+
       // Save van loading history after successful report generation
       try {
         await fetch(`${constants.baseURL}/api/van-loading-history`, {
@@ -403,15 +412,15 @@ const VanLoadingContent: React.FC = () => {
   // Calculate color intensity based on quantity
   const getHeatmapColor = (item: VanLoadingItem) => {
     if (reportData.length === 0) return 'bg-gray-100';
-    
+
     const maxQty = Math.max(...reportData.map(d => d.totalQty));
     const minQty = Math.min(...reportData.map(d => d.totalQty));
     const range = maxQty - minQty;
-    
+
     if (range === 0) return 'bg-blue-200';
-    
+
     const intensity = (item.totalQty - minQty) / range;
-    
+
     if (intensity >= 0.8) return 'bg-red-600 text-white';
     if (intensity >= 0.6) return 'bg-red-400 text-white';
     if (intensity >= 0.4) return 'bg-orange-400 text-white';
@@ -499,22 +508,24 @@ const VanLoadingContent: React.FC = () => {
     }
 
     // Group items by item name and calculate totals
-    const groupedItems: { [itemName: string]: {
-      itemName: string;
-      code: string;
-      mrp: number | null;
-      totalQty: number;
-      unit: string;
-      details: Array<{
-        date: string;
-        billNo: string;
-        party: string;
-        place: string;
-        qty: number;
-        free: number;
-        gross: number;
-      }>;
-    }} = {};
+    const groupedItems: {
+      [itemName: string]: {
+        itemName: string;
+        code: string;
+        mrp: number | null;
+        totalQty: number;
+        unit: string;
+        details: Array<{
+          date: string;
+          billNo: string;
+          party: string;
+          place: string;
+          qty: number;
+          free: number;
+          gross: number;
+        }>;
+      }
+    } = {};
 
     reportData.forEach(item => {
       if (!groupedItems[item.itemName]) {
@@ -660,7 +671,7 @@ const VanLoadingContent: React.FC = () => {
     // Write content to print window
     printWindow.document.write(printContent);
     printWindow.document.close();
-    
+
     // Wait for content to load then print
     printWindow.onload = () => {
       printWindow.print();
@@ -684,17 +695,17 @@ const VanLoadingContent: React.FC = () => {
       unit: string;
       billNumbers: string[];
     }>> = new Map();
-    
+
     reportData.forEach(item => {
       item.details.forEach(detail => {
         const partyKey = detail.partyName;
         if (!partyItemsMap.has(partyKey)) {
           partyItemsMap.set(partyKey, new Map());
         }
-        
+
         const partyItems = partyItemsMap.get(partyKey)!;
         const itemKey = `${item.sku}-${item.itemName}`;
-        
+
         if (!partyItems.has(itemKey)) {
           partyItems.set(itemKey, {
             sku: item.sku,
@@ -704,7 +715,7 @@ const VanLoadingContent: React.FC = () => {
             billNumbers: []
           });
         }
-        
+
         const itemInfo = partyItems.get(itemKey)!;
         itemInfo.totalQty += detail.qty;
         itemInfo.billNumbers.push(`${detail.series}-${detail.billNo} / ${detail.date}`);
@@ -840,23 +851,23 @@ const VanLoadingContent: React.FC = () => {
                 <td style="font-weight: bold; padding: 8px;">${partyName}</td>
                 <td style="padding: 8px; font-size: 7px; line-height: 1.2;">${Array.from(new Set(Array.from(partyItems.values()).flatMap(item => item.billNumbers))).join('<br>')}</td>
                 ${allItems.map(item => {
-                  const itemKey = `${(item as VanLoadingItem).sku}-${(item as VanLoadingItem).itemName}`;
-                  const itemInfo = partyItems.get(itemKey);
-                  return `<td class="qty-cell">${itemInfo ? itemInfo.totalQty : '-'}</td>`;
-                }).join('')}
+      const itemKey = `${(item as VanLoadingItem).sku}-${(item as VanLoadingItem).itemName}`;
+      const itemInfo = partyItems.get(itemKey);
+      return `<td class="qty-cell">${itemInfo ? itemInfo.totalQty : '-'}</td>`;
+    }).join('')}
               </tr>
             `).join('')}
             <tr style="background-color: #d0d0d0; font-weight: bold; border-top: 2px solid #333;">
               <td colspan="2" style="text-align: center; padding: 8px; font-size: 11px;">TOTAL QTY</td>
               ${allItems.map(item => {
-                const itemKey = `${(item as VanLoadingItem).sku}-${(item as VanLoadingItem).itemName}`;
-                let totalQty = 0;
-                Array.from(partyItemsMap.values()).forEach(partyItems => {
-                  const itemInfo = partyItems.get(itemKey);
-                  if (itemInfo) totalQty += itemInfo.totalQty;
-                });
-                return `<td class="qty-cell" style="background-color: #d0d0d0; font-weight: bold;">${totalQty > 0 ? totalQty : '-'}</td>`;
-              }).join('')}
+      const itemKey = `${(item as VanLoadingItem).sku}-${(item as VanLoadingItem).itemName}`;
+      let totalQty = 0;
+      Array.from(partyItemsMap.values()).forEach(partyItems => {
+        const itemInfo = partyItems.get(itemKey);
+        if (itemInfo) totalQty += itemInfo.totalQty;
+      });
+      return `<td class="qty-cell" style="background-color: #d0d0d0; font-weight: bold;">${totalQty > 0 ? totalQty : '-'}</td>`;
+    }).join('')}
             </tr>
           </tbody>
         </table>
@@ -871,22 +882,22 @@ const VanLoadingContent: React.FC = () => {
     // Write content to print window
     printWindow.document.write(printContent);
     printWindow.document.close();
-    
+
     // Wait for content to load then print
     printWindow.onload = () => {
-       printWindow.print();
-       // Don't automatically close - let user close manually or handle print events
-       // printWindow.close();
-     };
-   };
+      printWindow.print();
+      // Don't automatically close - let user close manually or handle print events
+      // printWindow.close();
+    };
+  };
 
   // Save PDF function
   const handleSavePDF = async () => {
     if (reportData.length === 0) return;
-    
+
     try {
       setLoading(true);
-      
+
       // Generate HTML content similar to print report
       const htmlContent = `
         <!DOCTYPE html>
@@ -989,17 +1000,17 @@ const VanLoadingContent: React.FC = () => {
                   <td class="qty-cell">${item.mrp ? `₹${item.mrp}` : 'N/A'}</td>
                   <td class="qty-cell">
                     ${unitFilter === 'Box' ? `${item.totalQtyBoxes} Box` :
-                      unitFilter === 'Pcs' ? `${item.totalQtyPcs} Pcs` :
-                      item.totalQtyBoxes > 0 && item.totalQtyPcs > 0
-                        ? `${item.totalQtyBoxes}B + ${item.totalQtyPcs}P`
-                        : item.totalQtyBoxes > 0
-                          ? `${item.totalQtyBoxes}B`
-                          : `${item.totalQtyPcs}P`}
+          unitFilter === 'Pcs' ? `${item.totalQtyPcs} Pcs` :
+            item.totalQtyBoxes > 0 && item.totalQtyPcs > 0
+              ? `${item.totalQtyBoxes}B + ${item.totalQtyPcs}P`
+              : item.totalQtyBoxes > 0
+                ? `${item.totalQtyBoxes}B`
+                : `${item.totalQtyPcs}P`}
                   </td>
                   <td>
-                    ${item.details.map(detail => 
-                      `${detail.partyName} (${detail.series}-${detail.billNo}): ${detail.qty} ${detail.unit}`
-                    ).join('<br>')}
+                    ${item.details.map(detail =>
+                  `${detail.partyName} (${detail.series}-${detail.billNo}): ${detail.qty} ${detail.unit}`
+                ).join('<br>')}
                   </td>
                 </tr>
               `).join('')}
@@ -1012,9 +1023,9 @@ const VanLoadingContent: React.FC = () => {
         </body>
         </html>
       `;
-      
+
       const filename = `van-loading-${new Date().toISOString().split('T')[0]}-${Date.now()}.pdf`;
-      
+
       const response = await fetch(`${constants.baseURL}/api/generate-pdf/van-loading`, {
         method: 'POST',
         headers: {
@@ -1023,26 +1034,26 @@ const VanLoadingContent: React.FC = () => {
         },
         body: JSON.stringify({ htmlContent, filename }),
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to generate PDF');
       }
-      
+
       const result = await response.json();
-      
+
       // Open the PDF in a new tab
       window.open(`${constants.baseURL}${result.pdfPath}`, '_blank');
-      
+
       setStatusMsg('PDF saved successfully!');
       setStatusType('success');
-      
+
     } catch (error) {
       console.error('Error saving PDF:', error);
       setStatusMsg('Failed to save PDF. Please try again.');
       setStatusType('not_accepted');
     } finally {
       setLoading(false);
-      
+
       // Clear status message after 3 seconds
       setTimeout(() => {
         setStatusMsg('');
@@ -1115,7 +1126,7 @@ const VanLoadingContent: React.FC = () => {
             ref={billTextRef}
           />
           <p className="mt-1 font-bold text-gray-800 dark:text-gray-200">
-            <span 
+            <span
               className="cursor-pointer hover:text-blue-600 hover:underline"
               onClick={fetchBillDetails}
               title="Click to view bill details"
@@ -1130,7 +1141,7 @@ const VanLoadingContent: React.FC = () => {
             </div>
           )}
         </div>
-        
+
         <div>
           <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Unit Filter
@@ -1223,7 +1234,7 @@ const VanLoadingContent: React.FC = () => {
         >
           {loading ? 'Loading...' : 'Refresh Report'}
         </button>
-        
+
         <button
           onClick={handlePrintReport}
           disabled={reportData.length === 0}
@@ -1231,7 +1242,7 @@ const VanLoadingContent: React.FC = () => {
         >
           Print Report
         </button>
-        
+
         <button
           onClick={handlePrintChart}
           disabled={reportData.length === 0}
@@ -1239,7 +1250,7 @@ const VanLoadingContent: React.FC = () => {
         >
           Print Chart Format
         </button>
-        
+
         <button
           onClick={handleSavePDF}
           disabled={reportData.length === 0 || loading}
@@ -1274,15 +1285,14 @@ const VanLoadingContent: React.FC = () => {
               Hover over each SKU for detailed information. Click to pin tooltip, click outside to unpin.
             </p>
           </div>
-          
+
           <div className="p-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
               {sortedReportData.map((item, index) => (
                 <div
                   key={`${item.sku}-${index}`}
-                  className={`p-3 min-h-[120px] rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${
-                    pinnedItem && pinnedItem.sku === item.sku ? 'ring-2 ring-blue-500' : ''
-                  }`}
+                  className={`p-3 min-h-[120px] rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${pinnedItem && pinnedItem.sku === item.sku ? 'ring-2 ring-blue-500' : ''
+                    }`}
                   style={getTileStyle(index, sortedReportData.length)}
                   data-sku-tile
                   onClick={(e) => handleTileClick(item, e)}
@@ -1303,12 +1313,12 @@ const VanLoadingContent: React.FC = () => {
                   </div>
                   <div className="text-sm font-bold mt-2">
                     {unitFilter === 'Box' ? `${item.totalQtyBoxes} Box` :
-                     unitFilter === 'Pcs' ? `${item.totalQtyPcs} Pcs` :
-                     item.totalQtyBoxes > 0 && item.totalQtyPcs > 0
-                      ? `${item.totalQtyBoxes}B + ${item.totalQtyPcs}P`
-                      : item.totalQtyBoxes > 0
-                        ? `${item.totalQtyBoxes}B`
-                        : `${item.totalQtyPcs}P`}
+                      unitFilter === 'Pcs' ? `${item.totalQtyPcs} Pcs` :
+                        item.totalQtyBoxes > 0 && item.totalQtyPcs > 0
+                          ? `${item.totalQtyBoxes}B + ${item.totalQtyPcs}P`
+                          : item.totalQtyBoxes > 0
+                            ? `${item.totalQtyBoxes}B`
+                            : `${item.totalQtyPcs}P`}
                   </div>
                 </div>
               ))}
@@ -1327,28 +1337,27 @@ const VanLoadingContent: React.FC = () => {
       {/* Tooltip */}
       {(hoveredItem || pinnedItem) && (
         <div
-          className={`fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-3 sm:p-4 tooltip-container ${
-            pinnedItem ? 'pointer-events-auto' : 'pointer-events-none'
-          }`}
+          className={`fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-3 sm:p-4 tooltip-container ${pinnedItem ? 'pointer-events-auto' : 'pointer-events-none'
+            }`}
           style={(() => {
             const item = pinnedItem || hoveredItem;
             const x = pinnedItem ? pinnedPosition.x : mousePosition.x;
             const y = pinnedItem ? pinnedPosition.y : mousePosition.y;
-            
+
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
             const margin = 16; // 16px margin from mouse/edge
-            
+
             const isMobile = viewportWidth < 640;
 
             // Determine quadrants
             const isRightHalf = x > viewportWidth / 2;
             const isBottomHalf = y > viewportHeight / 2;
-            
+
             const style: any = {
               width: 'max-content',
             };
-            
+
             // Horizontal positioning
             if (isMobile) {
               // On mobile, maximize width availability by anchoring to left with margin
@@ -1364,7 +1373,7 @@ const VanLoadingContent: React.FC = () => {
               style.right = 'auto';
               style.maxWidth = `${Math.min(viewportWidth - x - (margin * 2), 600)}px`;
             }
-            
+
             // Vertical positioning
             if (isBottomHalf) {
               style.bottom = `${viewportHeight - y + margin}px`;
@@ -1375,7 +1384,7 @@ const VanLoadingContent: React.FC = () => {
               style.bottom = 'auto';
               // style.maxHeight = `${viewportHeight - y - (margin * 2)}px`;
             }
-            
+
             return style;
           })()}
         >
@@ -1390,7 +1399,7 @@ const VanLoadingContent: React.FC = () => {
               ✕
             </button>
           )}
-          
+
           <div className="font-semibold text-gray-800 dark:text-white mb-2">
             {(pinnedItem || hoveredItem)?.sku} - {(pinnedItem || hoveredItem)?.itemName}
           </div>
@@ -1404,7 +1413,7 @@ const VanLoadingContent: React.FC = () => {
               return `Total: ${p} Pcs`;
             })()}
           </div>
-          
+
           <div className="overflow-y-auto overflow-x-hidden" style={{ maxHeight: '300px' }}>
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-white dark:bg-gray-800">
@@ -1495,13 +1504,12 @@ const VanLoadingContent: React.FC = () => {
       {/* Full-screen status overlay */}
       {statusMsg && (
         <div
-          className={`fixed inset-0 z-[9999] flex items-center justify-center ${
-            statusType === 'success'
-              ? 'bg-green-700'
-              : statusType === 'duplicate'
+          className={`fixed inset-0 z-[9999] flex items-center justify-center ${statusType === 'success'
+            ? 'bg-green-700'
+            : statusType === 'duplicate'
               ? 'bg-yellow-600'
               : 'bg-red-700'
-          }`}
+            }`}
           role="alert"
           aria-live="assertive"
         >
@@ -1518,9 +1526,9 @@ const VanLoadingContent: React.FC = () => {
 const VanLoading: React.FC = () => {
   // Dummy states for InvoiceProvider (required but not used)
   const [dummyItemsState, setDummyItemsState] = useState<any[]>([]);
-  const dummyUpdateItem = () => {};
-  const dummyRemoveItem = () => {};
-  const dummyAddItem = () => {};
+  const dummyUpdateItem = () => { };
+  const dummyRemoveItem = () => { };
+  const dummyAddItem = () => { };
   const dummyCalculateTotal = () => '0.00';
   const [dummyExpandedIndex, setDummyExpandedIndex] = useState<number | null>(null);
   const [dummyFocusNewItemIndex, setDummyFocusNewItemIndex] = useState<number | null>(null);
