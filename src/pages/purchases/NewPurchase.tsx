@@ -25,6 +25,7 @@ type ItemRow = {
   gstPercent: string;
   gstCode?: string;
   godown?: string;
+  originalDescription?: string;
 };
 
 type SupplierRecord = {
@@ -90,6 +91,8 @@ const NewPurchase: React.FC = () => {
   const [pmplData, setPmplData] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [purData, setPurData] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [itemMap, setItemMap] = useState<any[]>([]);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -184,6 +187,25 @@ const NewPurchase: React.FC = () => {
     if (!productNorm || !mrpStr) return '';
     const mrpNum = parseFloat(mrpStr);
     if (isNaN(mrpNum)) return '';
+
+    // Check itemMap
+    const mapped = itemMap.find(m => {
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       const mDesc = normalize(String((m as any).description || ''));
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       const mMrp = String((m as any).mrp || '').trim().replace(/[^0-9.]/g, '');
+       const mMrpNum = parseFloat(mMrp);
+       
+       if (mDesc !== productNorm) return false;
+       
+       if (!isNaN(mrpNum) && !isNaN(mMrpNum)) {
+         return Math.abs(mrpNum - mMrpNum) < 0.01;
+       }
+       return false;
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (mapped && (mapped as any).itemCode) return String((mapped as any).itemCode);
+
     const data = pmplData;
     for (const it of data) {
       const p = normalize(String(it.PRODUCT || ''));
@@ -388,6 +410,58 @@ const NewPurchase: React.FC = () => {
   const handleItemSelection = (index: number, code: string) => {
     const data = pmplData;
     const found = data.find(it => String(it.CODE || '') === String(code));
+
+    // Learn mapping
+    const row = items[index];
+    if (row && (row.originalDescription || row.description) && row.mrp && code) {
+       const descToMap = row.originalDescription || row.description;
+       const currentResolved = resolveItemCode(descToMap, row.mrp);
+       
+       console.log('Learning Item Map check:', { descToMap, mrp: row.mrp, code, currentResolved });
+
+       // Only map if it doesn't resolve to the selected code already
+       if (currentResolved !== code) {
+          const payload = { description: descToMap, mrp: row.mrp, itemCode: code };
+          
+          console.log('Sending Item Map payload:', payload);
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setItemMap(prev => [...prev, payload]);
+
+          const token = localStorage.getItem('token');
+          fetch(`${constants.baseURL}/api/itemmap`, {
+             method: 'POST',
+             headers: { 
+               'Content-Type': 'application/json', 
+               ...(token ? { Authorization: `Bearer ${token}` } : {}) 
+             },
+             body: JSON.stringify(payload)
+          }).then(res => {
+             if (!res.ok) {
+                 res.text().then(t => {
+                     console.error('Item map save failed', res.status, t);
+                     alert(`Failed to save item mapping: ${res.status} ${t}`);
+                 });
+             } else {
+                 console.log('Item map saved successfully');
+                 // alert('Item mapping learned!'); // Optional: don't spam user
+             }
+          }).catch(err => {
+              console.error('Failed to save item mapping', err);
+              alert(`Error saving item mapping: ${err.message}`);
+          });
+       } else {
+           console.log('Item already resolved correctly, skipping learn.');
+       }
+    } else {
+        console.log('Skipping learn due to missing data:', { 
+            hasRow: !!row, 
+            hasDesc: !!(row?.originalDescription || row?.description), 
+            hasMrp: !!row?.mrp, 
+            hasCode: !!code 
+        });
+    }
+
     setItems(prev => prev.map((row, i) => {
       if (i !== index) return row;
       const desc = String(found?.PRODUCT || row.description);
@@ -557,6 +631,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
           const meta = getPmplMetaByCode(itemCode);
           return {
             description,
+            originalDescription: description,
             hsn: meta.hsn || String(it.hsn || ''),
             qty: String(it.qty ?? ''),
             rate: String(it.rate ?? ''),
@@ -600,14 +675,16 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     // Fetch from API for up-to-date list
     (async () => {
       try {
-        const [cmpl, pmpl, godowns, pur] = await Promise.all([
+        const [cmpl, pmpl, godowns, pur, imap] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/godowns`),
-          getPurRecords()
+          getPurRecords(),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/json/itemmap`)
         ]);
 
         if (Array.isArray(cmpl)) {
@@ -620,6 +697,10 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
 
         if (Array.isArray(pur)) {
           setPurData(pur);
+        }
+
+        if (Array.isArray(imap)) {
+          setItemMap(imap);
         }
 
         if (Array.isArray(godowns)) {

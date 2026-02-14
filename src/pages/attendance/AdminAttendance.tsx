@@ -90,6 +90,8 @@ interface UserActivityLog {
   timestamp: string;
   ipAddress?: string;
   userAgent?: string;
+  duration?: number;
+  nextPage?: string;
 }
 
 interface MessageData {
@@ -644,61 +646,28 @@ const AdminAttendance: React.FC = () => {
   const fetchUserActivityLogs = async (userId: number) => {
     setActivityLoading(true);
     try {
-      const user = users.find(u => u.id === userId);
-      const userName = user?.name || 'Unknown';
+      const token = localStorage.getItem('token');
+      // Fetch real logs from backend
+      const response = await fetch(`${constants.baseURL}/api/activity/logs?userId=${userId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-      // Generate user-specific logs based on selected date and user ID
-      const selectedDateObj = new Date(selectedDate);
-      const baseTimestamp = selectedDateObj.getTime();
+      if (response.ok) {
+        const data = await response.json();
 
-      // Create different activity patterns based on user ID
-      const activityPatterns = {
-        dashboard: ['Viewed dashboard', 'Checked notifications', 'Reviewed alerts'],
-        attendance: ['Checked in', 'Checked out', 'Updated attendance status', 'Viewed attendance history'],
-        profile: ['Updated profile information', 'Changed password', 'Updated contact details'],
-        reports: ['Generated Employee Attendance Report', 'Downloaded Monthly Payroll Report', 'Viewed Sales Analytics Dashboard', 'Created Quarterly Performance Report', 'Exported Daily Activity Summary'],
-        invoicing: ['Created new invoice', 'Updated invoice status', 'Sent invoice to client'],
-        inventory: ['Updated stock levels', 'Added new product', 'Checked inventory status']
-      };
+        // Filter client-side if the backend doesn't support filtering by userId yet
+        // (Our planned backend route returns all logs, so we filter here for safety)
+        const allLogs = data.logs || [];
+        const userLogs = allLogs.filter((log: any) => String(log.userId) === String(userId));
 
-      const pages = Object.keys(activityPatterns);
-      const mockLogs: UserActivityLog[] = [];
-
-      // Generate 3-8 random activities for the selected date
-      const numActivities = 3 + (userId % 6); // Different number of activities per user
-
-      for (let i = 0; i < numActivities; i++) {
-        const randomPage = pages[Math.floor((userId * i + i) % pages.length)];
-        const actions = activityPatterns[randomPage as keyof typeof activityPatterns];
-        const randomAction = actions[Math.floor((userId + i) % actions.length)];
-
-        // Generate timestamps throughout the selected date
-        const hourOffset = 8 + (i * 2) + (userId % 3); // Start from 8 AM, spread throughout day
-        const minuteOffset = (userId * 7 + i * 13) % 60; // Different minutes for each user
-        const activityTimestamp = new Date(baseTimestamp + (hourOffset * 60 * 60 * 1000) + (minuteOffset * 60 * 1000));
-
-        // Generate different IP addresses based on user ID
-        const ipVariation = (userId % 50) + 100;
-        const ipAddress = `192.168.1.${ipVariation}`;
-
-        mockLogs.push({
-          id: `${userId}_${i}`,
-          userId: userId,
-          userName: userName,
-          page: randomPage.charAt(0).toUpperCase() + randomPage.slice(1),
-          action: randomAction,
-          timestamp: activityTimestamp.toISOString(),
-          ipAddress: ipAddress
-        });
+        setUserActivityLogs(userLogs);
+      } else {
+        setToast({ message: 'Failed to fetch activity logs', type: 'error' });
       }
 
-      // Sort logs by timestamp (newest first)
-      mockLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      setUserActivityLogs(mockLogs);
     } catch (error) {
       console.error('Error fetching user activity logs:', error);
       setToast({ message: 'Failed to fetch user activity logs', type: 'error' });
@@ -2061,19 +2030,35 @@ const AdminAttendance: React.FC = () => {
                             )}
                           </div>
                           <div className="text-xs text-gray-400 dark:text-gray-500">
-                            {(() => {
-                              const now = new Date();
-                              const logTime = new Date(log.timestamp);
-                              const diffMs = now.getTime() - logTime.getTime();
-                              const diffMins = Math.floor(diffMs / (1000 * 60));
-                              const diffHours = Math.floor(diffMins / 60);
-                              const diffDays = Math.floor(diffHours / 24);
+                            <div className="text-xs text-gray-400 dark:text-gray-500 flex flex-col items-end">
+                              <span>
+                                {(() => {
+                                  const now = new Date();
+                                  const logTime = new Date(log.timestamp);
+                                  const diffMs = now.getTime() - logTime.getTime();
+                                  const diffMins = Math.floor(diffMs / (1000 * 60));
+                                  const diffHours = Math.floor(diffMins / 60);
+                                  const diffDays = Math.floor(diffHours / 24);
 
-                              if (diffMins < 1) return 'Just now';
-                              if (diffMins < 60) return `${diffMins}m ago`;
-                              if (diffHours < 24) return `${diffHours}h ago`;
-                              return `${diffDays}d ago`;
-                            })()}
+                                  if (diffMins < 1) return 'Just now';
+                                  if (diffMins < 60) return `${diffMins}m ago`;
+                                  if (diffHours < 24) return `${diffHours}h ago`;
+                                  return `${diffDays}d ago`;
+                                })()}
+                              </span>
+                              {log.duration && (
+                                <span className="mt-1" title={`${(log.duration / 1000).toFixed(1)}s`}>
+                                  ⏱️ {log.duration < 60000
+                                    ? `${Math.round(log.duration / 1000)}s`
+                                    : `${Math.round(log.duration / 60000)}m`}
+                                </span>
+                              )}
+                              {log.nextPage && (
+                                <span className="mt-1 text-blue-400" title={`Next: ${log.nextPage}`}>
+                                  ➡️ {log.nextPage.split('/').pop()}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>

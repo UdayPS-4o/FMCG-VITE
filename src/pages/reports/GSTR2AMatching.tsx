@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Input from '../../components/form/input/Input';
 import constants from '../../constants';
 import useGoBack from '../../hooks/useGoBack';
+import useActivityTracker from '../../hooks/useActivityTracker';
 
 // Define User type
 interface User {
@@ -12,9 +13,9 @@ interface User {
   powers: string[];
   subgroups: any[];
   smCode?: string;
-  defaultSeries?: { 
+  defaultSeries?: {
     billing?: string;
-    reports?: string; 
+    reports?: string;
   };
   godownAccess: string[];
   canSelectSeries?: boolean;
@@ -116,8 +117,9 @@ interface ComparisonResult {
 const GSTR2AMatching: React.FC = () => {
   const goBack = useGoBack();
   const [user, setUser] = useState<User | null>(null);
+  const { logActivity } = useActivityTracker();
   const [hasAdminAccess, setHasAdminAccess] = useState<boolean>(false);
-  
+
   // Check user access on component mount
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -132,7 +134,7 @@ const GSTR2AMatching: React.FC = () => {
       }
     }
   }, []);
-  
+
   // Custom back navigation for internal steps
   const handleBackNavigation = () => {
     if (currentStep === 'comparison') {
@@ -145,31 +147,31 @@ const GSTR2AMatching: React.FC = () => {
       goBack(); // Exit the report if on first step
     }
   };
-  
+
   // State for month input and API flow
   const [month, setMonth] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<'input' | 'otp' | 'download' | 'display' | 'comparison'>('input');
-  
+
   // OTP and authentication states
   const [otp, setOtp] = useState('');
   const [authToken, setAuthToken] = useState('');
   const [otpRequested, setOtpRequested] = useState(false);
-  
+
   // Data selection states
   const [selectedSections, setSelectedSections] = useState<{ b2b: boolean; cdn: boolean }>({ b2b: true, cdn: false });
-  
+
   // Downloaded data states
   const [gstr2aB2BData, setGstr2aB2BData] = useState<GSTR2AB2BRecord[]>([]);
   const [gstr2aCDNData, setGstr2aCDNData] = useState<GSTR2ACDNRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'b2b' | 'cdn'>('b2b');
-  
+
   // Comparison states
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
   const [purchaseData, setPurchaseData] = useState<PurchaseRecord[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
-  
+
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
 
   const handleHideColumn = (columnName: string) => {
@@ -192,7 +194,7 @@ const GSTR2AMatching: React.FC = () => {
       totalCESS: allItems.reduce((sum, item) => sum + (item.itm_det?.csamt || 0), 0)
     };
   };
-  
+
   // Validate month format (MMYYYY)
   const validateMonth = (monthStr: string): boolean => {
     if (monthStr.length !== 6) return false;
@@ -200,17 +202,17 @@ const GSTR2AMatching: React.FC = () => {
     const year = parseInt(monthStr.substring(2, 6));
     return month >= 1 && month <= 12 && year >= 2000 && year <= 2099;
   };
-  
+
   // Handle OTP request
   const handleOTPRequest = async () => {
     if (!month || !validateMonth(month)) {
       setError('Please enter a valid month in MMYYYY format (e.g., 082025)');
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await fetch(`${constants.baseURL}/api/reports/gst-otp-request`, {
         method: 'POST',
@@ -225,9 +227,9 @@ const GSTR2AMatching: React.FC = () => {
           password: 'sHUBHAM@288'
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (data.status_cd === '1') {
         setOtpRequested(true);
         setCurrentStep('otp');
@@ -242,17 +244,17 @@ const GSTR2AMatching: React.FC = () => {
       setLoading(false);
     }
   };
-  
+
   // Handle auth token retrieval
   const handleAuthToken = async () => {
     if (!otp || otp.length !== 6) {
       setError('Please enter a valid 6-digit OTP');
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await fetch(`${constants.baseURL}/api/reports/gst-auth-token`, {
         method: 'POST',
@@ -268,9 +270,9 @@ const GSTR2AMatching: React.FC = () => {
           password: 'sHUBHAM@288'
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (data.status_cd === '1' && data.auth_token) {
         setAuthToken(data.auth_token);
         setCurrentStep('download');
@@ -284,20 +286,20 @@ const GSTR2AMatching: React.FC = () => {
       setLoading(false);
     }
   };
-  
+
   // Handle GSTR2A data download
   const handleDownloadGSTR2A = async () => {
     if (!selectedSections.b2b && !selectedSections.cdn) {
       setError('Please select at least one section (B2B or CDN)');
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const downloadPromises = [];
-      
+
       if (selectedSections.b2b) {
         const b2bPromise = fetch(`${constants.baseURL}/api/reports/gst-download-gstr2a`, {
           method: 'POST',
@@ -317,7 +319,7 @@ const GSTR2AMatching: React.FC = () => {
         }).then(res => res.json());
         downloadPromises.push(b2bPromise);
       }
-      
+
       if (selectedSections.cdn) {
         const cdnPromise = fetch(`${constants.baseURL}/api/reports/gst-download-gstr2a`, {
           method: 'POST',
@@ -337,16 +339,16 @@ const GSTR2AMatching: React.FC = () => {
         }).then(res => res.json());
         downloadPromises.push(cdnPromise);
       }
-      
+
       const results = await Promise.all(downloadPromises);
-      
+
       let b2bIndex = 0;
       if (selectedSections.b2b) {
         const b2bResult = results[b2bIndex];
         if (b2bResult.status_cd === '1' && b2bResult.data) {
           const rawB2BData = b2bResult.data.b2b || [];
           // Flatten the nested structure: each supplier has an 'inv' array
-          const flattenedB2BData = rawB2BData.flatMap((supplier: any) => 
+          const flattenedB2BData = rawB2BData.flatMap((supplier: any) =>
             supplier.inv.map((invoice: any) => ({
               ...invoice,
               ctin: supplier.ctin
@@ -378,13 +380,13 @@ const GSTR2AMatching: React.FC = () => {
         }
         b2bIndex++;
       }
-      
+
       if (selectedSections.cdn) {
         const cdnResult = results[b2bIndex];
         if (cdnResult.status_cd === '1' && cdnResult.data) {
           const rawCDNData = cdnResult.data.cdn || [];
           // Flatten the nested structure: each supplier has an 'nt' array
-          const flattenedCDNData = rawCDNData.flatMap((supplier: any) => 
+          const flattenedCDNData = rawCDNData.flatMap((supplier: any) =>
             supplier.nt.map((note: any) => ({
               ...note,
               ctin: supplier.ctin
@@ -415,7 +417,7 @@ const GSTR2AMatching: React.FC = () => {
           return;
         }
       }
-      
+
       setCurrentStep('display');
     } catch (err) {
       setError('Error downloading GSTR2A data. Please try again.');
@@ -424,23 +426,23 @@ const GSTR2AMatching: React.FC = () => {
       setLoading(false);
     }
   };
-  
+
   // Load existing GSTR2A files and purchase data for comparison
   const handleLoadExistingData = async () => {
     if (!month || !validateMonth(month)) {
       setError('Please enter a valid month in MMYYYY format (e.g., 082025)');
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       // Load existing GSTR2A JSON files from dedicated folder via backend API
       let b2bData = [];
       let cdnData = [];
       let filesFound = false;
-      
+
       // Try to load B2B data
       try {
         const b2bResponse = await fetch(`${constants.baseURL}/api/reports/gstr2a-load-file/${month}/B2B`, {
@@ -448,12 +450,12 @@ const GSTR2AMatching: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
+
         if (b2bResponse.ok) {
           const b2bJson = await b2bResponse.json();
           const rawB2BData = b2bJson.b2b || [];
           // Flatten the nested structure: each supplier has an 'inv' array
-          b2bData = rawB2BData.flatMap((supplier: any) => 
+          b2bData = rawB2BData.flatMap((supplier: any) =>
             supplier.inv.map((invoice: any) => ({
               ...invoice,
               ctin: supplier.ctin
@@ -469,7 +471,7 @@ const GSTR2AMatching: React.FC = () => {
       } catch (b2bError) {
         console.log(`B2B file not found for month ${month}`);
       }
-      
+
       // Try to load CDN data
       try {
         const cdnResponse = await fetch(`${constants.baseURL}/api/reports/gstr2a-load-file/${month}/CDN`, {
@@ -477,12 +479,12 @@ const GSTR2AMatching: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
+
         if (cdnResponse.ok) {
           const cdnJson = await cdnResponse.json();
           const rawCDNData = cdnJson.cdn || [];
           // Flatten the nested structure: each supplier has an 'nt' array
-          cdnData = rawCDNData.flatMap((supplier: any) => 
+          cdnData = rawCDNData.flatMap((supplier: any) =>
             supplier.nt.map((note: any) => ({
               ...note,
               ctin: supplier.ctin
@@ -496,12 +498,12 @@ const GSTR2AMatching: React.FC = () => {
       } catch (cdnError) {
         console.log(`CDN file not found for month ${month}`);
       }
-      
+
       if (!filesFound) {
         setError(`No GSTR2A data files found for month ${month}. Please ensure files exist in the gstr2a-data/${month}/ folder or download them first.`);
         return;
       }
-      
+
       setCurrentStep('display');
     } catch (err) {
       setError('Error loading GSTR2A data files. Please check if the files exist.');
@@ -510,12 +512,12 @@ const GSTR2AMatching: React.FC = () => {
       setLoading(false);
     }
   };
-  
+
   // Handle purchase data loading and comparison
   const handleMatchRecords = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // Load purchase data from server
       const response = await fetch(`${constants.baseURL}/api/reports/gstr2a-purchase-data?month=${month}`, {
@@ -523,24 +525,32 @@ const GSTR2AMatching: React.FC = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to load purchase data');
       }
-      
+
       const purchaseData = await response.json();
       setPurchaseData(purchaseData);
-      
+
       // Perform comparison
       console.log('=== STARTING COMPARISON ===');
       console.log('Purchase data length:', purchaseData?.length);
       console.log('GSTR2A B2B data length:', gstr2aB2BData?.length);
       console.log('GSTR2A CDN data length:', gstr2aCDNData?.length);
       console.log('Month:', month);
-      
+
       const results = performComparison(gstr2aB2BData, gstr2aCDNData, purchaseData, month);
       console.log('Comparison results:', results);
       setComparisonResults(results);
+
+      // Log report generation
+      logActivity({
+        page: 'GSTR2A Matching',
+        action: 'Generated Comparison Report',
+        duration: 0
+      });
+
       setCurrentStep('comparison');
     } catch (err) {
       setError('Error loading purchase data or performing comparison.');
@@ -549,15 +559,15 @@ const GSTR2AMatching: React.FC = () => {
       setLoading(false);
     }
   };
-  
+
   // Comparison logic
   // Test function to verify calculation logic
   const testCalculationLogic = () => {
     console.log('=== TESTING CALCULATION LOGIC ===');
-    
+
     // Sample data from actual GSTR2A file
     const sampleRecord = {
-      "itms": [{"num": 1, "itm_det": {"csamt": 0, "rt": 18, "txval": 52573.59, "iamt": 9463.23}}],
+      "itms": [{ "num": 1, "itm_det": { "csamt": 0, "rt": 18, "txval": 52573.59, "iamt": 9463.23 } }],
       "val": 62036.82,
       "inv_typ": "R",
       "pos": "23",
@@ -566,14 +576,14 @@ const GSTR2AMatching: React.FC = () => {
       "inum": "M10261025591",
       "ctin": "27AABCG3365J1ZI"
     };
-    
+
     console.log('Sample record:', sampleRecord);
     console.log('Sample record itms:', sampleRecord.itms);
-    
+
     const taxableValue = sampleRecord.itms?.reduce((sum, item) => sum + (item.itm_det?.txval || 0), 0) || 0;
-    const gstAmount = sampleRecord.itms?.reduce((sum, item) => 
+    const gstAmount = sampleRecord.itms?.reduce((sum, item) =>
       sum + (item.itm_det?.iamt || 0) + (item.itm_det?.csamt || 0), 0) || 0;
-    
+
     console.log('Calculated taxable value:', taxableValue);
     console.log('Calculated GST amount:', gstAmount);
     console.log('Expected taxable value: 52573.59');
@@ -593,13 +603,13 @@ const GSTR2AMatching: React.FC = () => {
     console.log('Purchase data received:', purchaseData?.length, 'records');
     console.log('First B2B record sample:', b2bData?.[0]);
     console.log('First B2B record itms:', b2bData?.[0]?.itms);
-    
+
     // Run test
     testCalculationLogic();
-    
+
     const results: ComparisonResult[] = [];
     const tolerance = 2.00; // Rs. 2.00 tolerance for value comparison
-    
+
     // Filter purchase data for the selected month
     const monthYear = `${month.substring(0, 2)}-${month.substring(2, 6)}`;
     const filteredPurchaseData = purchaseData.filter(record => {
@@ -608,79 +618,79 @@ const GSTR2AMatching: React.FC = () => {
       const recordMonthYear = `${String(recordDate.getMonth() + 1).padStart(2, '0')}-${recordDate.getFullYear()}`;
       return recordMonthYear === monthYear;
     });
-    
+
     // Create maps for quick lookup
     const gstr2aMap = new Map<string, GSTR2AB2BRecord | GSTR2ACDNRecord>();
     const purchaseMap = new Map<string, PurchaseRecord>();
-    
+
     // Process B2B data
     b2bData.forEach(record => {
       const key = `${record.inum}_${record.ctin}`;
       gstr2aMap.set(key, record);
     });
-    
+
     // Process CDN data
     cdnData.forEach(record => {
       const key = `${record.nt_num}_${record.ctin}`;
       gstr2aMap.set(key, record);
     });
-    
+
     // Process purchase data
     filteredPurchaseData.forEach(record => {
       const key = `${record.PBILL}_${record.C_CST}`;
       purchaseMap.set(key, record);
     });
-    
+
     // Compare records
     const allKeys = new Set([...gstr2aMap.keys(), ...purchaseMap.keys()]);
-    
+
     allKeys.forEach(key => {
       const gstr2aRecord = gstr2aMap.get(key);
       const purchaseRecord = purchaseMap.get(key);
-      
+
       if (gstr2aRecord && purchaseRecord) {
         // Both records exist - check for mismatches
         const mismatchDetails: string[] = [];
-        
+
         // Date comparison - normalize both dates to DD/MM/YYYY format
         const gstr2aDate = 'idt' in gstr2aRecord ? gstr2aRecord.idt : gstr2aRecord.nt_dt;
         const purchaseDate = new Date(purchaseRecord.PBILLDATE).toLocaleDateString('en-GB');
-        
+
         // Normalize dates to compare (convert DD-MM-YYYY to DD/MM/YYYY)
         const normalizedGstr2aDate = gstr2aDate.replace(/-/g, '/');
         const normalizedPurchaseDate = purchaseDate;
-        
+
         if (normalizedGstr2aDate !== normalizedPurchaseDate) {
           mismatchDetails.push(`Date mismatch: GSTR2A(${gstr2aDate}) vs Purchase(${purchaseDate})`);
         }
-        
+
         // Invoice value comparison removed as per user request
-        
+
         // Calculate GSTR2A taxable value and GST amount
         console.log('GSTR2A Record (Both case) for debugging:', gstr2aRecord);
         console.log('GSTR2A Record (Both case) itms array:', gstr2aRecord.itms);
-        
+
         const gstr2aTaxableValue = gstr2aRecord.itms?.reduce((sum, item) => sum + (item.itm_det?.txval || 0), 0) || 0;
-        const gstr2aGSTAmount = gstr2aRecord.itms?.reduce((sum, item) => 
+        const gstr2aGSTAmount = gstr2aRecord.itms?.reduce((sum, item) =>
           sum + (item.itm_det?.iamt || 0) + (item.itm_det?.camt || 0) + (item.itm_det?.samt || 0) + (item.itm_det?.csamt || 0), 0) || 0;
-        
+
         console.log('Calculated gstr2aTaxableValue (Both case):', gstr2aTaxableValue);
         console.log('Calculated gstr2aGSTAmount (Both case):', gstr2aGSTAmount);
-        
+
         // Get purchase taxable value and GST amount
         const purchaseTaxableValue = purchaseRecord.TOTAL_TAXABLE_VALUE || 0;
         const purchaseGSTAmount = purchaseRecord.TOTAL_GST_AMOUNT || 0;
-        
+
         // GST amount comparison with tolerance
         if (Math.abs(gstr2aGSTAmount - purchaseGSTAmount) > tolerance) {
           mismatchDetails.push(`GST Amount mismatch: GSTR2A(${gstr2aGSTAmount.toFixed(2)}) vs Purchase(${purchaseGSTAmount.toFixed(2)})`);
         }
-        
+
         // Taxable value comparison with tolerance
         if (Math.abs(gstr2aTaxableValue - purchaseTaxableValue) > tolerance) {
           mismatchDetails.push(`Taxable Value mismatch: GSTR2A(${gstr2aTaxableValue.toFixed(2)}) vs Purchase(${purchaseTaxableValue.toFixed(2)})`);
         }
-        
+
         results.push({
           invoiceNumber: 'inum' in gstr2aRecord ? gstr2aRecord.inum : gstr2aRecord.nt_num,
           invoiceDate: gstr2aDate,
@@ -700,14 +710,14 @@ const GSTR2AMatching: React.FC = () => {
         // Only in GSTR2A - Calculate GST amounts from itms array
         console.log('GSTR2A Record for debugging:', gstr2aRecord);
         console.log('GSTR2A Record itms array:', gstr2aRecord.itms);
-        
+
         const gstr2aTaxableValue = gstr2aRecord.itms?.reduce((sum, item) => sum + (item.itm_det?.txval || 0), 0) || 0;
-        const gstr2aGSTAmount = gstr2aRecord.itms?.reduce((sum, item) => 
+        const gstr2aGSTAmount = gstr2aRecord.itms?.reduce((sum, item) =>
           sum + (item.itm_det?.iamt || 0) + (item.itm_det?.camt || 0) + (item.itm_det?.samt || 0) + (item.itm_det?.csamt || 0), 0) || 0;
-        
+
         console.log('Calculated gstr2aTaxableValue:', gstr2aTaxableValue);
         console.log('Calculated gstr2aGSTAmount:', gstr2aGSTAmount);
-        
+
         results.push({
           invoiceNumber: 'inum' in gstr2aRecord ? gstr2aRecord.inum : gstr2aRecord.nt_num,
           invoiceDate: 'idt' in gstr2aRecord ? gstr2aRecord.idt : gstr2aRecord.nt_dt,
@@ -724,7 +734,7 @@ const GSTR2AMatching: React.FC = () => {
         // Purchase data should be populated, GSTR2A fields should be empty
         const purchaseTaxableValue = purchaseRecord.TOTAL_TAXABLE_VALUE || 0;
         const purchaseGSTAmount = purchaseRecord.TOTAL_GST_AMOUNT || 0;
-        
+
         results.push({
           invoiceNumber: purchaseRecord.PBILL,
           invoiceDate: new Date(purchaseRecord.PBILLDATE).toLocaleDateString('en-GB'),
@@ -741,7 +751,7 @@ const GSTR2AMatching: React.FC = () => {
         });
       }
     });
-    
+
     return results.sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber));
   };
 
@@ -793,7 +803,7 @@ const GSTR2AMatching: React.FC = () => {
     link.click();
     document.body.removeChild(link);
   };
-  
+
   // Check if user has admin access
   if (!hasAdminAccess) {
     return (
@@ -821,7 +831,7 @@ const GSTR2AMatching: React.FC = () => {
           </button>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">GSTR2A Matching</h1>
         </div>
-        
+
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
           <div className="flex justify-center mb-4">
             <svg className="w-16 h-16 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -839,7 +849,7 @@ const GSTR2AMatching: React.FC = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto p-4">
       <div className="flex items-center mb-6">
@@ -865,13 +875,13 @@ const GSTR2AMatching: React.FC = () => {
         </button>
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white">GSTR2A Matching Report</h1>
       </div>
-      
+
       {error && (
         <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
           {error}
         </div>
       )}
-      
+
       {/* Step 1: Month Input */}
       {currentStep === 'input' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
@@ -911,7 +921,7 @@ const GSTR2AMatching: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {/* Step 2: OTP Input */}
       {currentStep === 'otp' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
@@ -943,7 +953,7 @@ const GSTR2AMatching: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {/* Step 3: Section Selection and Download */}
       {currentStep === 'download' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
@@ -982,7 +992,7 @@ const GSTR2AMatching: React.FC = () => {
           </button>
         </div>
       )}
-      
+
       {/* Step 4: Data Display */}
       {currentStep === 'display' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
@@ -1006,18 +1016,17 @@ const GSTR2AMatching: React.FC = () => {
               </button>
             </div>
           </div>
-          
+
           {/* Tabs */}
           <div className="border-b border-gray-200 dark:border-gray-600 mb-4">
             <nav className="-mb-px flex space-x-8">
               {selectedSections.b2b && (
                 <button
                   onClick={() => setActiveTab('b2b')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'b2b'
-                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'b2b'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                    }`}
                 >
                   B2B ({gstr2aB2BData.length})
                 </button>
@@ -1025,18 +1034,17 @@ const GSTR2AMatching: React.FC = () => {
               {selectedSections.cdn && (
                 <button
                   onClick={() => setActiveTab('cdn')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'cdn'
-                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'cdn'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                    }`}
                 >
                   CDN ({gstr2aCDNData.length})
                 </button>
               )}
             </nav>
           </div>
-          
+
           {/* Table Display */}
           <div className="overflow-x-auto max-h-screen">
             {activeTab === 'b2b' && (
@@ -1045,111 +1053,111 @@ const GSTR2AMatching: React.FC = () => {
                   <tr>
                     {['GSTIN', 'Invoice Number', 'Invoice Date', 'Value', 'Place of Supply', 'Invoice Type', 'Reverse Charge', 'Source Type', 'IRN Gen Date', 'Taxable Value', 'Tax Rate', 'IGST', 'CGST', 'SGST', 'CESS'].map(header => (
                       !hiddenColumns.includes(header) && (
-                      <th key={header} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        <div className="flex flex-col items-start">
-                          <button 
-                            onClick={() => handleHideColumn(header)}
-                            className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
-                            title="Hide column"
-                          >
-                            (-)
-                          </button>
-                          {header}
-                        </div>
-                      </th>
+                        <th key={header} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          <div className="flex flex-col items-start">
+                            <button
+                              onClick={() => handleHideColumn(header)}
+                              className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                              title="Hide column"
+                            >
+                              (-)
+                            </button>
+                            {header}
+                          </div>
+                        </th>
                       )
                     ))}
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
-                   {gstr2aB2BData.flatMap((record, recordIndex) => 
-                     record.itms?.map((item, itemIndex) => (
-                       <tr key={`${recordIndex}-${itemIndex}`}>
-                         {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>}
-                         {!hiddenColumns.includes('Invoice Number') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inum}</td>}
-                         {!hiddenColumns.includes('Invoice Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.idt}</td>}
-                         {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>}
-                         {!hiddenColumns.includes('Place of Supply') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.pos}</td>}
-                         {!hiddenColumns.includes('Invoice Type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inv_typ}</td>}
-                         {!hiddenColumns.includes('Reverse Charge') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.rchrg}</td>}
-                         {!hiddenColumns.includes('Source Type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.srctyp}</td>}
-                         {!hiddenColumns.includes('IRN Gen Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.irngendate}</td>}
-                         {!hiddenColumns.includes('Taxable Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.txval?.toFixed(2) || '0.00'}</td>}
-                         {!hiddenColumns.includes('Tax Rate') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.rt?.toFixed(2) || '0.00'}%</td>}
-                         {!hiddenColumns.includes('IGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.iamt?.toFixed(2) || '0.00'}</td>}
-                         {!hiddenColumns.includes('CGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.camt?.toFixed(2) || '0.00'}</td>}
-                         {!hiddenColumns.includes('SGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.samt?.toFixed(2) || '0.00'}</td>}
-                         {!hiddenColumns.includes('CESS') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.csamt?.toFixed(2) || '0.00'}</td>}
-                       </tr>
-                     )) || []
-                   )}
-                   {/* Total Row for B2B Data */}
-                   {gstr2aB2BData.length > 0 && (() => {
-                     const totals = calculateB2BTotals();
-                     return (
-                       <tr className="bg-green-50 dark:bg-green-900 font-semibold border-t-2 border-green-200 dark:border-green-700">
-                         {(() => {
-                             const colSpan = ['GSTIN', 'Invoice Number', 'Invoice Date'].filter(h => !hiddenColumns.includes(h)).length;
-                             return colSpan > 0 ? (
-                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}>
-                                   <strong>TOTAL</strong>
-                                 </td>
-                             ) : null;
-                         })()}
-                         {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
-                           <strong>{totals.totalValue.toFixed(2)}</strong>
-                         </td>}
-                         {/* Spacer for 5 columns: Place of Supply, Invoice Type, Reverse Charge, Source Type, IRN Gen Date */}
-                         {['Place of Supply', 'Invoice Type', 'Reverse Charge', 'Source Type', 'IRN Gen Date'].map(header => 
-                            !hiddenColumns.includes(header) && <td key={header} className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100"></td>
-                         )}
-                         {!hiddenColumns.includes('Taxable Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
-                           <strong>{totals.totalTaxableValue.toFixed(2)}</strong>
-                         </td>}
-                         {!hiddenColumns.includes('Tax Rate') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100"></td>}
-                         {!hiddenColumns.includes('IGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
-                           <strong>{totals.totalIGST.toFixed(2)}</strong>
-                         </td>}
-                         {!hiddenColumns.includes('CGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
-                           <strong>{totals.totalCGST.toFixed(2)}</strong>
-                         </td>}
-                         {!hiddenColumns.includes('SGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
-                           <strong>{totals.totalSGST.toFixed(2)}</strong>
-                         </td>}
-                         {!hiddenColumns.includes('CESS') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
-                           <strong>{totals.totalCESS.toFixed(2)}</strong>
-                         </td>}
-                       </tr>
-                     );
-                   })()}
-                 </tbody>
+                  {gstr2aB2BData.flatMap((record, recordIndex) =>
+                    record.itms?.map((item, itemIndex) => (
+                      <tr key={`${recordIndex}-${itemIndex}`}>
+                        {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>}
+                        {!hiddenColumns.includes('Invoice Number') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inum}</td>}
+                        {!hiddenColumns.includes('Invoice Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.idt}</td>}
+                        {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('Place of Supply') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.pos}</td>}
+                        {!hiddenColumns.includes('Invoice Type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inv_typ}</td>}
+                        {!hiddenColumns.includes('Reverse Charge') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.rchrg}</td>}
+                        {!hiddenColumns.includes('Source Type') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.srctyp}</td>}
+                        {!hiddenColumns.includes('IRN Gen Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.irngendate}</td>}
+                        {!hiddenColumns.includes('Taxable Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.txval?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('Tax Rate') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.rt?.toFixed(2) || '0.00'}%</td>}
+                        {!hiddenColumns.includes('IGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.iamt?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('CGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.camt?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('SGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.samt?.toFixed(2) || '0.00'}</td>}
+                        {!hiddenColumns.includes('CESS') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.itm_det?.csamt?.toFixed(2) || '0.00'}</td>}
+                      </tr>
+                    )) || []
+                  )}
+                  {/* Total Row for B2B Data */}
+                  {gstr2aB2BData.length > 0 && (() => {
+                    const totals = calculateB2BTotals();
+                    return (
+                      <tr className="bg-green-50 dark:bg-green-900 font-semibold border-t-2 border-green-200 dark:border-green-700">
+                        {(() => {
+                          const colSpan = ['GSTIN', 'Invoice Number', 'Invoice Date'].filter(h => !hiddenColumns.includes(h)).length;
+                          return colSpan > 0 ? (
+                            <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}>
+                              <strong>TOTAL</strong>
+                            </td>
+                          ) : null;
+                        })()}
+                        {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                          <strong>{totals.totalValue.toFixed(2)}</strong>
+                        </td>}
+                        {/* Spacer for 5 columns: Place of Supply, Invoice Type, Reverse Charge, Source Type, IRN Gen Date */}
+                        {['Place of Supply', 'Invoice Type', 'Reverse Charge', 'Source Type', 'IRN Gen Date'].map(header =>
+                          !hiddenColumns.includes(header) && <td key={header} className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100"></td>
+                        )}
+                        {!hiddenColumns.includes('Taxable Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                          <strong>{totals.totalTaxableValue.toFixed(2)}</strong>
+                        </td>}
+                        {!hiddenColumns.includes('Tax Rate') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100"></td>}
+                        {!hiddenColumns.includes('IGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                          <strong>{totals.totalIGST.toFixed(2)}</strong>
+                        </td>}
+                        {!hiddenColumns.includes('CGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                          <strong>{totals.totalCGST.toFixed(2)}</strong>
+                        </td>}
+                        {!hiddenColumns.includes('SGST') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                          <strong>{totals.totalSGST.toFixed(2)}</strong>
+                        </td>}
+                        {!hiddenColumns.includes('CESS') && <td className="px-4 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
+                          <strong>{totals.totalCESS.toFixed(2)}</strong>
+                        </td>}
+                      </tr>
+                    );
+                  })()}
+                </tbody>
               </table>
             )}
-            
+
             {activeTab === 'cdn' && (
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                 <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
                   <tr>
                     {['GSTIN', 'Note Number', 'Note Date', 'Value', 'Place of Supply', 'Invoice Type', 'Reverse Charge', 'Source Type', 'IRN Gen Date', 'Taxable Value', 'Tax Rate', 'IGST', 'CGST', 'SGST', 'CESS'].map(header => (
                       !hiddenColumns.includes(header) && (
-                      <th key={header} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        <div className="flex flex-col items-start">
-                          <button 
-                            onClick={() => handleHideColumn(header)}
-                            className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
-                            title="Hide column"
-                          >
-                            (-)
-                          </button>
-                          {header}
-                        </div>
-                      </th>
+                        <th key={header} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          <div className="flex flex-col items-start">
+                            <button
+                              onClick={() => handleHideColumn(header)}
+                              className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                              title="Hide column"
+                            >
+                              (-)
+                            </button>
+                            {header}
+                          </div>
+                        </th>
                       )
                     ))}
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
-                  {gstr2aCDNData.flatMap((record, recordIndex) => 
+                  {gstr2aCDNData.flatMap((record, recordIndex) =>
                     record.itms?.map((item, itemIndex) => (
                       <tr key={`${recordIndex}-${itemIndex}`}>
                         {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>}
@@ -1176,12 +1184,12 @@ const GSTR2AMatching: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {/* Step 5: Comparison Results */}
       {currentStep === 'comparison' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Comparison Results</h2>
-          
+
           {/* Summary */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-green-100 dark:bg-green-900 p-4 rounded">
@@ -1209,7 +1217,7 @@ const GSTR2AMatching: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Save Button */}
           <div className="mb-4 flex justify-end space-x-2">
             {hiddenColumns.length > 0 && (
@@ -1230,7 +1238,7 @@ const GSTR2AMatching: React.FC = () => {
               <span>Save Comparison</span>
             </button>
           </div>
-          
+
           {/* Results Table */}
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
@@ -1240,7 +1248,7 @@ const GSTR2AMatching: React.FC = () => {
                     !hiddenColumns.includes(header) && (
                       <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                         <div className="flex flex-col items-start">
-                          <button 
+                          <button
                             onClick={() => handleHideColumn(header)}
                             className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
                             title="Hide column"
@@ -1253,10 +1261,10 @@ const GSTR2AMatching: React.FC = () => {
                     )
                   ))}
                   {!hiddenColumns.includes('Status') && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    <div className="flex flex-col space-y-1">
-                      <div className="flex items-center gap-1">
-                          <button 
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      <div className="flex flex-col space-y-1">
+                        <div className="flex items-center gap-1">
+                          <button
                             onClick={() => handleHideColumn('Status')}
                             className="text-gray-400 hover:text-red-600 focus:outline-none font-bold"
                             title="Hide column"
@@ -1264,34 +1272,34 @@ const GSTR2AMatching: React.FC = () => {
                             (-)
                           </button>
                           <span>Status</span>
+                        </div>
+                        <select
+                          value={statusFilter}
+                          onChange={(e) => setStatusFilter(e.target.value)}
+                          className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        >
+                          <option value="All">All</option>
+                          <option value="Matched">Matched</option>
+                          <option value="Mismatched">Mismatched</option>
+                          <option value="Missing in GSTR2A">Missing in GSTR2A</option>
+                          <option value="Missing in Purchase">Missing in Purchase</option>
+                        </select>
                       </div>
-                      <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      >
-                        <option value="All">All</option>
-                        <option value="Matched">Matched</option>
-                        <option value="Mismatched">Mismatched</option>
-                        <option value="Missing in GSTR2A">Missing in GSTR2A</option>
-                        <option value="Missing in Purchase">Missing in Purchase</option>
-                      </select>
-                    </div>
-                  </th>
+                    </th>
                   )}
                   {!hiddenColumns.includes('Details') && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    <div className="flex flex-col items-start">
-                        <button 
-                        onClick={() => handleHideColumn('Details')}
-                        className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
-                        title="Hide column"
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      <div className="flex flex-col items-start">
+                        <button
+                          onClick={() => handleHideColumn('Details')}
+                          className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                          title="Hide column"
                         >
-                        (-)
+                          (-)
                         </button>
                         Details
-                    </div>
-                  </th>
+                      </div>
+                    </th>
                   )}
                 </tr>
               </thead>
@@ -1299,36 +1307,35 @@ const GSTR2AMatching: React.FC = () => {
                 {comparisonResults
                   .filter(result => statusFilter === 'All' || result.status === statusFilter)
                   .map((result, index) => (
-                  <tr key={index}>
-                    {!hiddenColumns.includes('Invoice Number') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceNumber}</td>}
-                    {!hiddenColumns.includes('Invoice Date') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceDate}</td>}
-                    {!hiddenColumns.includes('Party GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.partyGST}</td>}
-                    {!hiddenColumns.includes('Invoice Value') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceValue.toFixed(2)}</td>}
-                    {!hiddenColumns.includes('GSTR2A Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aTaxableValue?.toFixed(2) || '-'}</td>}
-                    {!hiddenColumns.includes('Purchase Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseTaxableValue?.toFixed(2) || '-'}</td>}
-                    {!hiddenColumns.includes('GSTR2A GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aGSTAmount?.toFixed(2) || '-'}</td>}
-                    {!hiddenColumns.includes('Purchase GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseGSTAmount?.toFixed(2) || '-'}</td>}
-                    {!hiddenColumns.includes('Status') && <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        result.status === 'Matched' ? 'bg-green-100 text-green-800' :
-                        result.status === 'Mismatched' ? 'bg-yellow-100 text-yellow-800' :
-                        result.status === 'Missing in GSTR2A' ? 'bg-red-100 text-red-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>
-                        {result.status}
-                      </span>
-                    </td>}
-                    {!hiddenColumns.includes('Details') && <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                      {result.mismatchDetails && (
-                        <ul className="list-disc list-inside">
-                          {result.mismatchDetails.map((detail, idx) => (
-                            <li key={idx} className="text-xs">{detail}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </td>}
-                  </tr>
-                ))}
+                    <tr key={index}>
+                      {!hiddenColumns.includes('Invoice Number') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceNumber}</td>}
+                      {!hiddenColumns.includes('Invoice Date') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceDate}</td>}
+                      {!hiddenColumns.includes('Party GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.partyGST}</td>}
+                      {!hiddenColumns.includes('Invoice Value') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceValue.toFixed(2)}</td>}
+                      {!hiddenColumns.includes('GSTR2A Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aTaxableValue?.toFixed(2) || '-'}</td>}
+                      {!hiddenColumns.includes('Purchase Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseTaxableValue?.toFixed(2) || '-'}</td>}
+                      {!hiddenColumns.includes('GSTR2A GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aGSTAmount?.toFixed(2) || '-'}</td>}
+                      {!hiddenColumns.includes('Purchase GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseGSTAmount?.toFixed(2) || '-'}</td>}
+                      {!hiddenColumns.includes('Status') && <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${result.status === 'Matched' ? 'bg-green-100 text-green-800' :
+                          result.status === 'Mismatched' ? 'bg-yellow-100 text-yellow-800' :
+                            result.status === 'Missing in GSTR2A' ? 'bg-red-100 text-red-800' :
+                              'bg-blue-100 text-blue-800'
+                          }`}>
+                          {result.status}
+                        </span>
+                      </td>}
+                      {!hiddenColumns.includes('Details') && <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        {result.mismatchDetails && (
+                          <ul className="list-disc list-inside">
+                            {result.mismatchDetails.map((detail, idx) => (
+                              <li key={idx} className="text-xs">{detail}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>}
+                    </tr>
+                  ))}
                 {/* Total Row for Comparison Results */}
                 {comparisonResults.filter(result => statusFilter === 'All' || result.status === statusFilter).length > 0 && (() => {
                   const totals = {
@@ -1341,12 +1348,12 @@ const GSTR2AMatching: React.FC = () => {
                   return (
                     <tr className="bg-green-50 dark:bg-green-900 font-semibold border-t-2 border-green-200 dark:border-green-700">
                       {(() => {
-                          const colSpan = ['Invoice Number', 'Invoice Date', 'Party GST'].filter(h => !hiddenColumns.includes(h)).length;
-                          return colSpan > 0 ? (
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}>
-                                <strong>TOTAL</strong>
-                              </td>
-                          ) : null;
+                        const colSpan = ['Invoice Number', 'Invoice Date', 'Party GST'].filter(h => !hiddenColumns.includes(h)).length;
+                        return colSpan > 0 ? (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}>
+                            <strong>TOTAL</strong>
+                          </td>
+                        ) : null;
                       })()}
                       {!hiddenColumns.includes('Invoice Value') && <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100">
                         <strong>{totals.totalInvoiceValue.toFixed(2)}</strong>
@@ -1364,10 +1371,10 @@ const GSTR2AMatching: React.FC = () => {
                         <strong>{totals.totalPurchaseGSTAmount.toFixed(2)}</strong>
                       </td>}
                       {(() => {
-                          const colSpan = ['Status', 'Details'].filter(h => !hiddenColumns.includes(h)).length;
-                          return colSpan > 0 ? (
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}></td>
-                          ) : null;
+                        const colSpan = ['Status', 'Details'].filter(h => !hiddenColumns.includes(h)).length;
+                        return colSpan > 0 ? (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}></td>
+                        ) : null;
                       })()}
                     </tr>
                   );
@@ -1375,7 +1382,7 @@ const GSTR2AMatching: React.FC = () => {
               </tbody>
             </table>
           </div>
-          
+
           {/* Notes */}
           <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded">
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Notes on the Comparison:</h3>

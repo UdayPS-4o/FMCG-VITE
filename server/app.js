@@ -27,7 +27,7 @@ const {
 const cors = require('cors');
 app.use(
   cors({
-    origin: function(origin, callback) {
+    origin: function (origin, callback) {
       const allowedOrigins = [
         'http://localhost:3000',
         'http://localhost:3001',
@@ -37,19 +37,19 @@ app.use(
         'https://server.udayps.cfd',
         // Add any other domain that needs access
       ];
-      
+
       // Enhanced CORS logging for production debugging
       console.log('=== CORS DEBUG ===');
       console.log('Request Origin:', origin);
       console.log('NODE_ENV:', process.env.NODE_ENV);
       console.log('Allowed Origins:', allowedOrigins);
-      
+
       // Allow requests with no origin (like mobile apps, curl, postman)
       if (!origin) {
         console.log('CORS: Allowing request with no origin');
         return callback(null, true);
       }
-      
+
       if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
         console.log('CORS: Origin allowed');
         callback(null, true);
@@ -146,11 +146,17 @@ app.use('/api/merge/purchases', purchasesMergeRoutes);
 const itemsMergeRoutes = require('./routes/merge/items');
 app.use('/api/merge/items', itemsMergeRoutes);
 
+const itemMapRoutes = require('./routes/itemmap');
+app.use('/api', itemMapRoutes);
+
 const approvalRoutes = require('./routes/approval');
 app.use('/api', approvalRoutes);
 
 const attendanceRoutes = require('./routes/attendance');
 app.use(attendanceRoutes);
+
+const activityRoutes = require('./routes/activity');
+app.use('/api/activity', activityRoutes);
 
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);
