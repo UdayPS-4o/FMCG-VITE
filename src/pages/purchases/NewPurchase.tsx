@@ -93,6 +93,8 @@ const NewPurchase: React.FC = () => {
   const [purData, setPurData] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [itemMap, setItemMap] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [stockData, setStockData] = useState<Record<string, Record<string, number>>>({});
 
   const today = useMemo(() => {
     const d = new Date();
@@ -372,9 +374,25 @@ const NewPurchase: React.FC = () => {
     if (s.length <= 6) return s;
     return `${s.slice(0, 4)}••••${s.slice(-2)}`;
   }, [localKey]);
+  // Compute total stock across all godowns for each item code
+  const itemTotalStock = useMemo(() => {
+    const result: Record<string, number> = {};
+    if (!stockData || Object.keys(stockData).length === 0) return result;
+    for (const [code, godownQtys] of Object.entries(stockData)) {
+      if (godownQtys && typeof godownQtys === 'object') {
+        const total = Object.values(godownQtys).reduce((sum: number, qty) => {
+          const n = typeof qty === 'number' ? qty : parseInt(String(qty), 10);
+          return sum + (isNaN(n) ? 0 : n);
+        }, 0);
+        result[code] = total;
+      }
+    }
+    return result;
+  }, [stockData]);
+
   const pmplItemOptions = useMemo(() => {
     const data = pmplData;
-    return data.map(it => {
+    const withStock: { value: string; label: string; inStock: boolean; totalStock: number }[] = data.map(it => {
       const code = String(it.CODE || '');
       const name = String(it.PRODUCT || '');
       let mrpVal = '';
@@ -385,14 +403,27 @@ const NewPurchase: React.FC = () => {
         const n = String(mCand).trim().replace(/[^0-9.]/g, '');
         if (n) mrpVal = n;
       }
-      const label = `${code} | ${name}${mrpVal ? ` (${mrpVal})` : ''}`;
-      return { value: code, label };
+      const totalStock = itemTotalStock[code] ?? 0;
+      const inStock = totalStock > 0;
+      // Prefix with a special marker so the Autocomplete component can detect in-stock items
+      const stockBadge = inStock ? ` ●${totalStock}` : '';
+      const label = `${code} | ${name}${mrpVal ? ` (${mrpVal})` : ''}${stockBadge}`;
+      return { value: code, label, inStock, totalStock };
     });
-  }, [pmplData]);
+    // Sort: in-stock items first (by totalStock desc), then out-of-stock alphabetically
+    withStock.sort((a, b) => {
+      if (a.inStock && !b.inStock) return -1;
+      if (!a.inStock && b.inStock) return 1;
+      if (a.inStock && b.inStock) return b.totalStock - a.totalStock;
+      return a.label.localeCompare(b.label);
+    });
+    return withStock.map(({ value, label }) => ({ value, label }));
+  }, [pmplData, itemTotalStock]);
   const getItemLabelByCode = (code?: string) => {
     if (!code) return '';
     const opt = pmplItemOptions.find(o => o.value === code);
-    return opt?.label || '';
+    // Strip the stock badge suffix when displaying the selected value
+    return opt?.label.replace(/ ●\d+$/, '') || '';
   };
   const findSupplierByGstin = (gst: string) => {
     if (!gst) return null;
@@ -674,7 +705,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
   useEffect(() => {
     // Fetch from API for up-to-date list
     (async () => {
-      const [cmplRes, pmplRes, godownsRes, purRes, imapRes] = await Promise.allSettled([
+      const [cmplRes, pmplRes, godownsRes, purRes, imapRes, stockRes] = await Promise.allSettled([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -684,6 +715,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         getPurRecords(),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         apiCache.fetchWithCache<any[]>(`${constants.baseURL}/json/itemmap`),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apiCache.fetchWithCache<Record<string, Record<string, number>>>(`${constants.baseURL}/api/stock`),
       ]);
 
       if (cmplRes.status === 'fulfilled' && Array.isArray(cmplRes.value)) {
@@ -708,6 +741,13 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         setItemMap(imapRes.value);
       } else if (imapRes.status === 'rejected') {
         console.error('Error fetching itemmap:', imapRes.reason);
+      }
+
+      if (stockRes.status === 'fulfilled' && stockRes.value && typeof stockRes.value === 'object') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setStockData(stockRes.value as any);
+      } else if (stockRes.status === 'rejected') {
+        console.error('Error fetching stock:', stockRes.reason);
       }
 
       if (godownsRes.status === 'fulfilled' && Array.isArray(godownsRes.value)) {
