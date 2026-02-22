@@ -25,6 +25,7 @@ type ItemRow = {
   gstPercent: string;
   gstCode?: string;
   godown?: string;
+  unit?: string;
   originalDescription?: string;
 };
 
@@ -112,6 +113,8 @@ const NewPurchase: React.FC = () => {
   }, [godownOptions]);
 
   const [globalGodown, setGlobalGodown] = useState<string>('');
+  const [globalUnit, setGlobalUnit] = useState<string>('BOX');
+  const unitOptions = [{ value: 'BOX', label: 'BOX' }, { value: 'PCS', label: 'PCS' }];
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [localKey, setLocalKey] = useState<string | null>(() => localStorage.getItem('gemini_apikey'));
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
@@ -173,7 +176,7 @@ const NewPurchase: React.FC = () => {
   const handleResetColumns = () => setHiddenColumns([]);
 
   const addItem = () => {
-    setItems((prev) => [...prev, { description: '', hsn: '', qty: '', rate: '', mrp: '', itemCode: '', discRs: '', discPercent: '', cdPercent: '', gstPercent: '', gstCode: '', godown: globalGodown || '' }]);
+    setItems((prev) => [...prev, { description: '', hsn: '', qty: '', rate: '', mrp: '', itemCode: '', discRs: '', discPercent: '', cdPercent: '', gstPercent: '', gstCode: '', godown: globalGodown || '', unit: globalUnit || 'BOX' }]);
   };
 
   const resolveItemCode = (name: string, mrpVal: string) => {
@@ -501,7 +504,10 @@ const NewPurchase: React.FC = () => {
       const gstStr = found ? (gstVal !== undefined && gstVal !== null ? String(gstVal) : '') : row.gstPercent;
       const gstCode = found ? String(found.GST_CODE || found.GR_CODE || '').trim() : (row.gstCode || '');
       const mrpStr = found && (typeof found.MRP1 === 'number' ? String(found.MRP1) : String(found.MRP1 || row.mrp));
-      return { ...row, itemCode: code, description: desc, hsn, gstPercent: gstStr, gstCode: gstCode || undefined, mrp: mrpStr || row.mrp };
+      // Auto-set unit from PMPL UNIT_1 field (BOX or PCS)
+      const rawUnit = found ? String(found.UNIT_1 || found.UNIT || '').trim().toUpperCase() : '';
+      const unit = rawUnit === 'BOX' || rawUnit === 'PCS' ? rawUnit : (row.unit || globalUnit || 'BOX');
+      return { ...row, itemCode: code, description: desc, hsn, gstPercent: gstStr, gstCode: gstCode || undefined, mrp: mrpStr || row.mrp, unit };
     }));
   };
 
@@ -816,6 +822,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
           cdPercent: String(r.cdPercent || ''),
           gstPercent: String(r.gstPercent || ''),
           gstCode: String(r.gstCode || ''),
+          unit: String(r.unit || 'BOX'),
         }));
         setItems(mapped);
       }
@@ -977,6 +984,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             cdPercent: r.cdPercent,
             gstPercent: r.gstPercent,
             godown: (r.godown || '').slice(0, 2),
+            unit: r.unit || 'BOX',
             taxable: taxable.toFixed(2),
             gstAmount: gstAmt.toFixed(2),
             total: total.toFixed(2)
@@ -1252,6 +1260,27 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                   placeholder="Select Godown"
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700 dark:text-gray-300">Unit</span>
+                <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden">
+                  {unitOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setGlobalUnit(opt.value);
+                        setItems(prev => prev.map(r => ({ ...r, unit: opt.value })));
+                      }}
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${globalUnit === opt.value
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button onClick={addItem} className="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-3 py-2 text-sm font-medium">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
                 Add Item
@@ -1396,6 +1425,12 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       Item Code
                     </div>
                   </th>}
+                  {!hiddenColumns.includes('Unit') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Unit')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Unit
+                    </div>
+                  </th>}
                   {!hiddenColumns.includes('GDN') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     <div className="flex flex-col items-start">
                       <button onClick={() => handleHideColumn('GDN')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
@@ -1512,6 +1547,23 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       </td>}
                       {!hiddenColumns.includes('Item Code') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`code-${index}`} label="Item Code" value={row.itemCode} onChange={() => { }} variant="outlined" disabled maxLength={5} className="w-[9ch]" />
+                      </td>}
+                      {!hiddenColumns.includes('Unit') && <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden">
+                          {unitOptions.map(opt => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setItems(prev => prev.map((r, i) => i === index ? { ...r, unit: opt.value } : r))}
+                              className={`px-2 py-1 text-xs font-semibold transition-colors ${(row.unit || 'BOX') === opt.value
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
                       </td>}
                       {!hiddenColumns.includes('GDN') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Select
