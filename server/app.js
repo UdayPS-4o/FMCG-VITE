@@ -113,6 +113,10 @@ app.use('/api', billsRoutes);
 const godownRoutes = require('./routes/godowns');
 app.use('/api', godownRoutes);
 
+const shikharSchemeRoutes = require('./routes/shikhar_scheme');
+app.use('/api', shikharSchemeRoutes);
+
+
 const slinkRoutes = require('./routes/slink');
 const orcusRoutes = require('./routes/orcusRoutes');
 app.use(express.static(path.join(__dirname, '.', 'dist')));

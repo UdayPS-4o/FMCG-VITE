@@ -39,4 +39,4 @@ server/db
 server/.env
 server/db
 
-
+public

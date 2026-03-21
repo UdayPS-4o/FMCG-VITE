@@ -31,6 +31,7 @@ export interface ItemData {
   itemCode?: string;    // BILLDTL.CODE - Item Code from original bill
   itemName?: string;    // BILLDTL.PRODUCT - Item Name from original bill
   billdtlUnit?: string; // Original UNIT from BILLDTL for reference
+  schDisabled?: boolean; // Flag to prevent auto-scheme if manually overridden
 }
 
 export interface InvoiceContextType {

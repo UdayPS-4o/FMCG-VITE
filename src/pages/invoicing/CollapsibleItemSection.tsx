@@ -22,6 +22,7 @@ interface CollapsibleItemSectionProps {
   item: ItemData;
   expanded: boolean;
   partyCode: string | null; // Added partyCode prop
+  invoiceDate?: string; // Added invoiceDate for exact scheme matching
   handleAccordionChange: (panel: number) => (event: React.SyntheticEvent, isExpanded: boolean) => void;
   updateItem: (index: number, data: ItemData) => void;
   removeItem: (index: number) => void;
@@ -48,6 +49,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   item,
   expanded,
   partyCode, // Destructure partyCode from props
+  invoiceDate,
   handleAccordionChange,
   updateItem,
   removeItem,
@@ -74,6 +76,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   const [tooltipData, setTooltipData] = useState<any>(null); // State for tooltip data
   const [activeTooltipField, setActiveTooltipField] = useState<string | null>(null); // State for active tooltip
   
+  const [activeSchemes, setActiveSchemes] = useState<any[]>([]); // State for active schemes
+
   // State to track if initial focus (on expand) has been handled
   const [initialFocusHandled, setInitialFocusHandled] = useState<boolean>(false);
 
@@ -115,6 +119,35 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
       setUnitOptions(units);
     }
   }, [item.selectedItem]);
+
+  // Fetch active schemes for the selected item and date
+  useEffect(() => {
+    if (item.item && invoiceDate) {
+      const fetchSchemes = async () => {
+        try {
+          const response = await fetch(`${constants.baseURL}/api/schemes/for-item?itemCode=${encodeURIComponent(item.item)}&date=${encodeURIComponent(invoiceDate)}`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.schemes) {
+              setActiveSchemes(data.schemes);
+            } else {
+              setActiveSchemes([]);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch active schemes:', err);
+          setActiveSchemes([]);
+        }
+      };
+      
+      // Only fetch when exactly expanded to not overload network if many items
+      fetchSchemes();
+    } else {
+      setActiveSchemes([]);
+    }
+  }, [item.item, invoiceDate]);
 
   // Ref to track if swap unit was focused by Enter on Godown
   const swapUnitFocusedByEnter = useRef(false);
@@ -222,6 +255,19 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
         } else {
           setError('');
         }
+
+        // Auto scheme logic when unit swaps
+        if (!dataWithNewUnitAndRate.schDisabled && !isNaN(qtyNum) && qtyNum > 0 && activeSchemes.length > 0) {
+            const multF = parseInt(dataWithNewUnitAndRate.pcBx, 10) || 1;
+            const quantityInPieces = newUnit === currentSelectedItem.UNIT_2 ? qtyNum * multF : qtyNum;
+            const matchingSchemes = activeSchemes.filter(sch => quantityInPieces >= sch.slab1 && quantityInPieces <= sch.slab2);
+            if (matchingSchemes.length > 0) {
+                const totalDiscount = matchingSchemes.reduce((sum, sch) => sum + sch.discount, 0);
+                dataWithNewUnitAndRate.sch = totalDiscount.toString();
+            } else {
+                dataWithNewUnitAndRate.sch = '0';
+            }
+        }
       } else if (!dataWithNewUnitAndRate.qty || dataWithNewUnitAndRate.qty === '0') {
         // If quantity is empty or zero, clear any previous error
         setError('');
@@ -257,6 +303,13 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
 
   const handleFieldChange = (name: string, newValue: string) => {
     let updatedData = { ...item, [name]: newValue };
+    
+    // Disable automatic scheme if rate is manually changed
+    if (name === 'rate') {
+        updatedData.schDisabled = true;
+        updatedData.sch = '0';
+    }
+    
     if (name === 'qty' || name === 'rate' || name === 'schRs' || name === 'sch' || name === 'cd') {
       if (name === 'qty') {
         // Skip validation for empty or zero values
@@ -291,6 +344,22 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
             setError(`Quantity cannot exceed available stock of ${item.stockLimit}`);
           } else {
             setError('');
+          }
+
+          // Apply auto scheme logic
+          if (!updatedData.schDisabled && !isNaN(qty) && qty > 0 && activeSchemes.length > 0) {
+            const multF = parseInt(item.pcBx, 10) || 1;
+            const quantityInPieces = (item.selectedItem && item.unit === item.selectedItem.UNIT_2) 
+                                      ? qty * multF 
+                                      : qty;
+                                      
+            const matchingSchemes = activeSchemes.filter(sch => quantityInPieces >= sch.slab1 && quantityInPieces <= sch.slab2);
+            if (matchingSchemes.length > 0) {
+                const totalDiscount = matchingSchemes.reduce((sum, sch) => sum + sch.discount, 0);
+                updatedData.sch = totalDiscount.toString();
+            } else {
+                updatedData.sch = '0';
+            }
           }
         }
       } else {
@@ -368,6 +437,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
         netAmount: '0.00',
         stock: '', 
         stockLimit: 0, 
+        schDisabled: false,
       });
       setUnitOptions([]);
       itemNameAutocompleteRef.current?.focus(); // Using correct ref name
@@ -419,7 +489,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
       if (isNaN(currentGodownStock)) currentGodownStock = 0;
     }
 
-    let updatedItemData = {
+    let updatedItemData: ItemData = {
       ...item,
       item: selectedPmplItem.CODE,
       selectedItem: selectedPmplItem,
@@ -431,6 +501,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
       rate: initialRate,
       stock: totalStockForItem.toString(), // For "Total Stock" display field
       stockLimit: currentGodownStock, // Initial stock limit based on current godown
+      schDisabled: false, // Reset override flag on new item selection
        // Do not reset qty here, allow user to input
     };
 
@@ -1054,7 +1125,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 label="Sch%"
                 value={item.sch}
                 onChange={(e) => handleFieldChange('sch', e.target.value)}
-                disabled={!item.qty}
+                disabled={!item.qty || !!item.schDisabled}
                 type="text" inputMode="decimal"
                 variant="outlined"
                 ref={schInputRef}
