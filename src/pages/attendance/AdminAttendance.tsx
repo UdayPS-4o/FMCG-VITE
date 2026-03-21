@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -110,6 +110,142 @@ interface MandatoryDocsData {
   cashBook: string | null;
   bankSlips: string[];
 }
+
+const PresentDaysTooltip: React.FC<{ userId: number; month: string; targetValue: React.ReactNode }> = ({ userId, month, targetValue }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const fetchRecords = async () => {
+    if (hasFetched || loading) return;
+    setLoading(true);
+    try {
+      const yearStr = month.split('-')[0];
+      const monthStr = month.split('-')[1];
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${constants.baseURL}/api/attendance/admin/user-history`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ userId, month: monthStr, year: yearStr })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRecords(data.records || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+      setHasFetched(true);
+    }
+  };
+
+  const toggleTooltip = () => {
+    if (!isOpen) {
+      fetchRecords();
+    }
+    setIsOpen(!isOpen);
+  };
+
+  const formatDateShort = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  return (
+    <div 
+      className="relative flex items-center" 
+      ref={tooltipRef}
+    >
+      <div 
+        className="cursor-pointer border-b border-dashed border-gray-400 dark:border-gray-500 font-medium text-gray-900 dark:text-white group"
+        onClick={toggleTooltip}
+      >
+        {targetValue}
+      </div>
+      
+      {isOpen && (
+        <div className="absolute z-50 left-1/2 bottom-full -translate-x-1/2 mb-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 text-sm">
+          <div className="font-semibold text-gray-900 dark:text-white mb-2 pb-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <span>Attendance Details</span>
+            <div className="flex items-center space-x-2">
+              <span>{month}</span>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          {loading ? (
+            <div className="text-center py-4 text-gray-500">Loading...</div>
+          ) : records.length > 0 ? (
+            <div 
+              className="max-h-48 overflow-y-auto w-full pr-1 pointer-events-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full"
+              onWheel={(e) => e.stopPropagation()}
+            >
+            <table className="w-full text-xs text-left">
+              <thead className="bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 top-0 sticky z-10">
+                <tr>
+                  <th className="px-2 py-1.5 font-medium rounded-tl">Date</th>
+                  <th className="px-2 py-1.5 font-medium">Time</th>
+                  <th className="px-2 py-1.5 font-medium rounded-tr">Status</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-600 dark:text-gray-400">
+                {records.map(r => (
+                  <tr key={r.id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td className="px-2 py-1.5 whitespace-nowrap">{formatDateShort(r.date)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{r.time}</td>
+                    <td className="px-2 py-1.5">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap ${
+                        r.status === 'present' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
+                        r.status === 'half_day' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' :
+                        'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                      }`}>
+                        {r.status === 'present' ? 'Present' : r.status === 'half_day' ? 'Half Day' : 'Absent'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+           </div>
+          ) : (
+            <div className="text-center py-4 text-gray-500 text-xs">No records found.</div>
+          )}
+          
+          {/* Tooltip triangle indicator */}
+          <div className="absolute top-full left-1/2 -ml-2 border-4 border-transparent border-t-white dark:border-t-gray-800 drop-shadow-sm"></div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const AdminAttendance: React.FC = () => {
   const navigate = useNavigate();
@@ -1221,8 +1357,12 @@ const AdminAttendance: React.FC = () => {
                                   <p className="font-medium text-gray-900 dark:text-white">₹{salary.monthlySalary.toFixed(2)}</p>
                                 </div>
                                 <div>
-                                  <span className="text-gray-500 dark:text-gray-400">Present Days:</span>
-                                  <p className="font-medium text-gray-900 dark:text-white">{salary.attendance.presentDays}</p>
+                                  <span className="text-gray-500 dark:text-gray-400 block mb-1">Present Days:</span>
+                                  <PresentDaysTooltip 
+                                    userId={salary.userId} 
+                                    month={salary.month} 
+                                    targetValue={salary.attendance.presentDays} 
+                                  />
                                 </div>
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400">Half Days:</span>
