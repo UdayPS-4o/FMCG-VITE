@@ -343,13 +343,20 @@ const GSTR2AMatching: React.FC = () => {
       const results = await Promise.all(downloadPromises);
 
       let b2bIndex = 0;
+      let b2bSuccessCount = 0;
+      let cdnSuccessCount = 0;
+      let errorMessages: string[] = [];
+
       if (selectedSections.b2b) {
         const b2bResult = results[b2bIndex];
-        if (b2bResult.status_cd === '1' && b2bResult.data) {
-          const rawB2BData = b2bResult.data.b2b || [];
+        const isB2BSuccess = b2bResult.status_cd === '1' || b2bResult.b2b !== undefined || (b2bResult.status_cd === undefined && b2bResult.error === undefined);
+        const b2bDataPayload = b2bResult.data ? b2bResult.data : b2bResult;
+
+        if (isB2BSuccess) {
+          const rawB2BData = b2bDataPayload.b2b || [];
           // Flatten the nested structure: each supplier has an 'inv' array
           const flattenedB2BData = rawB2BData.flatMap((supplier: any) =>
-            supplier.inv.map((invoice: any) => ({
+            (supplier.inv || []).map((invoice: any) => ({
               ...invoice,
               ctin: supplier.ctin
             }))
@@ -366,7 +373,7 @@ const GSTR2AMatching: React.FC = () => {
               body: JSON.stringify({
                 month: month,
                 fileType: 'B2B',
-                data: b2bResult.data
+                data: b2bDataPayload
               })
             });
             console.log(`B2B data saved to gstr2a-data/${month}/gstr2aB2B${month}.json`);
@@ -374,20 +381,23 @@ const GSTR2AMatching: React.FC = () => {
             console.error('Error saving B2B file:', saveError);
             // Continue with the process even if save fails
           }
+          b2bSuccessCount++;
         } else {
-          setError(`B2B data download failed: ${b2bResult.error?.message || 'Unknown error'}`);
-          return;
+          errorMessages.push(`B2B data download failed: ${b2bResult.error?.message || (typeof b2bResult.error === 'string' ? b2bResult.error : null) || 'Unknown error'}`);
         }
         b2bIndex++;
       }
 
       if (selectedSections.cdn) {
         const cdnResult = results[b2bIndex];
-        if (cdnResult.status_cd === '1' && cdnResult.data) {
-          const rawCDNData = cdnResult.data.cdn || [];
+        const isCDNSuccess = cdnResult.status_cd === '1' || cdnResult.cdn !== undefined || (cdnResult.status_cd === undefined && cdnResult.error === undefined);
+        const cdnDataPayload = cdnResult.data ? cdnResult.data : cdnResult;
+
+        if (isCDNSuccess) {
+          const rawCDNData = cdnDataPayload.cdn || [];
           // Flatten the nested structure: each supplier has an 'nt' array
           const flattenedCDNData = rawCDNData.flatMap((supplier: any) =>
-            supplier.nt.map((note: any) => ({
+            (supplier.nt || []).map((note: any) => ({
               ...note,
               ctin: supplier.ctin
             }))
@@ -404,7 +414,7 @@ const GSTR2AMatching: React.FC = () => {
               body: JSON.stringify({
                 month: month,
                 fileType: 'CDN',
-                data: cdnResult.data
+                data: cdnDataPayload
               })
             });
             console.log(`CDN data saved to gstr2a-data/${month}/gstr2aCDN${month}.json`);
@@ -412,10 +422,23 @@ const GSTR2AMatching: React.FC = () => {
             console.error('Error saving CDN file:', saveError);
             // Continue with the process even if save fails
           }
+          cdnSuccessCount++;
         } else {
-          setError(`CDN data download failed: ${cdnResult.error?.message || 'Unknown error'}`);
-          return;
+          errorMessages.push(`CDN data download failed: ${cdnResult.error?.message || (typeof cdnResult.error === 'string' ? cdnResult.error : null) || 'Unknown error'}`);
         }
+      }
+
+      if (errorMessages.length > 0) {
+        setError(errorMessages.join(' | '));
+      }
+
+      const anySelectedSectionSucceeded = 
+        (selectedSections.b2b && b2bSuccessCount > 0) || 
+        (selectedSections.cdn && cdnSuccessCount > 0);
+
+      // Only abort if we didn't get any data for what we asked for
+      if (!anySelectedSectionSucceeded) {
+        return;
       }
 
       setCurrentStep('display');

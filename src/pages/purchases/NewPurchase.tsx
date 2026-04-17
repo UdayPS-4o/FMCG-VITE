@@ -121,6 +121,7 @@ const NewPurchase: React.FC = () => {
   const [tempKey, setTempKey] = useState<string>('');
   const apiKey = localKey || (import.meta.env.VITE_GEMINI_API_KEY as string | undefined) || undefined;
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string>('');
   const [isRateInclusive, setIsRateInclusive] = useState<boolean>(false);
   const [showNewItemModal, setShowNewItemModal] = useState<boolean>(false);
@@ -174,6 +175,8 @@ const NewPurchase: React.FC = () => {
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const handleHideColumn = (col: string) => setHiddenColumns(prev => [...prev, col]);
   const handleResetColumns = () => setHiddenColumns([]);
+
+  const [cashDiscount, setCashDiscount] = useState<string>('');
 
   const addItem = () => {
     setItems((prev) => [...prev, { description: '', hsn: '', qty: '', rate: '', mrp: '', itemCode: '', discRs: '', discPercent: '', cdPercent: '', gstPercent: '', gstCode: '', godown: globalGodown || '', unit: globalUnit || 'BOX' }]);
@@ -902,6 +905,9 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
   };
 
   const handleSavePurchase = async () => {
+    // Prevent double-submission: block if already saving
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       if (items.length === 0) {
         alert('No items present in bill. The bill cannot be saved.');
@@ -918,6 +924,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         alert(`Item Code is required for all rows.\nMissing on row(s): ${missingCodes.map(x => x.idx).join(', ')}`);
         return;
       }
+      // --- Duplicate check 1: JSON purchase store (same supplier + invoice, different record) ---
       try {
         const tokenDup = localStorage.getItem('token');
         const respDup = await fetch(`${constants.baseURL}/json/purchases`, {
@@ -934,12 +941,36 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             return sameSupp && sameInv && !sameBill && !sameCreated;
           });
           if (dup) {
-            alert('Bill already present for the same supplier and invoice number.');
+            alert(`Bill no. ${dup.bill || invoiceNo} already present for the same supplier and invoice number.`);
             return;
           }
         }
       } catch (err) {
         console.error(err);
+      }
+      // --- Duplicate check 2: Live PUR DBF (catches entries already committed to the database) ---
+      try {
+        const tokenPur = localStorage.getItem('token');
+        const respPur = await fetch(`${constants.baseURL}/api/dbf/PUR.json`, {
+          headers: { ...(tokenPur ? { Authorization: `Bearer ${tokenPur}` } : {}) }
+        });
+        if (respPur.ok) {
+          const purArr = await respPur.json();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const purDup = (purArr || []).find((x: any) => {
+            const sameSupp = String(x.C_CODE || '').trim() === String(supplierCode || '').trim();
+            const samePbill = String(x.PBILL || '').trim() === String(invoiceNo || '').trim();
+            // Skip the currently-editing bill
+            const isCurrentBill = editingBill && String(x.BILL || '') === String(editingBill);
+            return sameSupp && samePbill && !isCurrentBill;
+          });
+          if (purDup) {
+            alert(`Bill no. ${purDup.BILL} (Invoice: ${invoiceNo}) already present in the database for this supplier. Please check the Purchases Database.`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('PUR duplicate check error:', err);
       }
       const token = localStorage.getItem('token');
       // Determine BILL to use
@@ -1060,12 +1091,17 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
           const rounded = Math.round(gross);
           const roundOff = rounded - gross;
           const grandTotal = gross + roundOff;
+          const cdValue = parseFloat(cashDiscount || '0');
+          const safeCdValue = isNaN(cdValue) ? 0 : cdValue;
+          const netTotal = grandTotal - safeCdValue;
           return {
             taxable: Number(totalTaxable.toFixed(2)),
             cgst: Number((totalTax / 2).toFixed(2)),
             sgst: Number((totalTax / 2).toFixed(2)),
             roundOff: Number(roundOff.toFixed(2)),
-            total: Number(grandTotal.toFixed(2))
+            cashDiscount: Number(safeCdValue.toFixed(2)),
+            total: Number(grandTotal.toFixed(2)),
+            netTotal: Number(netTotal.toFixed(2))
           };
         })()
       };
@@ -1088,6 +1124,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
       }
     } catch {
       alert('Error saving purchase');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1167,7 +1205,21 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M8 8h8v8H8z" /></svg>
               {isProcessing ? 'Processing…' : 'Upload Invoice (OCR)'}
             </button>
-            <button onClick={handleSavePurchase} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-medium">Save Purchase</button>
+            <button
+              onClick={handleSavePurchase}
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white px-4 py-2 text-sm font-medium"
+            >
+              {isSaving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Saving…
+                </>
+              ) : 'Save Purchase'}
+            </button>
           </div>
         </div>
 
@@ -1272,8 +1324,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                         setItems(prev => prev.map(r => ({ ...r, unit: opt.value })));
                       }}
                       className={`px-3 py-1.5 text-sm font-medium transition-colors ${globalUnit === opt.value
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                         }`}
                     >
                       {opt.label}
@@ -1331,7 +1383,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                 </div>
                 <Input id="extraDesc" label="Extra Description" value={newItemExtraDesc} onChange={(e) => setNewItemExtraDesc(e.target.value)} variant="outlined" />
               </div>
-              <div className="mt-4 flex justify-end gap-2">
+              <div className="mt-4 flex justiDend gap-2">
                 <button onClick={() => setShowNewItemModal(false)} className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancel</button>
                 <button
                   onClick={async () => {
@@ -1556,8 +1608,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                               type="button"
                               onClick={() => setItems(prev => prev.map((r, i) => i === index ? { ...r, unit: opt.value } : r))}
                               className={`px-2 py-1 text-xs font-semibold transition-colors ${(row.unit || 'BOX') === opt.value
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                                 }`}
                             >
                               {opt.label}
@@ -1718,6 +1770,9 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               const rounded = Math.round(grandGross);
               const roundOff = rounded - grandGross;
               const grandTotal = grandGross + roundOff;
+              const cdValue = parseFloat(cashDiscount || '0');
+              const safeCdValue = isNaN(cdValue) ? 0 : cdValue;
+              const netTotal = grandTotal - safeCdValue;
 
               return (
                 <>
@@ -1782,7 +1837,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       </tbody>
                     </table>
                   </div>
-                  <div className="text-right w-full lg:w-auto">
+                  <div className="text-right w-full lg:w-auto flex flex-col justify-end items-end gap-1">
                     <div className="text-sm text-gray-600 dark:text-gray-300">Taxable: {formatINR.format(grandTaxable)}</div>
                     {isInterState ? (
                       <div className="text-sm text-gray-600 dark:text-gray-300">IGST: {formatINR.format(grandTax)}</div>
@@ -1793,7 +1848,18 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       </>
                     )}
                     <div className="text-sm text-gray-600 dark:text-gray-300">Round Off: {roundOff >= 0 ? '+' : ''}{roundOff.toFixed(2)}</div>
-                    <div className="mt-2 text-xl font-semibold text-gray-900 dark:text-white">Total: {formatINR.format(grandTotal)}</div>
+                    <div className="text-lg font-semibold text-gray-900 dark:text-white mt-1 border-t border-gray-200 dark:border-gray-700 pt-1">Total: {formatINR.format(grandTotal)}</div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Cash Discount (CD):</label>
+                      <input
+                        type="number"
+                        value={cashDiscount}
+                        onChange={(e) => setCashDiscount(e.target.value)}
+                        className="w-24 px-2 py-1 text-right text-sm border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="mt-2 text-xl font-bold text-green-700 dark:text-green-500 border-t-2 border-gray-200 dark:border-gray-700 pt-2">Net Payable: {formatINR.format(netTotal)}</div>
                   </div>
                 </>
               );
