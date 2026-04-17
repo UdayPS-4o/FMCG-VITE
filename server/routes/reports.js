@@ -1469,7 +1469,7 @@ router.post('/gst-download-gstr2a', async (req, res) => {
           'Content-Type': 'application/json',
           'aspid': aspid,
           'password': password,
-          'authtoken': authtoken
+          'auth-token': authtoken
         },
         timeout: 60000 // 60 second timeout for data download
       }
