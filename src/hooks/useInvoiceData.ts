@@ -56,7 +56,7 @@ export const useInvoiceData = () => {
   useEffect(() => {
     // Don't fetch if we already have data (prevents double fetching in StrictMode)
     if (dataFetchedRef.current) return;
-    
+
     // Create a new AbortController for this fetch operation
     fetchControllerRef.current = new AbortController();
     const signal = fetchControllerRef.current.signal;
@@ -64,7 +64,7 @@ export const useInvoiceData = () => {
     const loadAllData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch all data in parallel for better performance
         const [accountData, pmplRes, stockRes, godownRes, balanceRes] = await Promise.all([
           // Fetch account data with fallback
@@ -81,15 +81,15 @@ export const useInvoiceData = () => {
 
         // Helper function to get balance for a party code
         const getBalance = (code: string) => {
-          const balanceData = balanceRes?.data?.find((user: any) => 
+          const balanceData = balanceRes?.data?.find((user: any) =>
             user.partycode === code || user.C_CODE === code
           );
-          
+
           if (!balanceData) return "0.00";
-          
+
           const balanceValue = balanceData.result || 0;
           let formattedBalance = "";
-          
+
           // Check if the balance already contains CR/DR indicators
           if (typeof balanceValue === 'string') {
             if (balanceValue.includes('CR') || balanceValue.includes('DR')) {
@@ -106,24 +106,24 @@ export const useInvoiceData = () => {
             // Numeric value
             formattedBalance = `${Math.abs(balanceValue).toFixed(2)} ${balanceValue < 0 ? 'CR' : 'DR'}`;
           }
-          
+
           return formattedBalance;
         };
 
         // Process account data
-        const parties = Array.isArray(accountData) 
+        const parties = Array.isArray(accountData)
           ? accountData.map(acc => {
-              const code = acc.AC_CODE || acc.C_CODE || acc.id;
-              const name = acc.AC_HEAD || acc.C_NAME || acc.name;
-              const balance = getBalance(code);
-              return {
-                value: code,
-                label: `${name} | ${balance}`,
-                name: name,
-                balance: balance,
-                gst: acc.GST || acc.GSTNO || ''
-              };
-            })
+            const code = acc.AC_CODE || acc.C_CODE || acc.id;
+            const name = acc.AC_HEAD || acc.C_NAME || acc.name;
+            const balance = getBalance(code);
+            return {
+              value: code,
+              label: `${name} | ${balance}`,
+              name: name,
+              balance: balance,
+              gst: acc.GST || acc.GSTNO || ''
+            };
+          })
           : [];
 
         // Filter salesmen (codes that start with 'SM')
@@ -139,9 +139,9 @@ export const useInvoiceData = () => {
         setSmOptions(sms);
         setPmplData(pmplRes);
         setStockList(stockRes);
-        setGodownOptions(godownRes.map((gdn: Godown) => ({ 
-          value: gdn.GDN_CODE, 
-          label: gdn.GDN_NAME 
+        setGodownOptions(godownRes.map((gdn: Godown) => ({
+          value: gdn.GDN_CODE,
+          label: gdn.GDN_NAME
         })));
 
         // Clear expired cache items

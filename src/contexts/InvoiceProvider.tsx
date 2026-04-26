@@ -17,11 +17,11 @@ interface InvoiceProviderProps {
   setItems: React.Dispatch<React.SetStateAction<ItemData[]>>;
 }
 
-const InvoiceProvider: React.FC<InvoiceProviderProps> = ({ 
-  children, 
-  items, 
-  updateItem, 
-  removeItem, 
+const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
+  children,
+  items,
+  updateItem,
+  removeItem,
   addItem,
   calculateTotal,
   expandedIndex,
@@ -60,7 +60,7 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
             'Authorization': `Bearer ${token}`
           }
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           if (data.authenticated && data.user) {
@@ -81,11 +81,11 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
     if (dataFetched.current) {
       return;
     }
-    
+
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch master data in parallel (stock fetched in a dedicated effect)
         const [pmplResponse, godownResponse, partyResponse, balanceResponse, invoiceIdResponse] = await Promise.all([
           apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
@@ -94,15 +94,15 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           apiCache.fetchWithCache<any>(`${constants.baseURL}/json/balance`),
           apiCache.fetchWithCache<any>(`${constants.baseURL}/slink/invoiceID`)
         ]);
-        
+
         // Mark data as fetched to avoid repeating expensive operations
         dataFetched.current = true;
-        
+
         // Store the invoice ID information
         if (invoiceIdResponse && invoiceIdResponse.nextSeries) {
           setInvoiceIdInfo(invoiceIdResponse);
         }
-        
+
         // Process PMPL data
         if (Array.isArray(pmplResponse)) {
           setPmplData(pmplResponse);
@@ -118,18 +118,18 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
             value: gdn.GDN_CODE,
             label: gdn.GDN_NAME,
           }));
-          
+
           // Filter godowns based on user access rights
           let filteredGodowns = allGodowns;
-          
+
           // If user has godownAccess restrictions, filter the godowns
           if (userRef.current && userRef.current.godownAccess && userRef.current.godownAccess.length > 0) {
-            filteredGodowns = allGodowns.filter(godown => 
+            filteredGodowns = allGodowns.filter(godown =>
               userRef.current.godownAccess.includes(godown.value)
             );
             console.log(`Filtered to ${filteredGodowns.length} godowns based on user's access`);
           }
-          
+
           setGodownOptions(filteredGodowns);
         } else {
           console.warn('Godown response is not an array:', godownResponse);
@@ -139,37 +139,37 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
         // Process party and SM data
         if (Array.isArray(partyResponse)) {
           // Filter for parties (DT group) and exclude those with C_CODE ending in "000"
-          let dtParties = partyResponse.filter(party => 
+          let dtParties = partyResponse.filter(party =>
             // party.M_GROUP === 'DT' &&
-             !party.C_CODE.endsWith('000')
+            !party.C_CODE.endsWith('000')
           );
-          
+
           // Check if user is an admin
           const currentUser = userRef.current;
           const isAdmin = currentUser && currentUser.routeAccess && currentUser.routeAccess.includes('Admin');
-          
+
           // Only filter parties if user is not an admin and has assigned subgroups
           if (!isAdmin && currentUser && currentUser.subgroups && currentUser.subgroups.length > 0) {
             console.log(`Filtering parties by user's assigned subgroups`);
-            
+
             // Get all subgroup prefixes from user's assigned subgroups
-            const subgroupPrefixes = currentUser.subgroups.map(sg => 
+            const subgroupPrefixes = currentUser.subgroups.map(sg =>
               sg.subgroupCode.substring(0, 2).toUpperCase()
             );
-            
+
             console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
-            
+
             // Filter parties where C_CODE starts with any of the user's subgroup prefixes
             dtParties = dtParties.filter(party => {
               const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
               return subgroupPrefixes.includes(partyPrefix);
             });
-            
+
             console.log(`Filtered to ${dtParties.length} parties based on user's subgroups`);
           } else if (isAdmin) {
             console.log('User is admin - showing all parties without filtering');
           }
-          
+
           // Get balance information
           const balanceMap = new Map();
           if (balanceResponse && Array.isArray(balanceResponse.data)) {
@@ -177,14 +177,14 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
               balanceMap.set(item.partycode, item.result);
             });
           }
-          
+
           const partyOpts = dtParties.map(party => {
             // Get balance for this party
             const balance = balanceMap.get(party.C_CODE);
-            
+
             // Check if balance is non-zero (either greater or in negative)
             const hasNonZeroBalance = balance && balance.trim() !== '0 CR' && balance.trim() !== '0 DR';
-            
+
             return {
               value: party.C_CODE,
               label: hasNonZeroBalance
@@ -193,14 +193,14 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
               gst: party.GST_NO || party.GST || '',
             };
           });
-          
+
           setPartyOptions(partyOpts);
-          
+
           // Process SM options from the same CMPL data, excluding those ending with "000"
-          const smList = partyResponse.filter(sm => 
+          const smList = partyResponse.filter(sm =>
             sm.C_CODE.startsWith('SM') && !sm.C_CODE.endsWith('000')
           );
-          
+
           const smOpts = smList.map(sm => ({
             value: sm.C_CODE,
             label: `${sm.C_NAME} | ${sm.C_CODE}`,
@@ -221,7 +221,7 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
     };
 
     fetchData();
-    
+
     // Clean up expired cache items
     try {
       apiCache.clearExpiredCache();

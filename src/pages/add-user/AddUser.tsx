@@ -61,7 +61,7 @@ const AddUser: React.FC = () => {
     'Cash Payments',
     'Reports',
   ]);
-  
+
   const [powersOptions] = useState<string[]>(['Read', 'Write', 'Delete']);
   const [subgroupOptions, setSubgroupOptions] = useState<SubGroup[]>([]);
   const [smOptions, setSmOptions] = useState<SmOption[]>([]);
@@ -70,7 +70,7 @@ const AddUser: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEdit, setIsEdit] = useState<boolean>(false);
   const [godownOptions, setGodownOptions] = useState<any[]>([]);
-  
+
   // Form state
   const [name, setName] = useState<string>('');
   const [number, setNumber] = useState<string>('');
@@ -81,7 +81,7 @@ const AddUser: React.FC = () => {
   const [smCode, setSmCode] = useState<string>('');
   const [userId, setUserId] = useState<number | null>(null);
   const [formKey, setFormKey] = useState<number>(0);
-  
+
   // New state for default series
   const [defaultBillingSeries, setDefaultBillingSeries] = useState<string>('');
   const [defaultCashReceiptSeries, setDefaultCashReceiptSeries] = useState<string>('');
@@ -93,7 +93,7 @@ const AddUser: React.FC = () => {
   const [allowPastDateEntries, setAllowPastDateEntries] = useState<boolean>(false);
   const [requireMandatoryDocs, setRequireMandatoryDocs] = useState<boolean>(false);
   const [mandatoryDocsFromDate, setMandatoryDocsFromDate] = useState<string>('');
-  
+
   const navigate = useNavigate();
   const location = useLocation();
   const { user, refreshUser } = useAuth();
@@ -102,29 +102,29 @@ const AddUser: React.FC = () => {
   const loadUserData = useCallback(async (userId: string) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       // Find the user in already loaded userData
       const userToEdit = userData.find((user: any) => user.id === Number(userId));
-      
+
       if (userToEdit) {
         setIsEdit(true);
         setUserId(userToEdit.id);
         setName(userToEdit.name);
         setNumber(userToEdit.number);
         setPassword(userToEdit.password);
-        setRouteAccess(Array.isArray(userToEdit.routeAccess) 
-          ? userToEdit.routeAccess 
+        setRouteAccess(Array.isArray(userToEdit.routeAccess)
+          ? userToEdit.routeAccess
           : [userToEdit.routeAccess]);
-        setPowers(Array.isArray(userToEdit.powers) 
-          ? userToEdit.powers 
+        setPowers(Array.isArray(userToEdit.powers)
+          ? userToEdit.powers
           : [userToEdit.powers]);
-        
+
         // Set SM code if available
         if (userToEdit.smCode) {
           setSmCode(userToEdit.smCode);
         }
-        
+
         // Handle default series settings
         if (userToEdit.defaultSeries) {
           setDefaultBillingSeries(userToEdit.defaultSeries.billing || '');
@@ -133,19 +133,19 @@ const AddUser: React.FC = () => {
           setDefaultGodownSeries(userToEdit.defaultSeries.godown || '');
           setDefaultReportsSeries(userToEdit.defaultSeries.reports || '');
         }
-        
+
         // Handle series selection permission
         setCanSelectSeries(userToEdit.canSelectSeries !== false);
-        
+
         setAllowPastDateEntries(userToEdit.allowPastDateEntries === true);
         setRequireMandatoryDocs(userToEdit.requireMandatoryDocs === true);
         setMandatoryDocsFromDate(userToEdit.mandatoryDocsFromDate || '');
-        
+
         // Handle godown access rights
         if (userToEdit.godownAccess) {
           setGodownAccess(userToEdit.godownAccess);
         }
-        
+
         // Handle subgroups (can be either old format with single subgroup or new format with array)
         if (userToEdit.subgroups) {
           // New format - array of subgroups
@@ -176,7 +176,7 @@ const AddUser: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const id = params.get('id');
-    
+
     if (id && userData.length) {
       loadUserData(id);
     } else if (!id) {
@@ -189,7 +189,7 @@ const AddUser: React.FC = () => {
     const fetchUserData = async () => {
       setIsLoading(true);
       setError(null);
-      
+
       try {
         const url = `${constants.baseURL}/slink/json/users`;
         const response = await fetch(url, {
@@ -197,11 +197,11 @@ const AddUser: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
+
         if (!response.ok) {
           throw new Error('Failed to fetch user data');
         }
-        
+
         const users = await response.json();
         setUserData(users);
       } catch (err) {
@@ -211,10 +211,10 @@ const AddUser: React.FC = () => {
         setIsLoading(false);
       }
     };
-    
+
     fetchUserData();
   }, []);
-  
+
   // Fetch subgroups and salesman data
   useEffect(() => {
     const fetchData = async () => {
@@ -226,11 +226,11 @@ const AddUser: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
+
         if (!subgroupResponse.ok) {
           throw new Error('Failed to fetch subgroup data');
         }
-        
+
         const subgroups = await subgroupResponse.json();
         setSubgroupOptions(subgroups);
 
@@ -241,37 +241,37 @@ const AddUser: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
+
         if (!salesmanResponse.ok) {
           throw new Error('Failed to fetch salesman data');
         }
-        
+
         const salesmanData = await salesmanResponse.json();
-        
+
         // Filter for entries where code starts with 'SM' and not ending with '000'
-        const smData = salesmanData.filter((sm: any) => 
+        const smData = salesmanData.filter((sm: any) =>
           sm.C_CODE.startsWith('SM') && !sm.C_CODE.endsWith('000')
         );
-        
+
         // Map to the required format
         const formattedSmOptions = smData.map((sm: any) => ({
           value: sm.C_CODE,
           label: `${sm.C_NAME} | ${sm.C_CODE}`
         }));
-        
+
         setSmOptions(formattedSmOptions);
 
         // If editing a user, find and select the matching SM
         if (isEdit && smCode && formattedSmOptions.length > 0) {
           // Already handled in separate effect
         }
-        
+
       } catch (err) {
         console.error('Failed to fetch data:', err);
         setError('Failed to load data');
       }
     };
-    
+
     fetchData();
   }, []);
 
@@ -282,7 +282,7 @@ const AddUser: React.FC = () => {
       const matchedSm = smOptions.find(
         sm => sm.value === smCode
       );
-      
+
       if (matchedSm) {
         // SM is already set by ID, no need to update state again
       }
@@ -299,7 +299,7 @@ const AddUser: React.FC = () => {
         );
         return matchedSubgroup || subgroup;
       });
-      
+
       setSubgroups(updatedSubgroups);
     }
   }, [subgroupOptions, isEdit, subgroups]);
@@ -314,18 +314,18 @@ const AddUser: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
+
         if (!response.ok) {
           throw new Error('Failed to fetch godown data');
         }
-        
+
         const godowns = await response.json();
         setGodownOptions(godowns);
       } catch (err) {
         console.error('Failed to fetch godown data:', err);
       }
     };
-    
+
     fetchGodowns();
   }, []);
 
@@ -333,7 +333,7 @@ const AddUser: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const payload: User = {
         name,
@@ -357,17 +357,17 @@ const AddUser: React.FC = () => {
         requireMandatoryDocs,
         mandatoryDocsFromDate: requireMandatoryDocs ? mandatoryDocsFromDate : undefined
       };
-      
+
       if (isEdit && userId) {
         payload.id = userId;
       }
-      
-      const url = isEdit 
-        ? `${constants.baseURL}/slink/editUser` 
+
+      const url = isEdit
+        ? `${constants.baseURL}/slink/editUser`
         : `${constants.baseURL}/slink/addUser`;
-        
+
       const method = 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -376,41 +376,41 @@ const AddUser: React.FC = () => {
         },
         body: JSON.stringify(payload),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to save user data');
       }
-      
+
       const result = await response.json();
-      
+
       // Update user list after successful operation
-      const updatedUsers = isEdit 
+      const updatedUsers = isEdit
         ? userData.map(user => user.id === userId ? { ...payload, id: userId } : user)
         : [...userData, { ...payload, id: result.id }];
-      
+
       setUserData(updatedUsers);
-      
+
       // If the currently logged in user is being edited, refresh their data
       if (isEdit && user && user.id === userId) {
         // Refresh the user data to reflect new permissions immediately
         await refreshUser();
       }
-      
+
       // Reset form completely
       const originalFormKey = formKey;
       handleClearForm();
-      
+
       // Ensure formKey is different to force complete re-render
       if (formKey === originalFormKey) {
         setFormKey(prev => prev + 1);
       }
-      
+
       // Update URL without a full page reload if in edit mode
       if (isEdit) {
         navigate('/add-user', { replace: true });
       }
-      
+
     } catch (err) {
       console.error('Error saving user:', err);
       setError(err instanceof Error ? err.message : 'Failed to save user data');
@@ -447,7 +447,7 @@ const AddUser: React.FC = () => {
     setUserId(null);
     setFormKey(prevKey => prevKey + 1);
   };
-  
+
   // Handle SM change
   const handleSmChange = (value: string) => {
     setSmCode(value);
@@ -458,13 +458,13 @@ const AddUser: React.FC = () => {
   // when the billing series changes and other fields are empty
   const handleSeriesChange = (e: React.ChangeEvent<HTMLInputElement>, setterFunction: React.Dispatch<React.SetStateAction<string>>) => {
     const { name, value } = e.target;
-    
+
     // Take only the last character and uppercase it
     const newValue = value.length > 0 ? value.charAt(value.length - 1).toUpperCase() : '';
-    
+
     // Update the current field
     setterFunction(newValue);
-    
+
     // If it's the billing series and has a value, auto-fill all other empty fields
     if (name === 'defaultBillingSeries' && newValue) {
       if (defaultCashReceiptSeries === '') {
@@ -500,14 +500,14 @@ const AddUser: React.FC = () => {
         description="Add User page in FMCG Vite Admin Template"
       />
       <PageBreadcrumb pageTitle="Add User" />
-      
+
       <div className="container mx-auto px-4 py-6 max-w-full">
         {/* User Form */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6 w-full">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">
             {isEdit ? 'Edit User' : 'Create New User'}
           </h2>
-          
+
           {error ? (
             <div className="text-red-500 p-4 mb-4 bg-red-50 dark:bg-red-900/20 rounded">
               {error}
@@ -731,7 +731,7 @@ const AddUser: React.FC = () => {
                       Mandatory Document submission required
                     </label>
                   </div>
-                  
+
                   {requireMandatoryDocs && (
                     <div className="w-48">
                       <Input
@@ -764,11 +764,11 @@ const AddUser: React.FC = () => {
                   Cancel
                 </button>
               </div>
-              
+
             </FormComponent>
           )}
         </div>
-        
+
         {/* User Table */}
         {userData.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full">

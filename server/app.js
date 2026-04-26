@@ -116,6 +116,9 @@ app.use('/api', godownRoutes);
 const shikharSchemeRoutes = require('./routes/shikhar_scheme');
 app.use('/api', shikharSchemeRoutes);
 
+const godrejSchemeRoutes = require('./routes/godrej_scheme');
+app.use('/api/godrej-schemes', godrejSchemeRoutes);
+
 
 const slinkRoutes = require('./routes/slink');
 const orcusRoutes = require('./routes/orcusRoutes');

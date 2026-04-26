@@ -55,7 +55,7 @@ const centerElementInViewport = (element: HTMLElement | null) => {
   if (!element) return;
   element.scrollIntoView({
     behavior: 'smooth',
-    block: 'center' 
+    block: 'center'
   });
 };
 
@@ -74,7 +74,7 @@ const GodownTransfer: React.FC = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
-  
+
   // Helper function to format local date as DD-MM-YYYY
   const getLocalDateDDMMYYYY = (date: Date): string => {
     const day = date.getDate().toString().padStart(2, '0');
@@ -82,7 +82,7 @@ const GodownTransfer: React.FC = () => {
     const year = date.getFullYear();
     return `${day}-${month}-${year}`;
   };
-  
+
   const [formValues, setFormValues] = useState({
     date: getLocalDateDDMMYYYY(new Date()), // Prefill with local date
     series: 'T',
@@ -123,29 +123,29 @@ const GodownTransfer: React.FC = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch godownId with caching support
         let godownIdResponse;
         try {
           const headers: HeadersInit = {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           };
-          
+
           // Add the ETag if we have a hash
           if (godownIdHash) {
             headers['If-None-Match'] = godownIdHash;
           }
-          
+
           godownIdResponse = await fetch(`${baseURL}/slink/godownId`, {
             headers
           });
-          
+
           // Update the stored hash from the response
           const newEtag = godownIdResponse.headers.get('ETag');
           if (newEtag) {
             setGodownIdHash(newEtag.replace(/"/g, ''));
           }
-          
+
           // If we got a 304 Not Modified, use our cached data
           if (godownIdResponse.status === 304) {
             console.log('Using cached godown ID data');
@@ -166,7 +166,7 @@ const GodownTransfer: React.FC = () => {
         } catch (error) {
           console.error('Error fetching godown ID:', error);
         }
-        
+
         // Fetch all data in parallel using Promise.all
         const [godownData, pmplResponse, stockResponse, cmplData] = await Promise.all([
           apiCache.fetchWithCache(`${baseURL}/api/dbf/godown.json`),
@@ -174,21 +174,21 @@ const GodownTransfer: React.FC = () => {
           apiCache.fetchWithCache<StockData>(`${baseURL}/api/stock`),
           apiCache.fetchWithCache<any[]>(`${baseURL}/cmpl`) // Add CMPL data for S/M
         ]);
-        
+
         // Store all godowns for the To Godown dropdown
         if (Array.isArray(godownData)) {
           setAllGodowns(godownData);
-          
+
           // Filter godowns based on user access rights for From Godown
           let filteredGodowns = godownData;
-          
+
           // If user has godownAccess restrictions, filter the godowns
           if (user && user.godownAccess && user.godownAccess.length > 0) {
-            filteredGodowns = godownData.filter(godown => 
+            filteredGodowns = godownData.filter(godown =>
               user.godownAccess.includes(godown.GDN_CODE)
             );
           }
-          
+
           setPartyOptions(filteredGodowns);
         } else {
           console.error('Godown data is not an array:', godownData);
@@ -203,7 +203,7 @@ const GodownTransfer: React.FC = () => {
 
         // Process S/M options from CMPL data
         if (Array.isArray(cmplData)) {
-          const smList = cmplData.filter(item => 
+          const smList = cmplData.filter(item =>
             item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
           );
           const smApiOptions = smList.map((item: any) => ({
@@ -220,7 +220,7 @@ const GodownTransfer: React.FC = () => {
         // Process stock data
         setStockData(stockResponse || {});
         setStockDataLoaded(true);
-        
+
         setLoading(false);
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -229,7 +229,7 @@ const GodownTransfer: React.FC = () => {
     };
 
     fetchData();
-    
+
     // Clean up expired cache items
     try {
       apiCache.clearExpiredCache();
@@ -241,15 +241,15 @@ const GodownTransfer: React.FC = () => {
   // Filter SM options based on user's role and assigned SM code
   const filteredSmOptions = useMemo(() => {
     if (!user || !smOptions) return [];
-    
+
     const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
-    
+
     // If user is not admin and has an assigned SM code, only show that option
     if (!isAdmin && user.smCode) {
       const userSm = smOptions.find(option => option.value === user.smCode);
       return userSm ? [userSm] : [];
     }
-    
+
     // Otherwise, show all options
     return smOptions;
   }, [user, smOptions]);
@@ -265,7 +265,7 @@ const GodownTransfer: React.FC = () => {
   useEffect(() => {
     if (user && smOptions && smOptions.length > 0) {
       const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
-      
+
       if (user.smCode && !isAdmin) {
         const userSm = smOptions.find(option => option.value === user.smCode);
         if (userSm) {
@@ -315,7 +315,7 @@ const GodownTransfer: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
+
     // For series field, only allow alphabetic characters
     if (name === 'series') {
       const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
@@ -351,20 +351,20 @@ const GodownTransfer: React.FC = () => {
         stock: stockValue
       };
     });
-    
-    setFormValues({ 
-      ...formValues, 
+
+    setFormValues({
+      ...formValues,
       fromGodown: value,
       items: updatedItems
     });
-    
+
     setToGodown(null); // Reset toGodown when fromGodown changes
   };
 
   const handleToGodownChange = (value: string) => {
     const selectedGodown = allGodowns.find(option => option.GDN_CODE === value);
     setToGodown(selectedGodown);
-    
+
     // If this is the first time both godowns are selected and stock data is loaded, add the first item
     if (value && formValues.fromGodown && formValues.items.length === 0 && stockDataLoaded) {
       addItem(value);
@@ -375,13 +375,13 @@ const GodownTransfer: React.FC = () => {
 
   const getAvailableItems = () => {
     const selectedCodes = new Set(formValues.items.map((item) => item.item));
-    
+
     if (!formValues.fromGodown || !stockDataLoaded) return [];
-    
+
     // Filter products that have stock in the selected "From Godown"
     return pmplData.filter((pmpl) => {
       if (selectedCodes.has(pmpl.CODE)) return false;
-      
+
       // Check if this product has stock in the selected godown
       const stockAmount = getStockForItemAndGodown(pmpl.CODE, formValues.fromGodown);
       return stockAmount > 0;
@@ -390,7 +390,7 @@ const GodownTransfer: React.FC = () => {
 
   const addItem = (newToGodown?: string) => {
     const toGodownValue = newToGodown || formValues.toGodown;
-    
+
     const newItem: ItemData = {
       item: '',
       stock: '',
@@ -415,7 +415,7 @@ const GodownTransfer: React.FC = () => {
       toGodown: toGodownValue,
       items: newItems,
     }));
-    
+
     setExpanded(newItems.length - 1);
     setFocusNewItemIndex(newItems.length - 1); // Set focus to the new item
   };
@@ -450,7 +450,7 @@ const GodownTransfer: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setClicked(true);
-    
+
     const { fromGodown, toGodown, items } = formValues;
 
     if (!fromGodown) {
@@ -510,14 +510,14 @@ const GodownTransfer: React.FC = () => {
         },
         body: JSON.stringify(payload),
       });
-      
+
       if (!res.ok) {
         throw new Error(`Error ${res.status}: ${await res.text()}`);
       }
-      
+
       const json = await res.json();
       showToast(json.message || 'Godown transfer created successfully', 'success');
-      
+
       // Reset form or redirect
       setTimeout(() => {
         window.location.href = '/db/godown-transfer';
@@ -544,10 +544,10 @@ const GodownTransfer: React.FC = () => {
 
   // Calculate the total items that have been properly filled out
   const calculateValidItemsCount = () => {
-    return formValues.items.filter(item => 
-      item.item && 
-      item.godown && 
-      item.qty && 
+    return formValues.items.filter(item =>
+      item.item &&
+      item.godown &&
+      item.qty &&
       parseFloat(item.qty) > 0
     ).length;
   };
@@ -556,7 +556,7 @@ const GodownTransfer: React.FC = () => {
   const handleTabToNextItem = (currentIndex: number) => {
     const nextItemIndex = currentIndex + 1;
     if (nextItemIndex < formValues.items.length && collapsibleItemRefs.current[nextItemIndex]?.current) {
-      setExpanded(nextItemIndex); 
+      setExpanded(nextItemIndex);
       setTimeout(() => {
         collapsibleItemRefs.current[nextItemIndex]?.current?.focusItemName();
       }, 50); // Delay to allow section to expand
@@ -569,11 +569,11 @@ const GodownTransfer: React.FC = () => {
   const handleShiftTabToPreviousItem = (currentIndex: number) => {
     const prevItemIndex = currentIndex - 1;
     if (prevItemIndex >= 0 && collapsibleItemRefs.current[prevItemIndex]?.current) {
-      setExpanded(prevItemIndex);       
+      setExpanded(prevItemIndex);
       setTimeout(() => {
         collapsibleItemRefs.current[prevItemIndex]?.current?.focusQty(); // Focus Qty of previous item
       }, 50); // Delay to allow section to expand
-    } else if (searchItemsRef.current) { 
+    } else if (searchItemsRef.current) {
       searchItemsRef.current.focus();
       centerElementInViewport(document.getElementById('searchItems'));
     }
@@ -590,7 +590,7 @@ const GodownTransfer: React.FC = () => {
     if (formValues.items.length > 0 && collapsibleItemRefs.current[0]?.current) {
       setExpanded(0);
       setTimeout(() => {
-         collapsibleItemRefs.current[0]?.current?.focusItemName();
+        collapsibleItemRefs.current[0]?.current?.focusItemName();
       }, 50);
     } else if (addAnotherItemButtonRef.current) {
       addAnotherItemButtonRef.current.focus();
@@ -601,8 +601,8 @@ const GodownTransfer: React.FC = () => {
   // Reset focusNewItemIndex after it has been used or section changes
   useEffect(() => {
     if (focusNewItemIndex !== null && expanded !== focusNewItemIndex) {
-        // If a new item was added, but then the user expanded a different section, clear the focus intent
-        setFocusNewItemIndex(null);
+      // If a new item was added, but then the user expanded a different section, clear the focus intent
+      setFocusNewItemIndex(null);
     }
   }, [expanded, focusNewItemIndex]);
 
@@ -623,8 +623,8 @@ const GodownTransfer: React.FC = () => {
   return (
     <div>
       <PageMeta
-        title="Godown Transfer" 
-        description="Godown Transfer page in FMCG Vite Admin Template" 
+        title="Godown Transfer"
+        description="Godown Transfer page in FMCG Vite Admin Template"
       />
       <PageBreadcrumb pageTitle="Godown Transfer" />
 
@@ -738,7 +738,7 @@ const GodownTransfer: React.FC = () => {
                   if (formValues.items.length > 0 && collapsibleItemRefs.current[0]?.current) {
                     setExpanded(0);
                     setTimeout(() => {
-                        collapsibleItemRefs.current[0]?.current?.focusItemName();
+                      collapsibleItemRefs.current[0]?.current?.focusItemName();
                     }, 50);
                   } else if (searchItemsRef.current) {
                     searchItemsRef.current.focus();
@@ -755,7 +755,7 @@ const GodownTransfer: React.FC = () => {
 
         <div className="mb-4 mt-6">
           <h2 className="text-xl font-semibold mb-2 dark:text-white">Items</h2>
-          
+
           <div className="relative max-w-md mb-4">
             <Input
               id="searchItems"

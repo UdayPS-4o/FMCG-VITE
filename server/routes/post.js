@@ -27,8 +27,13 @@ function formatFormType(formType) {
 
 // Helper function to parse dd-mm-yyyy format correctly
 function parseDateDDMMYYYY(dateStr) {
-  const parts = dateStr.split('-');
+  if (!dateStr) return new Date('');
+  const parts = String(dateStr).split('-');
   if (parts.length === 3) {
+    // If it is already yyyy-mm-dd
+    if (parts[0].length === 4) {
+      return new Date(dateStr);
+    }
     // Convert dd-mm-yyyy to yyyy-mm-dd for proper parsing
     return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
   }
@@ -161,7 +166,7 @@ app.post('/:formType', async (req, res) => {
           entryDate.setHours(5,30, 0, 0);
           today.setHours(5,30, 0, 0);
 
-          if (entryDate.getTime() !== today.getTime()) {
+          if (!isNaN(entryDate.getTime()) && entryDate.getTime() !== today.getTime()) {
               const dateString = entryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
               message += ` on ${dateString}`;
           }
@@ -280,7 +285,7 @@ app.post('/edit/:formType', async (req, res) => {
         entryDate.setHours(0, 0, 0, 0);
         today.setHours(0, 0, 0, 0);
 
-        if (entryDate.getTime() !== today.getTime()) {
+        if (!isNaN(entryDate.getTime()) && entryDate.getTime() !== today.getTime()) {
             const dateString = entryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', '-');
             message += ` on ${dateString}`;
         }
