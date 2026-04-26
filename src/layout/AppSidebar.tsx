@@ -261,6 +261,7 @@ const fmcgItems: NavItem[] = [
       { name: "PNB Statement", path: "/reports/pnb-statement", pro: false },
       { name: "GSTR - Match Pur. B2B with GSTR2A", path: "/reports/gstr2a-matching", pro: false },
       { name: "Shikhar Scheme Update", path: "/reports/shikhar-scheme-update", pro: false, new: true },
+      { name: "Godrej Scheme Update", path: "/reports/godrej-scheme-update", pro: false, new: true },
     ],
   }
 ];
@@ -392,7 +393,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
           
           // Filter reports for non-admins
           if (!user.routeAccess.includes('Admin')) {
-            item.subItems = item.subItems.filter(r => r.name !== "PNB Statement" && r.name !== "Shikhar Scheme Update");
+            item.subItems = item.subItems.filter(r => r.name !== "PNB Statement" && r.name !== "Shikhar Scheme Update" && r.name !== "Godrej Scheme Update");
           }
           
           return true;

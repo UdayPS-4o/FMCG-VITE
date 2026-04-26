@@ -54,6 +54,7 @@ import AttendanceHistory from './pages/attendance/AttendanceHistory';
 import AdminAttendance from './pages/attendance/AdminAttendance';
 import GSTR2AMatching from './pages/reports/GSTR2AMatching';
 import ShikharSchemeUpdate from './pages/reports/ShikharSchemeUpdate';
+import GodrejSchemeUpdate from './pages/reports/GodrejSchemeUpdate';
 import Home from './pages/Dashboard/Home';
 import NewPurchase from './pages/purchases/NewPurchase';
 import DatabasePurchases from "./pages/database/Purchases";
@@ -279,6 +280,11 @@ const AppRoutes = () => {
         <Route path="/reports/shikhar-scheme-update" element={
           <ProtectedRoute requiredAccess="Admin">
             <ShikharSchemeUpdate />
+          </ProtectedRoute>
+        } />
+        <Route path="/reports/godrej-scheme-update" element={
+          <ProtectedRoute requiredAccess="Admin">
+            <GodrejSchemeUpdate />
           </ProtectedRoute>
         } />
 
