@@ -27,7 +27,7 @@ const {
 const cors = require('cors');
 app.use(
   cors({
-    origin: function(origin, callback) {
+    origin: function (origin, callback) {
       const allowedOrigins = [
         'http://localhost:3000',
         'http://localhost:3001',
@@ -35,21 +35,23 @@ app.use(
         'http://127.0.0.1:3001',
         'https://ekta-enterprises.com',
         'https://server.udayps.cfd',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
         // Add any other domain that needs access
       ];
-      
+
       // Enhanced CORS logging for production debugging
       console.log('=== CORS DEBUG ===');
       console.log('Request Origin:', origin);
       console.log('NODE_ENV:', process.env.NODE_ENV);
       console.log('Allowed Origins:', allowedOrigins);
-      
+
       // Allow requests with no origin (like mobile apps, curl, postman)
       if (!origin) {
         console.log('CORS: Allowing request with no origin');
         return callback(null, true);
       }
-      
+
       if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
         console.log('CORS: Origin allowed');
         callback(null, true);
@@ -93,6 +95,10 @@ app.use(stockRoutes);
 // Register reports routes
 const reportRoutes = require('./routes/reports');
 app.use('/api/reports', reportRoutes);  // this is the main route for the reports
+
+// App Routes
+const appRoutes = require('./routes/app/index');
+app.use('/api/app', appRoutes);
 
 // Register dashboard routes
 // set middleware to check if user is logged in
@@ -151,6 +157,8 @@ app.use('/api', approvalRoutes);
 
 const attendanceRoutes = require('./routes/attendance');
 app.use(attendanceRoutes);
+
+// App Routes has been moved up
 
 // Endpoint to get data from CMPL.DBF and return as JSON
 app.get('/cmpl', getCmplData);
