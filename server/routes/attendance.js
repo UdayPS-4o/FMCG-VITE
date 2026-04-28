@@ -458,6 +458,43 @@ app.post('/api/attendance/admin/records', verifyToken, requireAdmin, async (req,
   }
 });
 
+// Admin: Get user attendance history for a month
+app.post('/api/attendance/admin/user-history', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId, month, year } = req.body;
+    
+    if (!userId || !month || !year) {
+      return res.status(400).json({ success: false, message: 'Missing required parameters' });
+    }
+
+    const attendanceFilePath = path.join(__dirname, '..', 'db', 'attendance', 'records.json');
+    
+    try {
+      const data = await fs.readFile(attendanceFilePath, 'utf8');
+      const attendanceRecords = JSON.parse(data);
+      
+      const filteredRecords = attendanceRecords.filter(record => {
+        if (record.userId !== parseInt(userId)) return false;
+        
+        const recordDate = new Date(record.date);
+        const recordMonth = (recordDate.getMonth() + 1).toString().padStart(2, '0');
+        const recordYear = recordDate.getFullYear().toString();
+        
+        return recordMonth === month.toString().padStart(2, '0') && recordYear === year.toString();
+      });
+      
+      filteredRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      res.status(200).json({ success: true, records: filteredRecords });
+    } catch (error) {
+      res.status(200).json({ success: true, records: [] });
+    }
+  } catch (error) {
+    console.error('Error fetching admin user history:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch attendance history' });
+  }
+});
+
 // Admin: Get all user locations
 app.get('/api/attendance/admin/locations', verifyToken, requireAdmin, async (req, res) => {
   try {

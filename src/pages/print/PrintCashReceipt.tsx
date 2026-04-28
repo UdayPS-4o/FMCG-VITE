@@ -52,7 +52,7 @@ const PrintBulkCashReceipts: React.FC = () => {
     const queryParams = new URLSearchParams(window.location.search);
     const queryKey = queryParams.keys().next().value || '';
     let value = queryParams.get(queryKey);
-    
+
     // Check if the value is an array (multiple values for same key) or comma-separated
     const allValues = queryParams.getAll(queryKey);
     if (allValues.length > 1) {
@@ -63,7 +63,7 @@ const PrintBulkCashReceipts: React.FC = () => {
       // Value is already a comma-separated string
       console.log('Comma-separated values found for', queryKey, ':', value);
     }
-    
+
     return { queryKey, value };
   };
 
@@ -72,7 +72,7 @@ const PrintBulkCashReceipts: React.FC = () => {
   useEffect(() => {
     // Determine if this is a receipt or payment based on the query key
     setIsReceipt(queryKey !== 'voucherNo');
-    
+
     const fetchData = async () => {
       if (!value || !queryKey) {
         setError('No identifier provided');
@@ -86,7 +86,7 @@ const PrintBulkCashReceipts: React.FC = () => {
         if (!token) {
           throw new Error('Authentication required');
         }
-        
+
         const ids = value.split(',').map(id => id.trim()).filter(id => id); // Split, trim, and filter empty IDs
         if (ids.length === 0) {
           setError('No valid identifiers provided');
@@ -110,7 +110,7 @@ const PrintBulkCashReceipts: React.FC = () => {
           const responseData = await response.json();
           fetchedDataArray.push(responseData); // Assuming API returns single object per ID
         }
-        
+
         console.log('Fetched data for all IDs:', fetchedDataArray);
         setData(fetchedDataArray);
         setLoading(false);
@@ -118,23 +118,23 @@ const PrintBulkCashReceipts: React.FC = () => {
         const shouldAutoPrint = localStorage.getItem('autoPrint') == 'true';
         // check for query param ?autoprint=true
         const autoPrint = window.location.search.includes('autoprint');
-        console.log("location:",window.location.search)
+        console.log("location:", window.location.search)
         // setTimeout(() => {
         if (shouldAutoPrint || autoPrint) {
           localStorage.removeItem('autoPrint'); // Clean up flag
           // Delay auto-print to ensure the page is fully rendered
-            console.log('Auto-printing triggered');
-            if(!isprinted) {
-              window.print();
-              
-              setTimeout(() => {
-                navigate('/cash-receipt');
-              }, 2000);
-            }
-            isprinted = true;
-            // const printBtn = document.querySelector("button.bg-blue-500.transition-colors") as HTMLButtonElement;
-            // printBtn.click();
+          console.log('Auto-printing triggered');
+          if (!isprinted) {
+            window.print();
+
+            setTimeout(() => {
+              navigate('/cash-receipt');
+            }, 2000);
           }
+          isprinted = true;
+          // const printBtn = document.querySelector("button.bg-blue-500.transition-colors") as HTMLButtonElement;
+          // printBtn.click();
+        }
         // }, 2000);
 
       } catch (err) {
@@ -163,14 +163,14 @@ const PrintBulkCashReceipts: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
-    
+
     // Add event listener for after print
     const afterPrint = () => {
       window.removeEventListener('afterprint', afterPrint);
       // Redirect to cash receipt page after print
       navigate('/cash-receipt');
     };
-    
+
     window.addEventListener('afterprint', afterPrint);
   };
 
@@ -213,7 +213,7 @@ const PrintBulkCashReceipts: React.FC = () => {
   return (
     <div className="p-8 max-w-full mx-auto">
       <PageMeta title={`Bulk Cash ${isReceipt ? 'Receipt' : 'Payment'} Print`} description={`Print multiple cash ${isReceipt ? 'receipts' : 'payments'} details`} />
-      
+
       <div className="print:hidden mb-6 flex justify-between">
         <button
           onClick={handleBack}
@@ -228,11 +228,11 @@ const PrintBulkCashReceipts: React.FC = () => {
           Print All
         </button>
       </div>
-      
+
       <div ref={printRef} className="bg-gray-900 text-white print:bg-white print:text-black overflow-hidden">
         {data && data.length > 0 && data.map((item, index) => (
-          <div 
-            key={item.id || index} 
+          <div
+            key={item.id || index}
             className={`receipt-container mb-4 print:mb-0 ${index > 0 && index % 3 === 0 ? 'print-page-break-before' : ''}`}
           >
             <div className="receipt">
@@ -293,9 +293,9 @@ const PrintBulkCashReceipts: React.FC = () => {
           </div>
         ))}
       </div>
-      
+
       <style>
-{`
+        {`
 .receipt {
   width: 100%;
   margin: 0 auto;
@@ -469,8 +469,8 @@ th, td {
   }
 }
 `}
-</style>
-      
+      </style>
+
       {toast.visible && (
         <Toast
           message={toast.message}

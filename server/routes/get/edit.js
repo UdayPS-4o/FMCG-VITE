@@ -886,6 +886,233 @@ app.post("/api/update-old-bill-dbffile", verifyToken, async (req, res) => {
       await dtlDbf.appendRecord(rec);
     }
     await dtlDbf.close();
+
+    // --- CASH.DBF Update Logic ---
+    const cashPath = path.join(DBF_FOLDER_PATH, 'data', 'CASH.DBF');
+    const cashDbf = await DBFFile.open(cashPath);
+    const cashFields = new Set(cashDbf.fields.map(f => f.name));
+    const cashRecords = await cashDbf.readRecords(true);
+
+    const padBillNumber = (ser, num) => {
+        const nStr = String(num);
+        return `${String(ser).toUpperCase()}-${" ".repeat(Math.max(0, 5 - nStr.length))}${nStr}`;
+    };
+    
+    const formatUserTime = (d) => {
+        const dateObj = new Date(d);
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const year = dateObj.getFullYear();
+        const hours = String(dateObj.getHours()).padStart(2, '0');
+        const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+        const seconds = String(dateObj.getSeconds()).padStart(2, '0');
+        return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+    };
+
+    const targetBill2 = padBillNumber(series, billNo);
+    
+    // Mark existing SB/CR records for this bill as deleted
+    for (let i = 0; i < cashRecords.length; i++) {
+        const r = cashRecords[i];
+        if (r._deleted) continue;
+        if (String(r.BILL2).trim() === targetBill2.trim()) {
+             // Delete if it looks like an auto-generated SB or CR record
+             if (String(r.VR).startsWith('SB-') || String(r.VR).startsWith('CR-')) {
+                 await cashDbf.markRecordDeleted(i);
+             }
+        }
+    }
+
+    const getNextCrVrNumber = async (dbf) => {
+        const recs = await dbf.readRecords();
+        const crRecs = recs.filter(r => r.VR && String(r.VR).startsWith('CR-'));
+        if (crRecs.length === 0) return 'CR-000001';
+        const maxVr = crRecs.reduce((max, r) => {
+             const parts = String(r.VR).split('-');
+             if (parts[1]) {
+                 const num = parseInt(parts[1], 10);
+                 return num > max ? num : max;
+             }
+             return max;
+        }, 0);
+        return `CR-${String(maxVr + 1).padStart(6, '0')}`;
+    };
+
+    const totalAmount = total ? parseFloat(total) : (newHeader ? newHeader.AMOUNT : 0);
+    const netAmountRounded = Math.round(totalAmount); 
+    
+    // Get party data for AC_NAME and M_GROUP1
+    const partyCodeForCash = party || oldHeader?.C_CODE || '';
+    const partyRow = cmplData.find(c => String(c.C_CODE).toUpperCase() === String(partyCodeForCash).toUpperCase()) || {};
+    const partyNameVal = partyRow.C_NAME || partyName || '';
+    const mGroup = partyRow.M_GROUP || "DT";
+    
+    const sbVr = `SB-${series}${String(billNo).padStart(5, '0')}`;
+    const isLocal = !partyRow.C_STATE || partyRow.C_STATE === '23';
+
+    // Group items by GR_CODE9
+    const groupedItems = {};
+    for (const item of newDetails) {
+        const grCode = item.GR_CODE9;
+        if (!grCode) continue;
+        if (!groupedItems[grCode]) {
+            groupedItems[grCode] = { taxable: 0, tax: 0, grCode: grCode };
+        }
+        groupedItems[grCode].taxable += (item.GD10 || 0);
+        groupedItems[grCode].tax += (item.GST10 || 0);
+    }
+
+    let totalCredits = 0;
+
+    // Filter fields to ensure they exist in DBF
+    const filterFields = (rec) => {
+        const filtered = {};
+        for (const [k, v] of Object.entries(rec)) {
+            if (cashFields.has(k)) filtered[k] = v;
+        }
+        return filtered;
+    };
+
+    // 1. Goods Entries (Credit) & 2. Tax Entries (Credit)
+    for (const grCode in groupedItems) {
+        const group = groupedItems[grCode];
+        
+        if (group.taxable > 0) {
+            const goodsRecord = {
+                VR: sbVr,
+                DATE: parseDDMMYYYY(date),
+                C_CODE: group.grCode,
+                AC_NAME: "",
+                DR: 0,
+                CR: parseFloat(group.taxable.toFixed(2)),
+                REMARK: `BY GOODS BILL NO.${series}-${billNo}`,
+                BILL2: targetBill2,
+                CASH: cash || 'N',
+                OK: "",
+                USER_ID: req.user ? req.user.id : null,
+                USER_TIME: formatUserTime(new Date()),
+                M_GROUP1: "",
+                BR_CODE: sm || oldHeader?.SM || '',
+                BOOK: "CB",
+                E_TYPE: "G",
+                R_NO: ""
+            };
+            await cashDbf.appendRecord(filterFields(goodsRecord));
+            totalCredits += goodsRecord.CR;
+        }
+
+        if (group.tax > 0) {
+             let taxCode = group.grCode;
+             if (taxCode.startsWith('G')) {
+                  if (isLocal) {
+                      taxCode = 'V' + taxCode.substring(1);
+                  } else {
+                      if (taxCode.startsWith('GG')) {
+                          taxCode = 'VI' + taxCode.substring(2);
+                      } else {
+                          taxCode = 'VI' + taxCode.substring(2);
+                      }
+                  }
+             }
+
+             const taxRecord = {
+                VR: sbVr,
+                DATE: parseDDMMYYYY(date),
+                C_CODE: taxCode,
+                AC_NAME: "",
+                DR: 0,
+                CR: parseFloat(group.tax.toFixed(2)),
+                REMARK: `BY TAX BILL NO.${series}-${billNo}`,
+                BILL2: targetBill2,
+                CASH: cash || 'N',
+                OK: "",
+                USER_ID: req.user ? req.user.id : null,
+                USER_TIME: formatUserTime(new Date()),
+                M_GROUP1: "",
+                BR_CODE: sm || oldHeader?.SM || '',
+                BOOK: "CB",
+                E_TYPE: "G",
+                R_NO: ""
+            };
+            await cashDbf.appendRecord(filterFields(taxRecord));
+            totalCredits += taxRecord.CR;
+        }
+    }
+
+    // 3. Customer Entry (Debit)
+    const customerRecord = {
+        VR: sbVr,
+        DATE: parseDDMMYYYY(date),
+        C_CODE: partyCodeForCash,
+        AC_NAME: partyNameVal,
+        DR: netAmountRounded,
+        CR: 0,
+        REMARK: `TO BILL NO. ${series}-${billNo}`,
+        BILL2: targetBill2,
+        CASH: cash || 'N',
+        OK: "",
+        USER_ID: req.user ? req.user.id : null,
+        USER_TIME: formatUserTime(new Date()),
+        M_GROUP1: mGroup,
+        BR_CODE: sm || oldHeader?.SM || '',
+        BOOK: "CB",
+        E_TYPE: "G",
+        R_NO: `${series}-${billNo}`
+    };
+    await cashDbf.appendRecord(filterFields(customerRecord));
+
+    // 4. Round Off Entry
+    const roundOffDiff = parseFloat((netAmountRounded - totalCredits).toFixed(2));
+    if (Math.abs(roundOffDiff) > 0.001) {
+        const roundOffRecord = {
+            VR: sbVr,
+            DATE: parseDDMMYYYY(date),
+            C_CODE: "EE001",
+            AC_NAME: "",
+            DR: roundOffDiff < 0 ? Math.abs(roundOffDiff) : 0,
+            CR: roundOffDiff > 0 ? roundOffDiff : 0,
+            REMARK: `TO R/OFF BILL NO. ${series}-${billNo}`,
+            BILL2: targetBill2,
+            CASH: cash || 'N',
+            OK: "",
+            USER_ID: req.user ? req.user.id : null,
+            USER_TIME: formatUserTime(new Date()),
+            M_GROUP1: "",
+            BR_CODE: sm || oldHeader?.SM || '',
+            BOOK: "CB",
+            E_TYPE: "G",
+            R_NO: ""
+        };
+        await cashDbf.appendRecord(filterFields(roundOffRecord));
+    }
+
+    if (cash === 'Y') {
+        const crVr = await getNextCrVrNumber(cashDbf);
+        const crRecord = {
+            VR: crVr,
+            DATE: parseDDMMYYYY(date),
+            C_CODE: partyCodeForCash,
+            AC_NAME: partyNameVal,
+            DR: 0,
+            CR: netAmountRounded,
+            REMARK: "BY CASH",
+            BILL2: targetBill2,
+            CASH: "Y",
+            OK: "",
+            USER_ID: req.user ? req.user.id : null,
+            USER_TIME: formatUserTime(new Date()),
+            M_GROUP1: mGroup,
+            BR_CODE: sm || oldHeader?.SM || '',
+            BOOK: "CB",
+            E_TYPE: "G",
+            R_NO: ""
+        };
+        await cashDbf.appendRecord(filterFields(crRecord));
+    }
+
+    await cashDbf.close();
+    // --- End CASH.DBF Update Logic ---
+
     return res.json({ success: true, message: 'Old bill updated in DBF (delete + append)', detailsCount: newDetails.length });
   } catch (err) {
     console.error('Error in update-old-bill:', err);

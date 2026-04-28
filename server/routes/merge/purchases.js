@@ -277,6 +277,17 @@ router.post('/sync', async (req, res) => {
       return acc;
     }, {});
 
+    const cashRecords = await cashDbf.findAll();
+    let maxJb = 0;
+    for (const rec of cashRecords) {
+        if (rec.VR && typeof rec.VR === 'string' && rec.VR.startsWith('JB-')) {
+            const num = parseInt(rec.VR.replace('JB-', ''), 10);
+            if (!isNaN(num) && num > maxJb) {
+                maxJb = num;
+            }
+        }
+    }
+
     const existingPur = await purDbf.findAll();
     const existingKeys = new Set(existingPur.map(r => `${r.SERIES}-${r.BILL}`));
 
@@ -433,6 +444,48 @@ router.post('/sync', async (req, res) => {
           BILL2: bill2,
           QDR: 0
       });
+
+      // 5. Cash Discount (if any)
+      const cashDiscount = toFloat(purchase.totals?.cashDiscount || 0, 2);
+      if (cashDiscount > 0) {
+          const suppName = purchase.supplierName || supplier?.C_NAME || '';
+          const remarkCd = `BY CD ON INV#${invoiceNo} ${suppName} ON ${grandTotal}`.substring(0, 50).trim(); // Keep within typical DBF field length limit
+          // Journal Voucher number for Cash Discount
+          maxJb += 1;
+          const jbVrNo = `JB-${String(maxJb).padStart(6, '0')}`;
+          
+          // Credit Cash Discount Income Account
+          cashToInsert.push({
+              DATE: entryDate,
+              VR: jbVrNo,
+              C_CODE: 'EE084',
+              CR: cashDiscount,
+              DR: 0,
+              REMARK: remarkCd,
+              BILL: invoiceNo,
+              DT_BILL: invoiceDate,
+              E_TYPE: 'G',
+              PUR_CODE: supplierCode,
+              BILL2: bill2,
+              QDR: 0
+          });
+
+          // Debit Supplier Account
+          cashToInsert.push({
+              DATE: entryDate,
+              VR: jbVrNo,
+              C_CODE: supplierCode,
+              CR: 0,
+              DR: cashDiscount,
+              REMARK: remarkCd,
+              BILL: invoiceNo,
+              DT_BILL: invoiceDate,
+              E_TYPE: 'G',
+              PUR_CODE: supplierCode,
+              BILL2: bill2,
+              QDR: 0
+          });
+      }
 
       processed.push(key);
       existingKeys.add(key);
