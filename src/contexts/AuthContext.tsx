@@ -242,8 +242,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const getFirstAccessibleRoute = (): string => {
     if (!user) return '/login';
     
-    // Dashboard is accessible to all authenticated users
-    return '/dashboard';
+    // Check for Dashboard access first
+    if (hasAccess('Dashboard') || user.routeAccess.includes('Admin')) {
+      return '/dashboard';
+    }
+
+    // Check other main routes in order of priority
+    if (hasAccess('Account Master')) return '/account-master';
+    if (hasAccess('Invoicing')) return '/invoicing';
+    if (hasAccess('Godown Transfer')) return '/godown-transfer';
+    if (hasAccess('Cash Receipts')) return '/cash-receipt';
+    if (hasAccess('Cash Payments')) return '/cash-payment';
+    if (hasAccess('Purchases')) return '/purchases/new';
+    
+    // Report routes
+    if (hasAccess('Reports')) return '/reports/item-wise-sales';
+
+    // Default to attendance if no other access is found
+    return '/attendance';
   };
 
   // Add a function to refresh user data without logging out

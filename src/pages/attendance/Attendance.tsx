@@ -30,7 +30,7 @@ interface AttendanceRecord {
 
 const Attendance: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, hasAccess } = useAuth();
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -52,12 +52,12 @@ const Attendance: React.FC = () => {
   const { hasMarkedToday } = useAttendanceCheck();
 
   const { lastPosition, isTracking, startTracking, stopTracking, getCurrentLocation } = useLocationTracking();
-  const { 
-    backgroundState, 
-    enableBackgroundTracking, 
-    disableBackgroundTracking, 
+  const {
+    backgroundState,
+    enableBackgroundTracking,
+    disableBackgroundTracking,
     setBackgroundUpdateInterval,
-    requestBackgroundPermissions 
+    requestBackgroundPermissions
   } = useBackgroundLocationTracking();
 
   useEffect(() => {
@@ -71,9 +71,9 @@ const Attendance: React.FC = () => {
         setToast({ message: 'Failed to start location tracking. Some features may not work properly.', type: 'error' });
       }
     };
-    
+
     initializeLocationTracking();
-    
+
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
@@ -118,16 +118,16 @@ const Attendance: React.FC = () => {
       setDebugInfo('Starting camera initialization');
       setIsCapturing(true);
       setIsVideoReady(false);
-      
+
       // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera not supported in this browser');
       }
-      
+
       setCameraStatus('Requesting permissions...');
       setDebugInfo('Requesting camera access');
       console.log('📱 Requesting camera access...');
-      
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'user',
@@ -136,18 +136,18 @@ const Attendance: React.FC = () => {
         },
         audio: false
       });
-      
+
       setCameraStatus('Stream obtained, setting up video...');
       setDebugInfo(`Camera stream obtained: ${mediaStream.getVideoTracks().length} video tracks`);
       console.log('✅ Camera stream obtained:', mediaStream.getVideoTracks().length, 'video tracks');
       setStream(mediaStream);
-      
+
       if (videoRef.current) {
         setCameraStatus('Attaching to video element...');
         setDebugInfo('Attaching stream to video element');
         console.log('🔗 Attaching stream to video element...');
         videoRef.current.srcObject = mediaStream;
-        
+
         // Create a promise for video readiness
         const videoReadyPromise = new Promise((resolve, reject) => {
           const video = videoRef.current;
@@ -155,7 +155,7 @@ const Attendance: React.FC = () => {
             reject(new Error('Video element not found'));
             return;
           }
-          
+
           const handleLoadedMetadata = () => {
             setCameraStatus('Video metadata loaded');
             setDebugInfo(`Video dimensions: ${video.videoWidth}x${video.videoHeight}`);
@@ -164,7 +164,7 @@ const Attendance: React.FC = () => {
             video.removeEventListener('error', handleError);
             resolve(true);
           };
-          
+
           const handleError = (error: Event) => {
             setCameraStatus('Video element error');
             setDebugInfo(`Video error: ${error}`);
@@ -173,17 +173,17 @@ const Attendance: React.FC = () => {
             video.removeEventListener('error', handleError);
             reject(new Error('Video element failed to load'));
           };
-          
+
           video.addEventListener('loadedmetadata', handleLoadedMetadata);
           video.addEventListener('error', handleError);
-          
+
           // Fallback timeout with detailed checking
           setTimeout(() => {
             video.removeEventListener('loadedmetadata', handleLoadedMetadata);
             video.removeEventListener('error', handleError);
             setCameraStatus('Timeout reached, checking state...');
             console.log('⏰ Video ready timeout - checking current state...');
-            
+
             const currentState = {
               readyState: video.readyState,
               videoWidth: video.videoWidth,
@@ -193,7 +193,7 @@ const Attendance: React.FC = () => {
             };
             setDebugInfo(`Timeout state: ${JSON.stringify(currentState)}`);
             console.log('📊 Current video state:', currentState);
-            
+
             if (video.readyState >= 1) {
               setCameraStatus('Ready (via timeout)');
               console.log('✅ Video is actually ready (readyState:', video.readyState, ')');
@@ -205,7 +205,7 @@ const Attendance: React.FC = () => {
             }
           }, 3000);
         });
-        
+
         try {
           setCameraStatus('Starting playback...');
           console.log('▶️ Starting video playback...');
@@ -218,7 +218,7 @@ const Attendance: React.FC = () => {
           setDebugInfo(`Autoplay failed: ${playError}`);
           console.warn('⚠️ Video autoplay failed (this is normal):', playError);
         }
-        
+
         // Wait for video to be ready
         setCameraStatus('Waiting for video ready...');
         await videoReadyPromise;
@@ -232,7 +232,7 @@ const Attendance: React.FC = () => {
       setDebugInfo(`Error: ${error instanceof Error ? error.message : String(error)}`);
       console.error('❌ Camera initialization failed:', error);
       let errorMessage = 'Camera access failed. ';
-      
+
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
           errorMessage += 'Please allow camera permissions and try again.';
@@ -244,7 +244,7 @@ const Attendance: React.FC = () => {
           errorMessage += error.message;
         }
       }
-      
+
       setToast({ message: errorMessage, type: 'error' });
       setIsCapturing(false);
       setIsVideoReady(false);
@@ -265,40 +265,40 @@ const Attendance: React.FC = () => {
       setToast({ message: 'Please wait for camera to be ready before capturing.', type: 'error' });
       return;
     }
-    
+
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const video = videoRef.current;
       const context = canvas.getContext('2d');
-      
+
       // Check if video is ready
       if (video.readyState !== video.HAVE_ENOUGH_DATA) {
         setToast({ message: 'Video not ready yet. Please wait a moment and try again.', type: 'error' });
         return;
       }
-      
+
       // Check if video has valid dimensions
       if (!video.videoWidth || !video.videoHeight) {
         setToast({ message: 'Video dimensions not available. Please restart camera.', type: 'error' });
         return;
       }
-      
+
       if (context) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        
+
         // Clear canvas before drawing
         context.clearRect(0, 0, canvas.width, canvas.height);
         context.drawImage(video, 0, 0);
-        
+
         const imageData = canvas.toDataURL('image/jpeg', 0.8);
-        
+
         // Validate image data
         if (imageData === 'data:,' || imageData.length < 100) {
           setToast({ message: 'Failed to capture image. Please try again.', type: 'error' });
           return;
         }
-        
+
         console.log('Image captured successfully, data length:', imageData.length);
         setCapturedImage(imageData);
         stopCamera();
@@ -318,7 +318,7 @@ const Attendance: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    
+
     try {
       const attendanceData: AttendanceRecord = {
         id: `${user.id}_${Date.now()}`,
@@ -346,9 +346,21 @@ const Attendance: React.FC = () => {
         setCapturedImage(null);
         setTimeout(() => {
           if (user?.requireMandatoryDocs) {
-            window.location.href = '/mandatory-docs';
+            navigate('/mandatory-docs');
           } else {
-            window.location.href = '/account-master';
+            // Check redundant permissions before redirecting
+            // The user might not have access to Account Master or Dashboard
+            if (hasAccess('Account Master')) {
+              navigate('/account-master');
+            } else if (hasAccess('Dashboard')) {
+              navigate('/dashboard');
+            } else if (hasAccess('Invoicing')) {
+              navigate('/invoicing');
+            } else {
+              // Stay on attendance page if no other access
+              // But refresh the state to show "Attendance Already Marked"
+              window.location.reload();
+            }
           }
         }, 3000);
       } else {
@@ -372,7 +384,7 @@ const Attendance: React.FC = () => {
   const clearServiceWorkerCache = async () => {
     try {
       console.log('Clearing service worker cache...');
-      
+
       // Unregister all service workers
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
@@ -381,7 +393,7 @@ const Attendance: React.FC = () => {
           console.log('Service worker unregistered:', registration);
         }
       }
-      
+
       // Clear all caches
       if ('caches' in window) {
         const cacheNames = await caches.keys();
@@ -390,14 +402,14 @@ const Attendance: React.FC = () => {
         );
         console.log('All caches cleared');
       }
-      
+
       setToast({ message: 'Service worker cache cleared! Please refresh the page.', type: 'success' });
-      
+
       // Reload the page after a short delay
       setTimeout(() => {
         window.location.reload();
       }, 2000);
-      
+
     } catch (error) {
       console.error('Error clearing service worker cache:', error);
       setToast({ message: 'Failed to clear cache: ' + (error instanceof Error ? error.message : 'Unknown error'), type: 'error' });
@@ -430,7 +442,7 @@ const Attendance: React.FC = () => {
       <PageBreadcrumb
         pageTitle="Mark Attendance"
       />
-      
+
       <div className="max-w-2xl mx-auto p-6">
         {/* Important Notice Banner */}
         {!hasMarkedToday && (
@@ -452,18 +464,18 @@ const Attendance: React.FC = () => {
             </div>
           </div>
         )}
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
               Mark Your Attendance
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              {new Date().toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+              {new Date().toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
               })}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -496,10 +508,9 @@ const Attendance: React.FC = () => {
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     Location Status:
                   </span>
-                  <span className={`text-sm font-semibold ${
-                     location ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                   }`}>
-                     {location ? '📍 Location Detected' : '❌ Location Required'}
+                  <span className={`text-sm font-semibold ${location ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                    }`}>
+                    {location ? '📍 Location Detected' : '❌ Location Required'}
                   </span>
                 </div>
               </div>
@@ -511,21 +522,20 @@ const Attendance: React.FC = () => {
                     <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300">
                       🌍 Continuous Location Tracking
                     </h4>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      backgroundState.isBackgroundTrackingEnabled 
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                    }`}>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${backgroundState.isBackgroundTrackingEnabled
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                      }`}>
                       {backgroundState.isBackgroundTrackingEnabled ? 'Active' : 'Inactive'}
                     </span>
                   </div>
-                  
+
                   <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
-                    {backgroundState.isBackgroundTrackingEnabled 
+                    {backgroundState.isBackgroundTrackingEnabled
                       ? 'Your location is being tracked continuously, even when the app is not in use. This ensures accurate attendance monitoring.'
                       : 'Enable continuous tracking to monitor your location even when the app is closed or in the background.'}
                   </p>
-                  
+
                   {backgroundState.isBackgroundTrackingSupported ? (
                     <div className="flex items-center justify-between">
                       <div className="text-xs text-blue-600 dark:text-blue-400">
@@ -535,11 +545,10 @@ const Attendance: React.FC = () => {
                       </div>
                       <button
                         onClick={backgroundState.isBackgroundTrackingEnabled ? disableBackgroundTracking : enableBackgroundTracking}
-                        className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${
-                          backgroundState.isBackgroundTrackingEnabled
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
-                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
-                        }`}
+                        className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${backgroundState.isBackgroundTrackingEnabled
+                          ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
+                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
+                          }`}
                       >
                         {backgroundState.isBackgroundTrackingEnabled ? 'Disable' : 'Enable'}
                       </button>
@@ -549,13 +558,13 @@ const Attendance: React.FC = () => {
                       ⚠️ Background tracking not fully supported in this browser. Location will only be tracked when the app is active.
                     </div>
                   )}
-                  
+
                   {backgroundState.error && (
                     <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mt-2">
                       ❌ {backgroundState.error}
                     </div>
                   )}
-                  
+
                   {/* Debug button for clearing service worker cache */}
                   <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
                     <button
@@ -577,7 +586,7 @@ const Attendance: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                   Take Selfie for Attendance
                 </h3>
-                
+
                 <div className="relative bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
                   {!isCapturing && !capturedImage && (
                     <div className="aspect-video flex items-center justify-center flex-col space-y-4">
@@ -592,7 +601,7 @@ const Attendance: React.FC = () => {
                       </p>
                     </div>
                   )}
-                  
+
                   {isCapturing && (
                     <div className="relative">
                       <video
@@ -622,11 +631,10 @@ const Attendance: React.FC = () => {
                         <button
                           onClick={capturePhoto}
                           disabled={!isVideoReady}
-                          className={`font-medium py-2 px-4 rounded-full transition-colors ${
-                            isVideoReady 
-                              ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer' 
-                              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                          }`}
+                          className={`font-medium py-2 px-4 rounded-full transition-colors ${isVideoReady
+                            ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
+                            : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                            }`}
                         >
                           📸 {isVideoReady ? 'Capture' : 'Loading...'}
                         </button>
@@ -639,7 +647,7 @@ const Attendance: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  
+
                   {capturedImage && (
                     <div className="relative">
                       <img
@@ -658,7 +666,7 @@ const Attendance: React.FC = () => {
                     </div>
                   )}
                 </div>
-                
+
                 <canvas ref={canvasRef} className="hidden" />
               </div>
 

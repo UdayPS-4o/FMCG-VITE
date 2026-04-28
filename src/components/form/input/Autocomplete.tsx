@@ -96,7 +96,7 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  
+
   // Expose focus method via the ref
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -114,15 +114,15 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
     const labelLower = option.label.toLowerCase();
     const searchTermsLower = (searchTerm || '').toLowerCase();
     const searchWords = searchTermsLower.split(' ').filter(word => word.length > 0);
-    
+
     // If no search words, show all options (or handle as needed)
     if (searchWords.length === 0 && !value) {
       return true;
     }
     if (searchWords.length === 0 && value && selectedOption?.label === searchTerm) {
-        return option.value === value;
+      return option.value === value;
     }
-    
+
     // Check if all search words are included in the label
     return searchWords.every(word => labelLower.includes(word));
   });
@@ -174,9 +174,9 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        dropdownRef.current && 
+        dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node) &&
-        inputContainerRef.current && 
+        inputContainerRef.current &&
         !inputContainerRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
@@ -200,23 +200,23 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
 
   // Detect dark mode
   const [isDarkMode, setIsDarkMode] = useState(false);
-  
+
   // Check for dark mode on mount and when theme changes
   useEffect(() => {
     const checkDarkMode = () => {
       setIsDarkMode(document.documentElement.classList.contains('dark'));
     };
-    
+
     // Initial check
     checkDarkMode();
-    
+
     // Create an observer to watch for theme changes
     const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, { 
-      attributes: true, 
-      attributeFilter: ['class'] 
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
     });
-    
+
     return () => observer.disconnect();
   }, []);
 
@@ -252,7 +252,7 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
     if (onInputChange) {
       onInputChange(newVal);
     }
-    
+
     // If search term is empty, clear selection
     if (newVal === "") {
       setSelectedOption(null);
@@ -304,11 +304,11 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
         onEnter();
       }
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        if (!isOpen && searchTerm) {
-            setIsOpen(true);
-        } else if (!isOpen && !searchTerm && options.length > 0){
-            setIsOpen(true);
-        }
+      if (!isOpen && searchTerm) {
+        setIsOpen(true);
+      } else if (!isOpen && !searchTerm && options.length > 0) {
+        setIsOpen(true);
+      }
     }
 
     if (e.key === 'Tab' && isOpen) {
@@ -321,22 +321,43 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   };
 
   // Format option label - if it contains a pipe (|), make the first part bold
+  // If label ends with ●N (stock badge), render a green IN STOCK badge
   const formatOptionLabel = (label: string) => {
     if (label.includes('|')) {
       const parts = label.split('|');
+      const codeStr = parts[0].trim();
+      const rest = parts[1] || '';
+      // Check for stock badge: e.g. "CHAVI RED WAX (1) ●3"
+      const stockMatch = rest.match(/^(.*?) ●(\d+)$/);
+      if (stockMatch) {
+        return (
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-brand-600 dark:text-brand-400">{codeStr}</span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 leading-none">
+                ● IN STOCK ({stockMatch[2]})
+              </span>
+            </div>
+            <span className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 line-clamp-1">{stockMatch[1].trim()}</span>
+          </div>
+        );
+      }
       return (
         <div className="flex flex-col">
-          <span className="font-semibold text-brand-600 dark:text-brand-400">{parts[0].trim()}</span>
-          <span className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 line-clamp-1">{parts[1].trim()}</span>
+          <span className="font-semibold text-brand-600 dark:text-brand-400">{codeStr}</span>
+          <span className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 line-clamp-1">{rest.trim()}</span>
         </div>
       );
     }
     return label;
   };
 
+  // Detect if an option is "in stock" (has stock badge in label)
+  const isInStockOption = (label: string) => / ●\d+$/.test(label);
+
   return (
-    <div 
-      className={`relative border ${isActive ? 'border-brand-500 dark:border-brand-400' : 'border-gray-300 dark:border-gray-700'} rounded-lg transition-all duration-200 ${className}`} 
+    <div
+      className={`relative border ${isActive ? 'border-brand-500 dark:border-brand-400' : 'border-gray-300 dark:border-gray-700'} rounded-lg transition-all duration-200 ${className}`}
       ref={inputContainerRef}
     >
       <div className="relative">
@@ -357,7 +378,7 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
           autoComplete={autoComplete}
           disabled={Boolean(disabled)}
         />
-        
+
         {/* Clear button */}
         {searchTerm && (
           <button
@@ -371,15 +392,15 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
             className="absolute right-8 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 focus:outline-none"
             title="Clear"
           >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="16" 
-              height="16" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2" 
-              strokeLinecap="round" 
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
               strokeLinejoin="round"
             >
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -387,46 +408,45 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
             </svg>
           </button>
         )}
-        
+
         {/* Dropdown arrow */}
-        <div 
+        <div
           className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-500 dark:text-gray-400"
           onClick={() => setIsOpen(!isOpen)}
         >
-          <svg 
-            width="16" 
-            height="16" 
-            viewBox="0 0 16 16" 
-            fill="none" 
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
             xmlns="http://www.w3.org/2000/svg"
             className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
           >
-            <path 
-              d="M4 6L8 10L12 6" 
-              stroke="currentColor" 
-              strokeWidth="1.5" 
-              strokeLinecap="round" 
+            <path
+              d="M4 6L8 10L12 6"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
               strokeLinejoin="round"
             />
           </svg>
         </div>
       </div>
-      
-      <label 
-        htmlFor={id} 
-        className={`absolute transition-all duration-200 pointer-events-none ${
-          isActive 
-            ? 'text-xs -top-2 left-2 px-1 text-brand-500 dark:text-brand-400 bg-white dark:bg-gray-900' 
-            : 'text-gray-500 dark:text-gray-400 top-1/2 -translate-y-1/2 left-4'
-        }`}
+
+      <label
+        htmlFor={id}
+        className={`absolute transition-all duration-200 pointer-events-none ${isActive
+          ? 'text-xs -top-2 left-2 px-1 text-brand-500 dark:text-brand-400 bg-white dark:bg-gray-900'
+          : 'text-gray-500 dark:text-gray-400 top-1/2 -translate-y-1/2 left-4'
+          }`}
       >
         {label}
       </label>
-      
+
       {/* Render dropdown using portal to avoid clipping */}
       {isOpen && createPortal(
-        <div 
-          ref={dropdownRef} 
+        <div
+          ref={dropdownRef}
           className="autocomplete-dropdown dropdown-scrollbar"
           style={{
             position: 'absolute',
@@ -444,24 +464,63 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
           }}
         >
           {filteredOptions.length > 0 ? (
-            filteredOptions.map((option, index) => (
-              <div
-                key={option.value}
-                className={`px-4 py-3 text-sm cursor-pointer text-gray-700 dark:text-gray-200 transition-colors duration-150 hover:bg-brand-50 dark:hover:bg-brand-900/10 ${
-                  selectedOption?.value === option.value
-                    ? 'bg-brand-100 dark:bg-brand-900/20'
-                    : ''
-                } ${
-                  highlightedIndex === index
-                    ? 'bg-brand-200 dark:bg-brand-700 ring-2 ring-brand-500' 
-                    : ''
-                }`}
-                onClick={() => handleOptionSelect(option)}
-                onMouseEnter={() => setHighlightedIndex(index)}
-              >
-                {formatOptionLabel(option.label)}
-              </div>
-            ))
+            <>
+              {isInStockOption(filteredOptions[0].label) && (
+                <div className="flex items-center gap-2 px-4 py-1 sticky top-0" style={{
+                  background: isDarkMode ? '#1F2937' : 'white',
+                  zIndex: 1
+                }}>
+                  <div style={{ flex: 1, height: 1, background: isDarkMode ? '#374151' : '#D1FAE5' }} />
+                  <span style={{
+                    fontSize: '10px',
+                    color: isDarkMode ? '#34D399' : '#059669',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    whiteSpace: 'nowrap'
+                  }}>● IN STOCK ITEMS</span>
+                  <div style={{ flex: 1, height: 1, background: isDarkMode ? '#374151' : '#D1FAE5' }} />
+                </div>
+              )}
+              {filteredOptions.map((option, index) => {
+                const inStock = isInStockOption(option.label);
+                // Show divider before the first out-of-stock item when there are in-stock items above it
+                const prevInStock = index > 0 && isInStockOption(filteredOptions[index - 1].label);
+                const showDivider = !inStock && prevInStock;
+                return (
+                  <div key={option.value}>
+                    {showDivider && (
+                      <div className="flex items-center gap-2 px-4 py-1">
+                        <div style={{ flex: 1, height: 1, background: isDarkMode ? '#374151' : '#E5E7EB' }} />
+                        <span style={{
+                          fontSize: '10px',
+                          color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                          fontWeight: 600,
+                          letterSpacing: '0.05em',
+                          whiteSpace: 'nowrap'
+                        }}>OUT OF STOCK</span>
+                        <div style={{ flex: 1, height: 1, background: isDarkMode ? '#374151' : '#E5E7EB' }} />
+                      </div>
+                    )}
+                    <div
+                      className={`px-4 py-3 text-sm cursor-pointer text-gray-700 dark:text-gray-200 transition-colors duration-150 ${inStock
+                        ? 'border-l-[3px] border-green-500 bg-green-50/50 dark:bg-green-900/10 hover:bg-green-100/60 dark:hover:bg-green-900/20'
+                        : 'hover:bg-brand-50 dark:hover:bg-brand-900/10'
+                        } ${selectedOption?.value === option.value
+                          ? 'bg-brand-100 dark:bg-brand-900/20'
+                          : ''
+                        } ${highlightedIndex === index
+                          ? 'bg-brand-200 dark:bg-brand-700 ring-2 ring-brand-500'
+                          : ''
+                        }`}
+                      onClick={() => handleOptionSelect(option)}
+                      onMouseEnter={() => setHighlightedIndex(index)}
+                    >
+                      {formatOptionLabel(option.label)}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           ) : (
             <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 text-center">
               No options found
@@ -474,4 +533,4 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   );
 });
 
-export default Autocomplete; 
+export default Autocomplete;

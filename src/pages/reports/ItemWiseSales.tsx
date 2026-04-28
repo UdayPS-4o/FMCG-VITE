@@ -5,6 +5,7 @@ import Input from '../../components/form/input/Input';
 import { useInvoiceContext } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import constants from '../../constants';
+import useActivityTracker from '../../hooks/useActivityTracker';
 
 // Define the structure of a sales report item
 interface SalesReportItem {
@@ -65,9 +66,9 @@ interface User {
   powers: string[];
   subgroups: any[]; // Adjust as per actual SubGroup structure if needed
   smCode?: string;
-  defaultSeries?: { 
+  defaultSeries?: {
     billing?: string;
-    reports?: string; 
+    reports?: string;
   };
   godownAccess: string[];
   canSelectSeries?: boolean;
@@ -120,9 +121,11 @@ const ItemWiseSalesContent: React.FC = () => {
     setHiddenColumns([]);
   };
 
-  const { pmplData, partyOptions: contextPartyOptions } = useInvoiceContext(); 
+  const { pmplData, partyOptions: contextPartyOptions } = useInvoiceContext();
   // const itemAutocompleteRef = useRef<AutocompleteRefHandle>(null); // Not for MultiSelect
   const [user, setUser] = useState<User | null>(null);
+
+  const { logActivity } = useActivityTracker();
 
   // Handlers for dynamic series and bill number filters
   const handleSeriesBillFilterChange = (index: number, field: keyof SeriesBillFilter, value: string) => {
@@ -253,7 +256,7 @@ const ItemWiseSalesContent: React.FC = () => {
       }
       setSelectedItemCodes([]);
     }
-    
+
     // If companies change, reset party and items as well, as they might be filtered by company
     // This part needs to be handled carefully. We check if this effect is running due to a company change.
     // A simple way is to see if selectedCompanyCodes is a dependency.
@@ -297,28 +300,28 @@ const ItemWiseSalesContent: React.FC = () => {
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
-          
+
           const data = await response.json();
           if (signal.aborted) return;
 
           setDynamicItemOptions(data.itemOptions || []);
 
           if (!selectedParty || actualDatesChanged) {
-          setDynamicPartyOptions(data.partyOptions || []);
+            setDynamicPartyOptions(data.partyOptions || []);
           }
 
         } catch (err: any) {
           if (err.name !== 'AbortError') {
             console.error("Error fetching filter options:", err);
-          setFilterOptionsError(err.message);
+            setFilterOptionsError(err.message);
             setDynamicItemOptions([]); // Ensure called with []
             if (!selectedParty || actualDatesChanged) {
-               setDynamicPartyOptions([]); // Ensure called with []
+              setDynamicPartyOptions([]); // Ensure called with []
             }
           }
         } finally {
           if (!signal.aborted) {
-          setFilterOptionsLoading(false);
+            setFilterOptionsLoading(false);
           }
         }
       };
@@ -347,10 +350,10 @@ const ItemWiseSalesContent: React.FC = () => {
   const prevSelectedCompanyCodesRef = useRef<string[] | undefined>(undefined);
   useEffect(() => {
     if (prevSelectedCompanyCodesRef.current && JSON.stringify(prevSelectedCompanyCodesRef.current) !== JSON.stringify(selectedCompanyCodes)) {
-        if (selectedParty) {
-      setSelectedParty(null);
-        }
-        setSelectedItemCodes([]);
+      if (selectedParty) {
+        setSelectedParty(null);
+      }
+      setSelectedItemCodes([]);
     }
     prevSelectedCompanyCodesRef.current = selectedCompanyCodes;
   }, [selectedCompanyCodes, selectedParty, setSelectedParty, setSelectedItemCodes]);
@@ -416,66 +419,66 @@ const ItemWiseSalesContent: React.FC = () => {
       acc[key].details.push(row);
 
       const unit = (row.Unit || 'UNKNOWN').toUpperCase();
-      if(acc[key].unitQty) {
-          if (!acc[key].unitQty[unit]) {
-            acc[key].unitQty[unit] = 0;
-          }
-          acc[key].unitQty[unit] += Number(row.Qty) || 0;
+      if (acc[key].unitQty) {
+        if (!acc[key].unitQty[unit]) {
+          acc[key].unitQty[unit] = 0;
+        }
+        acc[key].unitQty[unit] += Number(row.Qty) || 0;
       }
-      if(acc[key].unitFree) {
-          if (!acc[key].unitFree[unit]) {
-            acc[key].unitFree[unit] = 0;
-          }
-          acc[key].unitFree[unit] += Number(row.Free) || 0;
+      if (acc[key].unitFree) {
+        if (!acc[key].unitFree[unit]) {
+          acc[key].unitFree[unit] = 0;
+        }
+        acc[key].unitFree[unit] += Number(row.Free) || 0;
       }
-      
+
       return acc;
     }, {} as Record<string, GroupedSalesReportItem>);
 
     const groupedResult = Object.values(grouped);
-    
+
     groupedResult.forEach(item => {
-        const formatDisplayValue = (totalValue: number, unitValues: { [unit: string]: number } | undefined) => {
-            if (!unitValues) return totalValue.toFixed(2);
+      const formatDisplayValue = (totalValue: number, unitValues: { [unit: string]: number } | undefined) => {
+        if (!unitValues) return totalValue.toFixed(2);
 
-            const activeUnits = Object.keys(unitValues).filter(u => unitValues[u] > 0);
-            const hasOnlyBoxAndPcs = activeUnits.every(u => u === 'BOX' || u === 'PCS');
+        const activeUnits = Object.keys(unitValues).filter(u => unitValues[u] > 0);
+        const hasOnlyBoxAndPcs = activeUnits.every(u => u === 'BOX' || u === 'PCS');
 
-            if (hasOnlyBoxAndPcs && activeUnits.length > 0) {
-                const boxValue = unitValues['BOX'] || 0;
-                const pcsValue = unitValues['PCS'] || 0;
-                return `(BOX+PCS)\n(${boxValue}+${pcsValue})`;
-            }
-            
-            // Fallback to old logic for other cases
-            const unitOrder = ['BOX', 'PCS'];
-            const sortedUnits = Object.keys(unitValues).sort((a, b) => {
-                const indexA = unitOrder.indexOf(a);
-                const indexB = unitOrder.indexOf(b);
-                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                if (indexA !== -1) return -1;
-                if (indexB !== -1) return 1;
-                return a.localeCompare(b);
-            });
+        if (hasOnlyBoxAndPcs && activeUnits.length > 0) {
+          const boxValue = unitValues['BOX'] || 0;
+          const pcsValue = unitValues['PCS'] || 0;
+          return `(BOX+PCS)\n(${boxValue}+${pcsValue})`;
+        }
 
-            const labels: string[] = [];
-            const values: number[] = [];
-            sortedUnits.forEach(unit => {
-                if (unitValues[unit] > 0) {
-                    labels.push(unit);
-                    values.push(unitValues[unit]);
-                }
-            });
+        // Fallback to old logic for other cases
+        const unitOrder = ['BOX', 'PCS'];
+        const sortedUnits = Object.keys(unitValues).sort((a, b) => {
+          const indexA = unitOrder.indexOf(a);
+          const indexB = unitOrder.indexOf(b);
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return a.localeCompare(b);
+        });
 
-            if (labels.length > 1) {
-                return `(${labels.join('+')})\n(${values.join('+')})`;
-            }
-            
-            return totalValue.toFixed(2);
-        };
+        const labels: string[] = [];
+        const values: number[] = [];
+        sortedUnits.forEach(unit => {
+          if (unitValues[unit] > 0) {
+            labels.push(unit);
+            values.push(unitValues[unit]);
+          }
+        });
 
-        item.displayQty = formatDisplayValue(item.Qty, item.unitQty);
-        item.displayFree = formatDisplayValue(item.Free, item.unitFree);
+        if (labels.length > 1) {
+          return `(${labels.join('+')})\n(${values.join('+')})`;
+        }
+
+        return totalValue.toFixed(2);
+      };
+
+      item.displayQty = formatDisplayValue(item.Qty, item.unitQty);
+      item.displayFree = formatDisplayValue(item.Free, item.unitFree);
     });
 
     return groupedResult.sort((a, b) => a.ItemName.localeCompare(b.ItemName));
@@ -511,7 +514,7 @@ const ItemWiseSalesContent: React.FC = () => {
     let newFromDate = '';
     let newToDate = '';
 
-        switch (selectedDateRange) {
+    switch (selectedDateRange) {
       case 'today':
         today.setHours(5, 30, 0, 0);
         newFromDate = formatDate(today);
@@ -551,11 +554,11 @@ const ItemWiseSalesContent: React.FC = () => {
         break;
       case 'custom':
         if (!fromDate || !toDate) {
-            const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-            firstDayThisMonth.setHours(5, 30, 0, 0);
-            today.setHours(5, 30, 0, 0);
-            setFromDate(formatDate(firstDayThisMonth));
-            setToDate(formatDate(today));
+          const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+          firstDayThisMonth.setHours(5, 30, 0, 0);
+          today.setHours(5, 30, 0, 0);
+          setFromDate(formatDate(firstDayThisMonth));
+          setToDate(formatDate(today));
         }
         return;
       default:
@@ -635,27 +638,35 @@ const ItemWiseSalesContent: React.FC = () => {
       }
       const data = await response.json();
       setReportData(data);
+
+      // Log report generation
+      logActivity({
+        page: 'Item Wise Sales Report',
+        action: 'Generated Report',
+        duration: 0
+      });
+
     } catch (err: any) {
       if (err.name === 'AbortError') {
         console.log('Fetch report aborted');
       } else {
-      setError(err.message);
-      setReportData([]);
+        setError(err.message);
+        setReportData([]);
       }
     } finally {
       if (!signal.aborted) {
-      setLoading(false);
+        setLoading(false);
       }
     }
   };
 
   // Item MultiSelect uses dynamicItemOptions if available, otherwise empty or placeholder
-  const currentItemOptions = dynamicItemOptions.length > 0 ? dynamicItemOptions 
-    : (fromDate && toDate && !filterOptionsLoading ? [{value: '', text: 'No items found for dates'}] : []);
+  const currentItemOptions = dynamicItemOptions.length > 0 ? dynamicItemOptions
+    : (fromDate && toDate && !filterOptionsLoading ? [{ value: '', text: 'No items found for dates' }] : []);
 
   // Party Autocomplete uses dynamicPartyOptions if available
-  const currentPartyOptions = dynamicPartyOptions.length > 0 ? dynamicPartyOptions 
-    : (fromDate && toDate && !filterOptionsLoading ? [{value: '', label: 'No parties found for dates'}] : (contextPartyOptions || [])); // Fallback to contextPartyOptions
+  const currentPartyOptions = dynamicPartyOptions.length > 0 ? dynamicPartyOptions
+    : (fromDate && toDate && !filterOptionsLoading ? [{ value: '', label: 'No parties found for dates' }] : (contextPartyOptions || [])); // Fallback to contextPartyOptions
 
   const handlePrintReport = () => {
     const companyNames = selectedCompanyCodes.map(ccode => {
@@ -840,7 +851,7 @@ const ItemWiseSalesContent: React.FC = () => {
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Item Wise Sales Report</h1>
       {/* Updated filter section grid */}
-      {/* width 70vw, only on breakpoint pc*/} 
+      {/* width 70vw, only on breakpoint pc*/}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow w-full lg:w-[75vw]">
         {/* --- Row 1: Date and Company Filters --- */}
         <div>
@@ -893,7 +904,7 @@ const ItemWiseSalesContent: React.FC = () => {
           />
           {companyLoadingError && <p className="text-xs text-red-500 mt-1">{companyLoadingError}</p>}
         </div>
-        
+
         {/* --- Row 2: Party and Item Filters --- */}
         <div className="lg:col-span-2">
           <label htmlFor="partyFilter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Party (Optional)</label>
@@ -1063,7 +1074,7 @@ const ItemWiseSalesContent: React.FC = () => {
                 !hiddenColumns.includes(header) && (
                   <th key={header} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">
                     <div className="flex flex-col items-start">
-                      <button 
+                      <button
                         onClick={() => handleHideColumn(header)}
                         className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
                         title="Hide column"
@@ -1111,10 +1122,10 @@ const ItemWiseSalesContent: React.FC = () => {
                         <tr className="bg-gray-200 dark:bg-gray-700/80">
                           {fullTableHeaders.map((header, headerIndex) => (
                             !hiddenColumns.includes(header) && (
-                            <th key={`detail-header-${headerIndex}`} 
+                              <th key={`detail-header-${headerIndex}`}
                                 className={`px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap ${headerIndex === 0 ? 'pl-8' : ''}`}>
-                              {header}
-                            </th>
+                                {header}
+                              </th>
                             )
                           ))}
                         </tr>
@@ -1175,8 +1186,8 @@ const ItemWiseSalesContent: React.FC = () => {
             <tfoot className="bg-gray-100 dark:bg-gray-700 font-semibold">
               <tr>
                 {(() => {
-                    const colSpan = (groupItems ? ['Code', 'Item Name'] : ['Date', 'Bill No.', 'Code', 'Item Name', 'Party', 'Place', 'Unit']).filter(h => !hiddenColumns.includes(h)).length;
-                    return colSpan > 0 ? <td colSpan={colSpan} className="px-4 py-3 text-left text-sm text-gray-800 dark:text-gray-100 uppercase whitespace-nowrap">Total</td> : null;
+                  const colSpan = (groupItems ? ['Code', 'Item Name'] : ['Date', 'Bill No.', 'Code', 'Item Name', 'Party', 'Place', 'Unit']).filter(h => !hiddenColumns.includes(h)).length;
+                  return colSpan > 0 ? <td colSpan={colSpan} className="px-4 py-3 text-left text-sm text-gray-800 dark:text-gray-100 uppercase whitespace-nowrap">Total</td> : null;
                 })()}
                 {/* Qty Total */}
                 {!hiddenColumns.includes('Qty') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Qty.toFixed(2)}</td>}
@@ -1215,9 +1226,9 @@ const ItemWiseSalesContent: React.FC = () => {
 const ItemWiseSales: React.FC = () => {
   // Dummy props for InvoiceProvider - Ensure all are correctly defined
   const [dummyItemsState, setDummyItemsState] = useState<any[]>([]); // Renamed to avoid conflict and use state
-  const dummyUpdateItem = (index: number, updatedItem: any) => {};
-  const dummyRemoveItem = (index: number) => {};
-  const dummyAddItem = (item?: any) => {};
+  const dummyUpdateItem = (index: number, updatedItem: any) => { };
+  const dummyRemoveItem = (index: number) => { };
+  const dummyAddItem = (item?: any) => { };
   const dummyCalculateTotal = () => '0.00';
   const [dummyExpandedIndex, setDummyExpandedIndex] = useState<number | null>(null); // Allow null
   const [dummyFocusNewItemIndex, setDummyFocusNewItemIndex] = useState<number | null>(null);

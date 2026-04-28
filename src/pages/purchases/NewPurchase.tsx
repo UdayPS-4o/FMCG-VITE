@@ -25,6 +25,8 @@ type ItemRow = {
   gstPercent: string;
   gstCode?: string;
   godown?: string;
+  unit?: string;
+  originalDescription?: string;
 };
 
 type SupplierRecord = {
@@ -90,6 +92,10 @@ const NewPurchase: React.FC = () => {
   const [pmplData, setPmplData] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [purData, setPurData] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [itemMap, setItemMap] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [stockData, setStockData] = useState<Record<string, Record<string, number>>>({});
 
   const today = useMemo(() => {
     const d = new Date();
@@ -107,12 +113,15 @@ const NewPurchase: React.FC = () => {
   }, [godownOptions]);
 
   const [globalGodown, setGlobalGodown] = useState<string>('');
+  const [globalUnit, setGlobalUnit] = useState<string>('BOX');
+  const unitOptions = [{ value: 'BOX', label: 'BOX' }, { value: 'PCS', label: 'PCS' }];
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [localKey, setLocalKey] = useState<string | null>(() => localStorage.getItem('gemini_apikey'));
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [tempKey, setTempKey] = useState<string>('');
   const apiKey = localKey || (import.meta.env.VITE_GEMINI_API_KEY as string | undefined) || undefined;
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string>('');
   const [isRateInclusive, setIsRateInclusive] = useState<boolean>(false);
   const [showNewItemModal, setShowNewItemModal] = useState<boolean>(false);
@@ -167,8 +176,10 @@ const NewPurchase: React.FC = () => {
   const handleHideColumn = (col: string) => setHiddenColumns(prev => [...prev, col]);
   const handleResetColumns = () => setHiddenColumns([]);
 
+  const [cashDiscount, setCashDiscount] = useState<string>('');
+
   const addItem = () => {
-    setItems((prev) => [...prev, { description: '', hsn: '', qty: '', rate: '', mrp: '', itemCode: '', discRs: '', discPercent: '', cdPercent: '', gstPercent: '', gstCode: '', godown: globalGodown || '' }]);
+    setItems((prev) => [...prev, { description: '', hsn: '', qty: '', rate: '', mrp: '', itemCode: '', discRs: '', discPercent: '', cdPercent: '', gstPercent: '', gstCode: '', godown: globalGodown || '', unit: globalUnit || 'BOX' }]);
   };
 
   const resolveItemCode = (name: string, mrpVal: string) => {
@@ -184,6 +195,25 @@ const NewPurchase: React.FC = () => {
     if (!productNorm || !mrpStr) return '';
     const mrpNum = parseFloat(mrpStr);
     if (isNaN(mrpNum)) return '';
+
+    // Check itemMap
+    const mapped = itemMap.find(m => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mDesc = normalize(String((m as any).description || ''));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mMrp = String((m as any).mrp || '').trim().replace(/[^0-9.]/g, '');
+      const mMrpNum = parseFloat(mMrp);
+
+      if (mDesc !== productNorm) return false;
+
+      if (!isNaN(mrpNum) && !isNaN(mMrpNum)) {
+        return Math.abs(mrpNum - mMrpNum) < 0.01;
+      }
+      return false;
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (mapped && (mapped as any).itemCode) return String((mapped as any).itemCode);
+
     const data = pmplData;
     for (const it of data) {
       const p = normalize(String(it.PRODUCT || ''));
@@ -322,7 +352,7 @@ const NewPurchase: React.FC = () => {
       }
     });
     setPBillBB(`P-${maxBillNum + 1}`);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingBill, purData]);
 
   const gstGroupOptions = useMemo(() => {
@@ -350,9 +380,25 @@ const NewPurchase: React.FC = () => {
     if (s.length <= 6) return s;
     return `${s.slice(0, 4)}••••${s.slice(-2)}`;
   }, [localKey]);
+  // Compute total stock across all godowns for each item code
+  const itemTotalStock = useMemo(() => {
+    const result: Record<string, number> = {};
+    if (!stockData || Object.keys(stockData).length === 0) return result;
+    for (const [code, godownQtys] of Object.entries(stockData)) {
+      if (godownQtys && typeof godownQtys === 'object') {
+        const total = Object.values(godownQtys).reduce((sum: number, qty) => {
+          const n = typeof qty === 'number' ? qty : parseInt(String(qty), 10);
+          return sum + (isNaN(n) ? 0 : n);
+        }, 0);
+        result[code] = total;
+      }
+    }
+    return result;
+  }, [stockData]);
+
   const pmplItemOptions = useMemo(() => {
     const data = pmplData;
-    return data.map(it => {
+    const withStock: { value: string; label: string; inStock: boolean; totalStock: number }[] = data.map(it => {
       const code = String(it.CODE || '');
       const name = String(it.PRODUCT || '');
       let mrpVal = '';
@@ -363,14 +409,27 @@ const NewPurchase: React.FC = () => {
         const n = String(mCand).trim().replace(/[^0-9.]/g, '');
         if (n) mrpVal = n;
       }
-      const label = `${code} | ${name}${mrpVal ? ` (${mrpVal})` : ''}`;
-      return { value: code, label };
+      const totalStock = itemTotalStock[code] ?? 0;
+      const inStock = totalStock > 0;
+      // Prefix with a special marker so the Autocomplete component can detect in-stock items
+      const stockBadge = inStock ? ` ●${totalStock}` : '';
+      const label = `${code} | ${name}${mrpVal ? ` (${mrpVal})` : ''}${stockBadge}`;
+      return { value: code, label, inStock, totalStock };
     });
-  }, [pmplData]);
+    // Sort: in-stock items first (by totalStock desc), then out-of-stock alphabetically
+    withStock.sort((a, b) => {
+      if (a.inStock && !b.inStock) return -1;
+      if (!a.inStock && b.inStock) return 1;
+      if (a.inStock && b.inStock) return b.totalStock - a.totalStock;
+      return a.label.localeCompare(b.label);
+    });
+    return withStock.map(({ value, label }) => ({ value, label }));
+  }, [pmplData, itemTotalStock]);
   const getItemLabelByCode = (code?: string) => {
     if (!code) return '';
     const opt = pmplItemOptions.find(o => o.value === code);
-    return opt?.label || '';
+    // Strip the stock badge suffix when displaying the selected value
+    return opt?.label.replace(/ ●\d+$/, '') || '';
   };
   const findSupplierByGstin = (gst: string) => {
     if (!gst) return null;
@@ -388,6 +447,58 @@ const NewPurchase: React.FC = () => {
   const handleItemSelection = (index: number, code: string) => {
     const data = pmplData;
     const found = data.find(it => String(it.CODE || '') === String(code));
+
+    // Learn mapping
+    const row = items[index];
+    if (row && (row.originalDescription || row.description) && row.mrp && code) {
+      const descToMap = row.originalDescription || row.description;
+      const currentResolved = resolveItemCode(descToMap, row.mrp);
+
+      console.log('Learning Item Map check:', { descToMap, mrp: row.mrp, code, currentResolved });
+
+      // Only map if it doesn't resolve to the selected code already
+      if (currentResolved !== code) {
+        const payload = { description: descToMap, mrp: row.mrp, itemCode: code };
+
+        console.log('Sending Item Map payload:', payload);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setItemMap(prev => [...prev, payload]);
+
+        const token = localStorage.getItem('token');
+        fetch(`${constants.baseURL}/api/itemmap`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify(payload)
+        }).then(res => {
+          if (!res.ok) {
+            res.text().then(t => {
+              console.error('Item map save failed', res.status, t);
+              alert(`Failed to save item mapping: ${res.status} ${t}`);
+            });
+          } else {
+            console.log('Item map saved successfully');
+            // alert('Item mapping learned!'); // Optional: don't spam user
+          }
+        }).catch(err => {
+          console.error('Failed to save item mapping', err);
+          alert(`Error saving item mapping: ${err.message}`);
+        });
+      } else {
+        console.log('Item already resolved correctly, skipping learn.');
+      }
+    } else {
+      console.log('Skipping learn due to missing data:', {
+        hasRow: !!row,
+        hasDesc: !!(row?.originalDescription || row?.description),
+        hasMrp: !!row?.mrp,
+        hasCode: !!code
+      });
+    }
+
     setItems(prev => prev.map((row, i) => {
       if (i !== index) return row;
       const desc = String(found?.PRODUCT || row.description);
@@ -396,7 +507,10 @@ const NewPurchase: React.FC = () => {
       const gstStr = found ? (gstVal !== undefined && gstVal !== null ? String(gstVal) : '') : row.gstPercent;
       const gstCode = found ? String(found.GST_CODE || found.GR_CODE || '').trim() : (row.gstCode || '');
       const mrpStr = found && (typeof found.MRP1 === 'number' ? String(found.MRP1) : String(found.MRP1 || row.mrp));
-      return { ...row, itemCode: code, description: desc, hsn, gstPercent: gstStr, gstCode: gstCode || undefined, mrp: mrpStr || row.mrp };
+      // Auto-set unit from PMPL UNIT_1 field (BOX or PCS)
+      const rawUnit = found ? String(found.UNIT_1 || found.UNIT || '').trim().toUpperCase() : '';
+      const unit = rawUnit === 'BOX' || rawUnit === 'PCS' ? rawUnit : (row.unit || globalUnit || 'BOX');
+      return { ...row, itemCode: code, description: desc, hsn, gstPercent: gstStr, gstCode: gstCode || undefined, mrp: mrpStr || row.mrp, unit };
     }));
   };
 
@@ -412,8 +526,8 @@ const NewPurchase: React.FC = () => {
       // The updateItem('mrp') or here will re-trigger resolveItemCode logic if we want auto-link.
       // But resolveItemCode is called in updateItem.
       // So let's just update description here.
-      
-      return { ...row, description: val, itemCode: '' }; 
+
+      return { ...row, description: val, itemCode: '' };
     }));
   };
 
@@ -557,6 +671,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
           const meta = getPmplMetaByCode(itemCode);
           return {
             description,
+            originalDescription: description,
             hsn: meta.hsn || String(it.hsn || ''),
             qty: String(it.qty ?? ''),
             rate: String(it.rate ?? ''),
@@ -599,43 +714,64 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
   useEffect(() => {
     // Fetch from API for up-to-date list
     (async () => {
-      try {
-        const [cmpl, pmpl, godowns, pur] = await Promise.all([
+      const [cmplRes, pmplRes, godownsRes, purRes, imapRes, stockRes] = await Promise.allSettled([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/godowns`),
+        getPurRecords(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apiCache.fetchWithCache<any[]>(`${constants.baseURL}/json/itemmap`),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apiCache.fetchWithCache<Record<string, Record<string, number>>>(`${constants.baseURL}/api/stock`),
+      ]);
+
+      if (cmplRes.status === 'fulfilled' && Array.isArray(cmplRes.value)) {
+        setCmplData(cmplRes.value);
+      } else if (cmplRes.status === 'rejected') {
+        console.error('Error fetching CMPL:', cmplRes.reason);
+      }
+
+      if (pmplRes.status === 'fulfilled' && Array.isArray(pmplRes.value)) {
+        setPmplData(pmplRes.value);
+      } else if (pmplRes.status === 'rejected') {
+        console.error('Error fetching PMPL:', pmplRes.reason);
+      }
+
+      if (purRes.status === 'fulfilled' && Array.isArray(purRes.value)) {
+        setPurData(purRes.value);
+      } else if (purRes.status === 'rejected') {
+        console.error('Error fetching PUR:', purRes.reason);
+      }
+
+      if (imapRes.status === 'fulfilled' && Array.isArray(imapRes.value)) {
+        setItemMap(imapRes.value);
+      } else if (imapRes.status === 'rejected') {
+        console.error('Error fetching itemmap:', imapRes.reason);
+      }
+
+      if (stockRes.status === 'fulfilled' && stockRes.value && typeof stockRes.value === 'object') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setStockData(stockRes.value as any);
+      } else if (stockRes.status === 'rejected') {
+        console.error('Error fetching stock:', stockRes.reason);
+      }
+
+      if (godownsRes.status === 'fulfilled' && Array.isArray(godownsRes.value)) {
+        const opts = godownsRes.value
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`),
+          .filter((g: any) => String(g.ACTIVE || 'Y') === 'Y')
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/dbf/pmpl.json`),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          apiCache.fetchWithCache<any[]>(`${constants.baseURL}/api/godowns`),
-          getPurRecords()
-        ]);
-
-        if (Array.isArray(cmpl)) {
-          setCmplData(cmpl);
-        }
-
-        if (Array.isArray(pmpl)) {
-          setPmplData(pmpl);
-        }
-
-        if (Array.isArray(pur)) {
-          setPurData(pur);
-        }
-
-        if (Array.isArray(godowns)) {
-          const opts = godowns
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .filter((g: any) => String(g.ACTIVE || 'Y') === 'Y')
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .map((g: any) => {
-              const code = String(g.GDN_CODE || '').padStart(2, '0').slice(0, 2);
-              const name = String(g.GDN_NAME || '');
-              return { value: code, label: `${name} (${code})` };
-            });
-          setGodownOptions(opts);
-        }
-      } catch (err) {
-        console.error('Error fetching data:', err);
+          .map((g: any) => {
+            const code = String(g.GDN_CODE || '').padStart(2, '0').slice(0, 2);
+            const name = String(g.GDN_NAME || '');
+            return { value: code, label: `${name} (${code})` };
+          });
+        setGodownOptions(opts);
+      } else if (godownsRes.status === 'rejected') {
+        console.error('Error fetching godowns:', godownsRes.reason);
       }
     })();
 
@@ -645,7 +781,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     } catch (error) {
       console.error('Error clearing cache:', error);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -653,7 +789,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
     if (GST_STATES.find(s => s.code === prefix)) {
       setStateVal(prefix);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gstin]);
 
   useEffect(() => {
@@ -689,6 +825,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
           cdPercent: String(r.cdPercent || ''),
           gstPercent: String(r.gstPercent || ''),
           gstCode: String(r.gstCode || ''),
+          unit: String(r.unit || 'BOX'),
         }));
         setItems(mapped);
       }
@@ -730,7 +867,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         }
       })();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleVendorChange = (value: string) => {
@@ -768,6 +905,9 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
   };
 
   const handleSavePurchase = async () => {
+    // Prevent double-submission: block if already saving
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       if (items.length === 0) {
         alert('No items present in bill. The bill cannot be saved.');
@@ -784,6 +924,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         alert(`Item Code is required for all rows.\nMissing on row(s): ${missingCodes.map(x => x.idx).join(', ')}`);
         return;
       }
+      // --- Duplicate check 1: JSON purchase store (same supplier + invoice, different record) ---
       try {
         const tokenDup = localStorage.getItem('token');
         const respDup = await fetch(`${constants.baseURL}/json/purchases`, {
@@ -800,12 +941,36 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             return sameSupp && sameInv && !sameBill && !sameCreated;
           });
           if (dup) {
-            alert('Bill already present for the same supplier and invoice number.');
+            alert(`Bill no. ${dup.bill || invoiceNo} already present for the same supplier and invoice number.`);
             return;
           }
         }
       } catch (err) {
         console.error(err);
+      }
+      // --- Duplicate check 2: Live PUR DBF (catches entries already committed to the database) ---
+      try {
+        const tokenPur = localStorage.getItem('token');
+        const respPur = await fetch(`${constants.baseURL}/api/dbf/PUR.json`, {
+          headers: { ...(tokenPur ? { Authorization: `Bearer ${tokenPur}` } : {}) }
+        });
+        if (respPur.ok) {
+          const purArr = await respPur.json();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const purDup = (purArr || []).find((x: any) => {
+            const sameSupp = String(x.C_CODE || '').trim() === String(supplierCode || '').trim();
+            const samePbill = String(x.PBILL || '').trim() === String(invoiceNo || '').trim();
+            // Skip the currently-editing bill
+            const isCurrentBill = editingBill && String(x.BILL || '') === String(editingBill);
+            return sameSupp && samePbill && !isCurrentBill;
+          });
+          if (purDup) {
+            alert(`Bill no. ${purDup.BILL} (Invoice: ${invoiceNo}) already present in the database for this supplier. Please check the Purchases Database.`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('PUR duplicate check error:', err);
       }
       const token = localStorage.getItem('token');
       // Determine BILL to use
@@ -850,6 +1015,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             cdPercent: r.cdPercent,
             gstPercent: r.gstPercent,
             godown: (r.godown || '').slice(0, 2),
+            unit: r.unit || 'BOX',
             taxable: taxable.toFixed(2),
             gstAmount: gstAmt.toFixed(2),
             total: total.toFixed(2)
@@ -861,14 +1027,14 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             const taxable = computeTaxable(row);
             const gst = computeRowGst(row);
             const p = parseFloat(row.gstPercent || '0');
-            
+
             let code = row.gstCode;
             if (!code && row.itemCode) {
-               const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
-               code = String(found?.GST_CODE || found?.G_CODE || '').trim();
+              const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
+              code = String(found?.GST_CODE || found?.G_CODE || '').trim();
             }
             const label = code || `GST ${p}%`;
-            
+
             if (!breakdown[label]) breakdown[label] = { taxable: 0, gst: 0, rate: p };
             breakdown[label].taxable += taxable;
             breakdown[label].gst += gst;
@@ -895,14 +1061,14 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             const taxable = computeTaxable(row);
             const gst = computeRowGst(row);
             const p = parseFloat(row.gstPercent || '0');
-            
+
             let code = row.gstCode;
             if (!code && row.itemCode) {
-               const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
-               code = String(found?.GST_CODE || found?.G_CODE || '').trim();
+              const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
+              code = String(found?.GST_CODE || found?.G_CODE || '').trim();
             }
             const label = code || `GST ${p}%`;
-            
+
             if (!breakdown[label]) breakdown[label] = { taxable: 0, gst: 0, rate: p };
             breakdown[label].taxable += taxable;
             breakdown[label].gst += gst;
@@ -916,7 +1082,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
             const finalTaxable = override ? parseFloat(override) : data.taxable;
             const safeTaxable = isNaN(finalTaxable) ? 0 : finalTaxable;
             const finalTax = safeTaxable * (data.rate / 100);
-            
+
             totalTaxable += safeTaxable;
             totalTax += finalTax;
           });
@@ -925,12 +1091,17 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
           const rounded = Math.round(gross);
           const roundOff = rounded - gross;
           const grandTotal = gross + roundOff;
+          const cdValue = parseFloat(cashDiscount || '0');
+          const safeCdValue = isNaN(cdValue) ? 0 : cdValue;
+          const netTotal = grandTotal - safeCdValue;
           return {
             taxable: Number(totalTaxable.toFixed(2)),
             cgst: Number((totalTax / 2).toFixed(2)),
             sgst: Number((totalTax / 2).toFixed(2)),
             roundOff: Number(roundOff.toFixed(2)),
-            total: Number(grandTotal.toFixed(2))
+            cashDiscount: Number(safeCdValue.toFixed(2)),
+            total: Number(grandTotal.toFixed(2)),
+            netTotal: Number(netTotal.toFixed(2))
           };
         })()
       };
@@ -953,18 +1124,20 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
       }
     } catch {
       alert('Error saving purchase');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const [breakdownOverrides, setBreakdownOverrides] = useState<Record<string, string>>({});
-  
+
   useEffect(() => {
     if (Object.keys(breakdownOverrides).length > 0) {
       setBreakdownOverrides({});
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
-  
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <PageMeta title="New Purchase Entry | FMCG Vite Admin Template" description="OCR Assisted Purchase Recording" />
@@ -1032,7 +1205,21 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M8 8h8v8H8z" /></svg>
               {isProcessing ? 'Processing…' : 'Upload Invoice (OCR)'}
             </button>
-            <button onClick={handleSavePurchase} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-medium">Save Purchase</button>
+            <button
+              onClick={handleSavePurchase}
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white px-4 py-2 text-sm font-medium"
+            >
+              {isSaving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Saving…
+                </>
+              ) : 'Save Purchase'}
+            </button>
           </div>
         </div>
 
@@ -1125,6 +1312,27 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                   placeholder="Select Godown"
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700 dark:text-gray-300">Unit</span>
+                <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden">
+                  {unitOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setGlobalUnit(opt.value);
+                        setItems(prev => prev.map(r => ({ ...r, unit: opt.value })));
+                      }}
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${globalUnit === opt.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button onClick={addItem} className="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-3 py-2 text-sm font-medium">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
                 Add Item
@@ -1175,7 +1383,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                 </div>
                 <Input id="extraDesc" label="Extra Description" value={newItemExtraDesc} onChange={(e) => setNewItemExtraDesc(e.target.value)} variant="outlined" />
               </div>
-              <div className="mt-4 flex justify-end gap-2">
+              <div className="mt-4 flex justiDend gap-2">
                 <button onClick={() => setShowNewItemModal(false)} className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancel</button>
                 <button
                   onClick={async () => {
@@ -1267,6 +1475,12 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                     <div className="flex flex-col items-start">
                       <button onClick={() => handleHideColumn('Item Code')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
                       Item Code
+                    </div>
+                  </th>}
+                  {!hiddenColumns.includes('Unit') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex flex-col items-start">
+                      <button onClick={() => handleHideColumn('Unit')} className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none" title="Hide column">(-)</button>
+                      Unit
                     </div>
                   </th>}
                   {!hiddenColumns.includes('GDN') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -1386,6 +1600,23 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       {!hiddenColumns.includes('Item Code') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Input id={`code-${index}`} label="Item Code" value={row.itemCode} onChange={() => { }} variant="outlined" disabled maxLength={5} className="w-[9ch]" />
                       </td>}
+                      {!hiddenColumns.includes('Unit') && <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden">
+                          {unitOptions.map(opt => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setItems(prev => prev.map((r, i) => i === index ? { ...r, unit: opt.value } : r))}
+                              className={`px-2 py-1 text-xs font-semibold transition-colors ${(row.unit || 'BOX') === opt.value
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </td>}
                       {!hiddenColumns.includes('GDN') && <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <Select
                           options={godownOptionsTable}
@@ -1417,7 +1648,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                         {row.itemCode ? (
                           <div className="relative w-[10ch]">
                             {row.gstCode ? (
-                              <div 
+                              <div
                                 className="absolute inset-0 flex items-center px-3 text-sm text-gray-900 dark:text-white bg-transparent pointer-events-none z-10"
                               >
                                 {(() => {
@@ -1426,20 +1657,20 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                                 })()}
                               </div>
                             ) : null}
-                            <Input 
-                              id={`gst-${index}`} 
-                              label="GST Group" 
-                              value={row.gstCode || row.gstPercent} 
-                              onChange={(e) => updateItem(index, 'gstPercent', e.target.value)} 
-                              variant="outlined" 
-                              disabled 
+                            <Input
+                              id={`gst-${index}`}
+                              label="GST Group"
+                              value={row.gstCode || row.gstPercent}
+                              onChange={(e) => updateItem(index, 'gstPercent', e.target.value)}
+                              variant="outlined"
+                              disabled
                               className={`w-full ${row.gstCode ? 'text-transparent dark:text-transparent' : ''}`}
                             />
                           </div>
                         ) : (
                           <div className="relative w-[10ch]">
                             {row.gstCode ? (
-                              <div 
+                              <div
                                 className="absolute inset-0 flex items-center px-3 text-sm text-gray-900 dark:text-white bg-transparent pointer-events-none z-10"
                               >
                                 {(() => {
@@ -1489,21 +1720,21 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                 const taxable = computeTaxable(row);
                 const gst = computeRowGst(row);
                 const p = parseFloat(row.gstPercent || '0');
-                
+
                 let code = row.gstCode;
                 if (!code && row.itemCode) {
-                   const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
-                   code = String(found?.GST_CODE || found?.G_CODE || '').trim();
+                  const found = pmplData.find(it => String(it.CODE || '') === String(row.itemCode));
+                  code = String(found?.GST_CODE || found?.G_CODE || '').trim();
                 }
                 const label = code || `GST ${p}%`;
-                
+
                 if (!gstBreakdown[label]) gstBreakdown[label] = { taxable: 0, gst: 0, rate: p };
                 gstBreakdown[label].taxable += taxable;
                 gstBreakdown[label].gst += gst;
               });
 
               const isInterState = !gstin.startsWith('23');
-              
+
               let totalTaxableBreakdown = 0;
               let totalTaxBreakdown = 0;
 
@@ -1513,7 +1744,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                   const override = breakdownOverrides[code];
                   const finalTaxable = override ? parseFloat(override) : data.taxable;
                   const safeTaxable = isNaN(finalTaxable) ? 0 : finalTaxable;
-                  
+
                   // Re-calculate tax based on (new) taxable amount
                   const finalTax = safeTaxable * (data.rate / 100);
 
@@ -1532,13 +1763,16 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               // Grand Total calculation now uses breakdown sums if available, or item sums?
               // The user said: "make the table's taxable feild editable... thus change in the cgst and sgst value"
               // This implies the Grand Total should reflect these edits.
-              
+
               const grandTaxable = totalTaxableBreakdown;
               const grandTax = totalTaxBreakdown;
               const grandGross = grandTaxable + grandTax;
               const rounded = Math.round(grandGross);
               const roundOff = rounded - grandGross;
               const grandTotal = grandGross + roundOff;
+              const cdValue = parseFloat(cashDiscount || '0');
+              const safeCdValue = isNaN(cdValue) ? 0 : cdValue;
+              const netTotal = grandTotal - safeCdValue;
 
               return (
                 <>
@@ -1564,8 +1798,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                           <tr key={row.code} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
                             <td className="px-3 py-1 border-r dark:border-gray-700 font-medium">{row.code} ({row.rate}%)</td>
                             <td className="px-3 py-1 border-r dark:border-gray-700 text-right">
-                              <input 
-                                type="text" 
+                              <input
+                                type="text"
                                 className="w-20 text-right bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none"
                                 value={breakdownOverrides[row.code] ?? row.originalTaxable.toFixed(2)}
                                 onChange={(e) => {
@@ -1603,7 +1837,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       </tbody>
                     </table>
                   </div>
-                  <div className="text-right w-full lg:w-auto">
+                  <div className="text-right w-full lg:w-auto flex flex-col justify-end items-end gap-1">
                     <div className="text-sm text-gray-600 dark:text-gray-300">Taxable: {formatINR.format(grandTaxable)}</div>
                     {isInterState ? (
                       <div className="text-sm text-gray-600 dark:text-gray-300">IGST: {formatINR.format(grandTax)}</div>
@@ -1614,7 +1848,18 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                       </>
                     )}
                     <div className="text-sm text-gray-600 dark:text-gray-300">Round Off: {roundOff >= 0 ? '+' : ''}{roundOff.toFixed(2)}</div>
-                    <div className="mt-2 text-xl font-semibold text-gray-900 dark:text-white">Total: {formatINR.format(grandTotal)}</div>
+                    <div className="text-lg font-semibold text-gray-900 dark:text-white mt-1 border-t border-gray-200 dark:border-gray-700 pt-1">Total: {formatINR.format(grandTotal)}</div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Cash Discount (CD):</label>
+                      <input
+                        type="number"
+                        value={cashDiscount}
+                        onChange={(e) => setCashDiscount(e.target.value)}
+                        className="w-24 px-2 py-1 text-right text-sm border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="mt-2 text-xl font-bold text-green-700 dark:text-green-500 border-t-2 border-gray-200 dark:border-gray-700 pt-2">Net Payable: {formatINR.format(netTotal)}</div>
                   </div>
                 </>
               );

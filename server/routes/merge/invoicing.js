@@ -13,6 +13,7 @@ const billDbfPath = path.join(dbfFolderPath, 'data', 'BILL.DBF');
 const billDtlDbfPath = path.join(dbfFolderPath, 'data', 'BILLDTL.DBF');
 const pmplDbfPath = path.join(dbfFolderPath, 'data', 'PMPL.DBF'); // Product Master
 const cmplDbfPath = path.join(dbfFolderPath, 'data', 'CMPL.DBF'); // Customer Master
+const cashDbfPath = path.join(dbfFolderPath, 'data', 'CASH.DBF'); // Cash Ledger
 
 // Source JSON data
 const invoicingJsonPath = path.resolve(__dirname, '..', '..', 'db', 'approved', 'invoicing.json');
@@ -44,6 +45,94 @@ function formatUserTime(date) {
   const minutes = String(d.getMinutes()).padStart(2, '0');
   const seconds = String(d.getSeconds()).padStart(2, '0');
   return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+}
+
+// Helper to load data in chunks to avoid memory issues
+async function loadMapInChunks(dbfOrm, keyFn, map = {}, label = 'records') {
+  await dbfOrm.ensureOpen();
+  const recordCount = dbfOrm.dbf.recordCount;
+  const chunkSize = 1000;
+  let offset = 0;
+  let loaded = 0;
+
+  console.log(`Starting to load ${label} in chunks of ${chunkSize}. Total records: ${recordCount}`);
+
+  while (offset < recordCount) {
+    const records = await dbfOrm.dbf.readRecords(false, chunkSize, offset);
+    for (const record of records) {
+      const key = keyFn(record);
+      if (key) {
+        map[key] = record;
+      }
+    }
+    loaded += records.length;
+    offset += chunkSize;
+    if (offset % 10000 === 0 || offset >= recordCount) {
+        console.log(`Loaded ${loaded}/${recordCount} ${label}...`);
+    }
+  }
+  return map;
+}
+
+async function loadSetInChunks(dbfOrm, keyFn, set = new Set(), label = 'keys') {
+  await dbfOrm.ensureOpen();
+  const recordCount = dbfOrm.dbf.recordCount;
+  const chunkSize = 1000;
+  let offset = 0;
+  let loaded = 0;
+
+  console.log(`Starting to load ${label} in chunks of ${chunkSize}. Total records: ${recordCount}`);
+
+  while (offset < recordCount) {
+    const records = await dbfOrm.dbf.readRecords(false, chunkSize, offset);
+    for (const record of records) {
+      const key = keyFn(record);
+      if (key) {
+        set.add(key);
+      }
+    }
+    loaded += records.length;
+    offset += chunkSize;
+    if (offset % 10000 === 0 || offset >= recordCount) {
+        console.log(`Loaded ${loaded}/${recordCount} ${label}...`);
+    }
+  }
+  return set;
+}
+
+// Helper function to get the next VR number for Cash Receipts (CR)
+async function getNextCrVrNumber(dbfOrm) {
+  await dbfOrm.ensureOpen();
+  const recordCount = dbfOrm.dbf.recordCount;
+  const chunkSize = 1000;
+  let offset = 0;
+  let maxVrNum = 0;
+  let found = false;
+
+  console.log(`Scanning for max CR VR number in ${recordCount} records...`);
+
+  while (offset < recordCount) {
+    const records = await dbfOrm.dbf.readRecords(false, chunkSize, offset);
+    for (const r of records) {
+        if (r.VR && r.VR.startsWith('CR-')) {
+            const part = r.VR.split('-')[1];
+            if (part) {
+                const num = parseInt(part, 10);
+                if (!isNaN(num) && num > maxVrNum) {
+                    maxVrNum = num;
+                    found = true;
+                }
+            }
+        }
+    }
+    offset += chunkSize;
+  }
+
+  if (!found) {
+    return 'CR-000001';
+  }
+  const nextNum = maxVrNum + 1;
+  return `CR-${String(nextNum).padStart(6, '0')}`;
 }
 // --- End Helper function ---
 
@@ -267,6 +356,7 @@ router.post('/sync', async (req, res) => {
   const billDtlDbf = new DbfORM(billDtlDbfPath, { autoCreate: true });
   const pmplDbf = new DbfORM(pmplDbfPath);
   const cmplDbf = new DbfORM(cmplDbfPath);
+  const cashDbf = new DbfORM(cashDbfPath, { autoCreate: true });
 
   try {
     console.log('[Invoicing Handler] Request received. req.user:', JSON.stringify(req.user));
@@ -316,13 +406,15 @@ router.post('/sync', async (req, res) => {
       billDbf.open(),
       billDtlDbf.open(),
       pmplDbf.open(),
-      cmplDbf.open()
+      cmplDbf.open(),
+      cashDbf.open()
     ]).catch(async (openError) => {
-        if (openError.message.includes(path.basename(billDbfPath)) || openError.message.includes(path.basename(billDtlDbfPath))) {
-            console.log('BILL.DBF or BILLDTL.DBF not found, attempting to create...');
+        if (openError.message.includes(path.basename(billDbfPath)) || openError.message.includes(path.basename(billDtlDbfPath)) || openError.message.includes(path.basename(cashDbfPath))) {
+            console.log('BILL/BILLDTL/CASH DBF not found, attempting to create...');
             try {
                 await billDbf.create();
                 await billDtlDbf.create();
+                await cashDbf.create();
                 await pmplDbf.open();
                 await cmplDbf.open();
             } catch (createError) {
@@ -335,34 +427,30 @@ router.post('/sync', async (req, res) => {
         }
     });
 
+    // Get next CR VR number
+    const nextVrStart = await getNextCrVrNumber(cashDbf);
+    let currentVrCounter = parseInt(nextVrStart.split('-')[1], 10);
+
     // 3. Load PMPL, CMPL into maps
     console.log('Loading PMPL data...');
-    const pmplRecords = await pmplDbf.findAll();
-    const pmplMap = pmplRecords.reduce((map, record) => {
-      map[record.CODE] = record; // Key by Product Code
-      return map;
-    }, {});
+    const pmplMap = await loadMapInChunks(pmplDbf, (record) => record.CODE, {}, 'product records');
     console.log(`Loaded ${Object.keys(pmplMap).length} product records.`);
 
     console.log('Loading CMPL data...');
-    const cmplRecords = await cmplDbf.findAll();
-    const cmplMap = cmplRecords.reduce((map, record) => {
-      map[record.C_CODE] = record; // Key by Customer Code
-      return map;
-    }, {});
+    const cmplMap = await loadMapInChunks(cmplDbf, (record) => record.C_CODE, {}, 'customer records');
     console.log(`Loaded ${Object.keys(cmplMap).length} customer records.`);
 
 
     // 4. Load existing BILL keys (SERIES+BILL)
     console.log('Loading existing BILL keys...');
-    const existingBillRecords = await billDbf.findAll();
-    const existingBillKeys = new Set(existingBillRecords.map(rec => `${rec.SERIES}-${rec.BILL}`));
+    const existingBillKeys = await loadSetInChunks(billDbf, (rec) => `${rec.SERIES}-${rec.BILL}`, new Set(), 'existing bill keys');
     console.log(`Found ${existingBillKeys.size} existing bill keys.`);
 
 
     // 5. Iterate invoices, check duplicates, map data
     const billRecordsToInsert = [];
     const billDtlRecordsToInsert = [];
+    const cashRecordsToInsert = [];
     const skippedInvoices = [];
     const processedInvoices = [];
     let messagesAttempted = 0;
@@ -459,6 +547,239 @@ router.post('/sync', async (req, res) => {
       // Map BILL record using calculated totals and the record-specific userId
       const billRecord = mapToBillDbfFormat(combinedDate, invoice, customerData, calculatedTotals, recordUserId);
       billRecordsToInsert.push(billRecord);
+
+      // --- Map to CASH.DBF ---
+      // 1. SB Records (Sale Bill Breakdown)
+      // VR Format: SB-A09788 (Series + 5 digit bill)
+      const sbVr = `SB-${invoice.series}${String(invoice.billNo).padStart(5, '0')}`;
+      const targetBill2 = padBillNumber(invoice.series, invoice.billNo);
+      const mGroup = customerData?.M_GROUP || "DT";
+      
+      // Group items by GR_CODE9 to generate aggregated Goods and Tax entries
+      const groupedItems = {};
+      
+      for (const item of currentBillDetails) {
+          const grCode = item.GR_CODE9;
+          if (!grCode) continue;
+          
+          if (!groupedItems[grCode]) {
+              groupedItems[grCode] = {
+                  taxable: 0,
+                  tax: 0,
+                  grCode: grCode
+              };
+          }
+          
+          // Use GD10 for Taxable Value and GST10 for Tax Amount
+          // GD10 is the taxable value of the item
+          // GST10 is the tax amount of the item
+          groupedItems[grCode].taxable += (item.GD10 || 0);
+          groupedItems[grCode].tax += (item.GST10 || 0);
+      }
+      
+      // Determine if IGST or Local based on State
+      // If customer state is 23 (MP) -> Local (VG)
+      // If customer state is not 23 -> Interstate (VI)?
+      // Default to Local if state is missing or empty for safety, or check GST_TYPE
+      const isLocal = !customerData?.C_STATE || customerData?.C_STATE === '23'; 
+      // Or check if any item has IGST? BILLDTL structure doesn't explicitly have IGST amount column populated in mapToBillDtl
+      // But we can rely on state code '23' for MP.
+      
+      let totalCredits = 0;
+      
+      // Generate Goods and Tax entries for each group
+      for (const grCode in groupedItems) {
+          const group = groupedItems[grCode];
+          
+          // 1. Goods Entry (Credit)
+          if (group.taxable > 0) {
+              const goodsRecord = {
+                  VR: sbVr,
+                  DATE: combinedDate,
+                  C_CODE: group.grCode, // e.g. GG010
+                  AC_NAME: "", // Usually empty for these system entries or derived
+                  DR: 0,
+                  CR: safeParseFloat(group.taxable, 2),
+                  REMARK: `BY GOODS BILL NO.${invoice.series}-${invoice.billNo}`,
+                  BILL2: targetBill2,
+                  CASH: invoice.cash || 'N',
+                  OK: "",
+                  USER_ID: recordUserId,
+                  USER_TIME: formatUserTime(new Date()),
+                  M_GROUP1: "", 
+                  BR_CODE: invoice.sm || "",
+                  BOOK: "CB",
+                  E_TYPE: "G",
+                  R_NO: ""
+              };
+              cashRecordsToInsert.push(goodsRecord);
+              totalCredits += goodsRecord.CR;
+          }
+          
+          // 2. Tax Entry (Credit)
+          if (group.tax > 0) {
+              // Determine Tax Code prefix: VG for Local, VI for Interstate (assumed based on user prompt "VG ,,VI wise")
+              // If grCode is GG010 -> VG010 or VI010
+              const taxPrefix = isLocal ? 'V' : 'V'; // User said "VG ,,VI wise".
+              // Let's refine: If local -> VG. If Interstate -> VI.
+              // Assuming GR_CODE9 starts with 'G'.
+              // If it starts with 'G', replace 'G' with 'V' (Local) or 'V'?
+              // Wait, user said "VG ,, VI".
+              // If it is IGST, does it map to VI...?
+              // Let's assume:
+              // Local: GG010 -> VG010
+              // Interstate: GG010 -> VI010 ?? Or maybe the Account Code for IGST is different.
+              // Without explicit mapping, I will assume:
+              // Local: Replace first char with 'V'.
+              // Interstate: Replace first char with 'VI'? No, that would be 3 chars prefix.
+              // Maybe 'I' instead of 'G'? 'IG010'?
+              // User said "VG ,,VI". Maybe VI is for IGST.
+              // Let's try to look at existing data? I can't.
+              // I'll implement: Local -> VG..., Interstate -> VI... (replacing first G with V or I?)
+              // Actually, standard practice:
+              // Sales: GG...
+              // Output CGST/SGST: VG... (V for VAT/GST?)
+              // Output IGST: VI... (I for IGST?)
+              // Let's try:
+              // If Local: Code = 'V' + grCode.substring(1) (e.g. VG010)
+              // If Interstate: Code = 'VI' + grCode.substring(2) (e.g. VI010) ??
+              // Or just 'I' + grCode.substring(1) (IG010)?
+              // Given "VG ,,VI", maybe VI is the prefix.
+              // So if GR_CODE is GG010.
+              // Local -> VG010.
+              // Interstate -> VI010.
+              
+              let taxCode = group.grCode;
+              if (taxCode.startsWith('G')) {
+                  if (isLocal) {
+                      taxCode = 'V' + taxCode.substring(1);
+                  } else {
+                      // If Interstate, try VI prefix?
+                      // If code is GG010, V + G010 = VG010.
+                      // If VI, maybe V + I + 010? No.
+                      // Maybe VI010?
+                      // Let's assume standard pattern is replacing the first letter.
+                      // But 'VI' is two letters.
+                      // If original is GG010 (5 chars).
+                      // VG010 is 5 chars.
+                      // VI010 is 5 chars.
+                      // So replacing 'GG' with 'VI'?
+                      // If grCode starts with 'GG', replace 'GG' with 'VI'.
+                      if (taxCode.startsWith('GG')) {
+                          taxCode = 'VI' + taxCode.substring(2);
+                      } else {
+                          // Fallback if not starting with GG
+                          taxCode = 'VI' + taxCode.substring(2); 
+                      }
+                  }
+              }
+              
+              const taxRecord = {
+                  VR: sbVr,
+                  DATE: combinedDate,
+                  C_CODE: taxCode,
+                  AC_NAME: "",
+                  DR: 0,
+                  CR: safeParseFloat(group.tax, 2),
+                  REMARK: `BY TAX BILL NO.${invoice.series}-${invoice.billNo}`,
+                  BILL2: targetBill2,
+                  CASH: invoice.cash || 'N',
+                  OK: "",
+                  USER_ID: recordUserId,
+                  USER_TIME: formatUserTime(new Date()),
+                  M_GROUP1: "",
+                  BR_CODE: invoice.sm || "",
+                  BOOK: "CB",
+                  E_TYPE: "G",
+                  R_NO: ""
+              };
+              cashRecordsToInsert.push(taxRecord);
+              totalCredits += taxRecord.CR;
+          }
+      }
+      
+      // 3. Customer Entry (Debit)
+      // Fix: Ensure C_CODE is populated correctly for the customer entry.
+      // Previously it used invoice.party, which should be correct (e.g., "EE001" or customer code).
+      // If invoice.party is missing/undefined, it would be empty.
+      const customerRecord = {
+          VR: sbVr,
+          DATE: combinedDate,
+          C_CODE: invoice.party || "", // Explicitly use invoice.party
+          AC_NAME: customerData?.C_NAME || invoice.partyName || "",
+          DR: netAmountRounded, // Total Bill Amount
+          CR: 0,
+          REMARK: `TO BILL NO. ${invoice.series}-${invoice.billNo}`,
+          BILL2: targetBill2,
+          CASH: invoice.cash || 'N',
+          OK: "",
+          USER_ID: recordUserId,
+          USER_TIME: formatUserTime(new Date()),
+          M_GROUP1: mGroup, 
+          BR_CODE: invoice.sm || "",
+          BOOK: "CB",
+          E_TYPE: "G",
+          R_NO: `${invoice.series}-${invoice.billNo}`
+      };
+      cashRecordsToInsert.push(customerRecord);
+      
+      // 4. Round Off Entry
+      // Difference between Net Amount (Customer Debit) and Total Credits (Goods + Tax)
+      // If Net Amount > Total Credits, we need more Credit (Round Off Income/Adjustment)
+      // If Net Amount < Total Credits, we need Debit (Round Off Expense)
+      // But typically Round Off is a single account EE001.
+      // If Diff > 0, Credit EE001.
+      // If Diff < 0, Debit EE001.
+      const roundOffDiff = safeParseFloat(netAmountRounded - totalCredits, 2);
+      
+      if (Math.abs(roundOffDiff) > 0.001) {
+          const roundOffRecord = {
+              VR: sbVr,
+              DATE: combinedDate,
+              C_CODE: "EE001", // Round Off Account
+              AC_NAME: "",
+              DR: roundOffDiff < 0 ? Math.abs(roundOffDiff) : 0,
+              CR: roundOffDiff > 0 ? roundOffDiff : 0,
+              REMARK: `TO R/OFF BILL NO. ${invoice.series}-${invoice.billNo}`,
+              BILL2: targetBill2,
+              CASH: invoice.cash || 'N',
+              OK: "",
+              USER_ID: recordUserId,
+              USER_TIME: formatUserTime(new Date()),
+              M_GROUP1: "",
+              BR_CODE: invoice.sm || "",
+              BOOK: "CB",
+              E_TYPE: "G",
+              R_NO: ""
+          };
+          cashRecordsToInsert.push(roundOffRecord);
+      }
+
+      // 2. CR Record (Cash Receipt) if CASH='Y'
+      if (invoice.cash === 'Y') {
+          const crVr = `CR-${String(currentVrCounter++).padStart(6, '0')}`;
+          const crRecordFinal = {
+              VR: crVr,
+              DATE: combinedDate,
+              AC_CODE: invoice.party,
+              AC_NAME: customerData?.C_NAME || invoice.partyName || "",
+              DR: 0,
+              CR: netAmountRounded,
+              REMARK: "BY CASH",
+              BILL2: targetBill2,
+              CASH: "Y",
+              OK: "",
+              USER_ID: recordUserId,
+              USER_TIME: formatUserTime(new Date()),
+              M_GROUP1: mGroup,
+              BR_CODE: invoice.sm || "",
+              BOOK: "CB",
+              E_TYPE: "G",
+              R_NO: "" // Empty for CR as per sample (REF_NO was empty)
+          };
+          cashRecordsToInsert.push(crRecordFinal);
+      }
+      // --- End Map to CASH.DBF ---
 
       // Add the processed details to the main list
       billDtlRecordsToInsert.push(...currentBillDetails);
@@ -567,6 +888,11 @@ router.post('/sync', async (req, res) => {
       console.log(`Inserting ${billDtlRecordsToInsert.length} new records into BILLDTL.DBF...`);
       await billDtlDbf.insertMany(billDtlRecordsToInsert);
     }
+    
+    if (cashRecordsToInsert.length > 0) {
+      console.log(`Inserting ${cashRecordsToInsert.length} new records into CASH.DBF...`);
+      await cashDbf.insertMany(cashRecordsToInsert);
+    }
 
 
     // 8. Return response
@@ -597,7 +923,8 @@ router.post('/sync', async (req, res) => {
             billDbf.close(),
             billDtlDbf.close(),
             pmplDbf.close(),
-            cmplDbf.close()
+            cmplDbf.close(),
+            cashDbf.close()
         ]);
         console.log('DBF files closed.');
     } catch (closeError) {

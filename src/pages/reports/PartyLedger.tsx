@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaPrint, FaFileInvoice } from 'react-icons/fa';
 import useAuth from '../../hooks/useAuth';
+import useActivityTracker from '../../hooks/useActivityTracker';
 import constants from '../../constants';
 import apiCache from '../../utils/apiCache';
 
@@ -70,8 +71,9 @@ const PartyLedger: React.FC = () => {
   const [reportData, setReportData] = useState<ReportData[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const { logActivity } = useActivityTracker();
   const printRef = useRef<HTMLDivElement>(null);
-  
+
   // Searchable dropdown state
   const [isPartyDropdownOpen, setIsPartyDropdownOpen] = useState(false);
   const [partySearchText, setPartySearchText] = useState('');
@@ -151,7 +153,7 @@ const PartyLedger: React.FC = () => {
         // Financial Year: April 1 to March 31
         const currentYear = today.getFullYear();
         const currentMonth = today.getMonth(); // 0-based (0 = January, 3 = April)
-        
+
         let fyStartYear, fyEndYear;
         if (currentMonth >= 3) { // April (3) to December (11)
           fyStartYear = currentYear;
@@ -160,7 +162,7 @@ const PartyLedger: React.FC = () => {
           fyStartYear = currentYear - 1;
           fyEndYear = currentYear;
         }
-        
+
         const fyStart = new Date(fyStartYear, 3, 1); // April 1
         const fyEnd = new Date(fyEndYear, 2, 31); // March 31
         setFromDate(formatDate(fyStart));
@@ -202,7 +204,7 @@ const PartyLedger: React.FC = () => {
 
         if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
           console.log(`Filtering parties by user's assigned subgroups`);
-          const subgroupPrefixes = user.subgroups.map((sg: any) => 
+          const subgroupPrefixes = user.subgroups.map((sg: any) =>
             sg.subgroupCode.substring(0, 2).toUpperCase()
           );
           console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
@@ -218,10 +220,10 @@ const PartyLedger: React.FC = () => {
         const partyList = filteredParties.map((party) => {
           // Get balance for this party
           const balance = balanceMap.get(party.C_CODE);
-          
+
           // Check if balance is non-zero
           const hasNonZeroBalance = balance && balance.toString().trim() !== '0 CR' && balance.toString().trim() !== '0 DR';
-          
+
           return {
             value: party.C_CODE,
             label: hasNonZeroBalance
@@ -285,13 +287,13 @@ const PartyLedger: React.FC = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
-      
+
       const result = await response.json();
-      
+
       if (result.success && result.data) {
         // Convert the backend response to our ReportData format
         const reportItems: ReportData[] = result.data.map((item: any) => ({
@@ -304,8 +306,16 @@ const PartyLedger: React.FC = () => {
           balanceType: item.balanceType,
           isOpeningBalance: item.date === 'Opening Balance'
         }));
-        
+
         setReportData(reportItems);
+
+        // Log report generation
+        logActivity({
+          page: 'Party Ledger Report',
+          action: 'Generated Report',
+          duration: 0
+        });
+
       } else {
         setReportData([]);
       }
@@ -320,13 +330,13 @@ const PartyLedger: React.FC = () => {
   // Parse date function
   const parseItemDate = (dateValue: string) => {
     if (!dateValue) return null;
-    
+
     // Try ISO format first (YYYY-MM-DD)
     let date = new Date(dateValue);
     if (!isNaN(date.getTime())) {
       return date;
     }
-    
+
     // Try DD-MM-YYYY format
     const ddmmyyyy = dateValue.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
     if (ddmmyyyy) {
@@ -336,25 +346,25 @@ const PartyLedger: React.FC = () => {
         return date;
       }
     }
-    
+
     return null;
   };
 
   // Format date to DD-MM-YYYY
   const formatDateToDDMMYYYY = (dateString: string) => {
     if (!dateString) return '';
-    
+
     // If the string is already in DD-MM-YYYY format, return as is
     if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
       return dateString;
     }
-    
+
     // If it's in YYYY-MM-DD format, convert to DD-MM-YYYY
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
       const [year, month, day] = dateString.split('-');
       return `${day}-${month}-${year}`;
     }
-    
+
     // Fallback: try to parse as Date and format
     const date = new Date(dateString);
     if (!isNaN(date.getTime())) {
@@ -363,7 +373,7 @@ const PartyLedger: React.FC = () => {
       const year = date.getFullYear();
       return `${day}-${month}-${year}`;
     }
-    
+
     return dateString;
   };
 
@@ -387,7 +397,7 @@ const PartyLedger: React.FC = () => {
     if (printRef.current) {
       const printContent = printRef.current.innerHTML;
       const originalContent = document.body.innerHTML;
-      
+
       document.body.innerHTML = printContent;
       window.print();
       document.body.innerHTML = originalContent;
@@ -409,13 +419,13 @@ const PartyLedger: React.FC = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
-      
+
       const result: BalanceSlipResponse = await response.json();
-      
+
       if (result.success) {
         setBalanceSlipData(result);
         setPendingBills(result.data);
@@ -436,7 +446,7 @@ const PartyLedger: React.FC = () => {
     if (balanceSlipRef.current) {
       const printContent = balanceSlipRef.current.innerHTML;
       const originalContent = document.body.innerHTML;
-      
+
       document.body.innerHTML = printContent;
       window.print();
       document.body.innerHTML = originalContent;
@@ -472,31 +482,31 @@ const PartyLedger: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Party Name</label>
             <div className="relative" ref={partyDropdownRef}>
-              <div 
+              <div
                 onClick={() => setIsPartyDropdownOpen(!isPartyDropdownOpen)}
                 className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between"
               >
                 <div className="flex items-center flex-1">
-                   <input
-                     type="text"
-                     placeholder={selectedParty && !partySearchText ? "" : "Search and select party..."}
-                     value={partySearchText || (selectedParty && !isPartyDropdownOpen ? selectedParty.label : '')}
-                     onChange={(e) => {
-                       setPartySearchText(e.target.value);
-                       setIsPartyDropdownOpen(true);
-                     }}
-                     onClick={(e) => {
-                       e.stopPropagation();
-                       setIsPartyDropdownOpen(true);
-                     }}
-                     onFocus={() => {
-                       if (selectedParty) {
-                         setPartySearchText('');
-                       }
-                     }}
-                     className="w-full bg-transparent border-0 outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                   />
-                 </div>
+                  <input
+                    type="text"
+                    placeholder={selectedParty && !partySearchText ? "" : "Search and select party..."}
+                    value={partySearchText || (selectedParty && !isPartyDropdownOpen ? selectedParty.label : '')}
+                    onChange={(e) => {
+                      setPartySearchText(e.target.value);
+                      setIsPartyDropdownOpen(true);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsPartyDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (selectedParty) {
+                        setPartySearchText('');
+                      }
+                    }}
+                    className="w-full bg-transparent border-0 outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  />
+                </div>
                 <svg
                   className={`w-5 h-5 text-gray-400 transition-transform ${isPartyDropdownOpen ? 'rotate-180' : ''}`}
                   fill="none"
@@ -506,7 +516,7 @@ const PartyLedger: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
-              
+
               {isPartyDropdownOpen && (
                 <div className="absolute z-50 w-full max-h-60 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md mt-1 shadow-lg">
                   {filteredPartyOptions.length > 0 ? (
@@ -572,7 +582,7 @@ const PartyLedger: React.FC = () => {
           >
             {loading ? 'Generating...' : 'Generate Report'}
           </button>
-          
+
           <button
             onClick={handleBalanceSlip}
             disabled={balanceSlipLoading || !selectedParty}
@@ -674,7 +684,7 @@ const PartyLedger: React.FC = () => {
                 </button>
               </div>
             </div>
-            
+
             <div ref={balanceSlipRef} className="print-content">
               <div className="text-center mb-6">
                 <h1 className="text-2xl font-bold">BALANCE SLIP</h1>
@@ -683,7 +693,7 @@ const PartyLedger: React.FC = () => {
                   <p><strong>Date:</strong> {new Date().toLocaleDateString('en-GB')}</p>
                 </div>
               </div>
-              
+
               {pendingBills.length > 0 ? (
                 <>
                   <table className="w-full border-collapse border border-gray-300 mb-4">

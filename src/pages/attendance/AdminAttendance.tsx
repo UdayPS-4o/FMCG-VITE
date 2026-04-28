@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -90,6 +90,8 @@ interface UserActivityLog {
   timestamp: string;
   ipAddress?: string;
   userAgent?: string;
+  duration?: number;
+  nextPage?: string;
 }
 
 interface MessageData {
@@ -109,6 +111,142 @@ interface MandatoryDocsData {
   bankSlips: string[];
 }
 
+const PresentDaysTooltip: React.FC<{ userId: number; month: string; targetValue: React.ReactNode }> = ({ userId, month, targetValue }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const fetchRecords = async () => {
+    if (hasFetched || loading) return;
+    setLoading(true);
+    try {
+      const yearStr = month.split('-')[0];
+      const monthStr = month.split('-')[1];
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${constants.baseURL}/api/attendance/admin/user-history`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ userId, month: monthStr, year: yearStr })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRecords(data.records || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+      setHasFetched(true);
+    }
+  };
+
+  const toggleTooltip = () => {
+    if (!isOpen) {
+      fetchRecords();
+    }
+    setIsOpen(!isOpen);
+  };
+
+  const formatDateShort = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  return (
+    <div 
+      className="relative flex items-center" 
+      ref={tooltipRef}
+    >
+      <div 
+        className="cursor-pointer border-b border-dashed border-gray-400 dark:border-gray-500 font-medium text-gray-900 dark:text-white group"
+        onClick={toggleTooltip}
+      >
+        {targetValue}
+      </div>
+      
+      {isOpen && (
+        <div className="absolute z-50 left-1/2 bottom-full -translate-x-1/2 mb-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 text-sm">
+          <div className="font-semibold text-gray-900 dark:text-white mb-2 pb-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <span>Attendance Details</span>
+            <div className="flex items-center space-x-2">
+              <span>{month}</span>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          {loading ? (
+            <div className="text-center py-4 text-gray-500">Loading...</div>
+          ) : records.length > 0 ? (
+            <div 
+              className="max-h-48 overflow-y-auto w-full pr-1 pointer-events-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full"
+              onWheel={(e) => e.stopPropagation()}
+            >
+            <table className="w-full text-xs text-left">
+              <thead className="bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 top-0 sticky z-10">
+                <tr>
+                  <th className="px-2 py-1.5 font-medium rounded-tl">Date</th>
+                  <th className="px-2 py-1.5 font-medium">Time</th>
+                  <th className="px-2 py-1.5 font-medium rounded-tr">Status</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-600 dark:text-gray-400">
+                {records.map(r => (
+                  <tr key={r.id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td className="px-2 py-1.5 whitespace-nowrap">{formatDateShort(r.date)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{r.time}</td>
+                    <td className="px-2 py-1.5">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap ${
+                        r.status === 'present' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
+                        r.status === 'half_day' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' :
+                        'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                      }`}>
+                        {r.status === 'present' ? 'Present' : r.status === 'half_day' ? 'Half Day' : 'Absent'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+           </div>
+          ) : (
+            <div className="text-center py-4 text-gray-500 text-xs">No records found.</div>
+          )}
+          
+          {/* Tooltip triangle indicator */}
+          <div className="absolute top-full left-1/2 -ml-2 border-4 border-transparent border-t-white dark:border-t-gray-800 drop-shadow-sm"></div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AdminAttendance: React.FC = () => {
   const navigate = useNavigate();
   const { user, hasAccess } = useAuth();
@@ -118,23 +256,34 @@ const AdminAttendance: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+
+  // Gallery Modal State
+  const [galleryState, setGalleryState] = useState<{
+    isOpen: boolean;
+    items: { src: string; title: string }[];
+    currentIndex: number;
+  }>({
+    isOpen: false,
+    items: [],
+    currentIndex: 0
+  });
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+
   const [activeTab, setActiveTab] = useState<'attendance' | 'locations'>('attendance');
-  const [users, setUsers] = useState<{ 
-    id: number; 
-    name: string; 
-    username: string; 
-    routeAccess: string[]; 
+  const [users, setUsers] = useState<{
+    id: number;
+    name: string;
+    username: string;
+    routeAccess: string[];
     isAdmin: boolean;
     requireMandatoryDocs?: boolean;
     mandatoryDocsFromDate?: string;
   }[]>([]);
   const [salaryModal, setSalaryModal] = useState<{ userId: number; userName: string } | null>(null);
-  
-  // Docs Modal State
-  const [docsModal, setDocsModal] = useState<{ userId: number; userName: string; date: string } | null>(null);
-  const [docsData, setDocsData] = useState<MandatoryDocsData | null>(null);
-  const [docsLoading, setDocsLoading] = useState(false);
+
+
   const [salaryData, setSalaryData] = useState<{
     monthlySalary: string;
     weeklyOffDays: number[];
@@ -192,7 +341,7 @@ const AdminAttendance: React.FC = () => {
       }
     }
     return null;
-   };
+  };
 
   // Enhanced setSalaryData function that automatically saves to localStorage
   const updateSalaryData = (newData: typeof salaryData | ((prev: typeof salaryData) => typeof salaryData)) => {
@@ -213,7 +362,7 @@ const AdminAttendance: React.FC = () => {
   const [userActivityModal, setUserActivityModal] = useState<{ userId: number; userName: string } | null>(null);
   const [userActivityLogs, setUserActivityLogs] = useState<UserActivityLog[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
-  
+
   // Message state management
   const [messageModal, setMessageModal] = useState<{ userId: number; userName: string } | null>(null);
   const [messageData, setMessageData] = useState<{
@@ -236,7 +385,7 @@ const AdminAttendance: React.FC = () => {
 
     const today = getIndianDate();
     setSelectedDate(today);
-    
+
     fetchUsers();
     fetchUserLocations();
   }, [hasAccess, navigate]);
@@ -355,12 +504,18 @@ const AdminAttendance: React.FC = () => {
     return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
   };
 
-  const openImageModal = (imageData: string) => {
-    setSelectedImage(imageData);
+  const openGallery = (index: number, items: { src: string; title: string }[]) => {
+    setGalleryState({
+      isOpen: true,
+      items,
+      currentIndex: index
+    });
+    setZoom(1);
+    setRotation(0);
   };
 
-  const closeImageModal = () => {
-    setSelectedImage(null);
+  const closeGallery = () => {
+    setGalleryState(prev => ({ ...prev, isOpen: false }));
   };
 
   const openLocationInMaps = (latitude: number, longitude: number) => {
@@ -370,45 +525,45 @@ const AdminAttendance: React.FC = () => {
 
   const getLocationStatus = (location: UserLocation) => {
     if (!location.currentLocation) {
-      return { 
-        status: 'No Location', 
-        color: 'text-gray-500', 
+      return {
+        status: 'No Location',
+        color: 'text-gray-500',
         bgColor: 'bg-gray-100',
         icon: '❌',
         description: 'No location data available'
       };
     }
-    
+
     const lastUpdated = new Date(location.lastUpdated);
     const now = new Date();
     const diffMinutes = (now.getTime() - lastUpdated.getTime()) / (1000 * 60);
     const isBackgroundTracking = location.isBackgroundTracking || false;
     const source = location.source || 'unknown';
-    
+
     if (diffMinutes < 5) {
-      return { 
-        status: isBackgroundTracking ? 'Online (BG)' : 'Online', 
-        color: 'text-green-800', 
+      return {
+        status: isBackgroundTracking ? 'Online (BG)' : 'Online',
+        color: 'text-green-800',
         bgColor: 'bg-green-100',
         icon: isBackgroundTracking ? '🌍' : '📍',
-        description: isBackgroundTracking 
-          ? `Active with background tracking (${source})` 
+        description: isBackgroundTracking
+          ? `Active with background tracking (${source})`
           : 'Active with foreground tracking'
       };
     } else if (diffMinutes < 30) {
-      return { 
-        status: isBackgroundTracking ? 'Recent (BG)' : 'Recent', 
-        color: 'text-yellow-800', 
+      return {
+        status: isBackgroundTracking ? 'Recent (BG)' : 'Recent',
+        color: 'text-yellow-800',
         bgColor: 'bg-yellow-100',
         icon: isBackgroundTracking ? '🟡' : '🟠',
-        description: isBackgroundTracking 
-          ? `Recently active with background tracking (${Math.round(diffMinutes)}m ago)` 
+        description: isBackgroundTracking
+          ? `Recently active with background tracking (${Math.round(diffMinutes)}m ago)`
           : `Recently active (${Math.round(diffMinutes)}m ago)`
       };
     } else {
-      return { 
-        status: 'Offline', 
-        color: 'text-red-800', 
+      return {
+        status: 'Offline',
+        color: 'text-red-800',
         bgColor: 'bg-red-100',
         icon: '🔴',
         description: `Last seen ${Math.round(diffMinutes)}m ago${isBackgroundTracking ? ' (had background tracking)' : ''}`
@@ -447,7 +602,7 @@ const AdminAttendance: React.FC = () => {
       if (response.ok) {
         setToast({ message: 'Attendance status updated successfully', type: 'success' });
         fetchAttendanceRecords(); // Refresh the records
-// Remove setEditingStatus since it's not defined and not needed
+        // Remove setEditingStatus since it's not defined and not needed
       } else {
         setToast({ message: 'Failed to update attendance status', type: 'error' });
       }
@@ -494,7 +649,7 @@ const AdminAttendance: React.FC = () => {
 
   const calculateSalary = async () => {
     if (!salaryModal) return;
-    
+
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${constants.baseURL}/api/attendance/admin/calculate-salary`, {
@@ -515,9 +670,9 @@ const AdminAttendance: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setToast({ 
-          message: `Salary calculated: ₹${data.calculation.salary.totalEarnedSalary} (${data.calculation.totalWorkingDays} working days)`, 
-          type: 'success' 
+        setToast({
+          message: `Salary calculated: ₹${data.calculation.salary.totalEarnedSalary} (${data.calculation.totalWorkingDays} working days)`,
+          type: 'success'
         });
         setSalaryModal(null);
         setSalaryData({ monthlySalary: '', weeklyOffDays: [], month: '', additions: [], deductions: [] });
@@ -579,7 +734,7 @@ const AdminAttendance: React.FC = () => {
   const updateAddition = (id: string, field: 'description' | 'amount', value: string | number) => {
     updateSalaryData(prev => ({
       ...prev,
-      additions: prev.additions.map(addition => 
+      additions: prev.additions.map(addition =>
         addition.id === id ? { ...addition, [field]: value } : addition
       )
     }));
@@ -607,7 +762,7 @@ const AdminAttendance: React.FC = () => {
   const updateDeduction = (id: string, field: 'description' | 'amount', value: string | number) => {
     updateSalaryData(prev => ({
       ...prev,
-      deductions: prev.deductions.map(deduction => 
+      deductions: prev.deductions.map(deduction =>
         deduction.id === id ? { ...deduction, [field]: value } : deduction
       )
     }));
@@ -627,61 +782,28 @@ const AdminAttendance: React.FC = () => {
   const fetchUserActivityLogs = async (userId: number) => {
     setActivityLoading(true);
     try {
-      const user = users.find(u => u.id === userId);
-      const userName = user?.name || 'Unknown';
-      
-      // Generate user-specific logs based on selected date and user ID
-      const selectedDateObj = new Date(selectedDate);
-      const baseTimestamp = selectedDateObj.getTime();
-      
-      // Create different activity patterns based on user ID
-       const activityPatterns = {
-         dashboard: ['Viewed dashboard', 'Checked notifications', 'Reviewed alerts'],
-         attendance: ['Checked in', 'Checked out', 'Updated attendance status', 'Viewed attendance history'],
-         profile: ['Updated profile information', 'Changed password', 'Updated contact details'],
-         reports: ['Generated Employee Attendance Report', 'Downloaded Monthly Payroll Report', 'Viewed Sales Analytics Dashboard', 'Created Quarterly Performance Report', 'Exported Daily Activity Summary'],
-         invoicing: ['Created new invoice', 'Updated invoice status', 'Sent invoice to client'],
-         inventory: ['Updated stock levels', 'Added new product', 'Checked inventory status']
-       };
-      
-      const pages = Object.keys(activityPatterns);
-      const mockLogs: UserActivityLog[] = [];
-      
-      // Generate 3-8 random activities for the selected date
-      const numActivities = 3 + (userId % 6); // Different number of activities per user
-      
-      for (let i = 0; i < numActivities; i++) {
-        const randomPage = pages[Math.floor((userId * i + i) % pages.length)];
-        const actions = activityPatterns[randomPage as keyof typeof activityPatterns];
-        const randomAction = actions[Math.floor((userId + i) % actions.length)];
-        
-        // Generate timestamps throughout the selected date
-        const hourOffset = 8 + (i * 2) + (userId % 3); // Start from 8 AM, spread throughout day
-        const minuteOffset = (userId * 7 + i * 13) % 60; // Different minutes for each user
-        const activityTimestamp = new Date(baseTimestamp + (hourOffset * 60 * 60 * 1000) + (minuteOffset * 60 * 1000));
-        
-        // Generate different IP addresses based on user ID
-        const ipVariation = (userId % 50) + 100;
-        const ipAddress = `192.168.1.${ipVariation}`;
-        
-        mockLogs.push({
-          id: `${userId}_${i}`,
-          userId: userId,
-          userName: userName,
-          page: randomPage.charAt(0).toUpperCase() + randomPage.slice(1),
-          action: randomAction,
-          timestamp: activityTimestamp.toISOString(),
-          ipAddress: ipAddress
-        });
+      const token = localStorage.getItem('token');
+      // Fetch real logs from backend
+      const response = await fetch(`${constants.baseURL}/api/activity/logs?userId=${userId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Filter client-side if the backend doesn't support filtering by userId yet
+        // (Our planned backend route returns all logs, so we filter here for safety)
+        const allLogs = data.logs || [];
+        const userLogs = allLogs.filter((log: any) => String(log.userId) === String(userId));
+
+        setUserActivityLogs(userLogs);
+      } else {
+        setToast({ message: 'Failed to fetch activity logs', type: 'error' });
       }
-      
-      // Sort logs by timestamp (newest first)
-      mockLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      setUserActivityLogs(mockLogs);
+
     } catch (error) {
       console.error('Error fetching user activity logs:', error);
       setToast({ message: 'Failed to fetch user activity logs', type: 'error' });
@@ -703,15 +825,15 @@ const AdminAttendance: React.FC = () => {
   const toggleSalarySlipVisibility = (salary: StoredSalaryCalculation) => {
     const key = getSalarySlipVisibilityKey(salary.userId, salary.month);
     const newVisibility = !visibleSalarySlips[key];
-    
+
     setVisibleSalarySlips(prev => ({
       ...prev,
       [key]: newVisibility
     }));
-    
+
     // Save to localStorage
     localStorage.setItem(key, JSON.stringify(newVisibility));
-    
+
     // Also send to backend to update user's visible salary slips
     updateUserSalarySlipVisibility(salary.userId, salary.month, newVisibility);
   };
@@ -726,7 +848,7 @@ const AdminAttendance: React.FC = () => {
         },
         body: JSON.stringify({ userId, month, isVisible })
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to update salary slip visibility');
       }
@@ -745,17 +867,17 @@ const AdminAttendance: React.FC = () => {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         const backendVisibility = data.visibilityData || {};
-        
+
         // Convert backend format to frontend format
         const visibility: { [key: string]: boolean } = {};
         salaries.forEach(salary => {
           const key = getSalarySlipVisibilityKey(salary.userId, salary.month);
           const backendKey = `${salary.userId}_${salary.month}`;
-          
+
           // Check backend data first, then fall back to localStorage
           if (backendVisibility[backendKey] && backendVisibility[backendKey].isVisible) {
             visibility[key] = true;
@@ -771,7 +893,7 @@ const AdminAttendance: React.FC = () => {
             }
           }
         });
-        
+
         setVisibleSalarySlips(visibility);
       } else {
         // Fallback to localStorage if API fails
@@ -801,10 +923,10 @@ const AdminAttendance: React.FC = () => {
   };
 
   const handleViewDocs = async (userId: number, userName: string, date: string) => {
-    setDocsModal({ userId, userName, date });
-    setDocsData(null);
-    setDocsLoading(true);
-    
+    // Show loading state using toast or global loading if preferred, here we use toast for feedback
+    // const loadingToastId = 'docs-loading'; 
+    // We could use a toast here to indicate loading if network is slow
+
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${constants.baseURL}/api/docs/get`, {
@@ -815,20 +937,34 @@ const AdminAttendance: React.FC = () => {
         },
         body: JSON.stringify({ userId, date })
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        setDocsData(data.docs);
+        const docs = data.docs; // Accessing docs from response
+
+        if (docs) {
+          const items: { src: string; title: string }[] = [];
+          if (docs.stockRegister) items.push({ src: docs.stockRegister, title: 'Physical Stock Register' });
+          if (docs.cashBook) items.push({ src: docs.cashBook, title: 'Physical Cash Book' });
+          if (docs.bankSlips && Array.isArray(docs.bankSlips)) {
+            docs.bankSlips.forEach((s: string, i: number) => items.push({ src: s, title: `Bank Deposit Slip #${i + 1}` }));
+          }
+
+          if (items.length > 0) {
+            openGallery(0, items);
+          } else {
+            setToast({ message: 'No documents uploaded for this date', type: 'error' });
+          }
+        } else {
+          setToast({ message: 'No documents found', type: 'error' });
+        }
+
       } else {
         setToast({ message: 'No documents found for this date', type: 'error' });
-        // Don't close modal immediately so user sees it opened but empty/error state
-        setDocsData(null); 
       }
     } catch (error) {
       console.error('Error fetching documents:', error);
       setToast({ message: 'Failed to fetch documents', type: 'error' });
-    } finally {
-      setDocsLoading(false);
     }
   };
 
@@ -848,7 +984,7 @@ const AdminAttendance: React.FC = () => {
         setToast({ message: 'Photo size must be less than 5MB', type: 'error' });
         return;
       }
-      
+
       const reader = new FileReader();
       reader.onload = (e) => {
         setMessageData(prev => ({
@@ -879,7 +1015,7 @@ const AdminAttendance: React.FC = () => {
     try {
       // Simulate API call with delay for realistic UX
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Mock successful message sending
       // In a real implementation, this would send to the backend API
       const messagePayload = {
@@ -891,7 +1027,7 @@ const AdminAttendance: React.FC = () => {
         sentBy: user?.id || 0, // Use actual admin user ID from auth context
         isRead: false
       };
-      
+
       // Store message in localStorage for demo purposes
       // In production, this would be handled by the backend
       const existingMessages = JSON.parse(localStorage.getItem('userMessages') || '[]');
@@ -901,14 +1037,14 @@ const AdminAttendance: React.FC = () => {
       };
       existingMessages.push(newMessage);
       localStorage.setItem('userMessages', JSON.stringify(existingMessages));
-      
+
       // Manually trigger storage event for same-window notification updates
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'userMessages',
         newValue: JSON.stringify(existingMessages),
         storageArea: localStorage
       }));
-      
+
       console.log('Message sent:', newMessage);
 
       setToast({ message: `Message sent to ${messageModal.userName} successfully!`, type: 'success' });
@@ -922,9 +1058,9 @@ const AdminAttendance: React.FC = () => {
       console.error('Error sending message:', error);
       setToast({ message: 'Failed to send message. Please try again.', type: 'error' });
     } finally {
-       setSendingMessage(false);
-     }
-   };
+      setSendingMessage(false);
+    }
+  };
 
   const loadSalarySlipVisibility = async () => {
     await loadSalarySlipVisibilityForSalaries(storedSalaries);
@@ -944,7 +1080,7 @@ const AdminAttendance: React.FC = () => {
   const generateSalarySlipHTML = (salary: StoredSalaryCalculation) => {
     const weekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const weeklyOffDaysText = salary.weeklyOffDays.map(day => weekDays[day]).join(', ');
-    
+
     return `
       <!DOCTYPE html>
       <html>
@@ -1028,7 +1164,7 @@ const AdminAttendance: React.FC = () => {
       <PageBreadcrumb
         pageTitle="Admin Attendance Portal"
       />
-      
+
       <div className="max-w-7xl mx-auto p-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-center mb-6">
@@ -1043,21 +1179,19 @@ const AdminAttendance: React.FC = () => {
               <nav className="-mb-px flex space-x-8">
                 <button
                   onClick={() => setActiveTab('attendance')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'attendance'
-                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'attendance'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                    }`}
                 >
                   📅 Attendance Records
                 </button>
                 <button
                   onClick={() => setActiveTab('locations')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'locations'
-                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'locations'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                    }`}
                 >
                   📍 Live Locations
                 </button>
@@ -1082,7 +1216,7 @@ const AdminAttendance: React.FC = () => {
                       className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Filter by User
@@ -1100,7 +1234,7 @@ const AdminAttendance: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  
+
                   {/* Salary Management Buttons */}
                   <div className="flex flex-col space-y-2">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1201,16 +1335,14 @@ const AdminAttendance: React.FC = () => {
                                         onChange={() => toggleSalarySlipVisibility(salary)}
                                         className="sr-only"
                                       />
-                                      <div className={`relative w-10 h-5 rounded-full transition-colors ${
-                                        visibleSalarySlips[getSalarySlipVisibilityKey(salary.userId, salary.month)] 
-                                          ? 'bg-blue-600' 
-                                          : 'bg-gray-300 dark:bg-gray-600'
-                                      }`}>
-                                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                                          visibleSalarySlips[getSalarySlipVisibilityKey(salary.userId, salary.month)] 
-                                            ? 'translate-x-5' 
-                                            : 'translate-x-0'
-                                        }`}></div>
+                                      <div className={`relative w-10 h-5 rounded-full transition-colors ${visibleSalarySlips[getSalarySlipVisibilityKey(salary.userId, salary.month)]
+                                        ? 'bg-blue-600'
+                                        : 'bg-gray-300 dark:bg-gray-600'
+                                        }`}>
+                                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${visibleSalarySlips[getSalarySlipVisibilityKey(salary.userId, salary.month)]
+                                          ? 'translate-x-5'
+                                          : 'translate-x-0'
+                                          }`}></div>
                                       </div>
                                       <span className="ml-2 text-xs text-gray-700 dark:text-gray-300">
                                         Show salary slip to user
@@ -1225,8 +1357,12 @@ const AdminAttendance: React.FC = () => {
                                   <p className="font-medium text-gray-900 dark:text-white">₹{salary.monthlySalary.toFixed(2)}</p>
                                 </div>
                                 <div>
-                                  <span className="text-gray-500 dark:text-gray-400">Present Days:</span>
-                                  <p className="font-medium text-gray-900 dark:text-white">{salary.attendance.presentDays}</p>
+                                  <span className="text-gray-500 dark:text-gray-400 block mb-1">Present Days:</span>
+                                  <PresentDaysTooltip 
+                                    userId={salary.userId} 
+                                    month={salary.month} 
+                                    targetValue={salary.attendance.presentDays} 
+                                  />
                                 </div>
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400">Half Days:</span>
@@ -1273,7 +1409,7 @@ const AdminAttendance: React.FC = () => {
                           Showing {attendanceRecords.length} record(s) for {formatDate(selectedDate)}
                         </p>
                       </div>
-                      
+
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                           <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
@@ -1302,69 +1438,69 @@ const AdminAttendance: React.FC = () => {
                                       ID: {record.userId}
                                     </div>
                                   </td>
-                                <td className="px-6 py-4">
-                                  {formatDate(record.date)}
-                                </td>
-                                <td className="px-6 py-4">
-                                  {record.time}
-                                </td>
-                                <td className="px-6 py-4">
-                                  <span 
-                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${getStatusColor(record.status)}`}
-                                    onDoubleClick={() => handleStatusDoubleClick(record)}
-                                    title="Double-click to change status"
-                                  >
-                                    {getStatusText(record.status)}
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4">
-                                  <span className="text-xs font-mono">
-                                    {getLocationString(record.location)}
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4">
-                                  <button
-                                    onClick={() => openImageModal(record.selfieData)}
-                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-                                  >
-                                    📷 View
-                                  </button>
-                                </td>
+                                  <td className="px-6 py-4">
+                                    {formatDate(record.date)}
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    {record.time}
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span
+                                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${getStatusColor(record.status)}`}
+                                      onDoubleClick={() => handleStatusDoubleClick(record)}
+                                      title="Double-click to change status"
+                                    >
+                                      {getStatusText(record.status)}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className="text-xs font-mono">
+                                      {getLocationString(record.location)}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <button
+                                      onClick={() => openGallery(0, [{ src: record.selfieData, title: 'Attendance Selfie' }])}
+                                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                                    >
+                                      📷 View
+                                    </button>
+                                  </td>
 
-                                <td className="px-6 py-4">
-                                  <div className="flex space-x-2">
-                                    {users.find(u => u.id === record.userId)?.requireMandatoryDocs && (
-                                       <button
-                                         onClick={() => handleViewDocs(record.userId, record.userName, record.date)}
-                                         className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 font-medium transition-colors"
-                                         title="View mandatory documents"
-                                       >
-                                         📄 View Docs
-                                       </button>
-                                     )}
-                                    <button
-                                      onClick={() => handleSendMessageClick(record.userId, record.userName)}
-                                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
-                                      title="Send message to user"
-                                    >
-                                      💬 Message
-                                    </button>
-                                    <button
-                                      onClick={() => openLocationInMaps(record.location.latitude, record.location.longitude)}
-                                      className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 font-medium"
-                                    >
-                                      🗺️ Maps
-                                    </button>
-                                    <button
-                                      onClick={() => deleteAttendanceRecord(record.id)}
-                                      className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium transition-colors"
-                                      title="Delete attendance record"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
+                                  <td className="px-6 py-4">
+                                    <div className="flex space-x-2">
+                                      {users.find(u => u.id === record.userId)?.requireMandatoryDocs && (
+                                        <button
+                                          onClick={() => handleViewDocs(record.userId, record.userName, record.date)}
+                                          className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 font-medium transition-colors"
+                                          title="View mandatory documents"
+                                        >
+                                          📄 View Docs
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => handleSendMessageClick(record.userId, record.userName)}
+                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
+                                        title="Send message to user"
+                                      >
+                                        💬 Message
+                                      </button>
+                                      <button
+                                        onClick={() => openLocationInMaps(record.location.latitude, record.location.longitude)}
+                                        className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 font-medium"
+                                      >
+                                        🗺️ Maps
+                                      </button>
+                                      <button
+                                        onClick={() => deleteAttendanceRecord(record.id)}
+                                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium transition-colors"
+                                        title="Delete attendance record"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
 
                               </React.Fragment>
                             ))}
@@ -1483,7 +1619,7 @@ const AdminAttendance: React.FC = () => {
                   ✕
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1497,7 +1633,7 @@ const AdminAttendance: React.FC = () => {
                     placeholder="Enter monthly salary"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Weekly Off Days
@@ -1521,7 +1657,7 @@ const AdminAttendance: React.FC = () => {
                     ))}
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Month (YYYY-MM)
@@ -1546,7 +1682,7 @@ const AdminAttendance: React.FC = () => {
                     className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
                   />
                 </div>
-                
+
                 {/* Additions Section */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
@@ -1587,7 +1723,7 @@ const AdminAttendance: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {/* Deductions Section */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
@@ -1628,7 +1764,7 @@ const AdminAttendance: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 <div className="text-sm text-gray-600 dark:text-gray-400">
                   <p>Calculation will be based on:</p>
                   <ul className="list-disc list-inside mt-1">
@@ -1639,7 +1775,7 @@ const AdminAttendance: React.FC = () => {
                   </ul>
                 </div>
               </div>
-              
+
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   onClick={() => {
@@ -1664,27 +1800,117 @@ const AdminAttendance: React.FC = () => {
       )}
 
       {/* Image Modal */}
-      {selectedImage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl max-h-full overflow-auto">
-            <div className="p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Attendance Selfie
-                </h3>
+      {/* Gallery Modal */}
+      {galleryState.isOpen && (
+        <div className="fixed inset-0 bg-black/95 flex flex-col z-[99999]">
+          {/* Header */}
+          <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent">
+            <h3 className="text-lg font-semibold text-white px-2 truncate max-w-[70%]">
+              {galleryState.items[galleryState.currentIndex]?.title}
+              <span className="ml-2 text-sm font-normal text-gray-300">
+                ({galleryState.currentIndex + 1} / {galleryState.items.length})
+              </span>
+            </h3>
+            <button
+              onClick={closeGallery}
+              className="text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+            >
+              ✕ Close
+            </button>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1 flex items-center justify-center overflow-hidden relative p-4">
+            {/* Navigation Buttons */}
+            {galleryState.items.length > 1 && (
+              <>
                 <button
-                  onClick={closeImageModal}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  onClick={() => {
+                    setGalleryState(prev => ({
+                      ...prev,
+                      currentIndex: (prev.currentIndex - 1 + prev.items.length) % prev.items.length
+                    }));
+                    setZoom(1);
+                    setRotation(0);
+                  }}
+                  className="absolute left-4 z-20 text-white/50 hover:text-white p-4 rounded-full hover:bg-white/10 transition-colors text-4xl"
+                  disabled={galleryState.items.length <= 1}
                 >
-                  ✕
+                  ‹
                 </button>
-              </div>
+                <button
+                  onClick={() => {
+                    setGalleryState(prev => ({
+                      ...prev,
+                      currentIndex: (prev.currentIndex + 1) % prev.items.length
+                    }));
+                    setZoom(1);
+                    setRotation(0);
+                  }}
+                  className="absolute right-4 z-20 text-white/50 hover:text-white p-4 rounded-full hover:bg-white/10 transition-colors text-4xl"
+                  disabled={galleryState.items.length <= 1}
+                >
+                  ›
+                </button>
+              </>
+            )}
+
+            {/* Image */}
+            <div
+              className="relative transition-transform duration-200 ease-out will-change-transform"
+              style={{
+                transform: `scale(${zoom}) rotate(${rotation}deg)`,
+              }}
+            >
               <img
-                src={selectedImage}
-                alt="Attendance selfie"
-                className="w-full h-auto rounded-lg"
+                src={galleryState.items[galleryState.currentIndex]?.src}
+                alt={galleryState.items[galleryState.currentIndex]?.title}
+                className="max-h-[85vh] max-w-[90vw] object-contain shadow-2xl"
+                draggable={false}
               />
             </div>
+          </div>
+
+          {/* Controls Toolbar */}
+          <div className="absolute bottom-24 md:bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-lg bg-gray-900/90 backdrop-blur-md rounded-full px-4 py-2 md:px-6 md:py-3 flex items-center justify-between md:space-x-6 shadow-2xl border border-white/10 z-20">
+            <div className="flex items-center space-x-2 border-r border-white/20 pr-4">
+              <button
+                onClick={() => setZoom(z => Math.max(0.2, z - 0.2))}
+                className="text-white hover:text-blue-400 transition-colors p-2 text-xl"
+                title="Zoom Out (-)"
+              >
+                −
+              </button>
+              <span className="text-white/80 w-8 md:w-12 text-center text-xs md:text-sm tabular-nums">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={() => setZoom(z => Math.min(4, z + 0.2))}
+                className="text-white hover:text-blue-400 transition-colors p-2 text-xl"
+                title="Zoom In (+)"
+              >
+                +
+              </button>
+            </div>
+
+            <button
+              onClick={() => setRotation(r => r + 90)}
+              className="text-white hover:text-blue-400 transition-colors p-2 flex items-center gap-2"
+              title="Rotate 90°"
+            >
+              <span className="text-xl">↻</span>
+              <span className="text-sm">Rotate</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setZoom(1);
+                setRotation(0);
+              }}
+              className="text-white hover:text-blue-400 transition-colors p-2 text-sm border-l border-white/20 pl-4"
+            >
+              Reset
+            </button>
           </div>
         </div>
       )}
@@ -1705,14 +1931,14 @@ const AdminAttendance: React.FC = () => {
                   ✕
                 </button>
               </div>
-              
+
               {/* Salary Slip Preview */}
               <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-lg mb-6">
                 <div className="text-center border-b-2 border-gray-300 pb-4 mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Your Company Name</h2>
                   <p className="text-lg text-gray-600 dark:text-gray-400 mt-2">Salary Slip</p>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-6 mb-6">
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Employee Name:</p>
@@ -1731,7 +1957,7 @@ const AdminAttendance: React.FC = () => {
                     <p className="font-semibold text-gray-900 dark:text-white">{new Date(printSlipModal.calculatedAt).toLocaleDateString()}</p>
                   </div>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
                     <thead>
@@ -1816,12 +2042,12 @@ const AdminAttendance: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-                
+
                 <div className="text-center mt-6 text-sm text-gray-600 dark:text-gray-400">
                   <p>This is a computer-generated salary slip.</p>
                 </div>
               </div>
-              
+
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setPrintSlipModal(null)}
@@ -1860,12 +2086,12 @@ const AdminAttendance: React.FC = () => {
                   ✕
                 </button>
               </div>
-              
+
               <div className="mb-4 flex items-center space-x-4">
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filter:</span>
                 <label className="inline-flex items-center">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     className="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
                     onChange={(e) => {
                       if (e.target.checked) {
@@ -1886,8 +2112,8 @@ const AdminAttendance: React.FC = () => {
                   <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Today</span>
                 </label>
                 <label className="inline-flex items-center">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     className="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
                     onChange={(e) => {
                       if (e.target.checked) {
@@ -1908,7 +2134,7 @@ const AdminAttendance: React.FC = () => {
                   <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Last Week</span>
                 </label>
               </div>
-              
+
               <div className="max-h-[60vh] overflow-y-auto">
                 {activityLoading ? (
                   <div className="flex items-center justify-center py-12">
@@ -1944,19 +2170,35 @@ const AdminAttendance: React.FC = () => {
                             )}
                           </div>
                           <div className="text-xs text-gray-400 dark:text-gray-500">
-                            {(() => {
-                              const now = new Date();
-                              const logTime = new Date(log.timestamp);
-                              const diffMs = now.getTime() - logTime.getTime();
-                              const diffMins = Math.floor(diffMs / (1000 * 60));
-                              const diffHours = Math.floor(diffMins / 60);
-                              const diffDays = Math.floor(diffHours / 24);
-                              
-                              if (diffMins < 1) return 'Just now';
-                              if (diffMins < 60) return `${diffMins}m ago`;
-                              if (diffHours < 24) return `${diffHours}h ago`;
-                              return `${diffDays}d ago`;
-                            })()}
+                            <div className="text-xs text-gray-400 dark:text-gray-500 flex flex-col items-end">
+                              <span>
+                                {(() => {
+                                  const now = new Date();
+                                  const logTime = new Date(log.timestamp);
+                                  const diffMs = now.getTime() - logTime.getTime();
+                                  const diffMins = Math.floor(diffMs / (1000 * 60));
+                                  const diffHours = Math.floor(diffMins / 60);
+                                  const diffDays = Math.floor(diffHours / 24);
+
+                                  if (diffMins < 1) return 'Just now';
+                                  if (diffMins < 60) return `${diffMins}m ago`;
+                                  if (diffHours < 24) return `${diffHours}h ago`;
+                                  return `${diffDays}d ago`;
+                                })()}
+                              </span>
+                              {log.duration && (
+                                <span className="mt-1" title={`${(log.duration / 1000).toFixed(1)}s`}>
+                                  ⏱️ {log.duration < 60000
+                                    ? `${Math.round(log.duration / 1000)}s`
+                                    : `${Math.round(log.duration / 60000)}m`}
+                                </span>
+                              )}
+                              {log.nextPage && (
+                                <span className="mt-1 text-blue-400" title={`Next: ${log.nextPage}`}>
+                                  ➡️ {log.nextPage.split('/').pop()}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1964,7 +2206,7 @@ const AdminAttendance: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               <div className="flex justify-end mt-6">
                 <button
                   onClick={() => {
@@ -2021,7 +2263,7 @@ const AdminAttendance: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Photo Attachment (Optional)
                   </label>
-                  
+
                   {messageData.photoPreview ? (
                     <div className="relative">
                       <img
@@ -2106,141 +2348,7 @@ const AdminAttendance: React.FC = () => {
         />
       )}
 
-      {/* Docs Modal */}
-      {docsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                    Mandatory Documents
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {docsModal.userName} - {formatDate(docsModal.date)}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setDocsModal(null)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              {docsLoading ? (
-                <div className="flex justify-center py-12">
-                  <PulseLoadAnimation size="md" />
-                </div>
-              ) : docsData ? (
-                <div className="space-y-6">
-                  {/* Stock Register */}
-                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
-                    <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                      📦 Physical Stock Register
-                      {!docsData.stockRegister && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Missing</span>}
-                    </h4>
-                    {docsData.stockRegister ? (
-                      <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100">
-                        <img 
-                          src={docsData.stockRegister} 
-                          alt="Stock Register"
-                          className="w-full h-auto max-h-[500px] object-contain"
-                        />
-                        <button
-                          onClick={() => openImageModal(docsData.stockRegister!)}
-                          className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white px-3 py-1 rounded text-sm backdrop-blur-sm"
-                        >
-                          🔍 Full View
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="h-32 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-400">
-                        No image uploaded
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Cash Book */}
-                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
-                    <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                      💰 Physical Cash Book
-                      {!docsData.cashBook && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Missing</span>}
-                    </h4>
-                    {docsData.cashBook ? (
-                      <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100">
-                        <img 
-                          src={docsData.cashBook} 
-                          alt="Cash Book"
-                          className="w-full h-auto max-h-[500px] object-contain"
-                        />
-                        <button
-                          onClick={() => openImageModal(docsData.cashBook!)}
-                          className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white px-3 py-1 rounded text-sm backdrop-blur-sm"
-                        >
-                          🔍 Full View
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="h-32 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-400">
-                        No image uploaded
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Bank Slips */}
-                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
-                    <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                      🏦 Bank Deposit Slips
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{docsData.bankSlips.length} Slips</span>
-                    </h4>
-                    
-                    {docsData.bankSlips.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {docsData.bankSlips.map((slip, idx) => (
-                          <div key={idx} className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100">
-                            <div className="absolute top-2 left-2 bg-black/50 text-white px-2 py-0.5 rounded text-xs backdrop-blur-sm z-10">
-                              Slip #{idx + 1}
-                            </div>
-                            <img 
-                              src={slip} 
-                              alt={`Bank Slip ${idx + 1}`}
-                              className="w-full h-48 object-cover"
-                            />
-                            <button
-                              onClick={() => openImageModal(slip)}
-                              className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white px-3 py-1 rounded text-sm backdrop-blur-sm"
-                            >
-                              🔍 Full View
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="h-32 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-400">
-                        No bank slips uploaded
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12 text-gray-500">
-                  No document data available
-                </div>
-              )}
-            </div>
-            
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-              <button
-                onClick={() => setDocsModal(null)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

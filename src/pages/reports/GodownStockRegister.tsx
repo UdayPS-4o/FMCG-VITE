@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import constants from '../../constants';
 import Autocomplete from '../../components/form/input/Autocomplete';
 import useAuth from '../../hooks/useAuth';
+import useActivityTracker from '../../hooks/useActivityTracker';
 
 interface Godown {
     GDN_CODE: string;
@@ -26,17 +27,17 @@ interface TransferItem {
 
 const getInitialDate = () => {
     const nowInIndia = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    
+
     // If it's 4 AM or later, set the date to tomorrow.
     if (nowInIndia.getHours() >= 4) {
         nowInIndia.setDate(nowInIndia.getDate() + 1);
     }
-    
+
     // Format to YYYY-MM-DD
     const year = nowInIndia.getFullYear();
     const month = String(nowInIndia.getMonth() + 1).padStart(2, '0');
     const day = String(nowInIndia.getDate()).padStart(2, '0');
-    
+
     return `${year}-${month}-${day}`;
 };
 
@@ -46,6 +47,7 @@ const GodownStockRegister: React.FC = () => {
     const [selectedGodown, setSelectedGodown] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
+    const { logActivity } = useActivityTracker();
     const [pmplData, setPmplData] = useState<PmplItem[]>([]);
     const [stockData, setStockData] = useState<any>({});
     const [selectedItemCode, setSelectedItemCode] = useState<string>('');
@@ -79,7 +81,7 @@ const GodownStockRegister: React.FC = () => {
                 let godownsData = godownsResponse.data;
                 // Filter based on user access
                 if (user && user.godownAccess && user.godownAccess.length > 0) {
-                    godownsData = godownsData.filter(godown => 
+                    godownsData = godownsData.filter(godown =>
                         user.godownAccess.includes(godown.GDN_CODE)
                     );
                 }
@@ -142,9 +144,9 @@ const GodownStockRegister: React.FC = () => {
         if (itemToAdd) {
             setTransferItems(prevItems => [
                 ...prevItems,
-                { 
-                    code: itemToAdd.CODE, 
-                    name: itemToAdd.PRODUCT || itemToAdd.NAME || 'Unknown Item', 
+                {
+                    code: itemToAdd.CODE,
+                    name: itemToAdd.PRODUCT || itemToAdd.NAME || 'Unknown Item',
                     unit: '1 box',
                     id: Date.now() + Math.random() // Simple unique ID
                 }
@@ -168,7 +170,7 @@ const GodownStockRegister: React.FC = () => {
 
             const stockDate = new Date(date);
             stockDate.setDate(stockDate.getDate() + 1); // We calculate opening for the *next* day
-            
+
             const day = String(stockDate.getDate()).padStart(2, '0');
             const month = String(stockDate.getMonth() + 1).padStart(2, '0');
             const year = stockDate.getFullYear();
@@ -208,9 +210,17 @@ const GodownStockRegister: React.FC = () => {
         }
         const [year, month, day] = date.split('-');
         const formattedDate = `${day}-${month}-${year}`;
+
+        // Log report generation
+        logActivity({
+            page: 'Godown Stock Register',
+            action: 'Generated PDF Report',
+            duration: 0
+        });
+
         window.open(`/print/godown-stock/${selectedGodown}?date=${formattedDate}`, '_blank');
     };
-    
+
     const itemDropdownOptions = useMemo(() => {
         if (!stockData || Object.keys(stockData).length === 0) return [];
 
@@ -224,9 +234,9 @@ const GodownStockRegister: React.FC = () => {
                 }
                 return false;
             })
-            .map(p => ({ 
-                value: p.CODE, 
-                label: `[${p.CODE}] ${p.PRODUCT || p.NAME} {${p.MRP1 || 'N/A'}}` 
+            .map(p => ({
+                value: p.CODE,
+                label: `[${p.CODE}] ${p.PRODUCT || p.NAME} {${p.MRP1 || 'N/A'}}`
             }));
     }, [pmplData, stockData]);
 
@@ -259,7 +269,7 @@ const GodownStockRegister: React.FC = () => {
                                     >
                                         Add Item
                                     </button>
-                                 </div>
+                                </div>
                             </div>
 
                             {/* Right side: Items Table */}
@@ -315,7 +325,7 @@ const GodownStockRegister: React.FC = () => {
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                     {/* Calculate Next Day Stock Section */}
                     <div className="p-6 border rounded-lg bg-gray-50 dark:bg-gray-700">
@@ -347,7 +357,7 @@ const GodownStockRegister: React.FC = () => {
                     <div className="p-6 border rounded-lg bg-gray-50 dark:bg-gray-700">
                         <h2 className="text-xl font-semibold text-gray-700 dark:text-white mb-4">Generate Stock Report</h2>
                         <div className="flex flex-col space-y-4">
-                             <div>
+                            <div>
                                 <Autocomplete
                                     id="godown-select"
                                     label="Select Godown"

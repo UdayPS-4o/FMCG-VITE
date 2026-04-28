@@ -4,6 +4,7 @@ import MultiSelect from '../../components/form/MultiSelect';
 import Input from '../../components/form/input/Input';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import constants from '../../constants';
+import useActivityTracker from '../../hooks/useActivityTracker';
 
 // Define the structure of a purchase report item
 interface PurchaseReportItem {
@@ -64,7 +65,7 @@ interface User {
   powers: string[];
   subgroups: any[];
   smCode?: string;
-  defaultSeries?: { 
+  defaultSeries?: {
     billing?: string;
     reports?: string;
   };
@@ -105,6 +106,7 @@ const ItemWisePurchaseContent: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
 
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const { logActivity } = useActivityTracker();
 
   const handleHideColumn = (columnName: string) => {
     setHiddenColumns(prev => [...prev, columnName]);
@@ -165,7 +167,7 @@ const ItemWisePurchaseContent: React.FC = () => {
     };
     fetchCompanies();
   }, []);
-  
+
   useEffect(() => {
     if (user) {
       const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
@@ -184,7 +186,7 @@ const ItemWisePurchaseContent: React.FC = () => {
       if (selectedParty) setSelectedParty(null);
       setSelectedItemCodes([]);
     }
-    
+
     if (fromDate && toDate) {
       if (fetchOptionsAbortControllerRef.current) fetchOptionsAbortControllerRef.current.abort();
       fetchOptionsAbortControllerRef.current = new AbortController();
@@ -198,7 +200,7 @@ const ItemWisePurchaseContent: React.FC = () => {
           const params = new URLSearchParams({ fromDate, toDate });
           if (selectedParty?.value) params.append('partyCode', selectedParty.value);
           if (selectedCompanyCodes.length > 0) params.append('companyCodes', selectedCompanyCodes.join(','));
-          
+
           const response = await fetch(`${constants.baseURL}/api/reports/purchase-filter-options?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
             signal,
@@ -206,7 +208,7 @@ const ItemWisePurchaseContent: React.FC = () => {
 
           if (signal.aborted) return;
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          
+
           const data = await response.json();
           if (signal.aborted) return;
 
@@ -292,17 +294,17 @@ const ItemWisePurchaseContent: React.FC = () => {
       acc[key].details.push(row);
 
       const unit = (row.Unit || 'UNKNOWN').toUpperCase();
-      if(acc[key].unitQty) {
-          if (!acc[key].unitQty[unit]) {
-            acc[key].unitQty[unit] = 0;
-          }
-          acc[key].unitQty[unit] += Number(row.Qty) || 0;
+      if (acc[key].unitQty) {
+        if (!acc[key].unitQty[unit]) {
+          acc[key].unitQty[unit] = 0;
+        }
+        acc[key].unitQty[unit] += Number(row.Qty) || 0;
       }
-      if(acc[key].unitFree) {
-          if (!acc[key].unitFree[unit]) {
-            acc[key].unitFree[unit] = 0;
-          }
-          acc[key].unitFree[unit] += Number(row.Free) || 0;
+      if (acc[key].unitFree) {
+        if (!acc[key].unitFree[unit]) {
+          acc[key].unitFree[unit] = 0;
+        }
+        acc[key].unitFree[unit] += Number(row.Free) || 0;
       }
 
       return acc;
@@ -311,46 +313,46 @@ const ItemWisePurchaseContent: React.FC = () => {
     const groupedResult = Object.values(grouped);
 
     groupedResult.forEach(item => {
-        const formatDisplayValue = (totalValue: number, unitValues: { [unit: string]: number } | undefined) => {
-            if (!unitValues) return totalValue.toFixed(2);
+      const formatDisplayValue = (totalValue: number, unitValues: { [unit: string]: number } | undefined) => {
+        if (!unitValues) return totalValue.toFixed(2);
 
-            const activeUnits = Object.keys(unitValues).filter(u => unitValues[u] > 0);
-            const hasOnlyBoxAndPcs = activeUnits.every(u => u === 'BOX' || u === 'PCS');
+        const activeUnits = Object.keys(unitValues).filter(u => unitValues[u] > 0);
+        const hasOnlyBoxAndPcs = activeUnits.every(u => u === 'BOX' || u === 'PCS');
 
-            if (hasOnlyBoxAndPcs && activeUnits.length > 0) {
-                const boxValue = unitValues['BOX'] || 0;
-                const pcsValue = unitValues['PCS'] || 0;
-                return `(BOX+PCS)\n(${boxValue}+${pcsValue})`;
-            }
-            
-            const unitOrder = ['BOX', 'PCS'];
-            const sortedUnits = Object.keys(unitValues).sort((a, b) => {
-                const indexA = unitOrder.indexOf(a);
-                const indexB = unitOrder.indexOf(b);
-                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                if (indexA !== -1) return -1;
-                if (indexB !== -1) return 1;
-                return a.localeCompare(b);
-            });
+        if (hasOnlyBoxAndPcs && activeUnits.length > 0) {
+          const boxValue = unitValues['BOX'] || 0;
+          const pcsValue = unitValues['PCS'] || 0;
+          return `(BOX+PCS)\n(${boxValue}+${pcsValue})`;
+        }
 
-            const labels: string[] = [];
-            const values: number[] = [];
-            sortedUnits.forEach(unit => {
-                if (unitValues[unit] > 0) {
-                    labels.push(unit);
-                    values.push(unitValues[unit]);
-                }
-            });
+        const unitOrder = ['BOX', 'PCS'];
+        const sortedUnits = Object.keys(unitValues).sort((a, b) => {
+          const indexA = unitOrder.indexOf(a);
+          const indexB = unitOrder.indexOf(b);
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return a.localeCompare(b);
+        });
 
-            if (labels.length > 1) {
-                return `(${labels.join('+')})\n(${values.join('+')})`;
-            }
-            
-            return totalValue.toFixed(2);
-        };
+        const labels: string[] = [];
+        const values: number[] = [];
+        sortedUnits.forEach(unit => {
+          if (unitValues[unit] > 0) {
+            labels.push(unit);
+            values.push(unitValues[unit]);
+          }
+        });
 
-        item.displayQty = formatDisplayValue(item.Qty, item.unitQty);
-        item.displayFree = formatDisplayValue(item.Free, item.unitFree);
+        if (labels.length > 1) {
+          return `(${labels.join('+')})\n(${values.join('+')})`;
+        }
+
+        return totalValue.toFixed(2);
+      };
+
+      item.displayQty = formatDisplayValue(item.Qty, item.unitQty);
+      item.displayFree = formatDisplayValue(item.Free, item.unitFree);
     });
 
     return groupedResult.sort((a, b) => a.ItemName.localeCompare(b.ItemName));
@@ -415,11 +417,11 @@ const ItemWisePurchaseContent: React.FC = () => {
         break;
       case 'custom':
         if (!fromDate || !toDate) {
-            const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-            firstDayThisMonth.setHours(5, 30, 0, 0);
-            today.setHours(5, 30, 0, 0);
-            setFromDate(formatDate(firstDayThisMonth));
-            setToDate(formatDate(today));
+          const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+          firstDayThisMonth.setHours(5, 30, 0, 0);
+          today.setHours(5, 30, 0, 0);
+          setFromDate(formatDate(firstDayThisMonth));
+          setToDate(formatDate(today));
         }
         return;
       default:
@@ -447,17 +449,17 @@ const ItemWisePurchaseContent: React.FC = () => {
     try {
       const params = new URLSearchParams({ fromDate, toDate });
       if (selectedItemCodes.length > 0) params.append('itemCodes', selectedItemCodes.join(','));
-      
+
       const validSeriesFilters = seriesBillFilters.filter(f => f.series.trim() !== '');
       if (validSeriesFilters.length > 0) {
-          const filtersToSend = validSeriesFilters.map(f => ({
-              series: f.series,
-              billNumbers: f.billNumbers.trim()
-          })).filter(f => f.series);
+        const filtersToSend = validSeriesFilters.map(f => ({
+          series: f.series,
+          billNumbers: f.billNumbers.trim()
+        })).filter(f => f.series);
 
-          if(filtersToSend.length > 0) {
-            params.append('seriesBillFilters', JSON.stringify(filtersToSend));
-          }
+        if (filtersToSend.length > 0) {
+          params.append('seriesBillFilters', JSON.stringify(filtersToSend));
+        }
       }
 
       if (selectedParty?.value) params.append('partyCode', selectedParty.value);
@@ -472,6 +474,14 @@ const ItemWisePurchaseContent: React.FC = () => {
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       setReportData(data);
+
+      // Log report generation
+      logActivity({
+        page: 'Item Wise Purchase Report',
+        action: 'Generated Report',
+        duration: 0
+      });
+
     } catch (err: any) {
       if (err.name === 'AbortError') console.log('Fetch report aborted');
       else {
@@ -483,11 +493,11 @@ const ItemWisePurchaseContent: React.FC = () => {
     }
   };
 
-  const currentItemOptions = dynamicItemOptions.length > 0 ? dynamicItemOptions 
-    : (fromDate && toDate && !filterOptionsLoading ? [{value: '', text: 'No items found for dates'}] : []);
+  const currentItemOptions = dynamicItemOptions.length > 0 ? dynamicItemOptions
+    : (fromDate && toDate && !filterOptionsLoading ? [{ value: '', text: 'No items found for dates' }] : []);
 
-  const currentPartyOptions = dynamicPartyOptions.length > 0 ? dynamicPartyOptions 
-    : (fromDate && toDate && !filterOptionsLoading ? [{value: '', label: 'No parties found for dates'}] : []);
+  const currentPartyOptions = dynamicPartyOptions.length > 0 ? dynamicPartyOptions
+    : (fromDate && toDate && !filterOptionsLoading ? [{ value: '', label: 'No parties found for dates' }] : []);
 
   const handlePrintReport = () => {
     const companyNames = selectedCompanyCodes.map(ccode => companyOptions.find(opt => opt.value === ccode)?.text || ccode).join(', ') || 'All';
@@ -651,73 +661,73 @@ const ItemWisePurchaseContent: React.FC = () => {
           <Autocomplete id="partyFilter" label={filterOptionsLoading ? 'Loading parties...' : 'Select Party'} options={currentPartyOptions} onChange={(value) => setSelectedParty(dynamicPartyOptions.find(p => p.value === value) || null)} value={selectedParty?.value || ''} disabled={!fromDate || !toDate || filterOptionsLoading} />
         </div>
         <div className="lg:col-span-2">
-            <label htmlFor="itemMultiSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Items (Optional)</label>
-            <MultiSelect label={filterOptionsLoading ? 'Loading items...' : ''} options={currentItemOptions} value={selectedItemCodes} onChange={setSelectedItemCodes} allowFiltering={true} selectOnEnter={true} matchThreshold={3} disabled={!fromDate || !toDate || filterOptionsLoading} />
+          <label htmlFor="itemMultiSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Items (Optional)</label>
+          <MultiSelect label={filterOptionsLoading ? 'Loading items...' : ''} options={currentItemOptions} value={selectedItemCodes} onChange={setSelectedItemCodes} allowFiltering={true} selectOnEnter={true} matchThreshold={3} disabled={!fromDate || !toDate || filterOptionsLoading} />
         </div>
 
         {/* --- Row 3: Series/Bills and Unit Filter --- */}
         <div className="lg:col-span-3">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Series & Bill Numbers (Optional)</label>
-            {seriesBillFilters.map((filter, index) => (
-              <div key={index} className="flex items-center gap-2 mb-2">
-                <Input
-                  name={`series_${index}`}
-                  type="text"
-                  value={filter.series}
-                  onChange={(e) => handleSeriesBillFilterChange(index, 'series', e.target.value)}
-                  placeholder="Series"
-                  variant="outlined"
-                  maxLength={1}
-                  className="w-24"
-                  disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false}
-                />
-                <Input
-                  name={`billNumbers_${index}`}
-                  type="text"
-                  value={filter.billNumbers}
-                  onChange={(e) => handleSeriesBillFilterChange(index, 'billNumbers', e.target.value)}
-                  placeholder="Bill Numbers (e.g., 1,2,3)"
-                  variant="outlined"
-                  disabled={!filter.series || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false)}
-                  className="flex-grow"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeSeriesBillFilter(index)}
-                  className="flex-shrink-0 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
-                  disabled={seriesBillFilters.length === 1 || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false)}
-                >
-                  &ndash;
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addSeriesBillFilter}
-              className="mt-1 text-sm font-medium text-indigo-600 hover:text-indigo-800"
-              disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false}
-            >
-              + Add Series
-            </button>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Series & Bill Numbers (Optional)</label>
+          {seriesBillFilters.map((filter, index) => (
+            <div key={index} className="flex items-center gap-2 mb-2">
+              <Input
+                name={`series_${index}`}
+                type="text"
+                value={filter.series}
+                onChange={(e) => handleSeriesBillFilterChange(index, 'series', e.target.value)}
+                placeholder="Series"
+                variant="outlined"
+                maxLength={1}
+                className="w-24"
+                disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false}
+              />
+              <Input
+                name={`billNumbers_${index}`}
+                type="text"
+                value={filter.billNumbers}
+                onChange={(e) => handleSeriesBillFilterChange(index, 'billNumbers', e.target.value)}
+                placeholder="Bill Numbers (e.g., 1,2,3)"
+                variant="outlined"
+                disabled={!filter.series || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false)}
+                className="flex-grow"
+              />
+              <button
+                type="button"
+                onClick={() => removeSeriesBillFilter(index)}
+                className="flex-shrink-0 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+                disabled={seriesBillFilters.length === 1 || (user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false)}
+              >
+                &ndash;
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addSeriesBillFilter}
+            className="mt-1 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+            disabled={user ? (!user.routeAccess.includes('Admin') && user.canSelectSeries === false && !!user.defaultSeries?.reports) : false}
+          >
+            + Add Series
+          </button>
         </div>
         <div className="flex flex-col justify-start pt-1">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Unit Filter</label>
           <div className="flex items-center mt-2 space-x-4">
-              {['All', 'Box', 'Pcs'].map(unitValue => (
-                <div key={unitValue}>
-                  <input type="radio" id={`unitFilter${unitValue}`} name="unitFilter" value={unitValue} checked={unitFilter === unitValue} onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')} className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600" />
-                  <label htmlFor={`unitFilter${unitValue}`} className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">{unitValue}</label>
-                </div>
-              ))}
+            {['All', 'Box', 'Pcs'].map(unitValue => (
+              <div key={unitValue}>
+                <input type="radio" id={`unitFilter${unitValue}`} name="unitFilter" value={unitValue} checked={unitFilter === unitValue} onChange={(e) => setUnitFilter(e.target.value as 'All' | 'Box' | 'Pcs')} className="form-radio h-4 w-4 text-indigo-600 transition duration-150 ease-in-out dark:bg-gray-700 dark:border-gray-600" />
+                <label htmlFor={`unitFilter${unitValue}`} className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">{unitValue}</label>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* --- Row 4: Grouping and Actions --- */}
         <div className="lg:col-span-2 flex items-center">
-            <div className="flex items-center">
-                <input type="checkbox" id="groupItems" checked={groupItems} onChange={(e) => setGroupItems(e.target.checked)} className="form-checkbox h-5 w-5 text-indigo-600 transition duration-150 ease-in-out mr-2 rounded dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:ring-offset-gray-800" />
-                <label htmlFor="groupItems" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">Group by Item Name</label>
-            </div>
+          <div className="flex items-center">
+            <input type="checkbox" id="groupItems" checked={groupItems} onChange={(e) => setGroupItems(e.target.checked)} className="form-checkbox h-5 w-5 text-indigo-600 transition duration-150 ease-in-out mr-2 rounded dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:ring-offset-gray-800" />
+            <label htmlFor="groupItems" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">Group by Item Name</label>
+          </div>
         </div>
         <div className="lg:col-span-2 flex items-end justify-end space-x-2">
           <button onClick={handleFetchReport} disabled={loading || !fromDate || !toDate} className="w-full max-w-xs inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50">
@@ -744,18 +754,18 @@ const ItemWisePurchaseContent: React.FC = () => {
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>{currentTableHeaders.map(header => (
               !hiddenColumns.includes(header) && (
-              <th key={header} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">
-                <div className="flex flex-col items-start">
-                  <button 
-                    onClick={() => handleHideColumn(header)}
-                    className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
-                    title="Hide column"
-                  >
-                    (-)
-                  </button>
-                  {header}
-                </div>
-              </th>
+                <th key={header} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">
+                  <div className="flex flex-col items-start">
+                    <button
+                      onClick={() => handleHideColumn(header)}
+                      className="text-gray-400 hover:text-red-600 mb-1 focus:outline-none"
+                      title="Hide column"
+                    >
+                      (-)
+                    </button>
+                    {header}
+                  </div>
+                </th>
               )
             ))}</tr>
           </thead>
@@ -785,7 +795,7 @@ const ItemWisePurchaseContent: React.FC = () => {
                         <tr className="bg-gray-200 dark:bg-gray-700/80">
                           {fullTableHeaders.map((header, headerIndex) => (
                             !hiddenColumns.includes(header) && (
-                            <th key={`detail-header-${headerIndex}`} className={`px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap ${headerIndex === 0 ? 'pl-8' : ''}`}>{header}</th>
+                              <th key={`detail-header-${headerIndex}`} className={`px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap ${headerIndex === 0 ? 'pl-8' : ''}`}>{header}</th>
                             )
                           ))}
                         </tr>
@@ -844,8 +854,8 @@ const ItemWisePurchaseContent: React.FC = () => {
             <tfoot className="bg-gray-100 dark:bg-gray-700 font-semibold">
               <tr>
                 {(() => {
-                    const colSpan = (groupItems ? ['Code', 'Item Name'] : ['Date', 'Bill No.', 'Code', 'Item Name', 'Party', 'Place', 'Unit']).filter(h => !hiddenColumns.includes(h)).length;
-                    return colSpan > 0 ? <td colSpan={colSpan} className="px-4 py-3 text-left text-sm text-gray-800 dark:text-gray-100 uppercase whitespace-nowrap">Total</td> : null;
+                  const colSpan = (groupItems ? ['Code', 'Item Name'] : ['Date', 'Bill No.', 'Code', 'Item Name', 'Party', 'Place', 'Unit']).filter(h => !hiddenColumns.includes(h)).length;
+                  return colSpan > 0 ? <td colSpan={colSpan} className="px-4 py-3 text-left text-sm text-gray-800 dark:text-gray-100 uppercase whitespace-nowrap">Total</td> : null;
                 })()}
                 {!hiddenColumns.includes('Qty') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Qty.toFixed(2)}</td>}
                 {!hiddenColumns.includes('Free') && <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 dark:text-gray-100">{reportTotals.Free.toFixed(2)}</td>}
@@ -869,9 +879,9 @@ const ItemWisePurchaseContent: React.FC = () => {
 
 const ItemWisePurchase: React.FC = () => {
   const [dummyItemsState, setDummyItemsState] = useState<any[]>([]);
-  const dummyUpdateItem = (index: number, updatedItem: any) => {};
-  const dummyRemoveItem = (index: number) => {};
-  const dummyAddItem = (item?: any) => {};
+  const dummyUpdateItem = (index: number, updatedItem: any) => { };
+  const dummyRemoveItem = (index: number) => { };
+  const dummyAddItem = (item?: any) => { };
   const dummyCalculateTotal = () => '0.00';
   const [dummyExpandedIndex, setDummyExpandedIndex] = useState<number | null>(null);
   const [dummyFocusNewItemIndex, setDummyFocusNewItemIndex] = useState<number | null>(null);

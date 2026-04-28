@@ -3,6 +3,7 @@ import Autocomplete, { AutocompleteRefHandle } from '../../components/form/input
 import Input from '../../components/form/input/Input';
 import DatePicker from '../../components/form/input/DatePicker';
 import constants from '../../constants';
+import useActivityTracker from '../../hooks/useActivityTracker';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Toast from '../../components/ui/toast/Toast';
@@ -75,10 +76,10 @@ const convertToPcsAndBoxFormat = (totalPcs: number, multF: number, displayInBoxP
   if (!displayInBoxPcs || !multF || multF === 1) {
     return totalPcs.toString();
   }
-  
+
   const boxes = Math.floor(totalPcs / multF);
   const remainingPcs = totalPcs % multF;
-  
+
   if (boxes === 0) {
     return remainingPcs.toString();
   } else if (remainingPcs === 0) {
@@ -90,6 +91,7 @@ const convertToPcsAndBoxFormat = (totalPcs: number, multF: number, displayInBoxP
 
 const ItemWiseStockRegister: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const { logActivity } = useActivityTracker();
   const [fromDate, setFromDate] = useState<string>(getLocalDateDDMMYYYY(new Date()));
   const [toDate, setToDate] = useState<string>(getLocalDateDDMMYYYY(new Date()));
   const [selectedItem, setSelectedItem] = useState<Option | null>(null);
@@ -104,14 +106,14 @@ const ItemWiseStockRegister: React.FC = () => {
   const [pmplData, setPmplData] = useState<PmplItem[]>([]);
   const [godownOptions, setGodownOptions] = useState<Option[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [toast, setToast] = useState<{ 
-    visible: boolean, 
-    message: string, 
-    type: 'success' | 'error' | 'info' 
-  }>({ 
-    visible: false, 
-    message: '', 
-    type: 'info' 
+  const [toast, setToast] = useState<{
+    visible: boolean,
+    message: string,
+    type: 'success' | 'error' | 'info'
+  }>({
+    visible: false,
+    message: '',
+    type: 'info'
   });
 
   // Get user data from localStorage
@@ -131,7 +133,7 @@ const ItemWiseStockRegister: React.FC = () => {
     const fetchData = async () => {
       try {
         const token = localStorage.getItem('token');
-        
+
         const [pmplResponse, godownResponse] = await Promise.all([
           fetch(`${constants.baseURL}/api/dbf/pmpl.json`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -153,7 +155,7 @@ const ItemWiseStockRegister: React.FC = () => {
         // Process godown options and filter by user access
         let filteredGodowns = godownData;
         if (user && user.godownAccess && user.godownAccess.length > 0) {
-          filteredGodowns = godownData.filter((godown: GodownItem) => 
+          filteredGodowns = godownData.filter((godown: GodownItem) =>
             user.godownAccess.includes(godown.GDN_CODE)
           );
         }
@@ -180,7 +182,7 @@ const ItemWiseStockRegister: React.FC = () => {
   // Prepare item options from pmplData
   const itemOptions = useMemo(() => {
     if (!pmplData) return [];
-    
+
     return pmplData.map((item) => ({
       value: item.CODE,
       label: `${item.CODE} | ${item.PRODUCT || 'No Product Name'}`
@@ -236,7 +238,7 @@ const ItemWiseStockRegister: React.FC = () => {
     // Validate date range
     const from = new Date(fromDate.split('-').reverse().join('-'));
     const to = new Date(toDate.split('-').reverse().join('-'));
-    
+
     if (from > to) {
       setToast({
         visible: true,
@@ -279,12 +281,20 @@ const ItemWiseStockRegister: React.FC = () => {
 
       const data = await response.json();
       setReportData(data.reportData || []);
-      
+
       setToast({
         visible: true,
         message: 'Report generated successfully!',
         type: 'success'
       });
+
+      // Log report generation
+      logActivity({
+        page: 'Item Wise Stock Register',
+        action: 'Generated Report',
+        duration: 0
+      });
+
     } catch (error) {
       console.error('Failed to generate report:', error);
       setError('Failed to generate report');
@@ -322,16 +332,16 @@ const ItemWiseStockRegister: React.FC = () => {
       // Get the table element
       const tableElement = document.querySelector('.print-table');
       if (!tableElement) {
-         setToast({ visible: true, message: 'Table not found for printing', type: 'error' });
-         return;
-       }
+        setToast({ visible: true, message: 'Table not found for printing', type: 'error' });
+        return;
+      }
 
       // Create a new window for printing
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-         setToast({ visible: true, message: 'Unable to open print window', type: 'error' });
-         return;
-       }
+        setToast({ visible: true, message: 'Unable to open print window', type: 'error' });
+        return;
+      }
 
       // Create the print content
       const printContent = `
@@ -421,13 +431,13 @@ const ItemWiseStockRegister: React.FC = () => {
       newExpandedRows.add(index);
     }
     setExpandedRows(newExpandedRows);
-    
+
     // Update expandAll state based on whether all expandable rows are now expanded
     const rowsWithDetails = reportData
       .map((item, idx) => ({ index: idx, hasDetails: item.details && item.details.length > 0 }))
       .filter(row => row.hasDetails)
       .map(row => row.index);
-    
+
     const allExpanded = rowsWithDetails.every(idx => newExpandedRows.has(idx));
     setExpandAll(allExpanded && rowsWithDetails.length > 0);
   };
@@ -496,8 +506,8 @@ const ItemWiseStockRegister: React.FC = () => {
         description="Item Wise Stock Register Report"
       />
       <PageBreadcrumb pageTitle="Item Wise Stock Register" />
-      
-      <Toast         
+
+      <Toast
         message={toast.message}
         type={toast.type}
         isVisible={toast.visible}
@@ -506,7 +516,7 @@ const ItemWiseStockRegister: React.FC = () => {
 
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6 no-print">
         <h2 className="text-xl font-semibold mb-4 dark:text-white">Filters</h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           <div>
             <DatePicker
@@ -518,7 +528,7 @@ const ItemWiseStockRegister: React.FC = () => {
               required
             />
           </div>
-          
+
           <div>
             <DatePicker
               id="toDate"
@@ -574,7 +584,7 @@ const ItemWiseStockRegister: React.FC = () => {
                 <span>Show Party Details</span>
               </label>
             </div>
-            
+
             {showPartyDetails && (
               <button
                 onClick={toggleExpandAll}
@@ -625,12 +635,12 @@ const ItemWiseStockRegister: React.FC = () => {
               Item Wise Stock Register
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Item: {selectedItem?.label} | Godown: {selectedGodown?.label} | 
+              Item: {selectedItem?.label} | Godown: {selectedGodown?.label} |
               Period: {fromDate} to {toDate}
               {displayInBoxPcs && " | Format: BOX+PCS"}
             </p>
           </div>
-          
+
           {/* Print button - only visible on screen */}
           <div className="no-print mb-4 flex justify-end">
             <button
@@ -653,7 +663,7 @@ const ItemWiseStockRegister: React.FC = () => {
                 <tr>
                   {showPartyDetails && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-12">
-                      
+
                     </th>
                   )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -713,55 +723,55 @@ const ItemWiseStockRegister: React.FC = () => {
                         {formatDateDDMMYYYY(item.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {displayInBoxPcs ? 
-                          convertToPcsAndBoxFormat(item.openingStock, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                        {displayInBoxPcs ?
+                          convertToPcsAndBoxFormat(item.openingStock, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                           item.openingStock
                         }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {displayInBoxPcs ? 
-                          convertToPcsAndBoxFormat(item.purchase, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                        {displayInBoxPcs ?
+                          convertToPcsAndBoxFormat(item.purchase, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                           item.purchase
                         }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {displayInBoxPcs ? 
-                          convertToPcsAndBoxFormat(item.salesReturn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                        {displayInBoxPcs ?
+                          convertToPcsAndBoxFormat(item.salesReturn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                           item.salesReturn
                         }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {displayInBoxPcs ? 
-                          convertToPcsAndBoxFormat(item.transferIn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                        {displayInBoxPcs ?
+                          convertToPcsAndBoxFormat(item.transferIn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                           item.transferIn
                         }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {displayInBoxPcs ? 
-                          convertToPcsAndBoxFormat(item.sales, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                        {displayInBoxPcs ?
+                          convertToPcsAndBoxFormat(item.sales, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                           item.sales
                         }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {displayInBoxPcs ? 
-                          convertToPcsAndBoxFormat(item.purReturn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                        {displayInBoxPcs ?
+                          convertToPcsAndBoxFormat(item.purReturn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                           item.purReturn
                         }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {displayInBoxPcs ? 
-                          convertToPcsAndBoxFormat(item.transferOut, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                        {displayInBoxPcs ?
+                          convertToPcsAndBoxFormat(item.transferOut, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                           item.transferOut
                         }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {displayInBoxPcs ? 
-                          convertToPcsAndBoxFormat(item.balanceStock, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                        {displayInBoxPcs ?
+                          convertToPcsAndBoxFormat(item.balanceStock, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                           item.balanceStock
                         }
                       </td>
                     </tr>
-                    
+
                     {/* Expanded details row */}
                     {showPartyDetails && expandedRows.has(index) && item.details && item.details.length > 0 && (
                       <tr className="bg-gray-50 dark:bg-gray-900">
@@ -792,13 +802,12 @@ const ItemWiseStockRegister: React.FC = () => {
                                   {item.details.map((detail, detailIndex) => (
                                     <tr key={detailIndex} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                       <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                          detail.type === 'Purchase' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${detail.type === 'Purchase' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
                                           detail.type === 'Sales' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                                          detail.type === 'Transfer In' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                                          detail.type === 'Transfer Out' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                                          'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                                        }`}>
+                                            detail.type === 'Transfer In' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                                              detail.type === 'Transfer Out' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                                                'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                                          }`}>
                                           {detail.type}
                                         </span>
                                       </td>
@@ -810,8 +819,8 @@ const ItemWiseStockRegister: React.FC = () => {
                                       </td>
                                       <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                                         <span className={detail.quantity >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                                          {displayInBoxPcs ? 
-                                            convertToPcsAndBoxFormat(Math.abs(detail.quantity), selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                                          {displayInBoxPcs ?
+                                            convertToPcsAndBoxFormat(Math.abs(detail.quantity), selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                                             Math.abs(detail.quantity)
                                           }
                                           {detail.quantity >= 0 ? ' (+)' : ' (-)'}
@@ -828,7 +837,7 @@ const ItemWiseStockRegister: React.FC = () => {
                     )}
                   </React.Fragment>
                 ))}
-                
+
                 {totals && (
                   <tr className="bg-gray-100 dark:bg-gray-700 font-semibold">
                     {showPartyDetails && (
@@ -840,50 +849,50 @@ const ItemWiseStockRegister: React.FC = () => {
                       Total
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {displayInBoxPcs ? 
-                        convertToPcsAndBoxFormat(totals.openingStock, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                      {displayInBoxPcs ?
+                        convertToPcsAndBoxFormat(totals.openingStock, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                         totals.openingStock
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {displayInBoxPcs ? 
-                        convertToPcsAndBoxFormat(totals.purchase, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                      {displayInBoxPcs ?
+                        convertToPcsAndBoxFormat(totals.purchase, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                         totals.purchase
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {displayInBoxPcs ? 
-                        convertToPcsAndBoxFormat(totals.salesReturn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                      {displayInBoxPcs ?
+                        convertToPcsAndBoxFormat(totals.salesReturn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                         totals.salesReturn
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {displayInBoxPcs ? 
-                        convertToPcsAndBoxFormat(totals.transferIn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                      {displayInBoxPcs ?
+                        convertToPcsAndBoxFormat(totals.transferIn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                         totals.transferIn
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {displayInBoxPcs ? 
-                        convertToPcsAndBoxFormat(totals.sales, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                      {displayInBoxPcs ?
+                        convertToPcsAndBoxFormat(totals.sales, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                         totals.sales
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {displayInBoxPcs ? 
-                        convertToPcsAndBoxFormat(totals.purReturn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                      {displayInBoxPcs ?
+                        convertToPcsAndBoxFormat(totals.purReturn, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                         totals.purReturn
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {displayInBoxPcs ? 
-                        convertToPcsAndBoxFormat(totals.transferOut, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                      {displayInBoxPcs ?
+                        convertToPcsAndBoxFormat(totals.transferOut, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                         totals.transferOut
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100">
-                      {displayInBoxPcs ? 
-                        convertToPcsAndBoxFormat(totals.balanceStock, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) : 
+                      {displayInBoxPcs ?
+                        convertToPcsAndBoxFormat(totals.balanceStock, selectedItemDetails?.MULT_F || 1, displayInBoxPcs) :
                         totals.balanceStock
                       }
                     </td>

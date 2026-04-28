@@ -28,42 +28,46 @@ const cors = require('cors');
 app.use(
   cors({
     origin: function (origin, callback) {
-      const allowedOrigins = [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:3001',
-        'https://ekta-enterprises.com',
-        'https://server.udayps.cfd',
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        // Add any other domain that needs access
-      ];
+      origin: function (origin, callback) {
+        const allowedOrigins = [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'http://127.0.0.1:3000',
+          'http://127.0.0.1:3001',
+          'https://ekta-enterprises.com',
+          'https://server.udayps.cfd',
+          'http://localhost:5173',
+          'http://127.0.0.1:5173',
+          // Add any other domain that needs access
+        ];
 
-      // Enhanced CORS logging for production debugging
-      console.log('=== CORS DEBUG ===');
-      console.log('Request Origin:', origin);
-      console.log('NODE_ENV:', process.env.NODE_ENV);
-      console.log('Allowed Origins:', allowedOrigins);
 
-      // Allow requests with no origin (like mobile apps, curl, postman)
-      if (!origin) {
-        console.log('CORS: Allowing request with no origin');
-        return callback(null, true);
-      }
+        // Enhanced CORS logging for production debugging
+        console.log('=== CORS DEBUG ===');
+        console.log('Request Origin:', origin);
+        console.log('NODE_ENV:', process.env.NODE_ENV);
+        console.log('Allowed Origins:', allowedOrigins);
 
-      if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
-        console.log('CORS: Origin allowed');
-        callback(null, true);
-      } else {
-        console.log('CORS: Blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'if-none-match', 'ETag', 'Cache-Control']
-  })
+
+        // Allow requests with no origin (like mobile apps, curl, postman)
+        if (!origin) {
+          console.log('CORS: Allowing request with no origin');
+          return callback(null, true);
+        }
+
+
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+          console.log('CORS: Origin allowed');
+          callback(null, true);
+        } else {
+          console.log('CORS: Blocked origin:', origin);
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+          allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'if-none-match', 'ETag', 'Cache-Control']
+    })
 );
 
 
@@ -119,6 +123,10 @@ app.use('/api', billsRoutes);
 const godownRoutes = require('./routes/godowns');
 app.use('/api', godownRoutes);
 
+const shikharSchemeRoutes = require('./routes/shikhar_scheme');
+app.use('/api', shikharSchemeRoutes);
+
+
 const slinkRoutes = require('./routes/slink');
 const orcusRoutes = require('./routes/orcusRoutes');
 app.use(express.static(path.join(__dirname, '.', 'dist')));
@@ -151,6 +159,9 @@ app.use('/api/merge/purchases', purchasesMergeRoutes);
 // Register items merge routes
 const itemsMergeRoutes = require('./routes/merge/items');
 app.use('/api/merge/items', itemsMergeRoutes);
+
+const itemMapRoutes = require('./routes/itemmap');
+app.use('/api', itemMapRoutes);
 
 const approvalRoutes = require('./routes/approval');
 app.use('/api', approvalRoutes);
