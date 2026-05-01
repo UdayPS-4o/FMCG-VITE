@@ -60,6 +60,8 @@ import NewPurchase from './pages/purchases/NewPurchase';
 import DatabasePurchases from "./pages/database/Purchases";
 import PurchasesApproved from "./pages/approved/PurchasesApproved";
 import MandatoryDocs from './pages/mandatory-docs/MandatoryDocs';
+import AppOrders from './pages/app-orders/AppOrders';
+import AppSchemes from './pages/app-schemes/AppSchemes';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -377,6 +379,18 @@ const AppRoutes = () => {
         <Route path="/push-notifications" element={
           <ProtectedRoute requiredAccess="Admin">
             <PushNotifications />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/app-orders" element={
+          <ProtectedRoute requiredAccess="Admin">
+            <AppOrders />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/app-schemes" element={
+          <ProtectedRoute requiredAccess="Admin">
+            <AppSchemes />
           </ProtectedRoute>
         } />
 

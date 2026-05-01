@@ -84,6 +84,13 @@ const BellIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const AppOrdersIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+      d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+  </svg>
+);
+
 const AttendanceIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg
     className={className}
@@ -216,6 +223,16 @@ const fmcgItems: NavItem[] = [
     path: "/add-user",
   },
   {
+    icon: <AppOrdersIcon />,
+    name: "App Orders",
+    path: "/app-orders",
+  },
+  {
+    icon: <BoxIcon />, // using box icon as a fallback
+    name: "App Schemes",
+    path: "/app-schemes",
+  },
+  {
     icon: <BellIcon />,
     name: "Push Notifications",
     path: "/push-notifications",
@@ -276,6 +293,27 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [filteredItems, setFilteredItems] = useState<NavItem[]>([]);
+  const [pendingOrderCount, setPendingOrderCount] = useState(0);
+
+  // Fetch pending app-order count (Admin only)
+  useEffect(() => {
+    const fetchPending = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch(`${constants.baseURL}/api/app/admin/stats`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPendingOrderCount(data.pending || 0);
+        }
+      } catch { /* silent */ }
+    };
+    fetchPending();
+    const interval = setInterval(fetchPending, 60_000); // refresh every minute
+    return () => clearInterval(interval);
+  }, []);
 
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others" | "fmcg";
@@ -602,6 +640,12 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
                 </span>
                 {(isExpanded || isHovered || isMobileOpen) && (
                   <span className="menu-item-text">{nav.name}</span>
+                )}
+                {/* Pending badge for App Orders */}
+                {nav.name === "App Orders" && pendingOrderCount > 0 && (isExpanded || isHovered || isMobileOpen) && (
+                  <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
+                    {pendingOrderCount > 99 ? '99+' : pendingOrderCount}
+                  </span>
                 )}
               </Link>
             )
