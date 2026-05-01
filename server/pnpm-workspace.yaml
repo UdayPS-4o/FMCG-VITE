@@ -1,0 +1,4 @@
+onlyBuiltDependencies:
+  - puppeteer
+  - sqlite3
+  - tesseract.js

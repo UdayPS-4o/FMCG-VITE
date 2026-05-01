@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, createRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Input, { InputRefHandle } from "../../components/form/input/Input";
@@ -112,7 +112,10 @@ const InvoicingContent: React.FC = () => {
     invoiceIdInfo,
     focusNewItemIndex,
     setFocusNewItemIndex,
-    setItems: contextSetItems
+    setItems: contextSetItems,
+    pmplData,
+    stockList,
+    godownOptions
   } = useInvoiceContext();
   
   // Helper function to format local date as DD-MM-YYYY
@@ -346,6 +349,117 @@ const InvoicingContent: React.FC = () => {
       }
     }
   }, [user, smOptions]);
+
+  const location = useLocation();
+
+  // Prefill order data from location.state if navigating from AppOrders
+  useEffect(() => {
+    const prefilledOrder = location.state?.prefilledOrder;
+    if (prefilledOrder && partyOptions.length > 0 && pmplData.length > 0 && contextSetItems && !loading) {
+      // 1. Set Party
+      console.log('Prefilled Order PartyCode:', prefilledOrder.partyCode);
+      console.log('Sample Party Options:', partyOptions.slice(0, 3));
+      
+      const matchedParty = partyOptions.find(p => 
+        String(p.value).trim().toUpperCase() === String(prefilledOrder.partyCode).trim().toUpperCase()
+      );
+      if (matchedParty) {
+        console.log('Found Party:', matchedParty);
+        setParty(matchedParty);
+      } else {
+        console.log('Failed to match party code!');
+      }
+
+      // Autofill Salesman as SM001
+      const matchedSm = smOptions.find(s => 
+        String(s.value).trim().toUpperCase() === 'SM001'
+      );
+      if (matchedSm) {
+        setSm(matchedSm);
+      } else {
+        setSm({ value: 'SM001', label: 'SM001' });
+      }
+      
+      // 2. Build items array
+      const newItems = prefilledOrder.items.map((orderItem: any, idx: number) => {
+        const itemCode = orderItem.productCode;
+        const pmplItem = pmplData.find(p => p.CODE === itemCode);
+        
+        let godownVal = '';
+        let stockLimit = 0;
+        
+        if (pmplItem) {
+          // Find godown with most stock
+          const itemStocks = stockList[itemCode] || {};
+          let maxStock = -1;
+          
+          for (const gd of godownOptions) {
+            const stockStr = itemStocks[gd.value];
+            if (stockStr) {
+              const stockNum = parseFloat(stockStr);
+              if (!isNaN(stockNum) && stockNum > maxStock) {
+                maxStock = stockNum;
+                godownVal = gd.value;
+                stockLimit = stockNum;
+              }
+            }
+          }
+          
+          if (!godownVal && godownOptions.length > 0) {
+            godownVal = godownOptions[0].value;
+          }
+        }
+
+        const multF = parseFloat(pmplItem?.MULT_F || '1') || 1;
+        const totalQty = (orderItem.qtyBoxes || 0) * multF + (orderItem.qtyPcs || 0);
+
+        return {
+          item: itemCode,
+          godown: godownVal,
+          unit: pmplItem?.UNIT_1 || 'PCS',
+          stock: String(stockLimit),
+          pack: pmplItem?.PACK || '',
+          gst: pmplItem?.TAXPAID === 'Y' ? '0' : String(pmplItem?.IGST || '0'),
+          pcBx: String(multF),
+          mrp: String(pmplItem?.MRP1 || '0'),
+          rate: String(orderItem.rate || pmplItem?.RATE1 || '0'),
+          qty: String(totalQty),
+          cess: '0',
+          schRs: idx === 0 && prefilledOrder.customDiscount ? String(prefilledOrder.customDiscount) : '0',
+          sch: '0',
+          cd: '0',
+          amount: String(totalQty * parseFloat(String(orderItem.rate || pmplItem?.RATE1 || '0'))),
+          netAmount: String(orderItem.netAmount || 0),
+          selectedItem: pmplItem,
+          stockLimit: stockLimit,
+          itemCode: itemCode,
+          itemName: pmplItem?.PRODUCT || orderItem.productName,
+        };
+      });
+
+      if (newItems.length > 0) {
+        newItems.push({
+          item: '', godown: '', unit: '', stock: '', pack: '', gst: '', pcBx: '',
+          mrp: '', rate: '', qty: '', cess: '', schRs: '', sch: '', cd: '',
+          amount: '', netAmount: '', selectedItem: null, stockLimit: 0
+        });
+      }
+
+      contextSetItems(newItems);
+      setDueDays('7');
+      if (prefilledOrder.notes) {
+        setRef(prefilledOrder.notes.substring(0, 50));
+      }
+
+      navigate(location.pathname, { replace: true, state: {} });
+      
+      setToast({
+        visible: true,
+        message: 'Order data loaded successfully!',
+        type: 'success'
+      });
+    }
+  }, [location.state, partyOptions, smOptions, pmplData, loading, contextSetItems, godownOptions, stockList, navigate, location.pathname]);
 
   const handleAccordionChange = (panel: number) => (_: React.SyntheticEvent, isExpanded: boolean) => {
     setExpandedIndex?.(isExpanded ? panel : -1);
@@ -964,6 +1078,8 @@ const InvoicingContent: React.FC = () => {
                 label="Party"
                 options={partyOptions}
                 onChange={handlePartyChange}
+                value={party?.value || ''}
+                defaultValue={party?.value || ''}
                 autoComplete="off"
                 onEnter={handlePartyEnter}
                 ref={partyAutocompleteRef}

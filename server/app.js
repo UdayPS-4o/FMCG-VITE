@@ -28,46 +28,34 @@ const cors = require('cors');
 app.use(
   cors({
     origin: function (origin, callback) {
-      origin: function (origin, callback) {
-        const allowedOrigins = [
-          'http://localhost:3000',
-          'http://localhost:3001',
-          'http://127.0.0.1:3000',
-          'http://127.0.0.1:3001',
-          'https://ekta-enterprises.com',
-          'https://server.udayps.cfd',
-          'http://localhost:5173',
-          'http://127.0.0.1:5173',
-          // Add any other domain that needs access
-        ];
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001',
+        'https://ekta-enterprises.com',
+        'https://server.udayps.cfd',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        // Add any other domain that needs access
+      ];
 
+      // Allow requests with no origin (like mobile apps, curl, postman)
+      if (!origin) {
+        return callback(null, true);
+      }
 
-        // Enhanced CORS logging for production debugging
-        console.log('=== CORS DEBUG ===');
-        console.log('Request Origin:', origin);
-        console.log('NODE_ENV:', process.env.NODE_ENV);
-        console.log('Allowed Origins:', allowedOrigins);
-
-
-        // Allow requests with no origin (like mobile apps, curl, postman)
-        if (!origin) {
-          console.log('CORS: Allowing request with no origin');
-          return callback(null, true);
-        }
-
-
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
-          console.log('CORS: Origin allowed');
-          callback(null, true);
-        } else {
-          console.log('CORS: Blocked origin:', origin);
-          callback(new Error('Not allowed by CORS'));
-        }
-      },
-      credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-          allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'if-none-match', 'ETag', 'Cache-Control']
-    })
+      if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        console.log('CORS: Blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'if-none-match', 'ETag', 'Cache-Control'],
+  })
 );
 
 
