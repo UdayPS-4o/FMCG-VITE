@@ -317,4 +317,5 @@ router.post('/schemes/scrape', (req, res) => {
     }
 });
 
+router.getActiveSchemesFromDBF = getActiveSchemesFromDBF;
 module.exports = router;

@@ -127,7 +127,7 @@ app.post('/api/login', async (req, res) => {
         }
       });
     } else {
-      res.status(404).json({ success: false, message: 'Invalid username or password.' });
+      res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
   } catch (err) {
     console.error(err);
