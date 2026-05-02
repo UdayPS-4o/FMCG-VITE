@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, Calendar, Plus, ShoppingCart, Loader2, Check } from 'lucide-react';
 import { getOrders } from '../lib/api';
-import { useStore, Product } from '../context/StoreContext';
+import { useStore, type Product } from '../context/StoreContext';
 
 interface OrderItem {
     productCode: string;
@@ -31,7 +31,7 @@ const statusConfig = {
 const OrderView = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { addToCart } = useStore();
+    const { addToCart, language } = useStore();
     
     const [order, setOrder] = useState<Order | null>(null);
     const [loading, setLoading] = useState(true);
@@ -83,13 +83,14 @@ const OrderView = () => {
         return (
             <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
                 <Package size={48} className="text-gray-300 mb-4" />
-                <p className="text-gray-500">Order not found.</p>
-                <button onClick={() => navigate(-1)} className="mt-4 text-indigo-600 font-semibold">Go Back</button>
+                <p className="text-gray-500">{language === 'en' ? 'Order not found.' : 'ऑर्डर नहीं मिला।'}</p>
+                <button onClick={() => navigate(-1)} className="mt-4 text-indigo-600 font-semibold">{language === 'en' ? 'Go Back' : 'वापस जाएं'}</button>
             </div>
         );
     }
 
     const s = statusConfig[order.status] || statusConfig.Pending;
+    const labelTranslated = language === 'en' ? s.label : (s.label === 'Processing' ? 'प्रोसेसिंग' : s.label === 'Confirmed' ? 'पुष्टि की गई' : 'रद्द');
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col pb-24">
@@ -99,7 +100,7 @@ const OrderView = () => {
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <h1 className="font-bold text-gray-900 leading-tight">Order #{order.id.slice(-6)}</h1>
+                        <h1 className="font-bold text-gray-900 leading-tight">{language === 'en' ? 'Order' : 'ऑर्डर'} #{order.id.slice(-6)}</h1>
                         <p className="text-[10px] text-gray-500 font-medium">
                             {new Date(order.date).toLocaleDateString('en-IN', {
                                 day: '2-digit', month: 'short', year: 'numeric',
@@ -109,31 +110,31 @@ const OrderView = () => {
                     </div>
                 </div>
                 <span className={`px-2.5 py-1 ${s.bg} ${s.text} text-[10px] font-bold rounded-full uppercase tracking-wide`}>
-                    {s.label}
+                    {labelTranslated}
                 </span>
             </header>
 
             <div className="p-4 pt-[76px] space-y-4">
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
                     <div>
-                        <p className="text-xs text-gray-500 font-medium mb-1">Order Total</p>
+                        <p className="text-xs text-gray-500 font-medium mb-1">{language === 'en' ? 'Order Total' : 'कुल ऑर्डर'}</p>
                         <p className="text-xl font-bold text-gray-900">₹{order.totalAmount.toFixed(2)}</p>
                     </div>
                     <button 
                         onClick={handleReorderAll}
                         className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm transition-transform active:scale-95"
                     >
-                        <ShoppingCart size={16} /> Reorder All
+                        <ShoppingCart size={16} /> {language === 'en' ? 'Reorder All' : 'सभी फिर से ऑर्डर करें'}
                     </button>
                 </div>
 
                 {order.adminNote && (
                     <div className="bg-yellow-50 text-yellow-800 text-sm p-4 rounded-2xl border border-yellow-100 shadow-sm">
-                        <span className="font-bold">Note from admin:</span> {order.adminNote}
+                        <span className="font-bold">{language === 'en' ? 'Note from admin:' : 'व्यवस्थापक से नोट:'}</span> {order.adminNote}
                     </div>
                 )}
 
-                <h2 className="text-sm font-bold text-gray-800 pt-2 px-1">Items ({order.items.length})</h2>
+                <h2 className="text-sm font-bold text-gray-800 pt-2 px-1">{language === 'en' ? 'Items' : 'आइटम'} ({order.items.length})</h2>
 
                 <div className="space-y-3">
                     {order.items.map((item, idx) => (
@@ -150,8 +151,8 @@ const OrderView = () => {
                                 <h3 className="font-bold text-gray-900 text-sm line-clamp-2 leading-tight mb-1">{item.productName}</h3>
                                 <div className="flex items-center gap-2 text-xs text-gray-500">
                                     <span className="bg-gray-100 px-2 py-0.5 rounded-md font-medium text-gray-600">
-                                        {item.qtyBoxes > 0 && `${item.qtyBoxes} box `}
-                                        {item.qtyPcs > 0 && `${item.qtyPcs} pcs`}
+                                        {item.qtyBoxes > 0 && `${item.qtyBoxes} ${language === 'en' ? 'box ' : 'बॉक्स '}`}
+                                        {item.qtyPcs > 0 && `${item.qtyPcs} ${language === 'en' ? 'pcs' : 'पीस'}`}
                                     </span>
                                 </div>
                                 <div className="mt-1.5 font-bold text-gray-900">₹{item.netAmount.toFixed(2)}</div>

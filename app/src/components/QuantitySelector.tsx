@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Product } from '../context/StoreContext';
+import { useStore, type Product } from '../context/StoreContext';
 import { Plus, Minus } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,6 +19,7 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
     onUpdate,
     compact = false
 }) => {
+    const { language } = useStore();
     const [pcs, setPcs] = useState(initialPcs);
     const [boxes, setBoxes] = useState(initialBoxes);
 
@@ -51,7 +52,7 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
             <div className="flex gap-2">
                 {/* Box/Case Control */}
                 <div className="flex-1 bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center shadow-sm">
-                    <span className="text-xs text-gray-500 mb-1">{unit2} (Case)</span>
+                    <span className="text-xs text-gray-500 mb-1">{unit2} ({language === 'en' ? 'Case' : 'केस'})</span>
                     <AnimatePresence mode='wait'>
                         <motion.div
                             key={boxes}
@@ -75,7 +76,7 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
 
                 {/* Pieces/Units Control */}
                 <div className="flex-1 bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center shadow-sm">
-                    <span className="text-xs text-gray-500 mb-1">{unit1} (Units)</span>
+                    <span className="text-xs text-gray-500 mb-1">{unit1} ({language === 'en' ? 'Units' : 'इकाइयां'})</span>
 
                     <AnimatePresence mode='wait'>
                         <motion.div
@@ -104,10 +105,10 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
             {(totalAdded > 0 || !compact) && (
                 <div className="flex justify-between items-center text-sm px-1">
                     <div className="text-green-600 font-medium text-xs">
-                        Savings: ₹{savings}
+                        {language === 'en' ? 'Savings:' : 'बचत:'} ₹{savings}
                     </div>
                     <div className="text-gray-900 font-bold">
-                        Net price: ₹{netPrice}
+                        {language === 'en' ? 'Net price:' : 'शुद्ध मूल्य:'} ₹{netPrice}
                     </div>
                 </div>
             )}

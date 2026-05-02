@@ -14,6 +14,7 @@ interface AppScheme {
   is_active: number;
   show_as_banner: number;
   banner_text: string;
+  sub_group?: string;
 }
 
 const SCHEME_TYPE_LABELS: Record<string, string> = {
@@ -27,6 +28,7 @@ const AppSchemes: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingScheme, setEditingScheme] = useState<AppScheme | null>(null);
+  const [subgroups, setSubgroups] = useState<any[]>([]);
 
   const emptyForm = {
     name: '',
@@ -39,6 +41,7 @@ const AppSchemes: React.FC = () => {
     is_active: 1,
     show_as_banner: 1,
     banner_text: '',
+    sub_group: '',
   };
 
   const [formData, setFormData] = useState<typeof emptyForm>(emptyForm);
@@ -59,7 +62,24 @@ const AppSchemes: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchSchemes(); }, []);
+  const fetchSubgroups = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${constants.baseURL}/slink/subgrp`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setSubgroups(await res.json());
+      }
+    } catch {
+      console.error('Error loading subgroups');
+    }
+  };
+
+  useEffect(() => { 
+    fetchSchemes(); 
+    fetchSubgroups();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -117,6 +137,7 @@ const AppSchemes: React.FC = () => {
       is_active: s.is_active,
       show_as_banner: s.show_as_banner,
       banner_text: s.banner_text || '',
+      sub_group: s.sub_group || '',
     });
     setShowModal(true);
   };
@@ -159,7 +180,7 @@ const AppSchemes: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-900/50">
               <tr>
-                {['Name', 'Type', 'Discount', 'Banner', 'Active', 'Actions'].map(h => (
+                {['Name', 'Type', 'Discount', 'Sub Group', 'Banner', 'Active', 'Actions'].map(h => (
                   <th key={h} className={`px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>
                 ))}
               </tr>
@@ -185,6 +206,9 @@ const AppSchemes: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm font-semibold text-green-600 dark:text-green-400">Rs {scheme.discount_amount}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {scheme.sub_group ? (subgroups.find(sg => sg.subgroupCode === scheme.sub_group)?.title || scheme.sub_group) : 'All'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${scheme.show_as_banner === 1 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
@@ -252,6 +276,20 @@ const AppSchemes: React.FC = () => {
                       <option value="overall_bill_amount" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Overall Bill Amount</option>
                     </select>
 
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sub Group (Optional)</label>
+                    <select
+                      name="sub_group"
+                      value={formData.sub_group} onChange={handleInputChange}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                    >
+                      <option value="">All Sub Groups</option>
+                      {subgroups.map(sg => (
+                        <option key={sg.subgroupCode} value={sg.subgroupCode}>{sg.title}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>

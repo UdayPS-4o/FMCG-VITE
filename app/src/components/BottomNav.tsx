@@ -5,15 +5,15 @@ import clsx from 'clsx';
 import { useStore } from '../context/StoreContext';
 
 const BottomNav = () => {
-    const { cart } = useStore();
+    const { cart, language } = useStore();
     const cartItemCount = cart.length; // distinct products
 
     const navItems = [
-        { to: '/', icon: Home, label: 'Home' },
-        { to: '/search', icon: Search, label: 'Search' },
-        { to: '/cart', icon: ShoppingCart, label: 'Cart', badge: cartItemCount },
-        { to: '/orders', icon: FileText, label: 'Orders' },
-        { to: '/profile', icon: User, label: 'Profile' },
+        { to: '/', icon: Home, label: language === 'en' ? 'Home' : 'होम' },
+        { to: '/search', icon: Search, label: language === 'en' ? 'Search' : 'खोजें' },
+        { to: '/cart', icon: ShoppingCart, label: language === 'en' ? 'Cart' : 'कार्ट', badge: cartItemCount },
+        { to: '/orders', icon: FileText, label: language === 'en' ? 'Orders' : 'ऑर्डर्स' },
+        { to: '/profile', icon: User, label: language === 'en' ? 'Profile' : 'प्रोफ़ाइल' },
     ];
 
     return (

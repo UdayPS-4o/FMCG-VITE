@@ -5,7 +5,7 @@ import { placeOrder } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 
 const Cart = () => {
-    const { cart, cartTotal, user, clearCart, removeFromCart, addToCart } = useStore();
+    const { cart, cartTotal, user, clearCart, removeFromCart, addToCart, language } = useStore();
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
@@ -31,7 +31,7 @@ const Cart = () => {
             navigate('/orders');
         } catch (error) {
             console.error(error);
-            alert('Failed to place order');
+            alert(language === 'en' ? 'Failed to place order' : 'ऑर्डर करने में विफल');
         } finally {
             setLoading(false);
         }
@@ -43,13 +43,13 @@ const Cart = () => {
                 <div className="bg-white p-6 rounded-full shadow-sm mb-4">
                     <ShoppingBag size={48} className="text-gray-300" />
                 </div>
-                <h2 className="text-xl font-bold text-gray-800 mb-2">Your cart is empty</h2>
-                <p className="text-gray-500 mb-8 max-w-xs">Looks like you haven't added any items to your cart yet.</p>
+                <h2 className="text-xl font-bold text-gray-800 mb-2">{language === 'en' ? 'Your cart is empty' : 'आपका कार्ट खाली है'}</h2>
+                <p className="text-gray-500 mb-8 max-w-xs">{language === 'en' ? "Looks like you haven't added any items to your cart yet." : 'ऐसा लगता है कि आपने अभी तक अपने कार्ट में कोई आइटम नहीं जोड़ा है।'}</p>
                 <button
                     onClick={() => navigate('/')}
                     className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-medium shadow-lg hover:bg-indigo-700 transition-colors"
                 >
-                    Start Shopping
+                    {language === 'en' ? 'Start Shopping' : 'खरीदारी शुरू करें'}
                 </button>
             </div>
         );
@@ -58,14 +58,15 @@ const Cart = () => {
     return (
         <div className="min-h-screen bg-gray-50 pb-32">
             <div className="bg-white p-4 border-b border-gray-100 sticky top-0 z-40 flex justify-between items-center shadow-sm">
-                <h1 className="text-xl font-bold text-gray-900">My Cart ({cart.length})</h1>
+                <h1 className="text-xl font-bold text-gray-900">{language === 'en' ? 'My Cart' : 'मेरा कार्ट'} ({cart.length})</h1>
                 <button 
                     onClick={() => {
-                        if (window.confirm('Are you sure you want to clear your cart?')) clearCart();
+                        const msg = language === 'en' ? 'Are you sure you want to clear your cart?' : 'क्या आप वाकई अपना कार्ट खाली करना चाहते हैं?';
+                        if (window.confirm(msg)) clearCart();
                     }} 
                     className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors"
                 >
-                    Clear Cart
+                    {language === 'en' ? 'Clear Cart' : 'कार्ट खाली करें'}
                 </button>
             </div>
 
@@ -104,7 +105,7 @@ const Cart = () => {
 
                                 {/* Rate */}
                                 <div className="text-[11px] text-gray-500 mt-0.5">
-                                    Rate: ₹{parseFloat(item.product.RATE1 || '0').toFixed(2)}
+                                    {language === 'en' ? 'Rate' : 'दर'}: ₹{parseFloat(item.product.RATE1 || '0').toFixed(2)}
                                 </div>
 
                                 {/* Quantity Controls & Net Amount */}
@@ -140,7 +141,7 @@ const Cart = () => {
             {/* Checkout Footer */}
             <div className="fixed bottom-[64px] left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40">
                 <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-500 font-medium text-sm">Total Amount</span>
+                    <span className="text-gray-500 font-medium text-sm">{language === 'en' ? 'Total Amount' : 'कुल राशि'}</span>
                     <span className="text-xl font-bold text-indigo-600">₹{cartTotal.toFixed(2)}</span>
                 </div>
 
@@ -149,7 +150,7 @@ const Cart = () => {
                     disabled={loading}
                     className="w-full bg-black text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors disabled:opacity-70 shadow-md"
                 >
-                    {loading ? 'Processing...' : 'Place Order'}
+                    {loading ? (language === 'en' ? 'Processing...' : 'प्रोसेस हो रहा है...') : (language === 'en' ? 'Place Order' : 'ऑर्डर करें')}
                     {!loading && <ArrowRight size={18} />}
                 </button>
             </div>

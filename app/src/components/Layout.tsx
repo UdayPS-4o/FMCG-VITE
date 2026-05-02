@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import { fetchActiveSchemes } from '../lib/api';
+import { useStore } from '../context/StoreContext';
 
 const Layout = () => {
+    const { language } = useStore();
     const [banners, setBanners] = useState<any[]>([]);
 
     const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -46,7 +48,7 @@ const Layout = () => {
                                                 : 'translate-x-full opacity-0 pointer-events-none'
                                     }`}
                                 >
-                                    <span className="bg-white text-blue-700 font-bold px-2 py-0.5 rounded text-[10px] tracking-wider shadow-sm">OFFER</span>
+                                    <span className="bg-white text-blue-700 font-bold px-2 py-0.5 rounded text-[10px] tracking-wider shadow-sm">{language === 'en' ? 'OFFER' : 'ऑफ़र'}</span>
                                     <span className="text-white font-bold text-xs sm:text-sm tracking-wide">
                                         {b.banner_text}
                                     </span>

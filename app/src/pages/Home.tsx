@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { fetchProducts, fetchBrands } from '../lib/api';
 import ProductCard from '../components/ProductCard';
-import type { Product } from '../context/StoreContext';
-import { Search as SearchIcon, Loader2 } from 'lucide-react';
+import { useStore, type Product } from '../context/StoreContext';
+import { Search as SearchIcon, Loader2, ArrowDownUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface Brand {
@@ -19,9 +19,18 @@ const Home = () => {
     const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
     const [brands, setBrands] = useState<Brand[]>([]);
     const [activeBrand, setActiveBrand] = useState<string>('');
+    const [sortOrder, setSortOrder] = useState<string>('');
+    const { language } = useStore();
     const navigate = useNavigate();
     const observer = useRef<IntersectionObserver | null>(null);
     const loadingRef = useRef(false);
+    const currentSortRef = useRef(sortOrder);
+    const currentBrandRef = useRef(activeBrand);
+
+    useEffect(() => {
+        currentSortRef.current = sortOrder;
+        currentBrandRef.current = activeBrand;
+    }, [sortOrder, activeBrand]);
 
     useEffect(() => {
         fetchBrands().then(data => {
@@ -33,14 +42,22 @@ const Home = () => {
     }, []);
 
     const loadProducts = useCallback(async (reset = false) => {
-        if (loadingRef.current) return;
+        if (loadingRef.current && !reset) return;
         if (!reset && !hasMore) return;
         
         const currentPage = reset ? 1 : page;
         loadingRef.current = true;
         setLoading(true);
         try {
-            const res = await fetchProducts(currentPage, 20, '', activeBrand);
+            const currentSort = sortOrder;
+            const currentBrand = activeBrand;
+            const res = await fetchProducts(currentPage, 20, '', activeBrand, sortOrder);
+            
+            // Ignore stale requests if the user changed filters while this was loading
+            if (currentSort !== currentSortRef.current || currentBrand !== currentBrandRef.current) {
+                return;
+            }
+
             if (res.data.length === 0) {
                 setHasMore(false);
                 if (reset) setProducts([]);
@@ -59,12 +76,12 @@ const Home = () => {
             loadingRef.current = false;
             setLoading(false);
         }
-    }, [page, hasMore, activeBrand]);
+    }, [page, hasMore, activeBrand, sortOrder]);
 
     useEffect(() => {
         loadProducts(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeBrand]);
+    }, [activeBrand, sortOrder]);
 
     const lastElementRef = useCallback((node: HTMLDivElement | null) => {
         if (loading) return;
@@ -93,7 +110,7 @@ const Home = () => {
                     <div className="flex-1" onClick={() => navigate('/search')}>
                         <div className="w-full h-11 bg-gray-100 rounded-xl flex items-center px-4 text-gray-400 gap-2 cursor-pointer hover:bg-gray-150 transition-colors">
                             <SearchIcon size={18} />
-                            <span className="text-sm">Search...</span>
+                            <span className="text-sm">{language === 'en' ? 'Search...' : 'खोजें...'}</span>
                         </div>
                     </div>
                 </div>
@@ -107,7 +124,7 @@ const Home = () => {
                 >
                     <div className={`w-[52px] h-[52px] rounded-full flex items-center justify-center p-[2px] ${activeBrand === '' ? 'bg-gradient-to-t from-gray-900 to-gray-600 shadow-md' : 'bg-transparent border border-gray-300'}`}>
                         <div className="w-full h-full bg-white rounded-full flex items-center justify-center shadow-inner text-[10px] font-bold text-center leading-tight text-gray-700">
-                            All<br/>Brands
+                            {language === 'en' ? <><span className="block">All</span>Brands</> : <><span className="block">सभी</span>ब्रांड</>}
                         </div>
                     </div>
                 </button>
@@ -136,9 +153,27 @@ const Home = () => {
             <div className="px-4 pt-4">
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-base font-semibold text-gray-800">
-                        {activeBrand ? brands.find(b => b.brand_code === activeBrand)?.brand_desc || 'Products' : 'All Products'}
+                        {activeBrand ? brands.find(b => b.brand_code === activeBrand)?.brand_desc || (language === 'en' ? 'Products' : 'उत्पाद') : (language === 'en' ? 'All Products' : 'सभी उत्पाद')}
                     </h2>
-                    <span className="text-xs text-gray-400">{products.length} items</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">{products.length} {language === 'en' ? 'items' : 'आइटम'}</span>
+                        <div className="relative">
+                            <select
+                                value={sortOrder}
+                                onChange={(e) => setSortOrder(e.target.value)}
+                                className="appearance-none bg-gray-100 border border-gray-200 text-gray-700 text-xs py-1 pl-2 pr-6 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            >
+                                <option value="">{language === 'en' ? 'Default' : 'डिफ़ॉल्ट'}</option>
+                                <option value="scheme">{language === 'en' ? 'Scheme Items' : 'स्कीम आइटम'}</option>
+                                <option value="az">{language === 'en' ? 'A-Z' : 'A-Z'}</option>
+                                <option value="mrp">{language === 'en' ? 'MRP Low-High' : 'एमआरपी कम-ज्यादा'}</option>
+                                <option value="mrp-desc">{language === 'en' ? 'MRP High-Low' : 'एमआरपी ज्यादा-कम'}</option>
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-gray-500">
+                                <ArrowDownUp size={12} />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -190,7 +225,7 @@ const Home = () => {
 
                 {!loading && !hasMore && products.length > 0 && (
                     <div className="text-center text-gray-400 text-xs py-8">
-                        You've reached the end
+                        {language === 'en' ? "You've reached the end" : 'आप अंत तक पहुँच गए हैं'}
                     </div>
                 )}
             </div>

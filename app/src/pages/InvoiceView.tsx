@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInvoiceData } from '../lib/api';
 import { ChevronLeft, Download, ShoppingCart, Plus, Package, Check } from 'lucide-react';
-import { useStore, Product } from '../context/StoreContext';
+import { useStore, type Product } from '../context/StoreContext';
 
 const InvoiceView = () => {
     const { series, billNo } = useParams<{ series: string; billNo: string }>();
     const navigate = useNavigate();
-    const { addToCart } = useStore();
+    const { addToCart, language } = useStore();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -29,10 +29,10 @@ const InvoiceView = () => {
                     <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full">
                         <ChevronLeft size={20} />
                     </button>
-                    <h1 className="text-lg font-bold">Loading Bill...</h1>
+                    <h1 className="text-lg font-bold">{language === 'en' ? 'Loading Bill...' : 'बिल लोड हो रहा है...'}</h1>
                 </div>
                 <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-                    Please wait...
+                    {language === 'en' ? 'Please wait...' : 'कृपया प्रतीक्षा करें...'}
                 </div>
             </div>
         );
@@ -45,12 +45,12 @@ const InvoiceView = () => {
                     <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full">
                         <ChevronLeft size={20} />
                     </button>
-                    <h1 className="text-lg font-bold">Error</h1>
+                    <h1 className="text-lg font-bold">{language === 'en' ? 'Error' : 'त्रुटि'}</h1>
                 </div>
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                    <p className="text-red-500 mb-4">{error || 'Invoice not found'}</p>
+                    <p className="text-red-500 mb-4">{error || (language === 'en' ? 'Invoice not found' : 'इनवॉइस नहीं मिला')}</p>
                     <button onClick={() => navigate(-1)} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium">
-                        Go Back
+                        {language === 'en' ? 'Go Back' : 'वापस जाएं'}
                     </button>
                 </div>
             </div>
@@ -140,7 +140,7 @@ const InvoiceView = () => {
                     <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
                         <ChevronLeft size={20} />
                     </button>
-                    <h1 className="text-lg font-bold text-gray-900">Bill {series}-{billNo}</h1>
+                    <h1 className="text-lg font-bold text-gray-900">{language === 'en' ? 'Bill' : 'बिल'} {series}-{billNo}</h1>
                 </div>
                 <button onClick={handleDownload} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 p-2 rounded-full transition-colors">
                     <Download size={18} />
@@ -150,18 +150,18 @@ const InvoiceView = () => {
             <div className="p-4 pt-[76px] space-y-4">
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
                     <div>
-                        <p className="text-xs text-gray-500 font-medium mb-1">Bill Net Amount</p>
+                        <p className="text-xs text-gray-500 font-medium mb-1">{language === 'en' ? 'Bill Net Amount' : 'बिल की शुद्ध राशि'}</p>
                         <p className="text-xl font-bold text-gray-900">₹{netAmount.toFixed(2)}</p>
                     </div>
                     <button 
                         onClick={handleReorderAll}
                         className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm transition-transform active:scale-95"
                     >
-                        <ShoppingCart size={16} /> Reorder All
+                        <ShoppingCart size={16} /> {language === 'en' ? 'Reorder All' : 'सभी फिर से ऑर्डर करें'}
                     </button>
                 </div>
 
-                <h2 className="text-sm font-bold text-gray-800 px-1 pt-2">Order Summary ({data.summary?.itemsInBill || data.items.length})</h2>
+                <h2 className="text-sm font-bold text-gray-800 px-1 pt-2">{language === 'en' ? 'Order Summary' : 'ऑर्डर का सारांश'} ({data.summary?.itemsInBill || data.items.length})</h2>
                 <div className="space-y-3">
                     {data.items.map((item: any, i: number) => (
                         <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex gap-4 items-center">
@@ -198,7 +198,7 @@ const InvoiceView = () => {
                     ))}
                 </div>
 
-                <h2 className="text-sm font-bold text-gray-800 px-1 pt-6 pb-2">Original Printed Bill</h2>
+                <h2 className="text-sm font-bold text-gray-800 px-1 pt-6 pb-2">{language === 'en' ? 'Original Printed Bill' : 'मूल मुद्रित बिल'}</h2>
             </div>
 
             <div className="p-2 flex-1 overflow-x-auto">
