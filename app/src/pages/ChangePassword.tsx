@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
 
 const ChangePassword = () => {
-    const { user, updateUser } = useStore();
+    const { user, updateUser, language } = useStore();
     const navigate = useNavigate();
 
     const [current, setCurrent] = useState('');
@@ -55,11 +55,11 @@ const ChangePassword = () => {
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-500 rounded-2xl shadow-lg shadow-amber-500/30 mb-4">
                         <Lock size={28} className="text-white" />
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900">Set Your Password</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">{language === 'en' ? 'Set Your Password' : 'अपना पासवर्ड सेट करें'}</h1>
                     <p className="text-sm text-gray-500 mt-1">
                         {user?.mustChangePassword
-                            ? 'You\'re using a temporary password. Please set a new one to continue.'
-                            : 'Change your account password'}
+                            ? (language === 'en' ? "You're using a temporary password. Please set a new one to continue." : "आप एक अस्थायी पासवर्ड का उपयोग कर रहे हैं। जारी रखने के लिए कृपया एक नया सेट करें।")
+                            : (language === 'en' ? 'Change your account password' : 'अपना अकाउंट पासवर्ड बदलें')}
                     </p>
                 </div>
 
@@ -70,21 +70,21 @@ const ChangePassword = () => {
                         className="bg-white rounded-3xl shadow-xl p-8 text-center"
                     >
                         <CheckCircle className="text-emerald-500 mx-auto mb-3" size={48} />
-                        <p className="font-bold text-gray-900 text-lg">Password Changed!</p>
-                        <p className="text-sm text-gray-500 mt-1">Redirecting you…</p>
+                        <p className="font-bold text-gray-900 text-lg">{language === 'en' ? 'Password Changed!' : 'पासवर्ड बदल गया!'}</p>
+                        <p className="text-sm text-gray-500 mt-1">{language === 'en' ? 'Redirecting you…' : 'आपको रीडायरेक्ट किया जा रहा है…'}</p>
                     </motion.div>
                 ) : (
                     <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/60 p-8">
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                    Current Password
+                                    {language === 'en' ? 'Current Password' : 'वर्तमान पासवर्ड'}
                                 </label>
                                 <div className="relative">
                                     <input
                                         type={showCurrent ? 'text' : 'password'}
                                         required
-                                        placeholder={user?.mustChangePassword ? '1234 (temporary)' : 'Current password'}
+                                        placeholder={user?.mustChangePassword ? (language === 'en' ? '1234 (temporary)' : '1234 (अस्थायी)') : (language === 'en' ? 'Current password' : 'वर्तमान पासवर्ड')}
                                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 pr-11 text-sm focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition-all"
                                         value={current}
                                         onChange={(e) => setCurrent(e.target.value)}
@@ -98,13 +98,13 @@ const ChangePassword = () => {
 
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                    New Password
+                                    {language === 'en' ? 'New Password' : 'नया पासवर्ड'}
                                 </label>
                                 <div className="relative">
                                     <input
                                         type={showNext ? 'text' : 'password'}
                                         required
-                                        placeholder="Min 4 characters"
+                                        placeholder={language === 'en' ? "Min 4 characters" : "कम से कम 4 अक्षर"}
                                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 pr-11 text-sm focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition-all"
                                         value={next}
                                         onChange={(e) => setNext(e.target.value)}
@@ -118,12 +118,12 @@ const ChangePassword = () => {
 
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                    Confirm New Password
+                                    {language === 'en' ? 'Confirm New Password' : 'नए पासवर्ड की पुष्टि करें'}
                                 </label>
                                 <input
                                     type="password"
                                     required
-                                    placeholder="Repeat new password"
+                                    placeholder={language === 'en' ? "Repeat new password" : "नया पासवर्ड दोहराएं"}
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition-all"
                                     value={confirm}
                                     onChange={(e) => setConfirm(e.target.value)}
@@ -141,7 +141,7 @@ const ChangePassword = () => {
                                 disabled={loading}
                                 className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-60 shadow-lg shadow-emerald-600/25"
                             >
-                                {loading ? 'Saving…' : 'Set Password'}
+                                {loading ? (language === 'en' ? 'Saving…' : 'सहेजा जा रहा है…') : (language === 'en' ? 'Set Password' : 'पासवर्ड सेट करें')}
                             </button>
 
                             {!user?.mustChangePassword && (
@@ -150,7 +150,7 @@ const ChangePassword = () => {
                                     onClick={() => navigate(-1)}
                                     className="w-full text-gray-500 py-2 text-sm hover:text-gray-700 transition-colors"
                                 >
-                                    Cancel
+                                    {language === 'en' ? 'Cancel' : 'रद्द करें'}
                                 </button>
                             )}
                         </form>

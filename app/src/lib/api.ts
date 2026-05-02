@@ -69,10 +69,11 @@ export const fetchActiveSchemes = async () => {
 
 // ── Products ─────────────────────────────────────────────────────────────────
 
-export const fetchProducts = async (page = 1, limit = 20, query = '', brand = '') => {
+export const fetchProducts = async (page = 1, limit = 20, query = '', brand = '', sort = '') => {
     const q = query ? `&q=${encodeURIComponent(query)}` : '';
     const b = brand ? `&brand=${encodeURIComponent(brand)}` : '';
-    const res = await fetch(`${API_URL}/products?page=${page}&limit=${limit}${q}${b}`);
+    const s = sort ? `&sort=${encodeURIComponent(sort)}` : '';
+    const res = await fetch(`${API_URL}/products?page=${page}&limit=${limit}${q}${b}${s}`);
     if (!res.ok) throw new Error('Failed to fetch products');
     return res.json();
 };

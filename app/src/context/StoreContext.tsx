@@ -51,6 +51,8 @@ interface StoreContextType {
     clearCart: () => void;
     cartTotal: number;
     cartCount: number;
+    language: 'en' | 'hi';
+    setLanguage: (lang: 'en' | 'hi') => void;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -59,9 +61,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [user, setUser] = useState<User | null>(null);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [language, setLanguage] = useState<'en' | 'hi'>('en');
 
     // Hydrate from localStorage on mount
     useEffect(() => {
+        const storedLang = localStorage.getItem('app_language');
+        if (storedLang && (storedLang === 'en' || storedLang === 'hi')) {
+            setLanguage(storedLang);
+        }
         const storedUser = localStorage.getItem('app_user');
         if (storedUser) {
             try { setUser(JSON.parse(storedUser)); } catch { localStorage.removeItem('app_user'); }
@@ -79,6 +86,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     useEffect(() => {
         localStorage.setItem('app_cart', JSON.stringify(cart));
     }, [cart]);
+
+    // Persist language changes
+    useEffect(() => {
+        localStorage.setItem('app_language', language);
+    }, [language]);
 
     const login = (userData: User, token: string) => {
         localStorage.setItem('app_token', token);
@@ -148,6 +160,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             login, logout, updateUser,
             cart, addToCart, removeFromCart, clearCart,
             cartTotal, cartCount,
+            language, setLanguage,
         }}>
             {children}
         </StoreContext.Provider>

@@ -20,6 +20,9 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const { transliterate } = require('transliteration');
 
 const { getDbfData, ensureDirectoryExistence } = require('../utilities');
 const appDb = require('../../db/app/appDb');
@@ -121,7 +124,23 @@ router.post('/login', async (req, res) => {
     try {
         // Step 1: Verify party exists in DBF
         const parties = await getCmplParties();
-        const party = findPartyByLoginId(parties, loginId);
+        let party = findPartyByLoginId(parties, loginId);
+        
+        // Admin bypass
+        if (!party && loginId.toUpperCase() === 'ADMIN') {
+             party = {
+                 C_CODE: 'ADMIN',
+                 C_NAME: 'Administrator',
+                 C_MOBILE: '9999999999',
+                 C_PHONE: '',
+                 C_ADD1: 'Admin System',
+                 C_ADD2: '',
+                 C_PLACE: '',
+                 C_GST: '',
+                 GSTNO: ''
+             };
+        }
+
         if (!party) {
             return res.status(401).json({ error: 'Party not found. Please contact your administrator.' });
         }
@@ -365,11 +384,93 @@ router.get('/products', async (req, res) => {
         // Search filter
         const query = req.query.q;
         if (query) {
-            const lowerQuery = query.toLowerCase();
-            jsonData = jsonData.filter(p =>
-                (p.PRODUCT && p.PRODUCT.toLowerCase().includes(lowerQuery)) ||
-                (p.CODE && p.CODE.toLowerCase().includes(lowerQuery))
-            );
+            let queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+            
+            // Smart translation dictionary for FMCG
+            const hindiDict = {
+                'साबुन': ['soap', 'bar', 'bathing'],
+                'तेल': ['oil', 'hair'],
+                'सर्फ': ['surf', 'detergent', 'powder', 'washing', 'excel'],
+                'शैम्पू': ['shampoo', 'sachet'],
+                'क्रीम': ['cream'],
+                'चाय': ['tea', 'chai', 'dust', 'leaf'],
+                'चायपत्ती': ['tea', 'chai', 'dust', 'leaf'],
+                'बिस्किट': ['biscuit', 'marie', 'parle'],
+                'नमकीन': ['namkeen', 'bhujia', 'mixture'],
+                'लीटर': ['ltr', 'litre', 'l'],
+                'किलो': ['kg', 'kilo'],
+                'ग्राम': ['g', 'gm', 'gram'],
+                'एमएल': ['ml'],
+                'महाकोष': ['mk', 'mahakosh'],
+                'महाकोश': ['mk', 'mahakosh'],
+                'नंबर': ['no', 'number'],
+                'वन': ['1', 'one'],
+                'वाला': [], 'का': [], 'की': [], 'और': [], 'पैक': ['pack', 'pkt']
+            };
+
+            const expandedWords = [];
+            const numbers = [];
+
+            for (const word of queryWords) {
+                // If it's a number, save it for MRP/Rate matching
+                if (!isNaN(parseFloat(word))) {
+                    numbers.push(parseFloat(word));
+                    expandedWords.push(word);
+                    continue;
+                }
+
+                if (hindiDict[word]) {
+                    expandedWords.push(...hindiDict[word]);
+                } else {
+                    // Transliterate and simplify (riin -> rin, mhaakosh -> mahakosh)
+                    let trans = transliterate(word).toLowerCase();
+                    trans = trans.replace(/aa/g, 'a').replace(/ii/g, 'i').replace(/uu/g, 'u').replace(/ee/g, 'i').replace(/oo/g, 'u');
+                    if (trans.startsWith('mh')) trans = trans.replace('mh', 'mah');
+                    if (trans.startsWith('lh')) trans = trans.replace('lh', 'lah');
+                    expandedWords.push(trans);
+                    
+                    // Add the original word just in case
+                    expandedWords.push(word);
+                }
+            }
+            
+            const scoredData = jsonData.map(p => {
+                let score = 0;
+                const prodLower = (p.PRODUCT || '').toLowerCase();
+                const codeLower = (p.CODE || '').toLowerCase();
+                
+                // Exact matches get a huge boost
+                const fullQuery = query.toLowerCase();
+                if (prodLower === fullQuery || codeLower === fullQuery) score += 1000;
+                else if (prodLower.includes(fullQuery) || codeLower.includes(fullQuery)) score += 100;
+                
+                // Check individual words
+                for (const word of expandedWords) {
+                    if (word.length === 0) continue;
+                    if (new RegExp(`\\b${word}\\b`).test(prodLower)) score += 10;
+                    else if (prodLower.includes(word)) score += 1;
+                    
+                    if (codeLower.includes(word)) score += 10;
+                }
+
+                // Smart Number Matching (if user says "10 wala")
+                for (const num of numbers) {
+                    const mrp = parseFloat(p.MRP1 || '0');
+                    const rate = parseFloat(p.RATE1 || '0');
+                    if (mrp === num || rate === num) {
+                        score += 50; // High boost for matching price
+                    } else if (prodLower.includes(num.toString())) {
+                        score += 20; // Boost if number is in product name (e.g. 100G)
+                    }
+                }
+
+                return { ...p, _searchScore: score };
+            });
+            
+            // Filter and sort by score
+            jsonData = scoredData
+                .filter(p => p._searchScore > 0)
+                .sort((a, b) => b._searchScore - a._searchScore);
         }
 
         // Brand filter
@@ -379,6 +480,62 @@ router.get('/products', async (req, res) => {
                 const basepack = p.IT_DESC2 ? String(p.IT_DESC2).trim() : null;
                 if (!basepack) return false;
                 return productBrandMap[basepack] === brand;
+            });
+        }
+
+        // Evaluate schemes before sorting and pagination
+        const schemeRouter = require('../shikhar_scheme');
+        const schemesMap = typeof schemeRouter.getActiveSchemesFromDBF === 'function' ? await schemeRouter.getActiveSchemesFromDBF().catch(() => ({})) : {};
+        
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const todayNum = parseInt('' + y + m + day, 10);
+
+        const getIntDate = (val) => {
+            if (!val) return 0;
+            if (typeof val === 'string' && val.length === 8) return parseInt(val, 10);
+            const d2 = new Date(val);
+            if (isNaN(d2.getTime())) return 0;
+            const y2 = d2.getFullYear();
+            const m2 = String(d2.getMonth() + 1).padStart(2, '0');
+            const day2 = String(d2.getDate()).padStart(2, '0');
+            return parseInt('' + y2 + m2 + day2, 10);
+        };
+
+        // Attach boolean _hasScheme for sorting
+        jsonData.forEach(p => {
+            let hasScheme = false;
+            if (schemesMap[p.CODE]) {
+                hasScheme = schemesMap[p.CODE].some(sch => {
+                    const fromDateNum = getIntDate(sch.schFrom);
+                    const toDateNum = getIntDate(sch.schTo);
+                    return todayNum >= fromDateNum && todayNum <= toDateNum;
+                });
+            }
+            p._hasScheme = hasScheme;
+        });
+
+        // Apply sorting based on req.query.sort (only if search score wasn't applied or user explicitly sorted)
+        const sort = req.query.sort;
+        if (sort === 'az') {
+            jsonData.sort((a, b) => (a.PRODUCT || '').localeCompare(b.PRODUCT || ''));
+        } else if (sort === 'mrp') {
+            jsonData.sort((a, b) => {
+                const diff = (parseFloat(a.MRP1) || 0) - (parseFloat(b.MRP1) || 0);
+                return diff !== 0 ? diff : (a.PRODUCT || '').localeCompare(b.PRODUCT || '');
+            });
+        } else if (sort === 'mrp-desc') {
+            jsonData.sort((a, b) => {
+                const diff = (parseFloat(b.MRP1) || 0) - (parseFloat(a.MRP1) || 0);
+                return diff !== 0 ? diff : (a.PRODUCT || '').localeCompare(b.PRODUCT || '');
+            });
+        } else if (sort === 'scheme') {
+            jsonData.sort((a, b) => {
+                if (a._hasScheme && !b._hasScheme) return -1;
+                if (!a._hasScheme && b._hasScheme) return 1;
+                return (a.PRODUCT || '').localeCompare(b.PRODUCT || '');
             });
         }
 
@@ -407,26 +564,6 @@ router.get('/products', async (req, res) => {
                 }
             }
             return null;
-        };
-
-        const schemeRouter = require('../shikhar_scheme');
-        const schemesMap = typeof schemeRouter.getActiveSchemesFromDBF === 'function' ? await schemeRouter.getActiveSchemesFromDBF().catch(() => ({})) : {};
-        
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const todayNum = parseInt('' + y + m + day, 10);
-
-        const getIntDate = (val) => {
-            if (!val) return 0;
-            if (typeof val === 'string' && val.length === 8) return parseInt(val, 10);
-            const d2 = new Date(val);
-            if (isNaN(d2.getTime())) return 0;
-            const y2 = d2.getFullYear();
-            const m2 = String(d2.getMonth() + 1).padStart(2, '0');
-            const day2 = String(d2.getDate()).padStart(2, '0');
-            return parseInt('' + y2 + m2 + day2, 10);
         };
 
         const results = jsonData.slice(startIndex, startIndex + limit).map(p => {
@@ -685,6 +822,80 @@ router.get('/admin/stats', async (req, res) => {
     } catch (err) {
         console.error('[app/admin/stats]', err);
         res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+});
+
+/**
+ * POST /api/app/admin/product-image
+ * Headers: Authorization: Bearer <token>
+ * Body: { productCode, imageUrl }
+ */
+router.post('/admin/product-image', requireAppAuth, async (req, res) => {
+    if (req.appPartyCode !== 'ADMIN' && req.appPartyCode !== '8081121020') {
+        return res.status(403).json({ error: 'Not authorized' });
+    }
+    const { productCode, imageUrl } = req.body;
+    if (!productCode || !imageUrl) return res.status(400).json({ error: 'productCode and imageUrl required' });
+    
+    let finalUrl = imageUrl;
+    if (imageUrl.startsWith('data:image')) {
+        const matches = imageUrl.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+            const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+            const data = Buffer.from(matches[2], 'base64');
+            const filename = `prod_${productCode.replace(/[^a-zA-Z0-9]/g, '')}_${Date.now()}.${ext}`;
+            const uploadDir = path.join(__dirname, '../../../public/uploads');
+            await ensureDirectoryExistence(path.join(uploadDir, filename));
+            await fs.writeFile(path.join(uploadDir, filename), data);
+            finalUrl = `/uploads/${filename}`;
+        }
+    }
+
+    try {
+        await appDb.updateProductImage(productCode, finalUrl);
+        res.json({ success: true, imageUrl: finalUrl });
+    } catch(err) {
+        console.error('[app/admin/product-image POST]', err);
+        res.status(500).json({ error: 'Failed to update image' });
+    }
+});
+
+/**
+ * GET /api/app/admin/amazon-search
+ * Query: q=search_term
+ */
+router.get('/admin/amazon-search', requireAppAuth, async (req, res) => {
+    if (req.appPartyCode !== 'ADMIN' && req.appPartyCode !== '8081121020') {
+        return res.status(403).json({ error: 'Not authorized' });
+    }
+    const q = req.query.q;
+    if (!q) return res.status(400).json({ error: 'Query parameter q required' });
+
+    try {
+        const amazonUrl = `https://www.amazon.in/s?k=${encodeURIComponent(q)}`;
+        const response = await axios.get(amazonUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+            }
+        });
+        const $ = cheerio.load(response.data);
+        const images = [];
+        $('.s-image').each((i, el) => {
+            const src = $(el).attr('src');
+            if (src && src.startsWith('https://m.media-amazon.com/images/I/')) {
+                // remove resize parameters to get high res image
+                const highRes = src.replace(/\._AC_[a-zA-Z0-9_,]*_\./, '.');
+                images.push(highRes);
+            }
+        });
+        
+        const uniqueImages = [...new Set(images)].slice(0, 10);
+        res.json({ images: uniqueImages });
+    } catch (err) {
+        console.error('[app/admin/amazon-search]', err);
+        res.status(500).json({ error: 'Failed to search amazon' });
     }
 });
 

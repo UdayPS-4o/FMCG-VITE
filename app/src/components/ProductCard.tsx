@@ -3,6 +3,7 @@ import { useStore } from '../context/StoreContext';
 import type { Product } from '../context/StoreContext';
 import { Plus, Minus, ShoppingCart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AdminImageModal } from './AdminImageModal';
 
 interface ProductCardProps {
     product: Product;
@@ -12,8 +13,12 @@ interface ProductCardProps {
     style?: React.CSSProperties;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand, onCollapse, style }) => {
-    const { addToCart, cart } = useStore();
+const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isExpanded, onExpand, onCollapse, style }) => {
+    const { addToCart, cart, language, user } = useStore();
+    const isAdmin = user?.partyCode === 'ADMIN' || user?.partyCode === '8081121020';
+    
+    const [product, setProduct] = useState(initialProduct);
+    const [showAdminImageModal, setShowAdminImageModal] = useState(false);
 
     const cartItem = cart.find(item => item.product.CODE === product.CODE);
     const [pcs, setPcs] = useState(cartItem ? cartItem.qtyPcs : 0);
@@ -91,9 +96,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
                 <motion.div layout className={isExpanded && hasMultipleUnits ? 'flex-1 min-w-0 flex flex-col' : ''}>
                     {/* Product Image */}
                     <motion.div layout className="relative mb-3">
-                        <motion.div layout className="aspect-square bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden">
+                        <motion.div layout className="aspect-square bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden relative">
                             {product.image_url ? (
                                 <img src={product.image_url} alt={product.PRODUCT} className="w-full h-full object-contain p-2" />
+                            ) : isAdmin ? (
+                                <button onClick={() => setShowAdminImageModal(true)} className="w-12 h-12 bg-white shadow-sm rounded-full flex items-center justify-center text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 transition-colors border border-gray-100">
+                                    <Plus size={24} />
+                                </button>
                             ) : (
                                 <svg className="w-12 h-12 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -130,7 +139,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
                                         : 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100'
                                     }`}
                                 >
-                                    {sch.discount}% OFF ({sch.slab1}+ pcs)
+                                    {sch.discount}% {language === 'en' ? 'OFF' : 'छूट'} ({sch.slab1}+ {language === 'en' ? 'pcs' : 'पीस'})
                                 </button>
                             );
                         })}
@@ -139,9 +148,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
 
                     {/* Price Row */}
                     <motion.div layout className={`flex items-baseline gap-1.5 ${isExpanded && hasMultipleUnits ? 'mb-0' : 'mb-3'}`}>
-                        <span className="text-sm font-bold text-gray-900">Rate: ₹{effectiveRate.toFixed(2)}</span>
+                        <span className="text-sm font-bold text-gray-900">{language === 'en' ? 'Rate:' : 'दर:'} ₹{effectiveRate.toFixed(2)}</span>
                         {mrp > effectiveRate && (
-                            <span className="text-xs text-gray-500">MRP: ₹{mrp.toFixed(2)}</span>
+                            <span className="text-xs text-gray-500">{language === 'en' ? 'MRP:' : 'एमआरपी:'} ₹{mrp.toFixed(2)}</span>
                         )}
                     </motion.div>
                 </motion.div>
@@ -161,7 +170,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
                             className="w-full h-9 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-1.5 transition-colors"
                         >
                             <ShoppingCart size={14} />
-                            <span>Add</span>
+                            <span>{language === 'en' ? 'Add' : 'जोड़ें'}</span>
                         </motion.button>
                     ) : !isExpanded && isInCart && !hasMultipleUnits ? (
                         /* Inline Quantity Control */
@@ -201,7 +210,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
                                 {boxes > 0 && pcs > 0 && ' + '}
                                 {pcs > 0 && `${pcs} ${unit1}`}
                             </span>
-                            <span className="text-xs font-semibold text-gray-700">Edit</span>
+                            <span className="text-xs font-semibold text-gray-700">{language === 'en' ? 'Edit' : 'बदलें'}</span>
                         </motion.div>
                     ) : isExpanded && hasMultipleUnits ? (
                         /* Expanded Selector - Box and PCS side by side */
@@ -216,7 +225,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
                             <div className="flex flex-col gap-2">
                                 {/* Box/Case Control */}
                                 <div className="bg-gray-50 rounded-xl p-2.5 flex flex-col items-center">
-                                    <span className="text-[10px] text-gray-500 mb-1">{unit2} (Case)</span>
+                                    <span className="text-[10px] text-gray-500 mb-1">{unit2} ({language === 'en' ? 'Case' : 'केस'})</span>
                                     <input 
                                         type="number"
                                         inputMode="numeric"
@@ -248,7 +257,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
 
                                 {/* PCS/Units Control */}
                                 <div className="bg-gray-50 rounded-xl p-2.5 flex flex-col items-center">
-                                    <span className="text-[10px] text-gray-500 mb-1">{unit1} (Units)</span>
+                                    <span className="text-[10px] text-gray-500 mb-1">{unit1} ({language === 'en' ? 'Units' : 'इकाइयां'})</span>
                                     <input 
                                         type="number"
                                         inputMode="numeric"
@@ -282,7 +291,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
                             {/* Savings & Net Price Footer */}
                             <div className="flex justify-end items-center text-xs px-1">
                                 <span className="text-gray-900 font-bold">
-                                    Net: ₹{netAmount.toFixed(2)}
+                                    {language === 'en' ? 'Net:' : 'कुल:'} ₹{netAmount.toFixed(2)}
                                 </span>
                             </div>
 
@@ -291,13 +300,20 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, isExpanded, onExpand
                                 onClick={onCollapse}
                                 className="w-full h-9 bg-gray-900 text-white rounded-xl font-medium text-sm active:bg-gray-800 transition-colors"
                             >
-                                Done
+                                {language === 'en' ? 'Done' : 'हो गया'}
                             </button>
                         </motion.div>
                     ) : null}
                     </AnimatePresence>
                 </motion.div>
             </motion.div>
+            
+            <AdminImageModal 
+                isOpen={showAdminImageModal}
+                onClose={() => setShowAdminImageModal(false)}
+                product={product}
+                onImageUpdated={(url) => setProduct({...product, image_url: url})}
+            />
         </motion.div>
     );
 };
