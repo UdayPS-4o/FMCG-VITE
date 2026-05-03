@@ -356,6 +356,9 @@ const InvoicingContent: React.FC = () => {
   useEffect(() => {
     const prefilledOrder = location.state?.prefilledOrder;
     if (prefilledOrder && partyOptions.length > 0 && pmplData.length > 0 && contextSetItems && !loading) {
+      // Force series to 'T' for app orders
+      setSeries('T');
+      
       // 1. Set Party
       console.log('Prefilled Order PartyCode:', prefilledOrder.partyCode);
       console.log('Sample Party Options:', partyOptions.slice(0, 3));

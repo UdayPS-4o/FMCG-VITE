@@ -381,8 +381,59 @@ router.get('/products', async (req, res) => {
             }
         });
 
-        // Search filter
+        // ── Fuzzy search helpers (pure JS, no extra deps) ──────────────────────
+
+        /**
+         * Levenshtein edit distance between two strings.
+         * Returns integer number of single-char edits needed.
+         */
+        const levenshtein = (a, b) => {
+            if (a === b) return 0;
+            if (a.length === 0) return b.length;
+            if (b.length === 0) return a.length;
+            const dp = Array.from({ length: a.length + 1 }, (_, i) =>
+                Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+            );
+            for (let i = 1; i <= a.length; i++) {
+                for (let j = 1; j <= b.length; j++) {
+                    dp[i][j] = a[i - 1] === b[j - 1]
+                        ? dp[i - 1][j - 1]
+                        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+                }
+            }
+            return dp[a.length][b.length];
+        };
+
+        /**
+         * Returns a similarity score 0–1 (1 = identical).
+         * Uses Levenshtein normalised by max length.
+         */
+        const strSimilarity = (a, b) => {
+            const maxLen = Math.max(a.length, b.length);
+            if (maxLen === 0) return 1;
+            return 1 - levenshtein(a, b) / maxLen;
+        };
+
+        /**
+         * Best fuzzy score of `needle` against any word-token in `haystack`.
+         * haystack is a lowercase product name string.
+         */
+        const bestTokenSimilarity = (needle, haystack) => {
+            if (!needle || !haystack) return 0;
+            // Check if needle is a prefix/substring of any token
+            const tokens = haystack.split(/[\s\-\/]+/).filter(Boolean);
+            let best = 0;
+            for (const tok of tokens) {
+                if (tok.startsWith(needle) || tok.includes(needle)) return 1; // exact hit
+                const sim = strSimilarity(needle, tok.substring(0, needle.length + 2));
+                if (sim > best) best = sim;
+            }
+            return best;
+        };
+
+        // ── Search filter ───────────────────────────────────────────────────────
         const query = req.query.q;
+        let isFuzzyResult = false;
         if (query) {
             let queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
             
@@ -467,10 +518,56 @@ router.get('/products', async (req, res) => {
                 return { ...p, _searchScore: score };
             });
             
-            // Filter and sort by score
-            jsonData = scoredData
+            // ── Primary filter: exact/substring/transliteration matches ─────────
+            const exactMatches = scoredData
                 .filter(p => p._searchScore > 0)
                 .sort((a, b) => b._searchScore - a._searchScore);
+
+            if (exactMatches.length > 0) {
+                // We have good matches — use them
+                jsonData = exactMatches;
+            } else {
+                // ── Fuzzy fallback: tolerate typos via Levenshtein ─────────────
+                isFuzzyResult = true;
+
+                // Only non-number query words participate in fuzzy matching
+                const fuzzyWords = expandedWords.filter(w => w.length >= 3 && isNaN(parseFloat(w)));
+
+                const fuzzyScored = jsonData.map(p => {
+                    const prodLower = (p.PRODUCT || '').toLowerCase();
+                    const codeLower = (p.CODE || '').toLowerCase();
+                    let fuzzyScore = 0;
+
+                    for (const word of fuzzyWords) {
+                        // Best similarity of this word token vs product name tokens
+                        const sim = bestTokenSimilarity(word, prodLower);
+                        // Threshold: at least 0.6 similarity (tolerates ~40% edits)
+                        if (sim >= 0.6) {
+                            fuzzyScore += Math.round(sim * 50);
+                        }
+                        // Also fuzzy match against product CODE
+                        const codeSim = strSimilarity(word, codeLower.substring(0, word.length + 2));
+                        if (codeSim >= 0.7) {
+                            fuzzyScore += Math.round(codeSim * 30);
+                        }
+                    }
+
+                    // Number matching still applies
+                    for (const num of numbers) {
+                        const mrp = parseFloat(p.MRP1 || '0');
+                        const rate = parseFloat(p.RATE1 || '0');
+                        if (mrp === num || rate === num) fuzzyScore += 50;
+                        else if (prodLower.includes(num.toString())) fuzzyScore += 20;
+                    }
+
+                    return { ...p, _searchScore: fuzzyScore, _fuzzy: fuzzyScore > 0 };
+                });
+
+                jsonData = fuzzyScored
+                    .filter(p => p._searchScore > 0)
+                    .sort((a, b) => b._searchScore - a._searchScore)
+                    .slice(0, 40); // cap fuzzy results to top 40
+            }
         }
 
         // Brand filter
@@ -595,7 +692,7 @@ router.get('/products', async (req, res) => {
             };
         });
 
-        res.json({ data: results, total: jsonData.length, page, limit });
+        res.json({ data: results, total: jsonData.length, page, limit, isFuzzy: isFuzzyResult });
     } catch (error) {
         console.error('[app/products]', error);
         res.status(500).json({ error: 'Failed to fetch products' });

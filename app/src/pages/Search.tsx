@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { fetchProducts } from '../lib/api';
 import ProductCard from '../components/ProductCard';
 import { useStore, type Product } from '../context/StoreContext';
-import { Search as SearchIcon, X, Loader2, ArrowLeft, Mic } from 'lucide-react';
+import { Search as SearchIcon, X, Loader2, ArrowLeft, Mic, Sparkles } from 'lucide-react';
 
 const Search = () => {
     const navigate = useNavigate();
     const [query, setQuery] = useState('');
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
+    const [isFuzzy, setIsFuzzy] = useState(false);
     const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
     const [isListening, setIsListening] = useState(false);
     const { language } = useStore();
@@ -17,6 +18,7 @@ const Search = () => {
     useEffect(() => {
         if (!query.trim()) {
             setProducts([]);
+            setIsFuzzy(false);
             return;
         }
 
@@ -25,6 +27,7 @@ const Search = () => {
             try {
                 const res = await fetchProducts(1, 50, query);
                 setProducts(res.data);
+                setIsFuzzy(!!res.isFuzzy);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -97,7 +100,7 @@ const Search = () => {
                         />
                         <div className="absolute inset-y-0 right-2 flex items-center gap-1">
                             {query && (
-                                <button 
+                                <button
                                     onClick={() => setQuery('')}
                                     className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full"
                                 >
@@ -124,7 +127,7 @@ const Search = () => {
                     <div className="grid grid-cols-2 gap-3 pb-20">
                         {products.map((product) => {
                             const isExp = !!expandedProducts[product.CODE];
-                            
+
                             return (
                                 <div key={product.CODE} className={isExp ? 'col-span-2' : ''}>
                                     <ProductCard
@@ -156,3 +159,4 @@ const Search = () => {
 };
 
 export default Search;
+
