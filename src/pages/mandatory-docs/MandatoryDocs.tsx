@@ -258,7 +258,11 @@ const MandatoryDocs: React.FC = () => {
     setIsVideoReady(false);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 4096 },
+          height: { ideal: 3072 }
+        },
         audio: false
       });
       setStream(mediaStream);
@@ -290,10 +294,12 @@ const MandatoryDocs: React.FC = () => {
     const video = videoRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    // Use full native resolution — do NOT cap width/height so document text stays readable
+    canvas.width = video.videoWidth || 1920;
+    canvas.height = video.videoHeight || 1080;
     ctx.drawImage(video, 0, 0);
-    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+    // Use maximum quality (1.0) so text on documents is not degraded by JPEG compression
+    const imageData = canvas.toDataURL('image/jpeg', 1.0);
     const { date, type, index } = activeCapture;
     
     setDocsByDay(prev => {
