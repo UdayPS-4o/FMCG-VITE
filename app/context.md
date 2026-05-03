@@ -25,8 +25,6 @@ We are building a mobile-friendly user ordering app for clients of an FMCG busin
 - **Logic**: Fetches products from `PMPL.json`. Calculates live stock from godown stock files.
 - **Pagination**: Implemented in `GET /api/app/products`.
 
-## 🚧 In Progress: Product Images
-We are currently integrating product images from the SQLite database into the PMPL-based product list.
 
 - **SQLite Schema**: `products` table in `data.sqlite` contains `basepack_code`, `itemvarient_desc`, and `image_url`.
 - **Status**: Just added `getAllProductImages` to `server/db/app/appDb.js`. This function fetches all products with images and caches them in `_imageCache`.
