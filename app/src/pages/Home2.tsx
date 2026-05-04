@@ -34,7 +34,7 @@ const MultiDrawer = ({ product, onClose, pal }: { product: Product; onClose: () 
   const [boxes, setBoxes] = useState(ci?.qtyBoxes ?? 0);
 
   const totalQty = pcs + boxes * conv;
-  const disc = product.schemes?.reduce((b, s) => totalQty >= s.slab1 && totalQty <= s.slab2 ? Math.max(b, s.discount) : b, 0) ?? 0;
+  const disc = product.schemes?.reduce((sum, s) => totalQty >= s.slab1 ? sum + s.discount : sum, 0) ?? 0;
   const net = totalQty * rate * (1 - disc / 100);
 
   const upd = (p: number, b: number) => { setPcs(p); setBoxes(b); addToCart(product, p, b); };
@@ -66,7 +66,7 @@ const MultiDrawer = ({ product, onClose, pal }: { product: Product; onClose: () 
         {product.schemes && product.schemes.length > 0 && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
             {product.schemes.map((s, i) => {
-              const active = totalQty >= s.slab1 && totalQty <= s.slab2;
+              const active = totalQty >= s.slab1;
               return (
                 <button key={i} onClick={() => upd(s.slab1 % conv, Math.floor(s.slab1 / conv))}
                   style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, border: 'none', cursor: 'pointer', background: active ? pal.acc : pal.lt, color: active ? '#fff' : pal.acc }}>
@@ -137,7 +137,7 @@ const MarketCard = ({ product, index, onOpenDrawer }: { product: Product; index:
   const isInCart = pcs > 0 || boxes > 0;
   const hasScheme = (product.schemes?.length ?? 0) > 0;
   const maxDiscount = hasScheme ? Math.max(...product.schemes!.map(s => s.discount)) : 0;
-  const currentDiscount = product.schemes?.reduce((b, s) => totalQty >= s.slab1 && totalQty <= s.slab2 ? Math.max(b, s.discount) : b, 0) ?? 0;
+  const currentDiscount = product.schemes?.reduce((sum, s) => totalQty >= s.slab1 ? sum + s.discount : sum, 0) ?? 0;
   const effectiveRate = rate * (1 - currentDiscount / 100);
 
   const upd = (p: number, b: number) => {
@@ -160,7 +160,7 @@ const MarketCard = ({ product, index, onOpenDrawer }: { product: Product; index:
         {product.schemes && product.schemes.length > 0 && (
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
             {product.schemes.map((s, i) => {
-              const active = totalQty >= s.slab1 && totalQty <= s.slab2;
+              const active = totalQty >= s.slab1;
               return (
                 <button 
                   key={i} 

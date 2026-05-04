@@ -57,7 +57,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
   const totalQty = pcs + boxes * conv;
   const hasScheme = (product.schemes?.length ?? 0) > 0;
   const maxDiscount = hasScheme ? Math.max(...product.schemes!.map(s => s.discount)) : 0;
-  const currentDiscount = product.schemes?.reduce((b, s) => totalQty >= s.slab1 && totalQty <= s.slab2 ? Math.max(b, s.discount) : b, 0) ?? 0;
+  const currentDiscount = product.schemes?.reduce((sum, s) => totalQty >= s.slab1 ? sum + s.discount : sum, 0) ?? 0;
   const effectiveRate = rate * (1 - currentDiscount / 100);
   const isInCart = pcs > 0 || boxes > 0;
 
