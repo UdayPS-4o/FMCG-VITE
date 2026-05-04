@@ -65,10 +65,10 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
   };
 
   return (
-    <motion.div style={{ borderRadius: 20, background: '#fff', boxShadow: isExpanded ? `0 4px 20px ${pal.acc}20` : '0 2px 12px rgba(0,0,0,0.06)', border: isExpanded ? `2px solid ${pal.acc}` : `1px solid ${pal.lt}`, overflow: 'hidden', position: 'relative', transition: 'box-shadow 0.2s', height: '100%', display: 'flex', flexDirection: isExpanded && hasMulti ? 'row' : 'column' }}>
+    <motion.div layout transition={{ layout: { type: 'spring', damping: 26, stiffness: 220 } }} style={{ borderRadius: 20, background: '#fff', boxShadow: isExpanded ? `0 4px 20px ${pal.acc}20` : '0 2px 12px rgba(0,0,0,0.06)', border: isExpanded ? `2px solid ${pal.acc}` : `1px solid ${pal.lt}`, overflow: 'hidden', position: 'relative', transition: 'box-shadow 0.2s', height: '100%', display: 'flex', flexDirection: isExpanded && hasMulti ? 'row' : 'column' }}>
       {hasScheme && <div style={{ position: 'absolute', top: 0, right: 0, background: pal.acc, color: '#fff', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderBottomLeftRadius: 10, zIndex: 1 }}>{maxDiscount}% OFF</div>}
       
-      <motion.div style={{ flex: isExpanded && hasMulti ? '0 0 calc(50% - 6px)' : undefined, display: 'flex', flexDirection: 'column' }}>
+      <motion.div layout style={{ flex: isExpanded && hasMulti ? '0 0 calc(50% - 6px)' : undefined, display: 'flex', flexDirection: 'column' }}>
         <div style={{ aspectRatio: '1/1', background: pal.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
           {product.image_url
             ? <img src={getImageUrl(product.image_url)} alt={product.PRODUCT} style={{ width: '72%', height: '72%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
@@ -110,10 +110,10 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
         </div>
       </motion.div>
       
-      <motion.div style={{ flex: isExpanded && hasMulti ? 1 : undefined, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: isExpanded && hasMulti ? '10px 10px 10px 0' : '0 11px 11px', overflow: 'hidden', position: 'relative' }}>
+      <motion.div style={{ flex: isExpanded && hasMulti ? 1 : undefined, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: isExpanded && hasMulti ? '10px 10px 10px 10px' : '0 11px 11px', overflow: 'hidden', position: 'relative' }}>
         <AnimatePresence mode="popLayout">
           {!isExpanded && !isInCart ? (
-            <motion.button key="add" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}
+            <motion.button key="add" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0 }}
               onClick={() => hasMulti ? toggleExpand(true) : addToCart(product, 1, 0)}
               style={{ width: '100%', height: 34, border: `2px solid ${pal.acc}`, borderRadius: 10, background: '#fff', color: pal.acc, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer' }}>
               <Plus size={14} /> {language === 'en' ? 'Add' : 'जोड़ें'}
@@ -133,7 +133,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
               <button onClick={() => upd(pcs + 1, 0)} style={{ width: 28, height: 26, background: pal.acc, border: 'none', borderRadius: 7, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={13} /></button>
             </motion.div>
           ) : isExpanded && hasMulti ? (
-            <motion.div key="expanded" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} style={{ display: 'flex', flexDirection: 'column', gap: 6, height: '100%', justifyContent: 'center' }}>
+            <motion.div key="expanded" initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }} transition={{ type: 'spring', damping: 22, stiffness: 280 }} style={{ display: 'flex', flexDirection: 'column', gap: 6, height: '100%', justifyContent: 'center' }}>
                <div style={{ background: '#f9fafb', borderRadius: 12, padding: '8px 10px', border: '1px solid #f3f4f6' }}>
                 <p style={{ margin: '0 0 5px', fontSize: 9, fontWeight: 700, color: pal.acc, textTransform: 'uppercase' }}>{u2} (Case)</p>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -348,9 +348,10 @@ const Home = () => {
             const isShifted = shiftedCodes.has(p.CODE);
             return (
               <motion.div
+              layout
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ opacity: { duration: 0.3 } }}
+                transition={{ opacity: { duration: 0.3 }, layout: { type: 'spring', damping: 26, stiffness: 220 } }}
                 key={`${p.CODE}-${isShifted ? 'shifted' : 'normal'}`} 
                 ref={i === displayProducts.length - 1 ? lastRef : undefined} 
                 style={{ gridColumn: isExpanded ? 'span 2' : 'span 1' }}
@@ -398,7 +399,7 @@ const Home = () => {
         )}
       </AnimatePresence>
 
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');@keyframes spin{to{transform:rotate(360deg)}}@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}::-webkit-scrollbar{display:none}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');@keyframes spin{to{transform:rotate(360deg)}}@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}::-webkit-scrollbar{display:none}input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}input[type=number]{-moz-appearance:textfield}`}</style>
     </div>
   );
 };
