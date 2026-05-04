@@ -481,7 +481,7 @@ const AppListings: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         {br ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {br.brand_name || br.brand_desc}
+                            {br.brand_name}
                           </span>
                         ) : '-'}
                       </td>
@@ -551,7 +551,7 @@ const AppListings: React.FC = () => {
                       className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     >
                       <option value="" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">No Brand</option>
-                      {allBrands.map(b => <option key={b.brand_code} value={b.brand_code} className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">{b.brand_name || b.brand_desc}</option>)}
+                      {allBrands.map(b => <option key={b.brand_code} value={b.brand_code} className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">{b.brand_name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -625,9 +625,8 @@ const AppListings: React.FC = () => {
           </div>
         </div>
       )}
-      )}
 
-        </>
+      </>
       )}
 
       {/* Brands Tab */}
