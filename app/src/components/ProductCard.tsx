@@ -4,6 +4,7 @@ import type { Product } from '../context/StoreContext';
 import { Plus, Minus, ShoppingCart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AdminImageModal } from './AdminImageModal';
+import { getImageUrl } from '../lib/api';
 
 interface ProductCardProps {
     product: Product;
@@ -98,7 +99,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                     <motion.div layout className="relative mb-3">
                         <motion.div layout className="aspect-square bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden relative">
                             {product.image_url ? (
-                                <img src={product.image_url} alt={product.PRODUCT} className="w-full h-full object-contain p-2" />
+                                <img src={getImageUrl(product.image_url)} alt={product.PRODUCT} className="w-full h-full object-contain p-2" />
                             ) : isAdmin ? (
                                 <button onClick={() => setShowAdminImageModal(true)} className="w-12 h-12 bg-white shadow-sm rounded-full flex items-center justify-center text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 transition-colors border border-gray-100">
                                     <Plus size={24} />

@@ -37,23 +37,23 @@ const statusConfig: Record<string, { bg: string; text: string; label: string }> 
 const Orders = () => {
     const navigate = useNavigate();
     const { language } = useStore();
-    const [activeTab, setActiveTab] = useState<'orders' | 'invoices'>('orders');
     const [orders, setOrders] = useState<Order[]>([]);
     const [invoices, setInvoices] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchData = () => {
+    const fetchData = async () => {
         setLoading(true);
-        if (activeTab === 'orders') {
-            getOrders()
-                .then(setOrders)
-                .catch(console.error)
-                .finally(() => setLoading(false));
-        } else {
-            getPastInvoices()
-                .then(setInvoices)
-                .catch(console.error)
-                .finally(() => setLoading(false));
+        try {
+            const [ordersData, invoicesData] = await Promise.all([
+                getOrders().catch(() => []),
+                getPastInvoices().catch(() => [])
+            ]);
+            setOrders(ordersData);
+            setInvoices(invoicesData);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -62,33 +62,17 @@ const Orders = () => {
         const onVisible = () => { if (document.visibilityState === 'visible') fetchData(); };
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
-    }, [activeTab]);
+    }, []);
+
+    const combinedList = [
+        ...orders.map(o => ({ ...o, _type: 'order' as const, _sortDate: new Date(o.date) })),
+        ...invoices.map(i => ({ ...i, _type: 'invoice' as const, _sortDate: new Date(i.DATE || i.date || i.DT_BILL) }))
+    ].sort((a, b) => b._sortDate.getTime() - a._sortDate.getTime());
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
-            <div className="bg-white px-4 pt-4 border-b border-gray-100 sticky top-0 z-40">
-                <h1 className="text-xl font-bold text-gray-900 mb-4">{language === 'en' ? 'My Orders' : 'मेरे ऑर्डर्स'}</h1>
-                
-                <div className="flex gap-4">
-                    <button
-                        className={`pb-3 text-sm font-semibold transition-colors relative ${activeTab === 'orders' ? 'text-indigo-600' : 'text-gray-500'}`}
-                        onClick={() => setActiveTab('orders')}
-                    >
-                        {language === 'en' ? 'App Orders' : 'ऐप ऑर्डर्स'}
-                        {activeTab === 'orders' && (
-                            <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full" />
-                        )}
-                    </button>
-                    <button
-                        className={`pb-3 text-sm font-semibold transition-colors relative ${activeTab === 'invoices' ? 'text-indigo-600' : 'text-gray-500'}`}
-                        onClick={() => setActiveTab('invoices')}
-                    >
-                        {language === 'en' ? 'Past Bills (DBF)' : 'पिछले बिल (DBF)'}
-                        {activeTab === 'invoices' && (
-                            <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full" />
-                        )}
-                    </button>
-                </div>
+            <div className="bg-white px-4 py-4 border-b border-gray-100 sticky top-0 z-40">
+                <h1 className="text-xl font-bold text-gray-900">{language === 'en' ? 'My Orders' : 'मेरे ऑर्डर्स'}</h1>
             </div>
 
             <div className="p-4 space-y-3 pb-24 flex-1">
@@ -103,19 +87,19 @@ const Orders = () => {
                             <div className="w-16 h-6 bg-gray-200 rounded-full shrink-0" />
                         </div>
                     ))
-                ) : activeTab === 'orders' ? (
-                    orders.length === 0 ? (
-                        <div className="text-center text-gray-400 py-16">
-                            <Package size={48} className="mx-auto mb-3 opacity-30" />
-                            <p className="font-medium">{language === 'en' ? 'No app orders yet' : 'अभी तक कोई ऐप ऑर्डर नहीं'}</p>
-                            <p className="text-sm mt-1">{language === 'en' ? 'Start shopping to place your first order' : 'अपना पहला ऑर्डर देने के लिए खरीदारी शुरू करें'}</p>
-                        </div>
-                    ) : (
-                        orders.map(order => {
+                ) : combinedList.length === 0 ? (
+                    <div className="text-center text-gray-400 py-16">
+                        <Package size={48} className="mx-auto mb-3 opacity-30" />
+                        <p className="font-medium">{language === 'en' ? 'No orders or bills yet' : 'अभी तक कोई ऑर्डर या बिल नहीं'}</p>
+                    </div>
+                ) : (
+                    combinedList.map((item, idx) => {
+                        if (item._type === 'order') {
+                            const order = item as Order;
                             const s = statusConfig[order.status] || statusConfig.Pending;
                             return (
                                 <div 
-                                    key={order.id} 
+                                    key={`order-${order.id}`} 
                                     onClick={() => navigate(`/order/${order.id}`)}
                                     className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer active:scale-[0.98] transition-transform"
                                 >
@@ -150,16 +134,8 @@ const Orders = () => {
                                     </div>
                                 </div>
                             );
-                        })
-                    )
-                ) : (
-                    invoices.length === 0 ? (
-                        <div className="text-center text-gray-400 py-16">
-                            <FileText size={48} className="mx-auto mb-3 opacity-30" />
-                            <p className="font-medium">{language === 'en' ? 'No past bills found' : 'कोई पिछला बिल नहीं मिला'}</p>
-                        </div>
-                    ) : (
-                        invoices.map((inv, idx) => {
+                        } else {
+                            const inv = item;
                             const rawDate = inv.DATE || inv.date || inv.DT_BILL;
                             const d = rawDate ? new Date(rawDate) : null;
                             const dateStr = d ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : (language === 'en' ? 'Unknown Date' : 'अज्ञात तिथि');
@@ -167,7 +143,7 @@ const Orders = () => {
                             
                             return (
                                 <div 
-                                    key={idx} 
+                                    key={`inv-${idx}`} 
                                     onClick={() => navigate(`/invoice/${inv.SERIES}/${inv.BILL}`)}
                                     className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer active:scale-[0.98] transition-transform"
                                 >
@@ -191,8 +167,8 @@ const Orders = () => {
                                     </div>
                                 </div>
                             );
-                        })
-                    )
+                        }
+                    })
                 )}
             </div>
         </div>
