@@ -59,7 +59,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
 
     const handleAddToCart = () => {
         if (!hasMultipleUnits) {
-            addToCart(product, 0, 1);
+            addToCart(product, 1, 0);
         } else {
             onExpand();
         }
@@ -78,8 +78,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
     const decrementBox = () => handleUpdate(pcs, Math.max(0, boxes - 1));
     const incrementPcs = () => handleUpdate(pcs + 1, boxes);
     const decrementPcs = () => handleUpdate(Math.max(0, pcs - 1), boxes);
-    const quickIncrement = () => handleUpdate(0, boxes + 1);
-    const quickDecrement = () => handleUpdate(0, Math.max(0, boxes - 1));
+    const quickIncrement = () => handleUpdate(pcs + 1, 0);
+    const quickDecrement = () => handleUpdate(Math.max(0, pcs - 1), 0);
 
     return (
         <motion.div
@@ -187,7 +187,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                             >
                                 <Minus size={14} />
                             </button>
-                            <span className="text-sm font-semibold text-gray-800">{boxes}</span>
+                            <span className="text-sm font-semibold text-gray-800">{pcs}</span>
                             <button
                                 onClick={quickIncrement}
                                 className="w-8 h-7 flex items-center justify-center bg-emerald-500 rounded-lg text-white active:bg-emerald-600 transition-colors"

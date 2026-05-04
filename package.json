@@ -9,7 +9,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview --port 5173 --host",
-    "bstart": "npm run build && npm run preview"
+    "bstart": "npm run build && npm run preview",
+    "dev:all": "npx concurrently -c \"bgBlue.bold,bgMagenta.bold,bgGreen.bold\" -n \"DASHBOARD,APP,SERVER\" --prefix \"[{name}]\" \"npm run dev\" \"cd app && npm run dev\" \"cd server && npm start\""
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

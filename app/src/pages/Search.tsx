@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchProducts } from '../lib/api';
 import ProductCard from '../components/ProductCard';
 import { useStore, type Product } from '../context/StoreContext';
-import { Search as SearchIcon, X, Loader2, ArrowLeft, Mic, Sparkles } from 'lucide-react';
+import { Search as SearchIcon, X, Loader2, ArrowLeft, Mic } from 'lucide-react';
 
 const Search = () => {
     const navigate = useNavigate();
     const [query, setQuery] = useState('');
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
-    const [isFuzzy, setIsFuzzy] = useState(false);
+    const [_isFuzzy, setIsFuzzy] = useState(false);
     const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
     const [isListening, setIsListening] = useState(false);
     const { language } = useStore();
@@ -47,7 +47,7 @@ const Search = () => {
     };
 
     const startListening = () => {
-        const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (!SpeechRecognition) {
             alert(language === 'en' ? 'Voice search is not supported in this browser.' : 'आपके ब्राउज़र में वॉइस सर्च सपोर्ट नहीं करता है।');
             return;

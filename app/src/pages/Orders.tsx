@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getOrders, getPastInvoices, getInvoiceData } from '../lib/api';
-import { Package, Calendar, ChevronDown, ChevronUp, RefreshCw, FileText, ExternalLink, ShoppingCart, Plus } from 'lucide-react';
+import { getOrders, getPastInvoices } from '../lib/api';
+import { Package, Calendar, ChevronDown, FileText } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 
 interface OrderItem {
@@ -17,17 +17,21 @@ interface OrderItem {
 interface Order {
     id: string;
     date: string;
-    status: 'Pending' | 'Approved' | 'Rejected';
+    status: 'Pending' | 'Approved' | 'Rejected' | 'Invoiced';
     items: OrderItem[];
     totalAmount: number;
     notes?: string;
     adminNote?: string;
+    invoiceBillNo?: string;
+    invoiceSeries?: string;
+    invoiceRef?: string;
 }
 
-const statusConfig = {
+const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
     Pending:  { bg: 'bg-amber-100',   text: 'text-amber-700',   label: 'Pending'  },
     Approved: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Approved' },
     Rejected: { bg: 'bg-red-100',     text: 'text-red-700',     label: 'Rejected' },
+    Invoiced: { bg: 'bg-blue-100',    text: 'text-blue-700',    label: 'Invoiced' },
 };
 
 const Orders = () => {
@@ -123,6 +127,11 @@ const Orders = () => {
                                             <div className="font-bold text-gray-900 text-sm">
                                                 {language === 'en' ? 'Order' : 'ऑर्डर'} #{order.id.slice(-6)}
                                             </div>
+                                            {order.status === 'Invoiced' && order.invoiceSeries && order.invoiceBillNo && (
+                                                <div className="text-xs font-semibold text-blue-600 mt-0.5">
+                                                    {language === 'en' ? 'Bill:' : 'बिल:'} {order.invoiceSeries}{order.invoiceBillNo}
+                                                </div>
+                                            )}
                                             <div className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                                                 <Calendar size={11} />
                                                 {new Date(order.date).toLocaleDateString('en-IN', {
@@ -132,7 +141,7 @@ const Orders = () => {
                                         </div>
                                         <div className="flex flex-col items-end gap-1 shrink-0">
                                             <span className={`px-2.5 py-1 ${s.bg} ${s.text} text-[10px] font-bold rounded-full uppercase tracking-wide`}>
-                                                {language === 'en' ? s.label : (s.label === 'Pending' ? 'लंबित' : s.label === 'Approved' ? 'स्वीकृत' : 'अस्वीकृत')}
+                                                {language === 'en' ? s.label : (s.label === 'Pending' ? 'लंबित' : s.label === 'Approved' ? 'स्वीकृत' : s.label === 'Invoiced' ? 'बिल हो गया' : 'अस्वीकृत')}
                                             </span>
                                             <div className="font-bold text-gray-900 text-sm mt-1">
                                                 ₹{order.totalAmount.toFixed(2)}

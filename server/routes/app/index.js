@@ -663,6 +663,10 @@ router.get('/products', async (req, res) => {
             return null;
         };
 
+        const productMeta = await appDb.getAllProductMeta().catch(() => []);
+        const metaMap = {};
+        productMeta.forEach(m => metaMap[m.product_code] = m);
+
         const results = jsonData.slice(startIndex, startIndex + limit).map(p => {
             let productSchemes = [];
             if (schemesMap[p.CODE]) {
@@ -677,9 +681,12 @@ router.get('/products', async (req, res) => {
                 }));
             }
 
+            const meta = metaMap[p.CODE] || {};
+            const img = meta.image_url || findImage(p.PRODUCT, p.CODE, p.IT_DESC2);
+
             return {
                 CODE: p.CODE,
-                PRODUCT: p.PRODUCT,
+                PRODUCT: meta.nickname || p.PRODUCT, // override product name with nickname if present
                 UNIT_1: p.UNIT_1,
                 UNIT_2: p.UNIT_2,
                 MULT_F: p.MULT_F,
@@ -687,8 +694,9 @@ router.get('/products', async (req, res) => {
                 MRP1: p.MRP1,
                 PACK: p.PACK,
                 stock: p.stock,
-                image_url: findImage(p.PRODUCT, p.CODE, p.IT_DESC2),
-                schemes: productSchemes
+                image_url: img,
+                schemes: productSchemes,
+                brand_code: meta.brand_code || productBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || ''
             };
         });
 
@@ -825,8 +833,43 @@ router.post('/orders', requireAppAuth, async (req, res) => {
             console.error('[app/orders POST] error calculating schemes', err);
         }
 
+        // Calculate the next T series bill number to assign a unique ID
+        let maxTBill = 0;
+        
+        const checkMax = (data, getSeries, getBillNo) => {
+            if (!Array.isArray(data)) return;
+            data.forEach(entry => {
+                const s = getSeries(entry)?.toUpperCase();
+                const b = Number(getBillNo(entry));
+                if (s === 'T' && !isNaN(b)) {
+                    if (b > maxTBill) maxTBill = b;
+                }
+            });
+        };
+
+        try {
+            const invData = await fs.readFile(path.join(__dirname, '../../db/invoicing.json'), 'utf8').then(JSON.parse);
+            checkMax(invData, e => e.series, e => e.billNo);
+        } catch (e) {}
+        
+        try {
+            const appInvData = await fs.readFile(path.join(__dirname, '../../db/approved/invoicing.json'), 'utf8').then(JSON.parse);
+            checkMax(appInvData, e => e.series, e => e.billNo);
+        } catch (e) {}
+        
+        try {
+            const billdtlData = await fs.readFile(path.join(process.env.DBF_FOLDER_PATH, 'data/json/billdtl.json'), 'utf8').then(JSON.parse);
+            checkMax(billdtlData, e => e.SERIES, e => e.BILL);
+        } catch (e) {}
+
+        checkMax(orders, e => e.series, e => e.billNo);
+
+        const nextTBillNo = maxTBill + 1;
+
         const newOrder = {
-            id: Date.now().toString(),
+            id: `T${nextTBillNo}`,
+            series: 'T',
+            billNo: nextTBillNo,
             date: new Date().toISOString(),
             status: 'Pending',
             partyCode: req.appPartyCode,
@@ -880,7 +923,7 @@ router.patch('/admin/orders/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status, note } = req.body;
 
-    const validStatuses = ['Approved', 'Rejected', 'Pending'];
+    const validStatuses = ['Approved', 'Rejected', 'Pending', 'Invoiced'];
     if (!validStatuses.includes(status)) {
         return res.status(400).json({ error: `status must be one of: ${validStatuses.join(', ')}` });
     }
@@ -903,6 +946,38 @@ router.patch('/admin/orders/:id/status', async (req, res) => {
 });
 
 /**
+ * PATCH /api/app/admin/orders/:id/mark-invoiced
+ * Body: { billNo: string, series: string }
+ * Marks an app order as Invoiced and stores the bill reference.
+ */
+router.patch('/admin/orders/:id/mark-invoiced', async (req, res) => {
+    const { id } = req.params;
+    const { billNo, series } = req.body;
+
+    if (!billNo || !series) {
+        return res.status(400).json({ error: 'billNo and series are required' });
+    }
+
+    try {
+        const orders = await readOrders();
+        const idx = orders.findIndex(o => o.id === id);
+        if (idx === -1) return res.status(404).json({ error: 'Order not found' });
+
+        orders[idx].status = 'Invoiced';
+        orders[idx].invoiceBillNo = billNo;
+        orders[idx].invoiceSeries = series;
+        orders[idx].invoiceRef = `${series}-${billNo}`;
+        orders[idx].updatedAt = new Date().toISOString();
+
+        await writeOrders(orders);
+        res.json({ success: true, order: orders[idx] });
+    } catch (err) {
+        console.error('[app/admin/orders/mark-invoiced PATCH]', err);
+        res.status(500).json({ error: 'Failed to mark order as invoiced' });
+    }
+});
+
+/**
  * GET /api/app/admin/stats
  * Returns count of pending/approved/rejected orders.
  */
@@ -914,6 +989,7 @@ router.get('/admin/stats', async (req, res) => {
             pending: orders.filter(o => o.status === 'Pending').length,
             approved: orders.filter(o => o.status === 'Approved').length,
             rejected: orders.filter(o => o.status === 'Rejected').length,
+            invoiced: orders.filter(o => o.status === 'Invoiced').length,
         };
         res.json(stats);
     } catch (err) {
@@ -949,7 +1025,7 @@ router.post('/admin/product-image', requireAppAuth, async (req, res) => {
     }
 
     try {
-        await appDb.updateProductImage(productCode, finalUrl);
+        await appDb.updateProductMetaImage(productCode, finalUrl);
         res.json({ success: true, imageUrl: finalUrl });
     } catch(err) {
         console.error('[app/admin/product-image POST]', err);
@@ -1024,6 +1100,18 @@ router.patch('/admin/users/:partyCode/reset-password', async (req, res) => {
  */
 router.get('/brands', async (req, res) => {
     try {
+        const customBrands = await appDb.getAllCustomBrands();
+        if (customBrands && customBrands.length > 0) {
+            // Map brands_custom to old structure: brand_code, brand_desc, image_url
+            const mapped = customBrands.map(b => ({
+                brand_code: b.brand_code,
+                brand_desc: b.brand_name,
+                image_url: b.image_url
+            }));
+            return res.json(mapped);
+        }
+        
+        // Fallback to old brands if no custom brands exist
         const brands = await appDb.getAllBrands();
         res.json(brands);
     } catch (err) {
@@ -1097,6 +1185,127 @@ router.delete('/admin/schemes/:id', async (req, res) => {
     } catch (err) {
         console.error('[app/admin/schemes DELETE]', err);
         res.status(500).json({ error: 'Failed to delete scheme' });
+    }
+});
+
+// ── App Listings / Products Admin ─────────────────────────────────────────────
+
+/**
+ * GET /api/app/admin/products
+ */
+router.get('/admin/products', async (req, res) => {
+    try {
+        const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
+        let jsonData;
+        try {
+            const data = await fs.readFile(jsonPath, 'utf8');
+            jsonData = JSON.parse(data);
+        } catch (e) {
+            const dbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF');
+            jsonData = await getDbfData(dbfPath);
+        }
+
+        const productMeta = await appDb.getAllProductMeta().catch(() => []);
+        const metaMap = {};
+        productMeta.forEach(m => {
+            metaMap[m.product_code] = m;
+        });
+
+        // We only show active products usually, but admin should see all
+        // Let's filter out products with empty CODE or PRODUCT just to be safe
+        jsonData = jsonData.filter(p => p.PRODUCT && p.CODE && p.PRODUCT.trim() !== '');
+
+        const results = jsonData.map(p => {
+            const meta = metaMap[p.CODE] || {};
+            return {
+                CODE: p.CODE,
+                PRODUCT: p.PRODUCT,
+                UNIT_1: p.UNIT_1,
+                UNIT_2: p.UNIT_2,
+                MULT_F: p.MULT_F,
+                RATE1: p.RATE1,
+                MRP1: p.MRP1,
+                PACK: p.PACK,
+                nickname: meta.nickname || '',
+                brand_code: meta.brand_code || '',
+                image_url: meta.image_url || ''
+            };
+        });
+
+        res.json(results);
+    } catch (err) {
+        console.error('[app/admin/products]', err);
+        res.status(500).json({ error: 'Failed to fetch products' });
+    }
+});
+
+/**
+ * PUT /api/app/admin/products/:code/meta
+ */
+router.put('/admin/products/:code/meta', async (req, res) => {
+    try {
+        const product_code = req.params.code;
+        await appDb.upsertProductMeta(product_code, req.body);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[app/admin/products/:code/meta]', err);
+        res.status(500).json({ error: 'Failed to update product meta' });
+    }
+});
+
+// ── Custom Brands Admin ───────────────────────────────────────────────────────
+
+/**
+ * GET /api/app/admin/brands_custom
+ */
+router.get('/admin/brands_custom', async (req, res) => {
+    try {
+        const brands = await appDb.getAllCustomBrands();
+        res.json(brands);
+    } catch (err) {
+        console.error('[app/admin/brands_custom]', err);
+        res.status(500).json({ error: 'Failed to fetch custom brands' });
+    }
+});
+
+/**
+ * POST /api/app/admin/brands_custom
+ */
+router.post('/admin/brands_custom', async (req, res) => {
+    try {
+        const result = await appDb.createCustomBrand(req.body);
+        res.json({ success: true, id: result.id });
+    } catch (err) {
+        console.error('[app/admin/brands_custom POST]', err);
+        res.status(500).json({ error: 'Failed to create custom brand' });
+    }
+});
+
+/**
+ * PUT /api/app/admin/brands_custom/:id
+ */
+router.put('/admin/brands_custom/:id', async (req, res) => {
+    try {
+        const success = await appDb.updateCustomBrand(req.params.id, req.body);
+        if (!success) return res.status(404).json({ error: 'Brand not found' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[app/admin/brands_custom PUT]', err);
+        res.status(500).json({ error: 'Failed to update custom brand' });
+    }
+});
+
+/**
+ * DELETE /api/app/admin/brands_custom/:id
+ */
+router.delete('/admin/brands_custom/:id', async (req, res) => {
+    try {
+        const success = await appDb.deleteCustomBrand(req.params.id);
+        if (!success) return res.status(404).json({ error: 'Brand not found' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[app/admin/brands_custom DELETE]', err);
+        res.status(500).json({ error: 'Failed to delete custom brand' });
     }
 });
 
