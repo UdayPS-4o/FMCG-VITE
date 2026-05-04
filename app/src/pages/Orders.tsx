@@ -65,8 +65,12 @@ const Orders = () => {
     }, []);
 
     const combinedList = [
-        ...orders.map(o => ({ ...o, _type: 'order' as const, _sortDate: new Date(o.date) })),
-        ...invoices.map(i => ({ ...i, _type: 'invoice' as const, _sortDate: new Date(i.DATE || i.date || i.DT_BILL) }))
+        ...orders
+            .filter(o => o != null)
+            .map(o => ({ ...o, _type: 'order' as const, _sortDate: new Date(o.date) })),
+        ...invoices
+            .filter(i => i != null)
+            .map(i => ({ ...i, _type: 'invoice' as const, _sortDate: new Date(i.DATE || i.date || i.DT_BILL) }))
     ].sort((a, b) => b._sortDate.getTime() - a._sortDate.getTime());
 
     return (
@@ -128,7 +132,7 @@ const Orders = () => {
                                                 {language === 'en' ? s.label : (s.label === 'Pending' ? 'लंबित' : s.label === 'Approved' ? 'स्वीकृत' : s.label === 'Invoiced' ? 'बिल हो गया' : 'अस्वीकृत')}
                                             </span>
                                             <div className="font-bold text-gray-900 text-sm mt-1">
-                                                ₹{order.totalAmount.toFixed(2)}
+                                                ₹{(Number(order.totalAmount) || 0).toFixed(2)}
                                             </div>
                                         </div>
                                     </div>
