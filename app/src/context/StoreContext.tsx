@@ -59,32 +59,35 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
-    const [cart, setCart] = useState<CartItem[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [language, setLanguage] = useState<'en' | 'hi'>('en');
-
-    // Hydrate from localStorage on mount
-    useEffect(() => {
-        const storedLang = localStorage.getItem('app_language');
-        if (storedLang && (storedLang === 'en' || storedLang === 'hi')) {
-            setLanguage(storedLang);
+    const [cart, setCart] = useState<CartItem[]>(() => {
+        const stored = localStorage.getItem('app_cart');
+        if (stored) {
+            try { return JSON.parse(stored); } catch { return []; }
         }
+        return [];
+    });
+    const [isLoading, setIsLoading] = useState(true);
+    const [language, setLanguage] = useState<'en' | 'hi'>(() => {
+        const stored = localStorage.getItem('app_language');
+        return (stored === 'en' || stored === 'hi') ? stored : 'en';
+    });
+
+    // Hydrate user from localStorage on mount
+    useEffect(() => {
         const storedUser = localStorage.getItem('app_user');
         if (storedUser) {
             try { setUser(JSON.parse(storedUser)); } catch { localStorage.removeItem('app_user'); }
         }
-
-        const storedCart = localStorage.getItem('app_cart');
-        if (storedCart) {
-            try { setCart(JSON.parse(storedCart)); } catch { localStorage.removeItem('app_cart'); }
-        }
-
         setIsLoading(false);
     }, []);
 
     // Persist cart changes
     useEffect(() => {
-        localStorage.setItem('app_cart', JSON.stringify(cart));
+        if (cart.length > 0) {
+            localStorage.setItem('app_cart', JSON.stringify(cart));
+        } else {
+            localStorage.removeItem('app_cart');
+        }
     }, [cart]);
 
     // Persist language changes
@@ -101,6 +104,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const logout = () => {
         localStorage.removeItem('app_token');
         localStorage.removeItem('app_user');
+        localStorage.removeItem('app_cart');
         setUser(null);
         setCart([]);
     };

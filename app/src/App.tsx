@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
+import Home2 from './pages/Home2';
 import Search from './pages/Search';
 import Cart from './pages/Cart';
 import Orders from './pages/Orders';
@@ -28,7 +29,12 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+import { usePushNotifications } from './hooks/usePushNotifications';
+
 function App() {
+  // Initialize push notifications
+  usePushNotifications();
+
   return (
     <BrowserRouter>
       <Routes>
@@ -41,6 +47,8 @@ function App() {
           </ProtectedRoute>
         }>
           <Route path="/" element={<Home />} />
+          {/* ── Home concept previews ── */}
+          <Route path="/home/2" element={<Home2 />} />
           <Route path="/search" element={<Search />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/orders" element={<Orders />} />

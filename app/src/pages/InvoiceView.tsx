@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInvoiceData } from '../lib/api';
 import { ChevronLeft, Download, ShoppingCart, Plus, Package, Check } from 'lucide-react';
-import { useStore, type Product } from '../context/StoreContext';
+import { useStore } from '../context/StoreContext';
 
 const InvoiceView = () => {
     const { series, billNo } = useParams<{ series: string; billNo: string }>();

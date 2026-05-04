@@ -542,7 +542,8 @@ async function getNextInvoiceId(req, res) {
     const invoiceFilePaths = [
       path.join(__dirname, '..', 'db', 'invoicing.json'),
       path.join(__dirname, '..', 'db', 'approved', 'invoicing.json'),
-      path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'billdtl.json')
+      path.join(process.env.DBF_FOLDER_PATH, 'data/json', 'billdtl.json'),
+      path.join(__dirname, '..', 'db', 'app', 'orders.json')
     ];
 
     // Get current file modification times
@@ -657,6 +658,25 @@ async function getNextInvoiceId(req, res) {
           seriesMap[series] = billNumber;
         }
       }
+    });
+
+    // Process app/orders.json (app orders)
+    const appOrdersFilePath = path.join(__dirname, '..', 'db', 'app', 'orders.json');
+    const appOrdersData = await fs.readFile(appOrdersFilePath, 'utf8').then(
+      (data) => JSON.parse(data),
+      (error) => {
+        if (error.code !== 'ENOENT') throw error;
+        return [];
+      }
+    );
+    appOrdersData.forEach(entry => {
+        const series = entry.series?.toUpperCase();
+        const billNumber = Number(entry.billNo);
+        if (series && !isNaN(billNumber)) {
+            if (!seriesMap[series] || billNumber > seriesMap[series]) {
+                seriesMap[series] = billNumber;
+            }
+        }
     });
     
     // Increment each max bill number by 1 to get the next bill number
