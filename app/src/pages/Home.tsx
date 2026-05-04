@@ -6,6 +6,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import logoUrl from '../../public/logo.png';
 import { fetchProducts, fetchBrands, getImageUrl } from '../lib/api';
+import { getStale, setCache } from '../lib/cache';
 import { useStore, type Product } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -195,6 +196,7 @@ const Home = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [sortOrder, setSortOrder] = useState('');
+  const [pricesStale, setPricesStale] = useState(false);
   const { cart, cartTotal, language } = useStore();
   const navigate = useNavigate();
   const loadingRef = useRef(false);
@@ -210,12 +212,45 @@ const Home = () => {
     currentBrandRef.current = activeBrand;
   }, [sortOrder, activeBrand]);
 
-  useEffect(() => { fetchBrands().then(setBrands).catch(() => {}); }, []);
+  // Brands: stale-while-revalidate (5 min TTL, always show cached, refresh in background)
+  useEffect(() => {
+    const BRAND_KEY = 'brands_v1';
+    const TTL = 5 * 60 * 1000;
+    getStale<Brand[]>(BRAND_KEY).then(cached => {
+      if (cached) setBrands(cached.data);
+      // always revalidate in background
+      fetchBrands()
+        .then(fresh => { setBrands(fresh); setCache(BRAND_KEY, fresh, TTL); })
+        .catch(() => {});
+    });
+  }, []);
+
+  const TTL_PRODUCTS = 5 * 60 * 1000;
 
   const load = useCallback(async (reset = false) => {
     if (loadingRef.current && !reset) return;
     if (!reset && !hasMore) return;
     const pg = reset ? 1 : page;
+    const cacheKey = `products_p${pg}_b${activeBrand}_s${sortOrder}`;
+
+    // On page-1 reset: try stale cache first for instant display
+    if (reset && pg === 1) {
+      const cached = await getStale<{ data: Product[]; total: number }>(cacheKey);
+      if (cached) {
+        setProducts(cached.data.data);
+        setTotalProducts(cached.data.total ?? 0);
+        setPricesStale(cached.isStale);
+        if (!cached.isStale) {
+          // Cache still fresh — no need to refetch
+          loadingRef.current = false;
+          setPage(2);
+          setHasMore(cached.data.data.length === 20);
+          return;
+        }
+        // Stale: show cached but continue to fetch fresh in background
+      }
+    }
+
     loadingRef.current = true; setLoading(true);
     try {
       const currentSort = sortOrder;
@@ -230,7 +265,10 @@ const Home = () => {
         setProducts(prev => reset ? res.data : [...prev, ...res.data.filter((p: Product) => !prev.some((e: Product) => e.CODE === p.CODE))]);
         setPage(pg + 1);
         if (reset) setHasMore(res.data.length === 20);
+        // Cache page-1 results
+        if (pg === 1) setCache(cacheKey, { data: res.data, total: res.total ?? 0 }, TTL_PRODUCTS);
       }
+      setPricesStale(false);
     } catch { /**/ } finally { loadingRef.current = false; setLoading(false); }
   }, [page, hasMore, activeBrand, sortOrder]);
 
@@ -361,7 +399,20 @@ const Home = () => {
             );
           })}
           {loading && Array.from({ length: 4 }).map((_, i) => <MarketCardSkeleton key={i} />)}
+          {!loading && displayProducts.length === 0 && (
+            <div style={{ gridColumn: 'span 2', padding: '48px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <Package size={40} color="#d1d5db" />
+              <p style={{ fontSize: 14, color: '#9ca3af', fontWeight: 600, margin: 0 }}>
+                {language === 'en' ? 'No products found' : 'कोई उत्पाद नहीं मिला'}
+              </p>
+            </div>
+          )}
         </div>
+        {pricesStale && (
+          <p style={{ fontSize: 10, color: '#f97316', fontWeight: 600, textAlign: 'center', marginTop: 6, opacity: 0.8 }}>
+            ⚡ Prices are being updated...
+          </p>
+        )}
       </div>
 
       {/* Pill Cart */}
