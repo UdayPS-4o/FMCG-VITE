@@ -8,7 +8,7 @@ import { fetchProducts, fetchBrands } from '../lib/api';
 import { useStore, type Product } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, ShoppingCart, Plus, Minus, X, Loader2, Package, ChevronRight, Sparkles, ArrowDownUp } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, X, Package, ChevronRight, Sparkles, ArrowDownUp } from 'lucide-react';
 
 interface Brand { brand_code: string; brand_desc: string; image_url: string; }
 
@@ -312,7 +312,7 @@ const Home2 = () => {
       {/* Header */}
       <div style={{ background: '#fff', padding: '10px 16px', borderBottom: '1px solid #f1f3f5', position: 'sticky', top: 0, zIndex: 50, boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h1 onClick={() => navigate('/')} style={{ fontSize: 17, fontWeight: 800, color: '#111', margin: 0, whiteSpace: 'nowrap', cursor: 'pointer' }}>FMCG 🛒</h1>
+          <img src="/logo.png" alt="App Logo" onClick={() => navigate('/')} style={{ height: 28, cursor: 'pointer', objectFit: 'contain' }} />
           <div onClick={() => navigate('/search')} style={{ flex: 1, height: 38, background: '#f3f4f6', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', color: '#9ca3af', fontSize: 12.5 }}>
             <Search size={14} /><span>{language === 'en' ? 'Search products...' : 'उत्पाद खोजें...'}</span>
           </div>

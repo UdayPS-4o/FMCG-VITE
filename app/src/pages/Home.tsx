@@ -4,11 +4,12 @@
  * Box/pcs UX: Sliding panel below card (Home3 concept)
  */
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { fetchProducts, fetchBrands } from '../lib/api';
+import { fetchProducts, fetchBrands, getImageUrl } from '../lib/api';
 import { useStore, type Product } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, ShoppingCart, Plus, Minus, X, Loader2, Package, ChevronRight, Sparkles, ArrowDownUp } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Package, ChevronRight, ArrowDownUp } from 'lucide-react';
+import { AdminImageModal } from '../components/AdminImageModal';
 
 interface Brand { brand_code: string; brand_desc: string; image_url: string; }
 
@@ -22,13 +23,17 @@ const PALS = [
 ];
 
 /* ── Card with side panel ── */
-const MarketSlidingCard = ({ product, index, isExpanded, toggleExpand }: { 
+const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleExpand }: { 
   product: Product; 
   index: number; 
   isExpanded: boolean;
   toggleExpand: (expand: boolean) => void;
 }) => {
-  const { addToCart, cart, language } = useStore();
+  const { addToCart, cart, language, user } = useStore();
+  const isAdmin = user?.partyCode === 'ADMIN' || user?.partyCode === '8081121020';
+  const [product, setProduct] = useState(initialProduct);
+  const [showAdminImageModal, setShowAdminImageModal] = useState(false);
+
   const ci = cart.find(i => i.product.CODE === product.CODE);
   const pal = PALS[index % PALS.length];
   const conv = parseFloat(product.MULT_F || '1') || 1;
@@ -59,14 +64,18 @@ const MarketSlidingCard = ({ product, index, isExpanded, toggleExpand }: {
   };
 
   return (
-    <motion.div layout style={{ borderRadius: 20, background: '#fff', boxShadow: isExpanded ? `0 4px 20px ${pal.acc}20` : '0 2px 12px rgba(0,0,0,0.06)', border: isExpanded ? `2px solid ${pal.acc}` : `1px solid ${pal.lt}`, overflow: 'hidden', position: 'relative', transition: 'box-shadow 0.2s', height: '100%', display: 'flex', flexDirection: isExpanded && hasMulti ? 'row' : 'column' }}>
+    <motion.div style={{ borderRadius: 20, background: '#fff', boxShadow: isExpanded ? `0 4px 20px ${pal.acc}20` : '0 2px 12px rgba(0,0,0,0.06)', border: isExpanded ? `2px solid ${pal.acc}` : `1px solid ${pal.lt}`, overflow: 'hidden', position: 'relative', transition: 'box-shadow 0.2s', height: '100%', display: 'flex', flexDirection: isExpanded && hasMulti ? 'row' : 'column' }}>
       {hasScheme && <div style={{ position: 'absolute', top: 0, right: 0, background: pal.acc, color: '#fff', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderBottomLeftRadius: 10, zIndex: 1 }}>{maxDiscount}% OFF</div>}
       
-      <motion.div layout style={{ flex: isExpanded && hasMulti ? '0 0 calc(50% - 6px)' : undefined, display: 'flex', flexDirection: 'column' }}>
+      <motion.div style={{ flex: isExpanded && hasMulti ? '0 0 calc(50% - 6px)' : undefined, display: 'flex', flexDirection: 'column' }}>
         <div style={{ aspectRatio: '1/1', background: pal.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
           {product.image_url
-            ? <img src={product.image_url} alt={product.PRODUCT} style={{ width: '72%', height: '72%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
-            : <div style={{ width: 48, height: 48, borderRadius: 14, background: pal.lt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Package size={22} color={pal.acc} /></div>}
+            ? <img src={getImageUrl(product.image_url)} alt={product.PRODUCT} style={{ width: '72%', height: '72%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+            : isAdmin ? (
+              <button onClick={() => setShowAdminImageModal(true)} style={{ width: 48, height: 48, background: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${pal.lt}`, cursor: 'pointer', color: pal.acc, boxShadow: `0 2px 8px ${pal.acc}20` }}>
+                <Plus size={24} />
+              </button>
+            ) : <div style={{ width: 48, height: 48, borderRadius: 14, background: pal.lt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Package size={22} color={pal.acc} /></div>}
         </div>
         
         <div style={{ padding: '9px 11px 11px', flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -100,7 +109,7 @@ const MarketSlidingCard = ({ product, index, isExpanded, toggleExpand }: {
         </div>
       </motion.div>
       
-      <motion.div layout style={{ flex: isExpanded && hasMulti ? 1 : undefined, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: isExpanded && hasMulti ? '10px 10px 10px 0' : '0 11px 11px', overflow: 'hidden', position: 'relative' }}>
+      <motion.div style={{ flex: isExpanded && hasMulti ? 1 : undefined, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: isExpanded && hasMulti ? '10px 10px 10px 0' : '0 11px 11px', overflow: 'hidden', position: 'relative' }}>
         <AnimatePresence mode="popLayout">
           {!isExpanded && !isInCart ? (
             <motion.button key="add" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}
@@ -148,6 +157,12 @@ const MarketSlidingCard = ({ product, index, isExpanded, toggleExpand }: {
           ) : null}
         </AnimatePresence>
       </motion.div>
+      <AdminImageModal 
+          isOpen={showAdminImageModal}
+          onClose={() => setShowAdminImageModal(false)}
+          product={product}
+          onImageUpdated={(url) => setProduct({...product, image_url: url})}
+      />
     </motion.div>
   );
 };
@@ -281,7 +296,7 @@ const Home = () => {
       {/* Header */}
       <div style={{ background: '#fff', padding: '10px 16px', borderBottom: '1px solid #f1f3f5', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h1 onClick={() => navigate('/')} style={{ fontSize: 17, fontWeight: 800, color: '#111', margin: 0, whiteSpace: 'nowrap', cursor: 'pointer' }}>FMCG 🛒</h1>
+          <img src="/logo.png" alt="App Logo" onClick={() => navigate('/')} style={{ height: 28, cursor: 'pointer', objectFit: 'contain' }} />
           <div onClick={() => navigate('/search')} style={{ flex: 1, height: 38, background: '#f3f4f6', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', color: '#9ca3af', fontSize: 12.5 }}>
             <Search size={14} /><span>{language === 'en' ? 'Search products...' : 'उत्पाद खोजें...'}</span>
           </div>
@@ -304,7 +319,7 @@ const Home = () => {
                 style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer' }}>
                 <div style={{ width: 50, height: 50, borderRadius: '50%', background: isActive ? pal.acc : pal.bg, border: isActive ? `2.5px solid ${pal.acc}` : '2px solid transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: isActive ? `0 4px 14px ${pal.acc}40` : 'none', transition: 'all 0.2s' }}>
                   {b.image_url
-                    ? <img src={b.image_url} alt={b.brand_desc} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={getImageUrl(b.image_url)} alt={b.brand_desc} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontSize: 9, fontWeight: 700, color: isActive ? '#fff' : pal.acc }}>{b.brand_desc.slice(0, 3)}</span>}
                 </div>
                 <span style={{ fontSize: 8.5, fontWeight: 600, color: isActive ? pal.acc : '#6b7280', maxWidth: 50, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.brand_desc || b.brand_code}</span>
@@ -331,7 +346,7 @@ const Home = () => {
             const isExpanded = expandedCodes.includes(p.CODE) && (parseFloat(p.MULT_F || '1') || 1) > 1;
             const isShifted = shiftedCodes.has(p.CODE);
             return (
-              <motion.div layout
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ opacity: { duration: 0.3 } }}

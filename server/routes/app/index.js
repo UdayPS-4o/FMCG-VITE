@@ -24,12 +24,31 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { transliterate } = require('transliteration');
 
+const jwt = require('jsonwebtoken');
 const { getDbfData, ensureDirectoryExistence } = require('../utilities');
 const appDb = require('../../db/app/appDb');
 
 const BCRYPT_ROUNDS = 10;
 const TEMP_PASSWORD = '1234';
 const SESSION_DAYS = 30;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+
+/**
+ * Admin middleware — validates the main CMS JWT token (sent by the admin dashboard).
+ * The /api/app routes are mounted BEFORE the global middleware, so admin routes
+ * need their own JWT check.
+ */
+const requireAdminJwtAuth = async (req, res, next) => {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'No token provided' });
+    try {
+        jwt.verify(token, JWT_SECRET); // throws if invalid/expired
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: 'Invalid or expired admin token' });
+    }
+};
 
 // Initialise SQLite tables on startup
 appDb.initDb().then(() => {
@@ -1003,10 +1022,7 @@ router.get('/admin/stats', async (req, res) => {
  * Headers: Authorization: Bearer <token>
  * Body: { productCode, imageUrl }
  */
-router.post('/admin/product-image', requireAppAuth, async (req, res) => {
-    if (req.appPartyCode !== 'ADMIN' && req.appPartyCode !== '8081121020') {
-        return res.status(403).json({ error: 'Not authorized' });
-    }
+router.post('/admin/product-image', requireAdminJwtAuth, async (req, res) => {
     const { productCode, imageUrl } = req.body;
     if (!productCode || !imageUrl) return res.status(400).json({ error: 'productCode and imageUrl required' });
     
@@ -1037,10 +1053,7 @@ router.post('/admin/product-image', requireAppAuth, async (req, res) => {
  * GET /api/app/admin/amazon-search
  * Query: q=search_term
  */
-router.get('/admin/amazon-search', requireAppAuth, async (req, res) => {
-    if (req.appPartyCode !== 'ADMIN' && req.appPartyCode !== '8081121020') {
-        return res.status(403).json({ error: 'Not authorized' });
-    }
+router.get('/admin/amazon-search', requireAdminJwtAuth, async (req, res) => {
     const q = req.query.q;
     if (!q) return res.status(400).json({ error: 'Query parameter q required' });
 
@@ -1096,27 +1109,155 @@ router.patch('/admin/users/:partyCode/reset-password', async (req, res) => {
 
 /**
  * GET /api/app/brands
- * Returns all brands for the frontend.
+ * Returns merged brands (brands_custom overrides brands table) for the frontend.
  */
 router.get('/brands', async (req, res) => {
     try {
-        const customBrands = await appDb.getAllCustomBrands();
-        if (customBrands && customBrands.length > 0) {
-            // Map brands_custom to old structure: brand_code, brand_desc, image_url
-            const mapped = customBrands.map(b => ({
+        const [baseBrands, customBrands] = await Promise.all([
+            appDb.getAllBrands(),
+            appDb.getAllCustomBrands()
+        ]);
+
+        // Custom brands override base brands by brand_code
+        const customMap = {};
+        customBrands.forEach(b => { customMap[b.brand_code] = b; });
+
+        // Start with base brands, map to unified structure
+        const merged = baseBrands.map(b => {
+            const custom = customMap[b.brand_code];
+            return {
                 brand_code: b.brand_code,
-                brand_desc: b.brand_name,
-                image_url: b.image_url
-            }));
-            return res.json(mapped);
-        }
-        
-        // Fallback to old brands if no custom brands exist
-        const brands = await appDb.getAllBrands();
-        res.json(brands);
+                brand_desc: custom ? custom.brand_name : b.brand_desc,
+                image_url: custom ? (custom.image_url || b.image_url) : b.image_url,
+                is_custom: !!custom
+            };
+        });
+
+        // Add custom-only brands that have no base counterpart
+        customBrands.forEach(b => {
+            if (!merged.find(m => m.brand_code === b.brand_code)) {
+                merged.push({
+                    brand_code: b.brand_code,
+                    brand_desc: b.brand_name,
+                    image_url: b.image_url,
+                    is_custom: true
+                });
+            }
+        });
+
+        merged.sort((a, b) => (a.brand_desc || '').localeCompare(b.brand_desc || ''));
+        res.json(merged);
     } catch (err) {
         console.error('[app/brands]', err);
         res.status(500).json({ error: 'Failed to fetch brands' });
+    }
+});
+
+/**
+ * GET /api/app/admin/brands
+ * Returns all brands with product counts from product_meta and base mappings.
+ */
+router.get('/admin/brands', async (req, res) => {
+    try {
+        const [baseBrands, customBrands, productsBase, productMeta] = await Promise.all([
+            appDb.getAllBrands(),
+            appDb.getAllCustomBrands(),
+            appDb.getProductBrands().catch(() => []),
+            appDb.getAllProductMeta().catch(() => [])
+        ]);
+
+        // 1. Get all products to count correctly
+        const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
+        let jsonData;
+        try {
+            const data = await fs.readFile(jsonPath, 'utf8');
+            jsonData = JSON.parse(data);
+        } catch (e) {
+            const dbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF');
+            jsonData = await getDbfData(dbfPath);
+        }
+
+        // 2. Maps for quick lookup
+        const metaMap = {};
+        productMeta.forEach(m => metaMap[m.product_code] = m);
+
+        const baseMap = {};
+        productsBase.forEach(pb => {
+            if (pb.basepack_code) baseMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+        });
+
+        // 3. Count products per brand
+        const brandProductCount = {};
+        jsonData.forEach(p => {
+            if (!p.CODE) return;
+            const meta = metaMap[p.CODE];
+            const basepack = p.IT_DESC2 ? String(p.IT_DESC2).trim() : null;
+            
+            // Custom brand code from meta overrides base brand code
+            const brandCode = (meta && meta.brand_code) || (basepack ? baseMap[basepack] : null);
+            
+            if (brandCode) {
+                brandProductCount[brandCode] = (brandProductCount[brandCode] || 0) + 1;
+            }
+        });
+
+        const customMap = {};
+        customBrands.forEach(b => { customMap[b.brand_code] = b; });
+
+        const merged = baseBrands.map(b => {
+            const custom = customMap[b.brand_code];
+            return {
+                brand_code: b.brand_code,
+                brand_name: custom ? custom.brand_name : b.brand_desc,
+                image_url: custom ? (custom.image_url || b.image_url) : b.image_url,
+                is_custom: !!custom,
+                custom_id: custom ? custom.id : null,
+                product_count: brandProductCount[b.brand_code] || 0
+            };
+        });
+
+        customBrands.forEach(b => {
+            if (!merged.find(m => m.brand_code === b.brand_code)) {
+                merged.push({
+                    brand_code: b.brand_code,
+                    brand_name: b.brand_name,
+                    image_url: b.image_url,
+                    is_custom: true,
+                    custom_id: b.id,
+                    product_count: brandProductCount[b.brand_code] || 0
+                });
+            }
+        });
+
+        merged.sort((a, b) => (a.brand_name || '').localeCompare(b.brand_name || ''));
+        res.json(merged);
+    } catch (err) {
+        console.error('[app/admin/brands]', err);
+        res.status(500).json({ error: 'Failed to fetch brands' });
+    }
+});
+
+/**
+ * POST /api/app/admin/brands
+ * Upsert a brand into brands_custom (by brand_code).
+ */
+router.post('/admin/brands', async (req, res) => {
+    try {
+        const { brand_code, brand_name, image_url } = req.body;
+        if (!brand_code || !brand_name) return res.status(400).json({ error: 'brand_code and brand_name required' });
+
+        const existing = await appDb.getAllCustomBrands();
+        const found = existing.find(b => b.brand_code === brand_code);
+
+        if (found) {
+            await appDb.updateCustomBrand(found.id, { brand_name, image_url });
+        } else {
+            await appDb.createCustomBrand({ brand_code, brand_name, image_url });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[app/admin/brands POST]', err);
+        res.status(500).json({ error: 'Failed to upsert brand' });
     }
 });
 
@@ -1205,6 +1346,37 @@ router.get('/admin/products', async (req, res) => {
             jsonData = await getDbfData(dbfPath);
         }
 
+        // Get product brands mapping
+        const productBrandsList = await appDb.getProductBrands().catch(() => []);
+        const productBrandMap = {};
+        productBrandsList.forEach(pb => {
+            if (pb.basepack_code && pb.brand_code) {
+                productBrandMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+            }
+        });
+
+        const productImages = await appDb.getAllProductImages().catch(() => []);
+        
+        const findImage = (productName, code, basepack) => {
+            if (!productName) return null;
+            const name = productName.toUpperCase().trim();
+            for (const img of productImages) {
+                if (basepack && img.basepack_code && String(img.basepack_code).trim() === String(basepack).trim()) {
+                    return img.image_url;
+                }
+                if (img.basepack_code && code && String(img.basepack_code).trim() === String(code).trim()) {
+                    return img.image_url;
+                }
+                if (!img.itemvarient_desc) continue;
+                const desc = img.itemvarient_desc.toUpperCase().trim();
+                const matchLen = Math.min(12, name.length, desc.length);
+                if (matchLen >= 8 && name.substring(0, matchLen) === desc.substring(0, matchLen)) {
+                    return img.image_url;
+                }
+            }
+            return null;
+        };
+
         const productMeta = await appDb.getAllProductMeta().catch(() => []);
         const metaMap = {};
         productMeta.forEach(m => {
@@ -1217,6 +1389,7 @@ router.get('/admin/products', async (req, res) => {
 
         const results = jsonData.map(p => {
             const meta = metaMap[p.CODE] || {};
+            const img = meta.image_url || findImage(p.PRODUCT, p.CODE, p.IT_DESC2);
             return {
                 CODE: p.CODE,
                 PRODUCT: p.PRODUCT,
@@ -1227,8 +1400,8 @@ router.get('/admin/products', async (req, res) => {
                 MRP1: p.MRP1,
                 PACK: p.PACK,
                 nickname: meta.nickname || '',
-                brand_code: meta.brand_code || '',
-                image_url: meta.image_url || ''
+                brand_code: meta.brand_code || productBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || '',
+                image_url: img || ''
             };
         });
 
