@@ -16,3 +16,4 @@ db/subscription.json
 db/subscriptions.json
 
 .env
+firebase.json

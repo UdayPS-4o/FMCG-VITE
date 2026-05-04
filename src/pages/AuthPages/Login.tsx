@@ -31,8 +31,13 @@ const Login: React.FC = () => {
           if (data.authenticated && data.user) {
             // Store user details in localStorage
             localStorage.setItem('user', JSON.stringify(data.user));
-            // If user is authenticated, redirect to /attendance
-            window.location.href = '/attendance';
+            
+            // Redirect based on role
+            if (data.user.routeAccess && data.user.routeAccess.includes('Admin')) {
+              window.location.href = '/dashboard';
+            } else {
+              window.location.href = '/attendance';
+            }
           }
         } else {
           // If token is invalid, remove it and user details
@@ -92,23 +97,29 @@ const Login: React.FC = () => {
               if (authData.authenticated && authData.user) {
                 // Store user details in localStorage
                 localStorage.setItem('user', JSON.stringify(authData.user));
+                
+                if (authData.user.routeAccess && authData.user.routeAccess.includes('Admin')) {
+                  navigate('/dashboard');
+                } else {
+                  navigate('/attendance');
+                }
               } else {
                  // Clear potentially stale user data if auth check fails after login
                  localStorage.removeItem('user');
+                 navigate('/attendance');
               }
             } else {
                // Clear potentially stale user data if auth check fails after login
                localStorage.removeItem('user');
                console.error('Failed to fetch user details after login.');
+               navigate('/attendance');
             }
           } catch (authErr) {
             // Clear potentially stale user data if auth check fails after login
             localStorage.removeItem('user');
             console.error('Error fetching user details after login:', authErr);
+            navigate('/attendance');
           }
-
-          // If login is successful, redirect to /attendance
-          navigate('/attendance');
         } else {
           setError('Login failed. Please check your credentials.');
         }

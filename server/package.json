@@ -25,6 +25,7 @@
     "express": "^4.18.3",
     "fast-csv": "^5.0.2",
     "fetch": "^1.1.0",
+    "firebase-admin": "^13.8.0",
     "html-template-02": "github:UdayPS-4o/html-template-02",
     "i": "^0.3.7",
     "io": "^1.5.0",

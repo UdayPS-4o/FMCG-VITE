@@ -22,6 +22,13 @@ Essential workflows and feature notes for maintaining the FMCG-VITE system.
 - **Dark Mode**: Modal text contrast is managed using `dark:text-white` classes in Tailwind/CSS.
 - **Auth Tokens**: The Admin Dashboard uses a JWT token stored in `localStorage` as `token`. The mobile app uses a different session mechanism.
 
-## 5. Maintenance Commands
+## 5. Recent Deployment & Build Fixes
+- **Asset Bundling (Logo)**: To ensure images like `logo.png` are available in production, **import them as modules** in the React component (e.g., `import logoUrl from '../../public/logo.png'`). Referencing them simply as `/logo.png` can fail if the server doesn't serve the `public` folder correctly at runtime.
+- **CORS Whitelist**: Production and test domains (`app.ekta-enterprises.com`, `test.ekta-enterprises.com`) must be explicitly whitelisted in `server/app.js` to allow mobile app logins.
+- **TypeScript & JSX Errors**: Be vigilant about mismatched JSX tags in large components like `AppListings.tsx`, as they can cause cryptic build failures.
+- **Brand Filtering**: Brands are now filtered at the API level (`/brands`) based on actual stock levels. If a brand disappears, check if any of its products are in-stock via the `/stock` endpoint.
+
+## 6. Maintenance Commands
 - **Seed Nicknames**: `node server/scripts/seed_nicknames.js` (Run from project root).
 - **Start All**: `npm run dev:all`.
+
