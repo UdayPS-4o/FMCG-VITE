@@ -34,6 +34,8 @@ app.use(
         'http://127.0.0.1:3000',
         'http://127.0.0.1:3001',
         'https://ekta-enterprises.com',
+        'https://app.ekta-enterprises.com',
+        'https://test.ekla-enterprises.com',
         'https://server.udayps.cfd',
         'http://localhost:5173',
         'http://127.0.0.1:5173',
