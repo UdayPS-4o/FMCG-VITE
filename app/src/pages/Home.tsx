@@ -4,8 +4,8 @@
  * Box/pcs UX: Sliding panel below card (Home3 concept)
  */
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import logoUrl from '../../public/logo.png';
 import { fetchProducts, fetchBrands, getImageUrl } from '../lib/api';
+const logoUrl = '/logo.png';
 import { getStale, setCache } from '../lib/cache';
 import { useStore, type Product } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
@@ -47,7 +47,12 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
 
   const [pcs, setPcs] = useState(ci?.qtyPcs ?? 0);
   const [boxes, setBoxes] = useState(ci?.qtyBoxes ?? 0);
-  useEffect(() => { setPcs(ci?.qtyPcs ?? 0); setBoxes(ci?.qtyBoxes ?? 0); }, [ci]);
+  useEffect(() => {
+    const nextPcs = ci?.qtyPcs ?? 0;
+    const nextBoxes = ci?.qtyBoxes ?? 0;
+    if (nextPcs !== pcs) setPcs(nextPcs);
+    if (nextBoxes !== boxes) setBoxes(nextBoxes);
+  }, [ci]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalQty = pcs + boxes * conv;
   const hasScheme = (product.schemes?.length ?? 0) > 0;
@@ -81,7 +86,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
         </div>
         
         <div style={{ padding: '9px 11px 11px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <p style={{ fontSize: 11.5, fontWeight: 600, color: '#1a1a1a', lineHeight: 1.3, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{product.PRODUCT}</p>
+          <p style={{ fontSize: 11.5, fontWeight: 600, color: '#1a1a1a', lineHeight: 1.3, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>{product.PRODUCT}</p>
           
           {product.schemes && product.schemes.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -270,7 +275,7 @@ const Home = () => {
       }
       setPricesStale(false);
     } catch { /**/ } finally { loadingRef.current = false; setLoading(false); }
-  }, [page, hasMore, activeBrand, sortOrder]);
+  }, [page, hasMore, activeBrand, sortOrder, TTL_PRODUCTS]);
 
   useEffect(() => { setProducts([]); setPage(1); setHasMore(true); setLoading(true); load(true); }, [activeBrand, sortOrder]); // eslint-disable-line
 

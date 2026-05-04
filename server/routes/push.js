@@ -4,6 +4,17 @@ const webpush = require('web-push');
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+const admin = require('firebase-admin');
+
+// Initialize Firebase Admin using the explicit file path
+try {
+    const serviceAccount = require('../db/app/firebase.json');
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+} catch (e) {
+    console.error('Firebase admin initialization failed:', e.message);
+}
 
 // Initialize SQLite Database
 const dbPath = path.join(__dirname, '../db/push_tokens.db');
@@ -74,6 +85,18 @@ router.get('/vapidPublicKey', (req, res) => {
     res.send(vapidPublicKey);
 });
 
+// Route to get all registered push tokens
+router.get('/tokens', async (req, res) => {
+    try {
+        db.all(`SELECT * FROM push_tokens ORDER BY created_at DESC`, [], (err, rows) => {
+            if (err) return res.status(500).json({ error: 'Failed to fetch tokens' });
+            res.json(rows);
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch tokens' });
+    }
+});
+
 // Subscribe route
 router.post('/subscribe', async (req, res) => {
     const { subscription, userId, type } = req.body;
@@ -124,10 +147,31 @@ router.post('/send', async (req, res) => {
                         }
                     });
             } else if (row.type === 'fcm') {
-                // Here we would use Firebase Admin SDK to send to FCM tokens
-                console.log('Would send FCM notification to token:', row.token);
-                // Currently FCM sending logic is skipped unless firebase-admin is setup.
-                return Promise.resolve();
+                // Use Firebase Admin SDK to send to FCM tokens
+                try {
+                    const messagePayload = {
+                        notification: {
+                            title: title || 'New Notification',
+                            body: message || 'You have a new notification.'
+                        },
+                        token: row.token,
+                        data: { url: url || '/' }
+                    };
+                    return admin.messaging().send(messagePayload)
+                        .then((response) => {
+                            console.log('Successfully sent FCM message:', response);
+                        })
+                        .catch(async (error) => {
+                            console.error('Error sending FCM message:', error);
+                            if (error.code === 'messaging/invalid-registration-token' ||
+                                error.code === 'messaging/registration-token-not-registered') {
+                                await removeToken(row.token);
+                            }
+                        });
+                } catch(e) {
+                    console.error('Failed to send FCM', e);
+                    return Promise.resolve();
+                }
             }
         });
 
@@ -136,6 +180,177 @@ router.post('/send', async (req, res) => {
     } catch (err) {
         console.error('Error sending notifications:', err);
         res.status(500).json({ error: 'Failed to send notifications.' });
+    }
+});
+
+// Send notification to ALL devices route
+router.post('/send-all', async (req, res) => {
+    const { title, message, url } = req.body;
+    try {
+        db.all(`SELECT * FROM push_tokens`, [], async (err, tokens) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            if (!tokens || tokens.length === 0) return res.status(404).json({ error: 'No subscriptions found' });
+
+            const notificationPayload = JSON.stringify({
+                title: title || 'New Notification',
+                message: message || 'You have a new notification.',
+                url: url || '/'
+            });
+
+            const promises = tokens.map(row => {
+                if (row.type === 'webpush') {
+                    let sub;
+                    try { sub = JSON.parse(row.token); } catch(e) { sub = row.token; }
+                    if (!vapidPublicKey) return Promise.resolve();
+                    return webpush.sendNotification(sub, notificationPayload)
+                        .catch(async err => {
+                            if (err.statusCode === 410 || err.statusCode === 404) {
+                                await removeToken(row.token);
+                            }
+                        });
+                } else if (row.type === 'fcm') {
+                    try {
+                        const messagePayload = {
+                            notification: { title: title || 'New Notification', body: message || 'You have a new notification.' },
+                            token: row.token,
+                            data: { url: url || '/' }
+                        };
+                        return admin.messaging().send(messagePayload)
+                            .catch(async (error) => {
+                                if (error.code === 'messaging/invalid-registration-token' ||
+                                    error.code === 'messaging/registration-token-not-registered') {
+                                    await removeToken(row.token);
+                                }
+                            });
+                    } catch(e) { return Promise.resolve(); }
+                }
+            });
+
+            await Promise.all(promises);
+            res.status(200).json({ message: 'Notifications sent to all devices successfully.' });
+        });
+    } catch (err) {
+        console.error('Error sending to all:', err);
+        res.status(500).json({ error: 'Failed to send notifications.' });
+    }
+});
+
+// GET advanced suite metadata
+router.get('/metadata', (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const p = path.join(__dirname, '..', 'db', 'users.json');
+        const users = JSON.parse(fs.readFileSync(p, 'utf8'));
+        res.json({ users });
+    } catch(err) {
+        res.status(500).json({ error: 'Failed to fetch metadata' });
+    }
+});
+
+// Send advanced suite notification (variables + targeting)
+router.post('/send-advanced', async (req, res) => {
+    const { title, message, url, imageUrl, targetMode, targetValue } = req.body;
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        const loadJson = (filename) => {
+            try {
+                const p = path.join(__dirname, '..', 'db', filename);
+                return JSON.parse(fs.readFileSync(p, 'utf8'));
+            } catch(e) { return null; }
+        };
+
+        const usersData = loadJson('users.json') || [];
+        const balanceDataRaw = loadJson('balance.json');
+        const balanceData = balanceDataRaw?.data || [];
+
+        db.all(`SELECT * FROM push_tokens`, [], async (err, allTokens) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            if (!allTokens || allTokens.length === 0) return res.status(404).json({ error: 'No subscriptions found' });
+
+            let targetTokens = [];
+            
+            if (targetMode === 'ALL') {
+                targetTokens = allTokens;
+            } else if (targetMode === 'USER') {
+                targetTokens = allTokens.filter(t => t.user_id === targetValue);
+            } else if (targetMode === 'SUBGROUP') {
+                const targetSubgroup = (targetValue || '').toLowerCase();
+                const matchedUsers = usersData.filter(u => u.subgroup && (u.subgroup.title || '').toLowerCase() === targetSubgroup);
+                const matchedUsernames = matchedUsers.map(u => u.username);
+                targetTokens = allTokens.filter(t => matchedUsernames.includes(t.user_id));
+            }
+
+            if (targetTokens.length === 0) {
+                return res.status(404).json({ error: `No devices matched the targeting criteria (${targetMode}: ${targetValue}).` });
+            }
+
+            const promises = targetTokens.map(row => {
+                const userObj = usersData.find(u => u.username === row.user_id) || {};
+                const name = userObj.name || row.user_id;
+                
+                const balObj = balanceData.find(b => b.partycode === row.user_id);
+                const balance = balObj ? balObj.result : "N/A";
+
+                const personalTitle = (title || 'New Notification')
+                    .replace(/\{\{name\}\}/gi, name)
+                    .replace(/\{\{balance\}\}/gi, balance);
+                    
+                const personalMessage = (message || '')
+                    .replace(/\{\{name\}\}/gi, name)
+                    .replace(/\{\{balance\}\}/gi, balance);
+
+                if (row.type === 'webpush') {
+                    let sub;
+                    try { sub = JSON.parse(row.token); } catch(e) { sub = row.token; }
+                    if (!vapidPublicKey) return Promise.resolve();
+                    
+                    const notificationPayload = JSON.stringify({
+                        title: personalTitle,
+                        message: personalMessage,
+                        url: url || '/',
+                        image: imageUrl || undefined
+                    });
+
+                    return webpush.sendNotification(sub, notificationPayload)
+                        .catch(async err => {
+                            if (err.statusCode === 410 || err.statusCode === 404) {
+                                await removeToken(row.token);
+                            }
+                        });
+                } else if (row.type === 'fcm') {
+                    try {
+                        const messagePayload = {
+                            notification: { 
+                                title: personalTitle, 
+                                body: personalMessage
+                            },
+                            token: row.token,
+                            data: { url: url || '/' }
+                        };
+                        if (imageUrl) {
+                            messagePayload.notification.imageUrl = imageUrl;
+                        }
+                        
+                        return admin.messaging().send(messagePayload)
+                            .catch(async (error) => {
+                                if (error.code === 'messaging/invalid-registration-token' ||
+                                    error.code === 'messaging/registration-token-not-registered') {
+                                    await removeToken(row.token);
+                                }
+                            });
+                    } catch(e) { return Promise.resolve(); }
+                }
+            });
+
+            await Promise.all(promises);
+            res.status(200).json({ message: `Notifications dispatched to ${targetTokens.length} devices.` });
+        });
+    } catch (err) {
+        console.error('Error sending advanced push:', err);
+        res.status(500).json({ error: 'Failed to dispatch advanced notifications.' });
     }
 });
 

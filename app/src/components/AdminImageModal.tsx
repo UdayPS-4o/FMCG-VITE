@@ -31,8 +31,7 @@ export const AdminImageModal: React.FC<AdminImageModalProps> = ({ isOpen, onClos
                 await submitImage(base64);
             };
             reader.readAsDataURL(file);
-        } catch (e) {
-            console.error(e);
+        } catch {
             setIsUploading(false);
         }
     };
@@ -56,7 +55,7 @@ export const AdminImageModal: React.FC<AdminImageModalProps> = ({ isOpen, onClos
             } else {
                 alert(data.error || 'Upload failed');
             }
-        } catch (e) {
+        } catch {
             alert('Upload failed');
         } finally {
             setIsUploading(false);
@@ -74,8 +73,8 @@ export const AdminImageModal: React.FC<AdminImageModalProps> = ({ isOpen, onClos
             if (data.images) {
                 setAmazonImages(data.images);
             }
-        } catch (e) {
-            console.error(e);
+        } catch {
+            console.error('Amazon search failed');
         } finally {
             setIsSearching(false);
         }

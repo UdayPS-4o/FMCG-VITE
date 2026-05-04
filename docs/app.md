@@ -51,14 +51,23 @@ The app features multiple "Home Page Concepts" for A/B testing or design selecti
     - Logic handles conversion factors (`MULT_F`).
     - Increments/decrements update the global `StoreContext`.
     - Supports "Quick Add" for single-unit items and "Detailed Select" for multi-unit items.
-- **Skeleton Loaders**: Integrated in `Home2` to prevent layout shift during data fetching.
+- **Premium Animations**: 
+    - **Layout Animations**: Uses `framer-motion`'s `layout` prop for smooth, spring-based grid transitions when cards expand.
+    - **Sliding Panels**: Inline Box/Pcs selection uses a sliding panel with spring physics (`damping: 22, stiffness: 280`).
+    - **Optimized Feedback**: Instant UI response for "Add" actions, bypassing fade-in delays for a snappier feel.
+- **Skeleton Loaders**: Integrated in `Home2` and `Home` to prevent layout shift during data fetching.
 
-### Native integrations
-- **`@capacitor/push-notifications`**: Handled in `App.tsx` for registering device tokens and receiving notifications.
-- **`@capacitor/status-bar`**: Configured for a native app feel.
+## 5. Performance & Caching
+- **`app/src/lib/cache.ts`**: A robust **IndexedDB-backed** caching layer.
+    - **Stale-While-Revalidate (SWR)**: Fetches from cache instantly for zero-latency UI, then revalidates in the background.
+    - **TTL Enforcement**: 5-minute cache expiry for prices and stock.
+    - **Visual Indicators**: Displays a "⚡ Prices are being updated..." status when showing stale data to ensure transparency.
+- **Asset Bundling**: Logo and other critical branding assets are imported as modules (`import logoUrl from '../../public/logo.png'`) to ensure they are hashed and correctly served by Vite in production environments.
 
-## 5. Directory Structure Summary
+## 6. Directory Structure Summary
 - **`/app/src/pages`**: Individual screens.
 - **`/app/src/components`**: Shared UI blocks.
-- **`/app/src/lib/api.ts`**: Typed API helper functions for all backend communication.
+- **`/app/src/lib/cache.ts`**: Caching utility.
+- **`/app/src/lib/api.ts`**: Typed API helper functions.
 - **`/app/android`**: Native Android project files.
+

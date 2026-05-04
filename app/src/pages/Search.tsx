@@ -10,7 +10,7 @@ const Search = () => {
     const [query, setQuery] = useState('');
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
-    const [_isFuzzy, setIsFuzzy] = useState(false);
+    const [, setIsFuzzy] = useState(false);
     const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
     const [isListening, setIsListening] = useState(false);
     const { language } = useStore();
@@ -62,12 +62,12 @@ const Search = () => {
             setIsListening(true);
         };
 
-        recognition.onresult = (event: any) => {
+        recognition.onresult = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
             const transcript = event.results[0][0].transcript;
             setQuery(transcript);
         };
 
-        recognition.onerror = (event: any) => {
+        recognition.onerror = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
             console.error('Speech recognition error', event.error);
             setIsListening(false);
         };

@@ -32,6 +32,9 @@ This document maps out the internal structure of the Node.js backend, detailing 
     - **Order Submission**:
         - Receives `qtyPcs` and `qtyBoxes` from the app.
         - **Bill Numbering**: Pre-assigns a sequential `billNo` with a `T-` prefix (e.g., `T-101`). This number is synchronized with the manual invoicing sequence to prevent collisions.
+    - **Brand Filtering**: Dynamically filters the `/brands` list based on real-time stock.
+        - Calculates current inventory using the `stock.js` engine.
+        - Brands with 0 in-stock products are hidden from the frontend to maintain a clean shopping experience.
     - **Image Scraping**: Background logic using Puppeteer to scrape product images from Amazon when local images are missing.
 
 ### Accounting Merge (`/api/merge`)
