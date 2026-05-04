@@ -787,7 +787,7 @@ router.get('/past-invoices', requireAppAuth, async (req, res) => {
 
         // Filter bills by the user's party code
         const userCode = String(req.appPartyCode).trim().toUpperCase();
-        let userInvoices = bills.filter(b => String(b.C_CODE || '').trim().toUpperCase() === userCode);
+        let userInvoices = bills.filter(b => b && String(b.C_CODE || '').trim().toUpperCase() === userCode);
 
         // Sort by date (newest first)
         userInvoices.sort((a, b) => {

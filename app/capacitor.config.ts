@@ -6,7 +6,8 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     url: 'https://app.ekta-enterprises.com',
-    cleartext: true
+    cleartext: true,
+    allowNavigation: ['app.ekta-enterprises.com', 'fmcg-vite-trsg.vercel.app']
   }
 };
 
