@@ -4,6 +4,7 @@
  * Box/pcs UX: Sliding panel below card (Home3 concept)
  */
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import logoUrl from '../../public/logo.png';
 import { fetchProducts, fetchBrands, getImageUrl } from '../lib/api';
 import { useStore, type Product } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
@@ -296,7 +297,7 @@ const Home = () => {
       {/* Header */}
       <div style={{ background: '#fff', padding: '10px 16px', borderBottom: '1px solid #f1f3f5', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/logo.png" alt="App Logo" onClick={() => navigate('/')} style={{ height: 28, cursor: 'pointer', objectFit: 'contain' }} />
+          <img src={logoUrl} alt="App Logo" onClick={() => navigate('/')} style={{ height: 28, cursor: 'pointer', objectFit: 'contain' }} />
           <div onClick={() => navigate('/search')} style={{ flex: 1, height: 38, background: '#f3f4f6', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', color: '#9ca3af', fontSize: 12.5 }}>
             <Search size={14} /><span>{language === 'en' ? 'Search products...' : 'उत्पाद खोजें...'}</span>
           </div>
