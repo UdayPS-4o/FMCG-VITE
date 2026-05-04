@@ -1113,10 +1113,45 @@ router.patch('/admin/users/:partyCode/reset-password', async (req, res) => {
  */
 router.get('/brands', async (req, res) => {
     try {
-        const [baseBrands, customBrands] = await Promise.all([
+        const [baseBrands, customBrands, productBrandsList, productMeta] = await Promise.all([
             appDb.getAllBrands(),
-            appDb.getAllCustomBrands()
+            appDb.getAllCustomBrands(),
+            appDb.getProductBrands().catch(() => []),
+            appDb.getAllProductMeta().catch(() => [])
         ]);
+
+        // Build basepack -> brand_code map
+        const bpBrandMap = {};
+        productBrandsList.forEach(pb => {
+            if (pb.basepack_code && pb.brand_code)
+                bpBrandMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+        });
+
+        // Build product_code -> brand_code map from meta overrides
+        const metaBrandMap = {};
+        productMeta.forEach(m => { if (m.brand_code) metaBrandMap[m.product_code] = m.brand_code; });
+
+        // Count in-stock products per brand (same stock check as /products endpoint)
+        const countMap = {};
+        try {
+            const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
+            const raw = await fs.readFile(jsonPath, 'utf8');
+            const pmpl = JSON.parse(raw);
+
+            const stockRouter = require('../stock');
+            const stockData = await stockRouter.calculateCurrentStock();
+
+            pmpl.forEach(p => {
+                if (!p.PRODUCT || !p.PRODUCT.trim()) return;
+                // Stock check — same logic as /products
+                const itemStock = stockData[p.CODE] || {};
+                const totalStock = Object.values(itemStock).reduce((sum, qty) => sum + (qty || 0), 0);
+                if (totalStock <= 0) return;
+
+                const brandCode = metaBrandMap[p.CODE] || bpBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || '';
+                if (brandCode) countMap[brandCode] = (countMap[brandCode] || 0) + 1;
+            });
+        } catch (e) { /* PMPL/stock unavailable — skip count filtering */ }
 
         // Custom brands override base brands by brand_code
         const customMap = {};
@@ -1129,7 +1164,8 @@ router.get('/brands', async (req, res) => {
                 brand_code: b.brand_code,
                 brand_desc: custom ? custom.brand_name : b.brand_desc,
                 image_url: custom ? (custom.image_url || b.image_url) : b.image_url,
-                is_custom: !!custom
+                is_custom: !!custom,
+                product_count: countMap[b.brand_code] || 0
             };
         });
 
@@ -1140,13 +1176,16 @@ router.get('/brands', async (req, res) => {
                     brand_code: b.brand_code,
                     brand_desc: b.brand_name,
                     image_url: b.image_url,
-                    is_custom: true
+                    is_custom: true,
+                    product_count: countMap[b.brand_code] || 0
                 });
             }
         });
 
-        merged.sort((a, b) => (a.brand_desc || '').localeCompare(b.brand_desc || ''));
-        res.json(merged);
+        // Filter out brands with no in-stock products, then sort
+        const active = merged.filter(b => b.product_count > 0);
+        active.sort((a, b) => (a.brand_desc || '').localeCompare(b.brand_desc || ''));
+        res.json(active);
     } catch (err) {
         console.error('[app/brands]', err);
         res.status(500).json({ error: 'Failed to fetch brands' });
