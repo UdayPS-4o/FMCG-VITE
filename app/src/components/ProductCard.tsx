@@ -35,7 +35,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
     let schemeDiscount = 0;
     const totalQty = pcs + (boxes * conversion);
     if (product.schemes && product.schemes.length > 0) {
-        const applicableSchemes = product.schemes.filter(sch => totalQty >= sch.slab1 && totalQty <= sch.slab2);
+        const applicableSchemes = product.schemes.filter(sch => totalQty >= sch.slab1);
         if (applicableSchemes.length > 0) {
             schemeDiscount = applicableSchemes.reduce((sum, sch) => sum + sch.discount, 0);
         }
@@ -124,7 +124,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                 {product.schemes && product.schemes.length > 0 && (
                     <div className="flex gap-1 flex-wrap mb-2">
                         {product.schemes.map((sch, i) => {
-                            const isActive = totalQty >= sch.slab1 && totalQty <= sch.slab2;
+                            const isActive = totalQty >= sch.slab1;
                             return (
                                 <button
                                     key={i}

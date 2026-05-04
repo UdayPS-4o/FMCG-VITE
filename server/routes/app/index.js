@@ -358,6 +358,99 @@ router.get('/ledger', requireAppAuth, async (req, res) => {
     }
 });
 
+// ── Products Cache (file-change based) ───────────────────────────────────────
+let _productsCache = null;
+let _productBrandMapCache = null;
+let _lastCheckTime = 0;
+let _lastFileMtimes = {};
+const MIN_CHECK_INTERVAL = 60 * 1000; // check file changes at most once per minute
+
+const _sourceFiles = () => [
+    path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'billdtl.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'purdtl.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'transfer.json'),
+    path.join(__dirname, '../../db/godown.json'),
+];
+
+async function _haveSourceFilesChanged() {
+    const files = _sourceFiles();
+    for (const file of files) {
+        try {
+            const stat = await fs.stat(file);
+            const mtime = stat.mtime.getTime();
+            if (!_lastFileMtimes[file] || _lastFileMtimes[file] !== mtime) {
+                return true;
+            }
+        } catch { return true; } // file missing = treat as changed
+    }
+    return false;
+}
+
+async function _snapshotMtimes() {
+    const files = _sourceFiles();
+    for (const file of files) {
+        try {
+            const stat = await fs.stat(file);
+            _lastFileMtimes[file] = stat.mtime.getTime();
+        } catch { /* ignore */ }
+    }
+}
+
+async function getEnrichedProducts() {
+    const now = Date.now();
+
+    // If cache exists and we checked recently, skip file-stat check entirely
+    if (_productsCache && now - _lastCheckTime < MIN_CHECK_INTERVAL) {
+        return { jsonData: _productsCache, productBrandMap: _productBrandMapCache };
+    }
+
+    // Check if source files actually changed
+    const changed = await _haveSourceFilesChanged();
+    _lastCheckTime = now;
+
+    if (_productsCache && !changed) {
+        return { jsonData: _productsCache, productBrandMap: _productBrandMapCache };
+    }
+
+    console.log(`[app/products] Source files changed, rebuilding cache...`);
+
+    const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
+    let jsonData;
+    try {
+        const data = await fs.readFile(jsonPath, 'utf8');
+        jsonData = JSON.parse(data);
+    } catch (e) {
+        const dbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF');
+        jsonData = await getDbfData(dbfPath);
+    }
+
+    const stockRouter = require('../stock');
+    const stockData = await stockRouter.calculateCurrentStock();
+
+    jsonData = jsonData.map(p => {
+        const itemStock = stockData[p.CODE] || {};
+        const totalStock = Object.values(itemStock).reduce((sum, qty) => sum + (qty || 0), 0);
+        return { ...p, stock: totalStock };
+    });
+
+    jsonData = jsonData.filter(p => p.stock > 0 && p.PRODUCT && p.PRODUCT.trim() !== '');
+
+    const productBrandsList = await appDb.getProductBrands().catch(() => []);
+    const productBrandMap = {};
+    productBrandsList.forEach(pb => {
+        if (pb.basepack_code && pb.brand_code) {
+            productBrandMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+        }
+    });
+
+    _productsCache = jsonData;
+    _productBrandMapCache = productBrandMap;
+    await _snapshotMtimes();
+    console.log(`[app/products] Cache ready: ${jsonData.length} in-stock products`);
+    return { jsonData, productBrandMap };
+}
+
 // ── Products Route ────────────────────────────────────────────────────────────
 
 /**
@@ -367,38 +460,8 @@ router.get('/ledger', requireAppAuth, async (req, res) => {
  */
 router.get('/products', async (req, res) => {
     try {
-        const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
-        let jsonData;
-        try {
-            const data = await fs.readFile(jsonPath, 'utf8');
-            jsonData = JSON.parse(data);
-        } catch (e) {
-            const dbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF');
-            jsonData = await getDbfData(dbfPath);
-        }
-
-        // Fetch current stock
-        const stockRouter = require('../stock');
-        const stockData = await stockRouter.calculateCurrentStock();
-
-        // Calculate total stock per product
-        jsonData = jsonData.map(p => {
-            const itemStock = stockData[p.CODE] || {};
-            const totalStock = Object.values(itemStock).reduce((sum, qty) => sum + (qty || 0), 0);
-            return { ...p, stock: totalStock };
-        });
-
-        // Only in-stock, non-empty products
-        jsonData = jsonData.filter(p => p.stock > 0 && p.PRODUCT && p.PRODUCT.trim() !== '');
-
-        // Get product brands mapping
-        const productBrandsList = await appDb.getProductBrands().catch(() => []);
-        const productBrandMap = {};
-        productBrandsList.forEach(pb => {
-            if (pb.basepack_code && pb.brand_code) {
-                productBrandMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
-            }
-        });
+        const { jsonData: cachedProducts, productBrandMap } = await getEnrichedProducts();
+        let jsonData = [...cachedProducts]; // shallow copy so we don't mutate cache
 
         // ── Fuzzy search helpers (pure JS, no extra deps) ──────────────────────
 
@@ -1131,23 +1194,12 @@ router.get('/brands', async (req, res) => {
         const metaBrandMap = {};
         productMeta.forEach(m => { if (m.brand_code) metaBrandMap[m.product_code] = m.brand_code; });
 
-        // Count in-stock products per brand (same stock check as /products endpoint)
+        // Count in-stock products per brand (reuse cached enriched products)
         const countMap = {};
         try {
-            const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
-            const raw = await fs.readFile(jsonPath, 'utf8');
-            const pmpl = JSON.parse(raw);
+            const { jsonData: enrichedProducts } = await getEnrichedProducts();
 
-            const stockRouter = require('../stock');
-            const stockData = await stockRouter.calculateCurrentStock();
-
-            pmpl.forEach(p => {
-                if (!p.PRODUCT || !p.PRODUCT.trim()) return;
-                // Stock check — same logic as /products
-                const itemStock = stockData[p.CODE] || {};
-                const totalStock = Object.values(itemStock).reduce((sum, qty) => sum + (qty || 0), 0);
-                if (totalStock <= 0) return;
-
+            enrichedProducts.forEach(p => {
                 const brandCode = metaBrandMap[p.CODE] || bpBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || '';
                 if (brandCode) countMap[brandCode] = (countMap[brandCode] || 0) + 1;
             });
