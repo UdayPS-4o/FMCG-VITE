@@ -272,7 +272,7 @@ const Home = () => {
     } catch { /**/ } finally { loadingRef.current = false; setLoading(false); }
   }, [page, hasMore, activeBrand, sortOrder]);
 
-  useEffect(() => { setProducts([]); setPage(1); setHasMore(true); load(true); }, [activeBrand, sortOrder]); // eslint-disable-line
+  useEffect(() => { setProducts([]); setPage(1); setHasMore(true); setLoading(true); load(true); }, [activeBrand, sortOrder]); // eslint-disable-line
 
   const lastRef = useCallback((node: HTMLDivElement | null) => {
     if (loading) return;
