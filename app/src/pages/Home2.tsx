@@ -4,8 +4,8 @@
  * bottom-sheet drawer with BOX + PCS steppers. Single-unit shows inline stepper.
  */
 import { useEffect, useState, useRef, useCallback } from 'react';
-import logoUrl from '../../public/logo.png';
 import { fetchProducts, fetchBrands } from '../lib/api';
+const logoUrl = '/logo.png';
 import { useStore, type Product } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -154,7 +154,7 @@ const MarketCard = ({ product, index, onOpenDrawer }: { product: Product; index:
         <span style={{ position: 'absolute', bottom: 5, left: 6, fontSize: 8, color: 'rgba(0,0,0,0.25)', fontFamily: 'monospace' }}>{product.CODE}</span>
       </div>
       <div style={{ padding: '9px 11px 11px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <p style={{ fontSize: 11.5, fontWeight: 600, color: '#1a1a1a', lineHeight: 1.3, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{product.PRODUCT}</p>
+        <p style={{ fontSize: 11.5, fontWeight: 600, color: '#1a1a1a', lineHeight: 1.3, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>{product.PRODUCT}</p>
         
         {/* Schemes inline */}
         {product.schemes && product.schemes.length > 0 && (
