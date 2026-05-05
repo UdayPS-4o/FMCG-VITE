@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatBubbleLeftIcon as ChatIcon, XMarkIcon as CloseIcon, MicrophoneIcon, PaperAirplaneIcon as PaperPlaneIcon, SpeakerWaveIcon as SpeakerIcon, StopIcon } from '@heroicons/react/24/solid';
-import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
 import { functionDeclarations, handleFunctionCall } from './functions';
+import constants from '../../constants';
 
 // TypeScript declarations for Speech Recognition API
 interface SpeechRecognitionResult {
@@ -139,8 +139,6 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   const criticalAbortTimeoutRef = useRef<any>(null);
   const isCriticalAbortModeRef = useRef<boolean>(false);
 
-  const GEMINI_API_KEY = 'AIzaSyBbCyGTCX1Z2oa-89BINfyNTgllhObdDWQ';
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
   // Debug: Log when props change
   useEffect(() => {
@@ -671,7 +669,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
 
 
 
-  // Function to send a message to the Gemini API with conversation history
+  // Function to send a message through the backend Gemini proxy
   const getGeminiResponse = async (userInput: string, allMessages: Message[], isVoiceMessage: boolean = false) => {
     console.log('=== SARTHAK ASSISTANT DEBUG ===');
     console.log('User input received:', userInput);
@@ -718,27 +716,20 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   }
     
     const systemPrompt = await getSystemPrompt();
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      systemInstruction: systemPrompt,
-      tools: [{ functionDeclarations }]
-    });
+    const token = localStorage.getItem('token');
 
+    // Build history for API (exclude the last user message, it is sent as "message")
     const historyForApi = allMessages
-      .slice(0, -1) // Exclude the last message, which is the current user input
+      .slice(0, -1)
       .map(msg => ({
         role: msg.isUser ? 'user' : 'model',
         parts: [{ text: msg.text }]
       }));
 
-    // The initial message from Sarthak should be ignored for the API history
+    // Drop leading model message (Sarthak's greeting)
     if (historyForApi.length > 0 && historyForApi[0].role === 'model') {
       historyForApi.shift();
     }
-
-    const chat = model.startChat({
-      history: historyForApi
-    });
 
     // Use the most current partyOptions from props
     const currentPartyOptions = props.partyOptions || [];
@@ -759,32 +750,91 @@ Available parties (${currentPartyOptions.length} total): ${currentPartyOptions.s
 Note: When user mentions a party name in Hindi (like सुरेश, राम, etc.), extract and transliterate it to English (Suresh, Ram, etc.) before calling fuzzy_search_party function.`;
     
     console.log('Party options being sent to AI:', currentPartyOptions.length);
-
     console.log('Context message being sent:', contextMessage);
     console.log('=== END SARTHAK ASSISTANT DEBUG ===');
 
-    let result = await chat.sendMessage(`${contextMessage}\n\nUser: ${userInput}`);
+    // ── First turn: send user message ──────────────────────────────────────────
+    let response = await fetch(`${constants.baseURL}/api/ai/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model: 'gemini-2.5-flash',
+        systemInstruction: systemPrompt,
+        history: historyForApi,
+        message: `${contextMessage}\n\nUser: ${userInput}`,
+        tools: [{ functionDeclarations }],
+      }),
+    });
 
-    while (true) {
-      const functionCalls = result.response.functionCalls();
-      if (!functionCalls || functionCalls.length === 0) {
-        return result.response.text();
-      }
-
-      const functionResponses: Part[] = [];
-
-      for (const functionCall of functionCalls) {
-        const functionResponse = await handleFunctionCall(functionCall, props);
-        functionResponses.push({
-          functionResponse: {
-            name: functionResponse.name,
-            response: functionResponse.response
-          }
-        });
-      }
-      
-      result = await chat.sendMessage(functionResponses);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.details || err.error || 'AI proxy request failed');
     }
+
+    let result = await response.json();
+
+    // ── Agentic loop: handle function calls ────────────────────────────────────
+    // We accumulate history so the server can see the full conversation context.
+    const runningHistory: { role: string; parts: Record<string, any>[] }[] = [
+      ...historyForApi,
+      { role: 'user', parts: [{ text: `${contextMessage}\n\nUser: ${userInput}` }] },
+    ];
+
+    while (result.functionCalls && result.functionCalls.length > 0) {
+      // Add the model's function-call turn to running history
+      runningHistory.push({
+        role: 'model',
+        parts: result.functionCalls.map((fc: any) => ({
+          functionCall: { name: fc.name, args: fc.args },
+        })),
+      });
+
+      // Execute each function call locally (UI side effects)
+      const functionResponses: { name: string; response: object }[] = [];
+      for (const fc of result.functionCalls) {
+        const funcResult = await handleFunctionCall(
+          { name: fc.name, args: fc.args },
+          props
+        );
+        functionResponses.push({ name: funcResult.name, response: funcResult.response });
+      }
+
+      // Send function results back to the server proxy
+      response = await fetch(`${constants.baseURL}/api/ai/chat/function-response`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          model: 'gemini-2.5-flash',
+          systemInstruction: systemPrompt,
+          history: runningHistory,
+          functionResponses,
+          tools: [{ functionDeclarations }],
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.details || err.error || 'AI function-response proxy failed');
+      }
+
+      result = await response.json();
+
+      // Add the function-response turn to running history
+      runningHistory.push({
+        role: 'user',
+        parts: functionResponses.map(fr => ({
+          functionResponse: { name: fr.name, response: fr.response },
+        })),
+      });
+    }
+
+    return result.text || '';
   };
 
   // Text-to-speech function
@@ -1000,6 +1050,16 @@ Note: When user mentions a party name in Hindi (like सुरेश, राम,
       }
     } catch (error) {
       console.error('Error processing message:', error);
+      
+      // Show error message in chat so the user knows something went wrong
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: `❌ **Error:** ${error instanceof Error ? error.message : 'Failed to get AI response. Please try again.'}`,
+        isUser: false,
+        timestamp: new Date(),
+        language: currentLanguage
+      };
+      setMessages(prev => [...prev, errorMessage]);
       
       // Resume listening on error if assistant is open
       setTimeout(() => {

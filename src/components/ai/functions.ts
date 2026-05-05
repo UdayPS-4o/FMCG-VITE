@@ -1,4 +1,4 @@
-import { FunctionDeclaration, SchemaType } from '@google/generative-ai';
+// Note: Using plain string types for Gemini REST API compatibility (REST API requires lowercase: "object", "string", etc.)
 import { toast } from 'react-toastify';
 
 // Define types for component props that are passed to the service
@@ -126,20 +126,20 @@ const arePhoneticallySimilar = (word1: string, word2: string): boolean => {
 };
 
 // Function Declarations
-export const updateFormFieldsDeclaration: FunctionDeclaration = {
+export const updateFormFieldsDeclaration = {
     name: 'update_form_fields',
     description: 'Updates one or more fields on the receipt form. Use this to create a new receipt, update fields, or clear fields by providing an empty string for the value.',
     parameters: {
-      type: SchemaType.OBJECT,
+      type: 'object',
       properties: {
         updates: {
-          type: SchemaType.ARRAY,
+          type: 'array',
           description: 'An array of field-value pairs to update.',
           items: {
-            type: SchemaType.OBJECT,
+            type: 'object',
             properties: {
-              field: { type: SchemaType.STRING, description: 'The name of the field to update (e.g., party, amount, series, narration, date, discount).' },
-              value: { type: SchemaType.STRING, description: 'The new value for the field.' }
+              field: { type: 'string', description: 'The name of the field to update (e.g., party, amount, series, narration, date, discount).' },
+              value: { type: 'string', description: 'The new value for the field.' }
             },
             required: ['field', 'value']
           }
@@ -149,82 +149,82 @@ export const updateFormFieldsDeclaration: FunctionDeclaration = {
     }
   };
 
-export const calculateAmountDeclaration: FunctionDeclaration = {
+export const calculateAmountDeclaration = {
   name: 'calculate_amount',
   description: 'Performs calculations on amounts (add, subtract, multiply, divide).',
   parameters: {
-    type: SchemaType.OBJECT,
+    type: 'object',
     properties: {
-      operation: { type: SchemaType.STRING, description: 'The operation to perform: add, subtract, multiply, divide.' },
-      value1: { type: SchemaType.NUMBER, description: 'First value for calculation.' },
-      value2: { type: SchemaType.NUMBER, description: 'Second value for calculation.' }
+      operation: { type: 'string', description: 'The operation to perform: add, subtract, multiply, divide.' },
+      value1: { type: 'number', description: 'First value for calculation.' },
+      value2: { type: 'number', description: 'Second value for calculation.' }
     },
     required: ['operation', 'value1', 'value2']
   }
 };
 
-export const validateReceiptDeclaration: FunctionDeclaration = {
+export const validateReceiptDeclaration = {
   name: 'validate_receipt',
   description: 'Validates the current receipt form for completeness and correctness.',
   parameters: {
-    type: SchemaType.OBJECT,
+    type: 'object',
     properties: {}
   }
 };
 
-export const getPartyBalanceDeclaration: FunctionDeclaration = {
+export const getPartyBalanceDeclaration = {
   name: 'get_party_balance',
   description: 'Gets the current balance for a specific party.',
   parameters: {
-    type: SchemaType.OBJECT,
+    type: 'object',
     properties: {
-      partyCode: { type: SchemaType.STRING, description: 'The party code to get balance for.' }
+      partyCode: { type: 'string', description: 'The party code to get balance for.' }
     },
     required: ['partyCode']
   }
 };
 
-export const splitAmountDeclaration: FunctionDeclaration = {
+export const splitAmountDeclaration = {
   name: 'split_amount',
   description: 'Splits a large amount into smaller amounts based on limits.',
   parameters: {
-    type: SchemaType.OBJECT,
+    type: 'object',
     properties: {
-      amount: { type: SchemaType.NUMBER, description: 'The amount to split.' }
+      amount: { type: 'number', description: 'The amount to split.' }
     },
     required: ['amount']
   }
 };
 
-export const getReceiptHistoryDeclaration: FunctionDeclaration = {
+export const getReceiptHistoryDeclaration = {
   name: 'get_receipt_history',
   description: 'Gets recent receipt history for reference.',
   parameters: {
-    type: SchemaType.OBJECT,
+    type: 'object',
     properties: {
-      limit: { type: SchemaType.NUMBER, description: 'Number of recent receipts to fetch (default 10).' }
+      limit: { type: 'number', description: 'Number of recent receipts to fetch (default 10).' }
     }
   }
 };
 
-export const fuzzySearchPartyDeclaration: FunctionDeclaration = {
+export const fuzzySearchPartyDeclaration = {
   name: 'fuzzy_search_party',
   description: 'Performs fuzzy search for party names and provides multiple options if more than one match is found.',
   parameters: {
-    type: SchemaType.OBJECT,
+    type: 'object',
     properties: {
-      searchTerm: { type: SchemaType.STRING, description: 'The name or partial name to search for. Party names are in English (Latin script). The user may speak the name in Hindi (Devanagari script). If the user provides a name in Hindi, transliterate it to English before calling the function. For example, if the user says "सुरेश", the searchTerm should be "Suresh".' },
-      selectOption: { type: SchemaType.NUMBER, description: 'Option number to select from search results (1-based index).' }
+      searchTerm: { type: 'string', description: 'The name or partial name to search for. Party names are in English (Latin script). The user may speak the name in Hindi (Devanagari script). If the user provides a name in Hindi, transliterate it to English before calling the function. For example, if the user says "सुरेश", the searchTerm should be "Suresh".' },
+      selectOption: { type: 'number', description: 'Option number to select from search results (1-based index).' }
     },
     required: ['searchTerm']
   }
 };
 
-export const printReceiptDeclaration: FunctionDeclaration = {
+export const printReceiptDeclaration = {
   name: 'print_receipt',
   description: 'Saves the current receipt and automatically prints it using the default printer.',
   parameters: {
-    type: SchemaType.OBJECT,
+    type: 'object',
     properties: {}
   }
 };
