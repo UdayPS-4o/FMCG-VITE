@@ -18,8 +18,9 @@ export const usePushNotifications = () => {
 
   useEffect(() => {
     if (user && fcmToken) {
+      const BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api/app', '') : 'http://localhost:8000';
       // Send token to backend
-      fetch('/api/push/subscribe', {
+      fetch(`${BASE_URL}/api/push/subscribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
