@@ -62,6 +62,7 @@ import PurchasesApproved from "./pages/approved/PurchasesApproved";
 import MandatoryDocs from './pages/mandatory-docs/MandatoryDocs';
 import AppOrders from './pages/app-orders/AppOrders';
 import AppSchemes from './pages/app-schemes/AppSchemes';
+import AppListings from './pages/app-listings/AppListings';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -391,6 +392,12 @@ const AppRoutes = () => {
         <Route path="/app-schemes" element={
           <ProtectedRoute requiredAccess="Admin">
             <AppSchemes />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/app-listings" element={
+          <ProtectedRoute requiredAccess="Admin">
+            <AppListings />
           </ProtectedRoute>
         } />
 

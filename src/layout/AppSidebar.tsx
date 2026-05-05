@@ -233,6 +233,11 @@ const fmcgItems: NavItem[] = [
     path: "/app-schemes",
   },
   {
+    icon: <BoxIcon />, // using box icon as a fallback
+    name: "App Listings",
+    path: "/app-listings",
+  },
+  {
     icon: <BellIcon />,
     name: "Push Notifications",
     path: "/push-notifications",
@@ -374,10 +379,12 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
     console.log("User routeAccess:", user.routeAccess);
     console.log("User powers:", user.powers);
 
-    // If user has Admin access, show all items
+    // If user has Admin access, show all items except attendance-related ones
     if (user.routeAccess.includes('Admin')) {
-      console.log("User has Admin access, showing all menu items");
-      setFilteredItems([...fmcgItems]);
+      console.log("User has Admin access, showing all menu items (excluding attendance)");
+      setFilteredItems(fmcgItems.filter(item =>
+        item.name !== 'Attendance' && item.name !== 'Admin Attendance'
+      ));
       return;
     }
 

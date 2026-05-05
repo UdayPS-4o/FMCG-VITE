@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchProducts } from '../lib/api';
 import ProductCard from '../components/ProductCard';
@@ -10,6 +10,7 @@ const Search = () => {
     const [query, setQuery] = useState('');
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
+    const [, setIsFuzzy] = useState(false);
     const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
     const [isListening, setIsListening] = useState(false);
     const { language } = useStore();
@@ -17,6 +18,7 @@ const Search = () => {
     useEffect(() => {
         if (!query.trim()) {
             setProducts([]);
+            setIsFuzzy(false);
             return;
         }
 
@@ -25,6 +27,7 @@ const Search = () => {
             try {
                 const res = await fetchProducts(1, 50, query);
                 setProducts(res.data);
+                setIsFuzzy(!!res.isFuzzy);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -44,7 +47,7 @@ const Search = () => {
     };
 
     const startListening = () => {
-        const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (!SpeechRecognition) {
             alert(language === 'en' ? 'Voice search is not supported in this browser.' : 'आपके ब्राउज़र में वॉइस सर्च सपोर्ट नहीं करता है।');
             return;
@@ -59,12 +62,12 @@ const Search = () => {
             setIsListening(true);
         };
 
-        recognition.onresult = (event: any) => {
+        recognition.onresult = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
             const transcript = event.results[0][0].transcript;
             setQuery(transcript);
         };
 
-        recognition.onerror = (event: any) => {
+        recognition.onerror = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
             console.error('Speech recognition error', event.error);
             setIsListening(false);
         };
@@ -97,7 +100,7 @@ const Search = () => {
                         />
                         <div className="absolute inset-y-0 right-2 flex items-center gap-1">
                             {query && (
-                                <button 
+                                <button
                                     onClick={() => setQuery('')}
                                     className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full"
                                 >
@@ -124,7 +127,7 @@ const Search = () => {
                     <div className="grid grid-cols-2 gap-3 pb-20">
                         {products.map((product) => {
                             const isExp = !!expandedProducts[product.CODE];
-                            
+
                             return (
                                 <div key={product.CODE} className={isExp ? 'col-span-2' : ''}>
                                     <ProductCard
@@ -156,3 +159,4 @@ const Search = () => {
 };
 
 export default Search;
+

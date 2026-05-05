@@ -125,3 +125,5 @@ export const placeOrder = async (orderData: {
     if (!res.ok) throw new Error(data.error || 'Failed to place order');
     return data;
 };
+
+export const getImageUrl = (url: string) => { if (!url) return url; if (url.startsWith('http') || url.startsWith('data:')) return url; const base = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api/app', '') : 'http://localhost:8000'; return base + url; };

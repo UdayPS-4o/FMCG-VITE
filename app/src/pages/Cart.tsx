@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useStore } from '../context/StoreContext';
 import { ShoppingBag, ArrowRight, Trash2, Plus, Minus } from 'lucide-react';
 import { placeOrder } from '../lib/api';

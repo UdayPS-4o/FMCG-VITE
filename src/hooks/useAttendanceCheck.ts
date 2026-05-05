@@ -31,6 +31,12 @@ const useAttendanceCheck = (): AttendanceCheckResult => {
       setIsLoading(false);
       return;
     }
+
+    if (user.routeAccess && user.routeAccess.includes('Admin')) {
+      setHasMarkedToday(true);
+      setIsLoading(false);
+      return;
+    }
     
     try {
       setIsLoading(true);

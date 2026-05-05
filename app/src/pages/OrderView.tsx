@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, Calendar, Plus, ShoppingCart, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, Package, Plus, ShoppingCart, Loader2, Check } from 'lucide-react';
 import { getOrders } from '../lib/api';
 import { useStore, type Product } from '../context/StoreContext';
 
@@ -16,16 +16,20 @@ interface OrderItem {
 interface Order {
     id: string;
     date: string;
-    status: 'Pending' | 'Approved' | 'Rejected';
+    status: 'Pending' | 'Approved' | 'Rejected' | 'Invoiced';
     totalAmount: number;
     items: OrderItem[];
     adminNote?: string;
+    invoiceBillNo?: string;
+    invoiceSeries?: string;
+    invoiceRef?: string;
 }
 
-const statusConfig = {
+const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
     Pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Processing' },
     Approved: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Confirmed' },
     Rejected: { bg: 'bg-red-100', text: 'text-red-700', label: 'Cancelled' },
+    Invoiced: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Invoiced' },
 };
 
 const OrderView = () => {
@@ -131,6 +135,22 @@ const OrderView = () => {
                 {order.adminNote && (
                     <div className="bg-yellow-50 text-yellow-800 text-sm p-4 rounded-2xl border border-yellow-100 shadow-sm">
                         <span className="font-bold">{language === 'en' ? 'Note from admin:' : 'व्यवस्थापक से नोट:'}</span> {order.adminNote}
+                    </div>
+                )}
+
+                {order.status === 'Invoiced' && order.invoiceSeries && order.invoiceBillNo && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <p className="text-xs text-blue-500 font-medium">{language === 'en' ? 'Bill Number' : 'बिल नंबर'}</p>
+                            <p className="text-lg font-black text-blue-800 leading-tight">
+                                {order.invoiceSeries}{order.invoiceBillNo}
+                            </p>
+                        </div>
                     </div>
                 )}
 
