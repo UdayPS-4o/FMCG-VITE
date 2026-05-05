@@ -282,13 +282,15 @@ const PushNotifications: React.FC = () => {
                                         list="users-list"
                                         value={targetValue}
                                         onChange={(e) => setTargetValue(e.target.value)}
-                                        placeholder="Search or Select User ID..."
+                                        placeholder="Search User ID or Name..."
                                         className="w-full p-2.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:ring-blue-500 focus:border-blue-500 transition-all"
                                     />
                                     <datalist id="users-list">
-                                        {uniqueUsers.map(uid => (
-                                            <option key={uid} value={uid}>{uid}</option>
-                                        ))}
+                                        {uniqueUsers.map(uid => {
+                                            const userObj = usersMetadata.find(u => u.username === uid);
+                                            const label = userObj ? `${userObj.name} (${uid})` : uid;
+                                            return <option key={uid} value={uid}>{label}</option>
+                                        })}
                                     </datalist>
                                 </div>
                             )}
@@ -300,7 +302,7 @@ const PushNotifications: React.FC = () => {
                                         list="subgroups-list"
                                         value={targetValue}
                                         onChange={(e) => setTargetValue(e.target.value)}
-                                        placeholder="Search or Select Subgroup..."
+                                        placeholder="Search Subgroup Code or Name..."
                                         className="w-full p-2.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:ring-blue-500 focus:border-blue-500 transition-all"
                                     />
                                     <datalist id="subgroups-list">

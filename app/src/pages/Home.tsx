@@ -202,7 +202,7 @@ const Home = () => {
   const [hasMore, setHasMore] = useState(true);
   const [sortOrder, setSortOrder] = useState('');
   const [pricesStale, setPricesStale] = useState(false);
-  const { cart, cartTotal, language } = useStore();
+  const { cart, cartTotal, language, user } = useStore();
   const navigate = useNavigate();
   const loadingRef = useRef(false);
   const observer = useRef<IntersectionObserver | null>(null);
@@ -236,7 +236,7 @@ const Home = () => {
     if (loadingRef.current && !reset) return;
     if (!reset && !hasMore) return;
     const pg = reset ? 1 : page;
-    const cacheKey = `products_p${pg}_b${activeBrand}_s${sortOrder}`;
+    const cacheKey = `products_p${pg}_b${activeBrand}_s${sortOrder}_u${!sortOrder ? (user?.partyCode || 'guest') : 'all'}`;
 
     // On page-1 reset: try stale cache first for instant display
     if (reset && pg === 1) {

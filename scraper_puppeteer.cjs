@@ -79,6 +79,70 @@ async function init() {
     await fs.ensureDir(CACHE_DIR);
 }
 
+/**
+ * Tries to extract a valid accesstoken from the live browser session cookies.
+ * If the live 'data' cookie exists and has a valid token, updates HEADERS and returns true.
+ * Otherwise, sets hardcoded COOKIES on the page and returns false.
+ */
+async function resolveSessionCookies(page) {
+    const liveCookies = await page.cookies();
+    const liveDataCookie = liveCookies.find(c => c.name === 'data');
+
+    if (liveDataCookie) {
+        try {
+            const urlDecoded = decodeURIComponent(liveDataCookie.value);
+            const jsonData = JSON.parse(Buffer.from(urlDecoded, 'base64').toString('utf8'));
+            const token = jsonData?.retailer?.accesstoken;
+            const hulid = jsonData?.retailer?.parcodehul;
+
+            if (token) {
+                console.log(`[Session] ✅ Live session found! Retailer: ${jsonData?.retailer?.name || 'unknown'}`);
+                console.log(`[Session]    Token: ${token.substring(0, 20)}...`);
+                HEADERS['accesstoken'] = token;
+                if (hulid) HEADERS['hulid'] = hulid;
+                return true; // Using live session
+            }
+        } catch (e) {
+            console.warn('[Session] ⚠ Could not decode live data cookie:', e.message);
+        }
+    }
+
+    // Live session is missing or expired → fall back to hardcoded COOKIES
+    console.log('[Session] ⚠ No valid live session found. Falling back to hardcoded cookies...');
+    const cleanCookies = COOKIES.map(c => {
+        const cookie = { ...c };
+        if (cookie.expirationDate) {
+            cookie.expires = cookie.expirationDate;
+            delete cookie.expirationDate;
+        }
+        if (cookie.sameSite === null) delete cookie.sameSite;
+        if (cookie.storeId !== undefined) delete cookie.storeId;
+        if (cookie.hostOnly !== undefined) delete cookie.hostOnly;
+        return cookie;
+    });
+    await page.setCookie(...cleanCookies);
+
+    // Also extract accesstoken from hardcoded data cookie
+    const hardcodedDataCookie = COOKIES.find(c => c.name === 'data');
+    if (hardcodedDataCookie) {
+        try {
+            const urlDecoded = decodeURIComponent(hardcodedDataCookie.value);
+            const jsonData = JSON.parse(Buffer.from(urlDecoded, 'base64').toString('utf8'));
+            const token = jsonData?.retailer?.accesstoken;
+            const hulid = jsonData?.retailer?.parcodehul;
+            if (token) {
+                HEADERS['accesstoken'] = token;
+                if (hulid) HEADERS['hulid'] = hulid;
+                console.log('[Session]    Hardcoded token applied.');
+            }
+        } catch (e) {
+            console.warn('[Session] ⚠ Could not decode hardcoded data cookie:', e.message);
+        }
+    }
+
+    return false; // Using hardcoded fallback
+}
+
 async function fetchWithPuppeteer(page, cacheKey, url, headers = {}) {
     const cachePath = path.join(CACHE_DIR, `${cacheKey}.json`);
 
@@ -126,29 +190,7 @@ async function fetchWithPuppeteer(page, cacheKey, url, headers = {}) {
 }
 
 async function getAllBrands(page) {
-    const dataCookie = COOKIES.find(c => c.name === 'data');
-    let accessToken = "";
-    if (dataCookie) {
-        try {
-            // The cookie value from user starts with eyJ and ends with %3D%3D.
-            // 1. URL Decode
-            const urlDecoded = decodeURIComponent(dataCookie.value);
-            // 2. Base64 Decode
-            const base64Decoded = Buffer.from(urlDecoded, 'base64').toString('utf8');
-            // 3. Parse JSON
-            const jsonData = JSON.parse(base64Decoded);
-
-            if (jsonData.retailer && jsonData.retailer.accesstoken) {
-                accessToken = jsonData.retailer.accesstoken;
-                console.log(`Extracted access token from cookie: ${accessToken.substring(0, 15)}...`);
-                HEADERS['accesstoken'] = accessToken;
-            } else {
-                console.warn("Cookie JSON parsed but no retailer.accesstoken found.");
-            }
-        } catch (e) {
-            console.warn("Failed to extract access token from cookie (non-fatal):", e.message);
-        }
-    }
+    // accesstoken is already set in HEADERS by resolveSessionCookies() called in main()
 
     try {
         const data = await fetchWithPuppeteer(page, 'brands_list', `${BASE_URL}/brands`);
@@ -290,8 +332,12 @@ async function main() {
         // We need to be on the allowed domain context to make requests with cookies
         await page.goto('https://shikhar.hulcd.com/', { waitUntil: 'domcontentloaded' });
 
-        // Extract token if we haven't already (double check)
-        // Sometimes the app sets it in localStorage or updates cookies on load.
+        // Resolve session: use live cookies if valid, else fall back to hardcoded COOKIES
+        const usingLiveSession = await resolveSessionCookies(page);
+        if (!usingLiveSession) {
+            // Reload the page so the newly set hardcoded cookies are active
+            await page.goto('https://shikhar.hulcd.com/', { waitUntil: 'domcontentloaded' });
+        }
 
         console.log('Fetching brands list...');
         const brands = await getAllBrands(page);

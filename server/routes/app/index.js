@@ -716,6 +716,85 @@ router.get('/products', async (req, res) => {
                 if (!a._hasScheme && b._hasScheme) return 1;
                 return (a.PRODUCT || '').localeCompare(b.PRODUCT || '');
             });
+        } else {
+            // Default sort: float products from the user's last 5 purchases to the top
+            try {
+                const auth = req.headers['authorization'] || '';
+                const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+                if (token) {
+                    const session = await appDb.getSession(token);
+                    if (session) {
+                        const partyCode = String(session.party_code).trim().toUpperCase();
+
+                        // Read billdtl.json to get recent purchase product codes
+                        const billdtlPath = path.join(process.env.DBF_FOLDER_PATH, 'data/json/billdtl.json');
+                        const billPath = path.join(process.env.DBF_FOLDER_PATH, 'data/json/bill.json');
+
+                        const [billdtlRaw, billRaw] = await Promise.all([
+                            fs.readFile(billdtlPath, 'utf8').catch(() => '[]'),
+                            fs.readFile(billPath, 'utf8').catch(() => '[]'),
+                        ]);
+
+                        const billdtl = JSON.parse(billdtlRaw);
+                        const bills = JSON.parse(billRaw);
+
+                        // Get the last 5 bills for this party, sorted newest first
+                        const userBills = bills
+                            .filter(b => b && String(b.C_CODE || '').trim().toUpperCase() === partyCode)
+                            .sort((a, b) => {
+                                const da = new Date(a.DATE || a.DT_BILL || 0);
+                                const db2 = new Date(b.DATE || b.DT_BILL || 0);
+                                return db2 - da;
+                            })
+                            .slice(0, 5);
+
+                        if (userBills.length > 0) {
+                            // Build a set of bill keys (series+bill) for the last 5
+                            const recentBillKeys = new Set(
+                                userBills.map(b => `${String(b.SERIES || '').trim().toUpperCase()}|${String(b.BILL || b.BILL_NO || '').trim()}`)
+                            );
+
+                            // Collect product codes from those bills in order (newest bill first)
+                            const recentCodes = [];
+                            const seenCodes = new Set();
+                            for (const bill of userBills) {
+                                const billKey = `${String(bill.SERIES || '').trim().toUpperCase()}|${String(bill.BILL || bill.BILL_NO || '').trim()}`;
+                                const lineItems = billdtl.filter(d => {
+                                    const dKey = `${String(d.SERIES || '').trim().toUpperCase()}|${String(d.BILL || '').trim()}`;
+                                    return dKey === billKey;
+                                });
+                                for (const item of lineItems) {
+                                    const code = String(item.CODE || item.IT_CODE || '').trim().toUpperCase();
+                                    if (code && !seenCodes.has(code)) {
+                                        seenCodes.add(code);
+                                        recentCodes.push(code);
+                                    }
+                                }
+                            }
+
+                            if (recentCodes.length > 0) {
+                                // Build a rank map (lower index = higher priority)
+                                const rankMap = {};
+                                recentCodes.forEach((code, idx) => { rankMap[code] = idx; });
+
+                                jsonData.sort((a, b) => {
+                                    const ra = rankMap[String(a.CODE || '').trim().toUpperCase()];
+                                    const rb = rankMap[String(b.CODE || '').trim().toUpperCase()];
+                                    const aIsRecent = ra !== undefined;
+                                    const bIsRecent = rb !== undefined;
+                                    if (aIsRecent && !bIsRecent) return -1;
+                                    if (!aIsRecent && bIsRecent) return 1;
+                                    if (aIsRecent && bIsRecent) return ra - rb;
+                                    return 0; // keep original order for non-recent
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // Non-critical — silently ignore, keep default order
+                console.error('[app/products] Default sort (past purchases) failed:', e.message);
+            }
         }
 
         // Pagination
@@ -1359,7 +1438,13 @@ router.post('/admin/brands', async (req, res) => {
 router.get('/schemes/active', async (req, res) => {
     try {
         const schemes = await appDb.getActiveBannerSchemes();
-        res.json(schemes);
+        const now = new Date();
+        const validSchemes = schemes.filter(scheme => {
+            if (scheme.start_date && new Date(scheme.start_date) > now) return false;
+            if (scheme.end_date && new Date(scheme.end_date) < now) return false;
+            return true;
+        });
+        res.json(validSchemes);
     } catch (err) {
         console.error('[app/schemes/active]', err);
         res.status(500).json({ error: 'Failed to fetch active schemes' });

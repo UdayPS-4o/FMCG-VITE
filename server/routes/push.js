@@ -387,8 +387,35 @@ const sendNotificationToAdmins = async (payload) => {
                         }
                     });
             } else if (row.type === 'fcm') {
-                console.log('Would send FCM notification to admin token:', row.token);
-                return Promise.resolve();
+                try {
+                    const messagePayload = {
+                        notification: {
+                            title: payload.title || 'New Notification',
+                            body: payload.message || 'You have a new notification.'
+                        },
+                        token: row.token,
+                        data: {
+                            url: payload.data && payload.data.url ? String(payload.data.url) : '/',
+                            ...(payload.data ? Object.fromEntries(
+                                Object.entries(payload.data).map(([k, v]) => [k, String(v)])
+                            ) : {})
+                        }
+                    };
+                    return admin.messaging().send(messagePayload)
+                        .then((response) => {
+                            console.log('Successfully sent FCM admin message:', response);
+                        })
+                        .catch(async (error) => {
+                            console.error('Error sending FCM admin message:', error);
+                            if (error.code === 'messaging/invalid-registration-token' ||
+                                error.code === 'messaging/registration-token-not-registered') {
+                                await removeToken(row.token);
+                            }
+                        });
+                } catch(e) {
+                    console.error('Failed to send FCM admin message', e);
+                    return Promise.resolve();
+                }
             }
         });
 
