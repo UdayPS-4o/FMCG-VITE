@@ -16,18 +16,18 @@ import { AdminImageModal } from '../components/AdminImageModal';
 interface Brand { brand_code: string; brand_desc: string; image_url: string; }
 
 const PALS = [
-  { bg:'#fff7ed', acc:'#f97316', lt:'#fef3e2' },
-  { bg:'#f0fdf4', acc:'#16a34a', lt:'#dcfce7' },
-  { bg:'#eff6ff', acc:'#2563eb', lt:'#dbeafe' },
-  { bg:'#fdf4ff', acc:'#9333ea', lt:'#f3e8ff' },
-  { bg:'#fff1f2', acc:'#e11d48', lt:'#ffe4e6' },
-  { bg:'#f0fdfa', acc:'#0d9488', lt:'#ccfbf1' },
+  { bg: '#fff7ed', acc: '#f97316', lt: '#fef3e2' },
+  { bg: '#f0fdf4', acc: '#16a34a', lt: '#dcfce7' },
+  { bg: '#eff6ff', acc: '#2563eb', lt: '#dbeafe' },
+  { bg: '#fdf4ff', acc: '#9333ea', lt: '#f3e8ff' },
+  { bg: '#fff1f2', acc: '#e11d48', lt: '#ffe4e6' },
+  { bg: '#f0fdfa', acc: '#0d9488', lt: '#ccfbf1' },
 ];
 
 /* ── Card with side panel ── */
-const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleExpand }: { 
-  product: Product; 
-  index: number; 
+const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleExpand }: {
+  product: Product;
+  index: number;
   isExpanded: boolean;
   toggleExpand: (expand: boolean) => void;
 }) => {
@@ -73,7 +73,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
   return (
     <motion.div layout transition={{ layout: { type: 'spring', damping: 26, stiffness: 220 } }} style={{ borderRadius: 20, background: '#fff', boxShadow: isExpanded ? `0 4px 20px ${pal.acc}20` : '0 2px 12px rgba(0,0,0,0.06)', border: isExpanded ? `2px solid ${pal.acc}` : `1px solid ${pal.lt}`, overflow: 'hidden', position: 'relative', transition: 'box-shadow 0.2s', height: '100%', display: 'flex', flexDirection: isExpanded && hasMulti ? 'row' : 'column' }}>
       {hasScheme && <div style={{ position: 'absolute', top: 0, right: 0, background: pal.acc, color: '#fff', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderBottomLeftRadius: 10, zIndex: 1 }}>{maxDiscount}% OFF</div>}
-      
+
       <motion.div layout style={{ flex: isExpanded && hasMulti ? '0 0 calc(50% - 6px)' : undefined, display: 'flex', flexDirection: 'column' }}>
         <div style={{ aspectRatio: '1/1', background: pal.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
           {product.image_url
@@ -84,17 +84,17 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
               </button>
             ) : <div style={{ width: 48, height: 48, borderRadius: 14, background: pal.lt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Package size={22} color={pal.acc} /></div>}
         </div>
-        
+
         <div style={{ padding: '9px 11px 11px', flex: 1, display: 'flex', flexDirection: 'column' }}>
           <p style={{ fontSize: 11.5, fontWeight: 600, color: '#1a1a1a', lineHeight: 1.3, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>{product.PRODUCT}</p>
-          
+
           {product.schemes && product.schemes.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
               {product.schemes.map((s, i) => {
                 const active = totalQty >= s.slab1;
                 return (
-                  <button 
-                    key={i} 
+                  <button
+                    key={i}
                     onClick={(e) => {
                       e.stopPropagation();
                       upd(s.slab1 % conv, Math.floor(s.slab1 / conv));
@@ -115,7 +115,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
           {isExpanded && hasMulti && <div style={{ height: 45 }} />}
         </div>
       </motion.div>
-      
+
       <motion.div style={{ flex: isExpanded && hasMulti ? 1 : undefined, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: isExpanded && hasMulti ? '10px 10px 10px 10px' : '0 11px 11px', overflow: 'hidden', position: 'relative' }}>
         <AnimatePresence mode="popLayout">
           {!isExpanded && !isInCart ? (
@@ -140,35 +140,35 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
             </motion.div>
           ) : isExpanded && hasMulti ? (
             <motion.div key="expanded" initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }} transition={{ type: 'spring', damping: 22, stiffness: 280 }} style={{ display: 'flex', flexDirection: 'column', gap: 6, height: '100%', justifyContent: 'center' }}>
-               <div style={{ background: '#f9fafb', borderRadius: 12, padding: '8px 10px', border: '1px solid #f3f4f6' }}>
+              <div style={{ background: '#f9fafb', borderRadius: 12, padding: '8px 10px', border: '1px solid #f3f4f6' }}>
                 <p style={{ margin: '0 0 5px', fontSize: 9, fontWeight: 700, color: pal.acc, textTransform: 'uppercase' }}>{u2} (Case)</p>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   {stepBtn(false, () => upd(pcs, Math.max(0, boxes - 1)), <Minus size={14} />)}
                   <input type="number" inputMode="numeric" value={boxes === 0 ? '' : boxes} placeholder="0" onChange={e => upd(pcs, Math.max(0, parseInt(e.target.value) || 0))} style={{ width: 40, textAlign: 'center', fontSize: 16, fontWeight: 800, color: '#111', border: 'none', outline: 'none', background: 'transparent' }} />
                   {stepBtn(true, () => upd(pcs, boxes + 1), <Plus size={14} />)}
                 </div>
-               </div>
-               <div style={{ background: '#f9fafb', borderRadius: 12, padding: '8px 10px', border: '1px solid #f3f4f6' }}>
+              </div>
+              <div style={{ background: '#f9fafb', borderRadius: 12, padding: '8px 10px', border: '1px solid #f3f4f6' }}>
                 <p style={{ margin: '0 0 5px', fontSize: 9, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{u1} (Loose)</p>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   {stepBtn(false, () => upd(Math.max(0, pcs - 1), boxes), <Minus size={14} />, true)}
                   <input type="number" inputMode="numeric" value={pcs === 0 ? '' : pcs} placeholder="0" onChange={e => upd(Math.max(0, parseInt(e.target.value) || 0), boxes)} style={{ width: 40, textAlign: 'center', fontSize: 16, fontWeight: 800, color: '#111', border: 'none', outline: 'none', background: 'transparent' }} />
                   {stepBtn(true, () => upd(pcs + 1, boxes), <Plus size={14} />, true)}
                 </div>
-               </div>
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                 <span style={{ fontSize: 11, fontWeight: 800, color: pal.acc }}>Net ₹{(totalQty * effectiveRate).toFixed(0)}</span>
-                 <button onClick={() => toggleExpand(false)} style={{ padding: '6px 14px', background: pal.acc, border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, fontSize: 11 }}>Done</button>
-               </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: pal.acc }}>Net ₹{(totalQty * effectiveRate).toFixed(0)}</span>
+                <button onClick={() => toggleExpand(false)} style={{ padding: '6px 14px', background: pal.acc, border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, fontSize: 11 }}>Done</button>
+              </div>
             </motion.div>
           ) : null}
         </AnimatePresence>
       </motion.div>
-      <AdminImageModal 
-          isOpen={showAdminImageModal}
-          onClose={() => setShowAdminImageModal(false)}
-          product={product}
-          onImageUpdated={(url) => setProduct({...product, image_url: url})}
+      <AdminImageModal
+        isOpen={showAdminImageModal}
+        onClose={() => setShowAdminImageModal(false)}
+        product={product}
+        onImageUpdated={(url) => setProduct({ ...product, image_url: url })}
       />
     </motion.div>
   );
@@ -201,7 +201,6 @@ const Home = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [sortOrder, setSortOrder] = useState('');
-  const [pricesStale, setPricesStale] = useState(false);
   const { cart, cartTotal, language } = useStore();
   const navigate = useNavigate();
   const loadingRef = useRef(false);
@@ -226,7 +225,7 @@ const Home = () => {
       // always revalidate in background
       fetchBrands()
         .then(fresh => { setBrands(fresh); setCache(BRAND_KEY, fresh, TTL); })
-        .catch(() => {});
+        .catch(() => { });
     });
   }, []);
 
@@ -244,7 +243,6 @@ const Home = () => {
       if (cached) {
         setProducts(cached.data.data);
         setTotalProducts(cached.data.total ?? 0);
-        setPricesStale(cached.isStale);
         if (!cached.isStale) {
           // Cache still fresh — no need to refetch
           loadingRef.current = false;
@@ -273,7 +271,6 @@ const Home = () => {
         // Cache page-1 results
         if (pg === 1) setCache(cacheKey, { data: res.data, total: res.total ?? 0 }, TTL_PRODUCTS);
       }
-      setPricesStale(false);
     } catch { /**/ } finally { loadingRef.current = false; setLoading(false); }
   }, [page, hasMore, activeBrand, sortOrder, TTL_PRODUCTS]);
 
@@ -302,7 +299,7 @@ const Home = () => {
       const right = products[i + 1];
 
       const leftExp = expandedCodes.includes(left.CODE) && (parseFloat(left.MULT_F || '1') || 1) > 1;
-      
+
       if (!right) {
         normal.push(left);
         continue;
@@ -378,10 +375,10 @@ const Home = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: 14, fontWeight: 800, color: '#111', margin: 0 }}>All Products <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500 }}>{totalProducts || ''}</span></h2>
           <button onClick={() => setShowSort(true)} style={{ background: '#fff', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-             <ArrowDownUp size={12} color="#4b5563" />
-             <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>
-                {sortOrder ? sortOptions.find(o => o.value === sortOrder)?.label : (language === 'en' ? 'Sort' : 'क्रमबद्ध करें')}
-             </span>
+            <ArrowDownUp size={12} color="#4b5563" />
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>
+              {sortOrder ? sortOptions.find(o => o.value === sortOrder)?.label : (language === 'en' ? 'Sort' : 'क्रमबद्ध करें')}
+            </span>
           </button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -391,12 +388,12 @@ const Home = () => {
             const isShifted = shiftedCodes.has(p.CODE);
             return (
               <motion.div
-              layout
+                layout
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ opacity: { duration: 0.3 }, layout: { type: 'spring', damping: 26, stiffness: 220 } }}
-                key={`${p.CODE}-${isShifted ? 'shifted' : 'normal'}`} 
-                ref={i === displayProducts.length - 1 ? lastRef : undefined} 
+                key={`${p.CODE}-${isShifted ? 'shifted' : 'normal'}`}
+                ref={i === displayProducts.length - 1 ? lastRef : undefined}
                 style={{ gridColumn: isExpanded ? 'span 2' : 'span 1' }}
               >
                 <MarketSlidingCard product={p} index={originalIndex} isExpanded={isExpanded} toggleExpand={(expand) => toggleExpand(p.CODE, expand)} />
@@ -413,11 +410,6 @@ const Home = () => {
             </div>
           )}
         </div>
-        {pricesStale && (
-          <p style={{ fontSize: 10, color: '#f97316', fontWeight: 600, textAlign: 'center', marginTop: 6, opacity: 0.8 }}>
-            ⚡ Prices are being updated...
-          </p>
-        )}
       </div>
 
       {/* Pill Cart */}
