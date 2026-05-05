@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
-import { loginUser, requestOtp, verifyOtp } from '../lib/api';
+import { requestOtp, verifyOtp } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Eye, EyeOff, Smartphone, KeyRound, ArrowLeft } from 'lucide-react';
+import { ShoppingBag, ArrowLeft, MessageSquare } from 'lucide-react';
 
 const Login = () => {
     const [loginId, setLoginId] = useState('');
-    const [password, setPassword] = useState('');
     const [otp, setOtp] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [loginMethod, setLoginMethod] = useState<'password' | 'otp'>('password');
     const [otpSent, setOtpSent] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
@@ -18,48 +15,35 @@ const Login = () => {
     const { login, language, setLanguage } = useStore();
     const navigate = useNavigate();
 
-    const handleLogin = (res: any) => {
-        login(res.user, res.token);
-        if (res.mustChangePassword) {
-            navigate('/change-password');
-        } else {
-            navigate('/');
-        }
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleRequestOtp = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError('');
         setSuccessMessage('');
-        
         try {
-            if (loginMethod === 'password') {
-                const res = await loginUser(loginId, password);
-                handleLogin(res);
-            } else {
-                if (!otpSent) {
-                    const res = await requestOtp(loginId);
-                    setOtpSent(true);
-                    setSuccessMessage(res.message || 'OTP sent successfully!');
-                } else {
-                    const res = await verifyOtp(loginId, otp);
-                    handleLogin(res);
-                }
-            }
+            const res = await requestOtp(loginId);
+            setOtpSent(true);
+            setSuccessMessage(res.message || 'OTP sent to your registered mobile number.');
         } catch (err: any) {
-            setError(err.message || 'Action failed');
+            setError(err.message || 'Failed to send OTP');
         } finally {
             setLoading(false);
         }
     };
 
-    const switchMethod = (method: 'password' | 'otp') => {
-        setLoginMethod(method);
+    const handleVerifyOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
         setError('');
-        setSuccessMessage('');
-        setOtpSent(false);
-        setOtp('');
+        try {
+            const res = await verifyOtp(loginId, otp);
+            login(res.user, res.token);
+            navigate(res.mustChangePassword ? '/change-password' : '/');
+        } catch (err: any) {
+            setError(err.message || 'Incorrect OTP');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -87,143 +71,118 @@ const Login = () => {
                         <ShoppingBag size={28} className="text-white" />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900">{language === 'en' ? 'Welcome' : 'स्वागत है'}</h1>
-                    <p className="text-sm text-gray-500 mt-1">{language === 'en' ? 'Sign in with your party code or mobile number' : 'अपने पार्टी कोड या मोबाइल नंबर से साइन इन करें'}</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {language === 'en' ? 'Login with OTP on your registered mobile' : 'अपने मोबाइल पर OTP से लॉगिन करें'}
+                    </p>
                 </div>
 
                 <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/60 p-8">
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                {language === 'en' ? 'Party Code / Mobile' : 'पार्टी कोड / मोबाइल'}
-                            </label>
-                            <input
-                                type="text"
-                                required
-                                disabled={otpSent && loginMethod === 'otp'}
-                                placeholder={language === 'en' ? 'e.g. BG001 or 9876543210' : 'उदा. BG001 या 9876543210'}
-                                className={`w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition-all ${otpSent && loginMethod === 'otp' ? 'opacity-50' : ''}`}
-                                value={loginId}
-                                onChange={(e) => setLoginId(e.target.value)}
-                            />
-                        </div>
-
-                        <AnimatePresence mode="wait">
-                            {loginMethod === 'password' && (
-                                <motion.div
-                                    key="password-field"
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="overflow-hidden"
-                                >
+                    <AnimatePresence mode="wait">
+                        {!otpSent ? (
+                            <motion.form
+                                key="step-phone"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.25 }}
+                                onSubmit={handleRequestOtp}
+                                className="space-y-5"
+                            >
+                                <div>
                                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                        {language === 'en' ? 'Password' : 'पासवर्ड'}
+                                        {language === 'en' ? 'Party Code / Mobile' : 'पार्टी कोड / मोबाइल'}
                                     </label>
-                                    <div className="relative">
-                                        <input
-                                            type={showPassword ? 'text' : 'password'}
-                                            required={loginMethod === 'password'}
-                                            placeholder={language === 'en' ? 'Enter password' : 'पासवर्ड दर्ज करें'}
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 pr-11 text-sm focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition-all"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(v => !v)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                                        >
-                                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                        </button>
-                                    </div>
-                                    <p className="text-xs text-gray-400 mt-1">
-                                        {language === 'en' ? (
-                                            <>Default password for new accounts is <strong>1234</strong></>
-                                        ) : (
-                                            <>नए अकाउंट के लिए डिफ़ॉल्ट पासवर्ड <strong>1234</strong> है</>
-                                        )}
-                                    </p>
-                                </motion.div>
-                            )}
+                                    <input
+                                        type="text"
+                                        required
+                                        autoFocus
+                                        placeholder={language === 'en' ? 'e.g. BG001 or 9876543210' : 'उदा. BG001 या 9876543210'}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition-all"
+                                        value={loginId}
+                                        onChange={(e) => setLoginId(e.target.value)}
+                                    />
+                                </div>
 
-                            {loginMethod === 'otp' && otpSent && (
-                                <motion.div
-                                    key="otp-field"
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="overflow-hidden"
+                                {error && (
+                                    <div className="text-red-600 text-sm text-center bg-red-50 border border-red-100 p-3 rounded-xl">
+                                        {error}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={loading || !loginId.trim()}
+                                    className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/25 flex justify-center items-center gap-2"
                                 >
+                                    <MessageSquare size={18} />
+                                    {loading
+                                        ? (language === 'en' ? 'Sending OTP…' : 'OTP भेजा जा रहा है…')
+                                        : (language === 'en' ? 'Get OTP' : 'OTP प्राप्त करें')}
+                                </button>
+                            </motion.form>
+                        ) : (
+                            <motion.form
+                                key="step-otp"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                transition={{ duration: 0.25 }}
+                                onSubmit={handleVerifyOtp}
+                                className="space-y-5"
+                            >
+                                <div className="text-center">
+                                    <div className="inline-flex items-center justify-center w-12 h-12 bg-emerald-100 rounded-2xl mb-3">
+                                        <MessageSquare size={22} className="text-emerald-600" />
+                                    </div>
+                                    <p className="text-sm text-gray-600">
+                                        {successMessage || (language === 'en' ? 'OTP sent to your mobile.' : 'आपके मोबाइल पर OTP भेजा गया।')}
+                                    </p>
+                                    <p className="text-xs text-emerald-700 font-semibold mt-1">{loginId}</p>
+                                </div>
+
+                                <div>
                                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                        {language === 'en' ? 'Enter OTP' : 'OTP दर्ज करें'}
+                                        {language === 'en' ? 'Enter 4-digit OTP' : '4-अंकीय OTP दर्ज करें'}
                                     </label>
                                     <input
                                         type="number"
-                                        required={loginMethod === 'otp' && otpSent}
-                                        placeholder={language === 'en' ? '4-digit code' : '4-अंकीय कोड'}
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition-all tracking-widest text-center text-lg"
+                                        required
+                                        autoFocus
+                                        placeholder="• • • •"
+                                        maxLength={4}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 text-xl font-bold tracking-[0.5em] text-center focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition-all"
                                         value={otp}
-                                        onChange={(e) => setOtp(e.target.value)}
+                                        onChange={(e) => setOtp(e.target.value.slice(0, 4))}
                                     />
-                                    <button 
-                                        type="button" 
-                                        onClick={() => { setOtpSent(false); setOtp(''); setSuccessMessage(''); }}
-                                        className="mt-2 text-xs text-emerald-600 font-medium flex items-center gap-1 hover:text-emerald-800"
-                                    >
-                                        <ArrowLeft size={12} /> {language === 'en' ? 'Change Number' : 'नंबर बदलें'}
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                                </div>
 
-                        {successMessage && (
-                            <div className="text-emerald-700 text-sm text-center bg-emerald-50 border border-emerald-200 p-3 rounded-xl">
-                                {successMessage}
-                            </div>
+                                {error && (
+                                    <div className="text-red-600 text-sm text-center bg-red-50 border border-red-100 p-3 rounded-xl">
+                                        {error}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={loading || otp.length < 4}
+                                    className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/25"
+                                >
+                                    {loading
+                                        ? (language === 'en' ? 'Verifying…' : 'जांचा जा रहा है…')
+                                        : (language === 'en' ? 'Sign In' : 'साइन इन करें')}
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => { setOtpSent(false); setOtp(''); setError(''); setSuccessMessage(''); }}
+                                    className="w-full text-sm text-gray-500 hover:text-gray-700 flex items-center justify-center gap-1 transition-colors pt-1"
+                                >
+                                    <ArrowLeft size={14} />
+                                    {language === 'en' ? 'Change number / Party Code' : 'नंबर / पार्टी कोड बदलें'}
+                                </button>
+                            </motion.form>
                         )}
-
-                        {error && (
-                            <div className="text-red-600 text-sm text-center bg-red-50 border border-red-100 p-3 rounded-xl">
-                                {error}
-                            </div>
-                        )}
-
-                        <button
-                            type="submit"
-                            disabled={loading || (loginMethod === 'otp' && otpSent && otp.length < 4)}
-                            className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/25 mt-2 flex justify-center items-center gap-2"
-                        >
-                            {loading ? (language === 'en' ? 'Processing…' : 'प्रोसेस हो रहा है…') : 
-                             loginMethod === 'otp' && !otpSent ? (language === 'en' ? 'Get OTP' : 'OTP प्राप्त करें') :
-                             (language === 'en' ? 'Sign In' : 'साइन इन करें')}
-                        </button>
-                    </form>
-
-                    <div className="mt-6 flex items-center justify-between gap-4">
-                        <div className="h-px bg-gray-200 flex-1"></div>
-                        <span className="text-xs text-gray-400 uppercase tracking-widest font-semibold">{language === 'en' ? 'OR' : 'या'}</span>
-                        <div className="h-px bg-gray-200 flex-1"></div>
-                    </div>
-
-                    <div className="mt-6">
-                        {loginMethod === 'password' ? (
-                            <button 
-                                onClick={() => switchMethod('otp')}
-                                className="w-full border border-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-50 active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Smartphone size={18} className="text-emerald-600" /> 
-                                {language === 'en' ? 'Login with OTP' : 'OTP से लॉगिन करें'}
-                            </button>
-                        ) : (
-                            <button 
-                                onClick={() => switchMethod('password')}
-                                className="w-full border border-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-50 active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                <KeyRound size={18} className="text-emerald-600" /> 
-                                {language === 'en' ? 'Login with Password' : 'पासवर्ड से लॉगिन करें'}
-                            </button>
-                        )}
-                    </div>
+                    </AnimatePresence>
                 </div>
 
                 <p className="text-center text-xs text-gray-400 mt-6">
