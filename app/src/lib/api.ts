@@ -25,6 +25,28 @@ export const loginUser = async (loginId: string, password: string) => {
     return data; // { success, token, user, mustChangePassword }
 };
 
+export const requestOtp = async (loginId: string) => {
+    const res = await fetch(`${API_URL}/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to request OTP');
+    return data;
+};
+
+export const verifyOtp = async (loginId: string, otp: string) => {
+    const res = await fetch(`${API_URL}/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginId, otp }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to verify OTP');
+    return data;
+};
+
 export const logoutUser = async () => {
     try {
         await fetch(`${API_URL}/logout`, {
