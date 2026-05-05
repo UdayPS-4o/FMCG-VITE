@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PageMeta from '../../components/common/PageMeta';
 import PageBreadcrumb from '../../components/common/PageBreadCrumb';
 import constants from '../../constants';
+import useAuth from '../../hooks/useAuth';
 
 interface OrderItem {
     productCode: string;
@@ -49,6 +50,8 @@ const AppOrders: React.FC = () => {
     const [activeFilter, setActiveFilter] = useState<StatusFilter>('All');
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+    const { user } = useAuth();
+
     const fetchOrders = useCallback(async () => {
         setLoading(true);
         try {
@@ -91,16 +94,37 @@ const AppOrders: React.FC = () => {
         }
     };
 
+    const isAdmin = user?.routeAccess?.includes('Admin');
+    
+    // Get all subgroup objects (handling both new and old formats)
+    let userSubgroups: any[] = [];
+    if (user?.subgroups) {
+        userSubgroups = Array.isArray(user.subgroups) ? user.subgroups : [user.subgroups];
+    } else if (user?.subgroup) {
+        userSubgroups = Array.isArray(user.subgroup) ? user.subgroup : [user.subgroup];
+    }
+
+    const allowedPrefixes = userSubgroups.map(sg => 
+        (typeof sg === 'string' ? sg : sg.subgroupCode || '').substring(0, 2)
+    ).filter(Boolean);
+
+    /** Filter orders by allowed subgroups first */
+    const allowedOrders = orders.filter(o => {
+        if (isAdmin) return true;
+        const pCode = o.partyCode || '';
+        return allowedPrefixes.includes(pCode.substring(0, 2));
+    });
+
     /** Visible orders based on filter — "Approved" is treated as "Pending" bucket for UX */
     const visibleOrders = (activeFilter === 'All'
-        ? orders
-        : orders.filter(o => o.status === activeFilter)
+        ? allowedOrders
+        : allowedOrders.filter(o => o.status === activeFilter)
     );
 
     /** Count for tab badge */
     const countFor = (tab: StatusFilter) => {
-        if (tab === 'All') return orders.length;
-        return orders.filter(o => o.status === tab).length;
+        if (tab === 'All') return allowedOrders.length;
+        return allowedOrders.filter(o => o.status === tab).length;
     };
 
     return (

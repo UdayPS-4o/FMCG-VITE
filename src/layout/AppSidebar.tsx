@@ -379,11 +379,11 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
     console.log("User routeAccess:", user.routeAccess);
     console.log("User powers:", user.powers);
 
-    // If user has Admin access, show all items except attendance-related ones
+    // If user has Admin access, show all items except regular attendance
     if (user.routeAccess.includes('Admin')) {
-      console.log("User has Admin access, showing all menu items (excluding attendance)");
+      console.log("User has Admin access, showing all menu items (excluding regular attendance)");
       setFilteredItems(fmcgItems.filter(item =>
-        item.name !== 'Attendance' && item.name !== 'Admin Attendance'
+        item.name !== 'Attendance'
       ));
       return;
     }
@@ -402,6 +402,11 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
 
       // Special case for "Bills Delivery Register" - only show for Admin
       if (item.name === "Bills Delivery Register") {
+        return false;
+      }
+
+      // Special case for "App Listings" and "App Schemes" - only show for Admin
+      if (item.name === "App Listings" || item.name === "App Schemes") {
         return false;
       }
 

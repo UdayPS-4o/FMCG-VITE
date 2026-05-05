@@ -73,7 +73,10 @@ export const fetchProducts = async (page = 1, limit = 20, query = '', brand = ''
     const q = query ? `&q=${encodeURIComponent(query)}` : '';
     const b = brand ? `&brand=${encodeURIComponent(brand)}` : '';
     const s = sort ? `&sort=${encodeURIComponent(sort)}` : '';
-    const res = await fetch(`${API_URL}/products?page=${page}&limit=${limit}${q}${b}${s}`);
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_URL}/products?page=${page}&limit=${limit}${q}${b}${s}`, { headers });
     if (!res.ok) throw new Error('Failed to fetch products');
     return res.json();
 };

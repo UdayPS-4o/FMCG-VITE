@@ -216,9 +216,16 @@ const AppSchemes: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${scheme.is_active === 1 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                        {scheme.is_active === 1 ? 'Active' : 'Inactive'}
-                      </span>
+                      {(() => {
+                        const isExpired = scheme.end_date ? new Date(scheme.end_date) < new Date() : false;
+                        const statusColor = scheme.is_active === 1 && !isExpired ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+                        const statusText = scheme.is_active === 0 ? 'Inactive' : (isExpired ? 'Expired' : 'Active');
+                        return (
+                          <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}`}>
+                            {statusText}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
                       <button onClick={() => openEdit(scheme)} className="text-brand-600 hover:text-brand-900 font-semibold">Edit</button>

@@ -70,6 +70,20 @@ export const usePushNotifications = () => {
     }
   };
 
+  // Helper to convert VAPID key for Web Push
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  };
+
   const registerWebPush = async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       console.warn('Push messaging is not supported by this browser.');
@@ -83,19 +97,23 @@ export const usePushNotifications = () => {
         return;
       }
 
-      await navigator.serviceWorker.ready;
+      const registration = await navigator.serviceWorker.ready;
+      
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        const VAPID_PUBLIC_KEY = "BMoDDiSzf7AavViREU6_M0Yez44WtpEUUi52Fkscvfd6uI1UfLXXGdzMOTDHbyATt5apBAe6o-eDgYBb33khRmI";
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+        console.log('Web Push subscription successful');
+      }
 
-      // Note: To subscribe to web push, you typically need a VAPID public key
-      // const subscription = await registration.pushManager.subscribe({
-      //   userVisibleOnly: true,
-      //   applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY_HERE')
-      // });
-      // console.log('Web Push subscription successful', subscription);
-      // setFcmToken(JSON.stringify(subscription)); // You would send the subscription object here
+      setFcmToken(JSON.stringify(subscription));
     } catch (error) {
       console.error('Error registering web push notifications', error);
     }
   };
 
-  return { fcmToken };
+  return { fcmToken, registerPush, registerWebPush };
 };

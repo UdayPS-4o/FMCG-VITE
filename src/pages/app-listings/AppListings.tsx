@@ -34,6 +34,8 @@ const AppListings: React.FC = () => {
   // Filters
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all'); // all, no-image, no-brand
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [stockData, setStockData] = useState<Record<string, Record<string, number>>>({});
   
   // Bulk selection
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
@@ -69,15 +71,19 @@ const AppListings: React.FC = () => {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
       
-      const [prodRes, brandRes] = await Promise.all([
+      const [prodRes, brandRes, stockRes] = await Promise.all([
         fetch(`${constants.baseURL}/api/app/admin/products`, { headers }),
-        fetch(`${constants.baseURL}/api/app/admin/brands`, { headers })
+        fetch(`${constants.baseURL}/api/app/admin/brands`, { headers }),
+        fetch(`${constants.baseURL}/api/stock`, { headers })
       ]);
       
       if (!prodRes.ok || !brandRes.ok) throw new Error('Failed to fetch data');
       
       setProducts(await prodRes.json());
       setAllBrands(await brandRes.json());
+      if (stockRes.ok) {
+        setStockData(await stockRes.json());
+      }
     } catch {
       toast.error('Error loading data');
     } finally {
@@ -87,6 +93,13 @@ const AppListings: React.FC = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  const hasPositiveStock = (code: string) => {
+    const stockInfo = stockData[code];
+    if (!stockInfo) return false;
+    const totalStock = Object.values(stockInfo).reduce((sum, qty) => sum + qty, 0);
+    return totalStock > 0;
+  };
+
   // Filter and paginate
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.PRODUCT.toLowerCase().includes(search.toLowerCase()) || 
@@ -95,6 +108,7 @@ const AppListings: React.FC = () => {
     let matchesFilter = true;
     if (filterType === 'no-image') matchesFilter = !p.image_url;
     if (filterType === 'no-brand') matchesFilter = !p.brand_code;
+    if (inStockOnly && !hasPositiveStock(p.CODE)) return false;
     return matchesSearch && matchesFilter;
   });
   
@@ -409,6 +423,15 @@ const AppListings: React.FC = () => {
             <option value="no-image" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Missing Image</option>
             <option value="no-brand" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Missing Brand</option>
           </select>
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap px-2">
+            <input 
+              type="checkbox" 
+              checked={inStockOnly} 
+              onChange={(e) => { setInStockOnly(e.target.checked); setCurrentPage(1); }}
+              className="rounded text-brand-600 focus:ring-brand-500 w-4 h-4 cursor-pointer"
+            />
+            <span className="cursor-pointer">In Stock</span>
+          </label>
         </div>
         
         {/* Bulk Action Bar */}
@@ -473,7 +496,7 @@ const AppListings: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-bold text-gray-900 dark:text-white">{p.PRODUCT}</div>
-                        <div className="text-xs text-gray-500 mt-1 font-mono">{p.CODE} | Rs {p.RATE1}</div>
+                        <div className="text-xs text-gray-500 mt-1 font-mono">{p.CODE} | Rs {p.MRP1}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 font-medium">
                         {p.nickname || '-'}
