@@ -1,0 +1,80 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "sarthak bot",
+      "intents": [
+        {
+          "name": "SarthakCommandIntent",
+          "slots": [
+            {
+              "name": "command",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "{command}",
+            "bolo {command}",
+            "karo {command}",
+            "banao {command}",
+            "set karo {command}",
+            "do {command}",
+            "please {command}",
+            "sarthak {command}"
+          ]
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        }
+      ],
+      "types": []
+    },
+    "dialog": {
+      "intents": [
+        {
+          "name": "SarthakCommandIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "command",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.SarthakCommandIntent.command"
+              }
+            }
+          ]
+        }
+      ],
+      "delegationStrategy": "ALWAYS"
+    },
+    "prompts": [
+      {
+        "id": "Elicit.Slot.SarthakCommandIntent.command",
+        "variations": [
+          { "type": "PlainText", "value": "Kya karna hai?" },
+          { "type": "PlainText", "value": "Aap kya command dena chahte hain?" },
+          { "type": "PlainText", "value": "Batao, kya karna hai?" }
+        ]
+      }
+    ]
+  }
+}

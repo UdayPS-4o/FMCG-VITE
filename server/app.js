@@ -92,6 +92,10 @@ app.use('/api/reports', reportRoutes);  // this is the main route for the report
 const appRoutes = require('./routes/app/index');
 app.use('/api/app', appRoutes);
 
+// Alexa skill webhook — registered BEFORE auth middleware so Amazon can POST to it
+const alexaRoutes = require('./routes/alexa');
+app.use('/api/alexa', alexaRoutes);
+
 // Register dashboard routes
 // set middleware to check if user is logged in
 // Apply this BEFORE routes that need authentication
@@ -159,6 +163,10 @@ app.use('/api', approvalRoutes);
 
 const attendanceRoutes = require('./routes/attendance');
 app.use(attendanceRoutes);
+
+// AI proxy routes (Gemini key stays on server)
+const aiRoutes = require('./routes/ai');
+app.use('/api/ai', aiRoutes);
 
 // App Routes has been moved up
 
