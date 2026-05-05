@@ -23,7 +23,6 @@ This pattern is used for both Brands and Product Listings to provide "instant-on
 
 ## 3. UI Feedback
 To maintain trust, the app provides visual cues when data is stale:
-- **Price Indicator**: A "⚡ Prices are being updated..." badge appears below the product grid when the displayed data is from a stale cache.
 - **Sync Fix**: When switching brands, the app ensures `loading` state is set synchronously with the data reset to prevent "No products found" flashes before the cache/network response resolves.
 
 ## 4. Key Functions
