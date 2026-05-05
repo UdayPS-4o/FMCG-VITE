@@ -122,6 +122,9 @@ const requireAppAuth = async (req, res, next) => {
 
 // ── Auth Routes ──────────────────────────────────────────────────────────────
 
+const otpCache = new Map();
+
+
 /**
  * POST /api/app/login
  * Body: { loginId, password }
@@ -206,6 +209,116 @@ router.post('/login', async (req, res) => {
     } catch (err) {
         console.error('[app/login]', err);
         res.status(500).json({ error: 'Login failed' });
+    }
+});
+
+/**
+ * POST /api/app/request-otp
+ * Body: { loginId }
+ */
+router.post('/request-otp', async (req, res) => {
+    const { loginId } = req.body;
+    if (!loginId) return res.status(400).json({ error: 'Mobile number or party code is required' });
+
+    try {
+        const parties = await getCmplParties();
+        let party = findPartyByLoginId(parties, loginId);
+        
+        if (!party) {
+            return res.status(404).json({ error: 'User not found in the system' });
+        }
+
+        // Get mobile number
+        let mobileStr = party.C_MOBILE || party.C_PHONE || party.WA_MOB || '';
+        mobileStr = mobileStr.replace(/\D/g, ''); // Extract digits only
+        
+        if (mobileStr.length < 10) {
+            return res.status(400).json({ error: 'Valid mobile number not found for this party' });
+        }
+        
+        // Take last 10 digits
+        if (mobileStr.length > 10) mobileStr = mobileStr.slice(-10);
+
+        const otp = Math.floor(1000 + Math.random() * 9000).toString();
+        const expiresAt = Date.now() + 5 * 60 * 1000; // 5 mins
+
+        otpCache.set(loginId, { otp, expiresAt, partyCode: party.C_CODE });
+
+        // Send OTP via the new API endpoint
+        await axios.post('http://localhost:4292/sendText', {
+            phoneNumber: mobileStr,
+            textMessage: `Your login OTP for Ekta Enterprises is ${otp}. It is valid for 5 minutes.`
+        }).catch(err => {
+            console.error('Failed to send OTP via localhost:4292', err.message);
+            throw new Error('Failed to send SMS');
+        });
+
+        res.json({ success: true, message: `OTP sent to mobile ending in ******${mobileStr.slice(-4)}` });
+    } catch (err) {
+        console.error('[app/request-otp]', err);
+        res.status(500).json({ error: err.message || 'Failed to request OTP' });
+    }
+});
+
+/**
+ * POST /api/app/verify-otp
+ * Body: { loginId, otp }
+ */
+router.post('/verify-otp', async (req, res) => {
+    const { loginId, otp } = req.body;
+    if (!loginId || !otp) return res.status(400).json({ error: 'loginId and otp are required' });
+
+    try {
+        const cached = otpCache.get(loginId);
+        if (!cached) return res.status(400).json({ error: 'OTP expired or invalid' });
+        if (Date.now() > cached.expiresAt) {
+            otpCache.delete(loginId);
+            return res.status(400).json({ error: 'OTP has expired' });
+        }
+        if (cached.otp !== otp) {
+            return res.status(400).json({ error: 'Incorrect OTP' });
+        }
+
+        const partyCode = cached.partyCode;
+        otpCache.delete(loginId);
+
+        // Get party info
+        const parties = await getCmplParties();
+        const party = parties.find(p => p.C_CODE === partyCode);
+
+        if (!party) return res.status(404).json({ error: 'Party not found' });
+
+        // Lookup in SQLite
+        let dbUser = await appDb.getUserByPartyCode(partyCode);
+        if (!dbUser) {
+            const tempHash = await bcrypt.hash(TEMP_PASSWORD, BCRYPT_ROUNDS);
+            await appDb.createUser(partyCode, tempHash, 1);
+            dbUser = await appDb.getUserByPartyCode(partyCode);
+        }
+
+        // Create session
+        const token = generateToken();
+        const expiresAtDb = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .replace('T', ' ')
+            .split('.')[0];
+        await appDb.createSession(partyCode, token, expiresAtDb);
+
+        return res.json({
+            success: true,
+            token,
+            mustChangePassword: dbUser.must_change_pass === 1,
+            user: {
+                partyCode,
+                name: party.C_NAME,
+                mobile: party.C_MOBILE || party.C_PHONE || '',
+                address: [party.C_ADD1, party.C_ADD2, party.C_PLACE].filter(Boolean).join(', '),
+                gst: party.C_GST || party.GSTNO || '',
+            }
+        });
+    } catch (err) {
+        console.error('[app/verify-otp]', err);
+        res.status(500).json({ error: 'Failed to verify OTP' });
     }
 });
 
