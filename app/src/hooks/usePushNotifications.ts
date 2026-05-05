@@ -29,7 +29,7 @@ export const usePushNotifications = () => {
         body: JSON.stringify({
           subscription: fcmToken,
           userId: user.partyCode,
-          type: 'fcm'
+          type: Capacitor.isNativePlatform() ? 'fcm' : 'webpush'
         })
       }).catch(console.error);
     }
