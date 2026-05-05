@@ -201,7 +201,7 @@ const Home = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [sortOrder, setSortOrder] = useState('');
-  const { cart, cartTotal, language } = useStore();
+  const { cart, cartTotal, language, user } = useStore();
   const navigate = useNavigate();
   const loadingRef = useRef(false);
   const observer = useRef<IntersectionObserver | null>(null);
