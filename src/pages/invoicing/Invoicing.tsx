@@ -136,6 +136,7 @@ const InvoicingContent: React.FC = () => {
   const [ref, setRef] = useState<string>('');
   const [dueDays, setDueDays] = useState<string>('7');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [appOrderId, setAppOrderId] = useState<string | null>(null); // tracks source app order for mark-invoiced
   const [toast, setToast] = useState<{ 
     visible: boolean, 
     message: string, 
@@ -328,13 +329,15 @@ const InvoicingContent: React.FC = () => {
 
   // Update bill number whenever series changes
   useEffect(() => {
+    // Don't auto-update if we're prefilling from an app order (it has its own assigned bill number)
+    if (appOrderId) return;
     if (series && invoiceIdInfo?.nextSeries) {
       const nextNumber = invoiceIdInfo.nextSeries[series.toUpperCase()] || 1;
       setBillNo(nextNumber.toString());
     } else {
       setBillNo('1');
     }
-  }, [series, invoiceIdInfo]);
+  }, [series, invoiceIdInfo, appOrderId]);
 
   // Auto-select SM based on user's smCode
   useEffect(() => {
@@ -356,6 +359,9 @@ const InvoicingContent: React.FC = () => {
   useEffect(() => {
     const prefilledOrder = location.state?.prefilledOrder;
     if (prefilledOrder && partyOptions.length > 0 && pmplData.length > 0 && contextSetItems && !loading) {
+      // Force series to 'T' for app orders
+      setSeries('T');
+      
       // 1. Set Party
       console.log('Prefilled Order PartyCode:', prefilledOrder.partyCode);
       console.log('Sample Party Options:', partyOptions.slice(0, 3));
@@ -449,6 +455,22 @@ const InvoicingContent: React.FC = () => {
       setDueDays('7');
       if (prefilledOrder.notes) {
         setRef(prefilledOrder.notes.substring(0, 50));
+      }
+
+      // Capture the app order ID for mark-invoiced call after submission
+      if (prefilledOrder.id) {
+        setAppOrderId(prefilledOrder.id);
+      }
+      
+      let extractedBillNo = null;
+      if (prefilledOrder.billNo) {
+        extractedBillNo = String(prefilledOrder.billNo);
+      } else if (prefilledOrder.id && typeof prefilledOrder.id === 'string' && prefilledOrder.id.startsWith('T')) {
+        extractedBillNo = prefilledOrder.id.substring(1);
+      }
+      
+      if (extractedBillNo) {
+        setBillNo(extractedBillNo);
       }
 
       navigate(location.pathname, { replace: true, state: {} });
@@ -809,6 +831,24 @@ const InvoicingContent: React.FC = () => {
       localStorage.removeItem('invoicingDraft');
       setDraftExistsInStorage(false);
       setShowLoadDraftButton(false);
+      
+      // If this invoice was created from an app order, mark the order as invoiced
+      if (appOrderId) {
+        try {
+          await fetch(`${constants.baseURL}/api/app/admin/orders/${appOrderId}/mark-invoiced`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            },
+            body: JSON.stringify({ billNo, series }),
+          });
+          console.log(`[Invoicing] Marked app order ${appOrderId} as invoiced with bill ${series}-${billNo}`);
+        } catch (markErr) {
+          console.warn('[Invoicing] Failed to mark app order as invoiced:', markErr);
+        }
+        setAppOrderId(null);
+      }
       
       if (invoiceId) {
          // Generate PDF in background instead of redirecting

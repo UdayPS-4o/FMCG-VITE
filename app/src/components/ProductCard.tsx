@@ -4,6 +4,7 @@ import type { Product } from '../context/StoreContext';
 import { Plus, Minus, ShoppingCart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AdminImageModal } from './AdminImageModal';
+import { getImageUrl } from '../lib/api';
 
 interface ProductCardProps {
     product: Product;
@@ -34,7 +35,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
     let schemeDiscount = 0;
     const totalQty = pcs + (boxes * conversion);
     if (product.schemes && product.schemes.length > 0) {
-        const applicableSchemes = product.schemes.filter(sch => totalQty >= sch.slab1 && totalQty <= sch.slab2);
+        const applicableSchemes = product.schemes.filter(sch => totalQty >= sch.slab1);
         if (applicableSchemes.length > 0) {
             schemeDiscount = applicableSchemes.reduce((sum, sch) => sum + sch.discount, 0);
         }
@@ -59,7 +60,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
 
     const handleAddToCart = () => {
         if (!hasMultipleUnits) {
-            addToCart(product, 0, 1);
+            addToCart(product, 1, 0);
         } else {
             onExpand();
         }
@@ -78,8 +79,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
     const decrementBox = () => handleUpdate(pcs, Math.max(0, boxes - 1));
     const incrementPcs = () => handleUpdate(pcs + 1, boxes);
     const decrementPcs = () => handleUpdate(Math.max(0, pcs - 1), boxes);
-    const quickIncrement = () => handleUpdate(0, boxes + 1);
-    const quickDecrement = () => handleUpdate(0, Math.max(0, boxes - 1));
+    const quickIncrement = () => handleUpdate(pcs + 1, 0);
+    const quickDecrement = () => handleUpdate(Math.max(0, pcs - 1), 0);
 
     return (
         <motion.div
@@ -98,7 +99,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                     <motion.div layout className="relative mb-3">
                         <motion.div layout className="aspect-square bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden relative">
                             {product.image_url ? (
-                                <img src={product.image_url} alt={product.PRODUCT} className="w-full h-full object-contain p-2" />
+                                <img src={getImageUrl(product.image_url)} alt={product.PRODUCT} className="w-full h-full object-contain p-2" />
                             ) : isAdmin ? (
                                 <button onClick={() => setShowAdminImageModal(true)} className="w-12 h-12 bg-white shadow-sm rounded-full flex items-center justify-center text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 transition-colors border border-gray-100">
                                     <Plus size={24} />
@@ -123,7 +124,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                 {product.schemes && product.schemes.length > 0 && (
                     <div className="flex gap-1 flex-wrap mb-2">
                         {product.schemes.map((sch, i) => {
-                            const isActive = totalQty >= sch.slab1 && totalQty <= sch.slab2;
+                            const isActive = totalQty >= sch.slab1;
                             return (
                                 <button
                                     key={i}
@@ -187,7 +188,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                             >
                                 <Minus size={14} />
                             </button>
-                            <span className="text-sm font-semibold text-gray-800">{boxes}</span>
+                            <span className="text-sm font-semibold text-gray-800">{pcs}</span>
                             <button
                                 onClick={quickIncrement}
                                 className="w-8 h-7 flex items-center justify-center bg-emerald-500 rounded-lg text-white active:bg-emerald-600 transition-colors"

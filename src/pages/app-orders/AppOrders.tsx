@@ -16,7 +16,7 @@ interface OrderItem {
 interface AppOrder {
     id: string;
     date: string;
-    status: 'Pending' | 'Approved' | 'Rejected';
+    status: 'Pending' | 'Approved' | 'Rejected' | 'Invoiced';
     partyCode: string;
     partyName: string;
     items: OrderItem[];
@@ -24,25 +24,30 @@ interface AppOrder {
     notes?: string;
     adminNote?: string;
     updatedAt?: string;
+    invoiceBillNo?: string;
+    invoiceSeries?: string;
+    invoiceRef?: string;
+    billNo?: number;
+    series?: string;
 }
 
-type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected';
+type StatusFilter = 'All' | 'Pending' | 'Rejected' | 'Invoiced';
 
-const STATUS_TABS: StatusFilter[] = ['All', 'Pending', 'Approved', 'Rejected'];
+const STATUS_TABS: StatusFilter[] = ['All', 'Pending', 'Rejected', 'Invoiced'];
 
-const statusStyle = {
-    Pending:  { pill: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-500'   },
+const statusStyle: Record<string, { pill: string; dot: string }> = {
+    Pending:  { pill: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-500'   },
     Approved: { pill: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-    Rejected: { pill: 'bg-red-100 text-red-700',       dot: 'bg-red-500'     },
+    Rejected: { pill: 'bg-red-100 text-red-700',         dot: 'bg-red-500'     },
+    Invoiced: { pill: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-500'    },
 };
 
 const AppOrders: React.FC = () => {
     const [orders, setOrders] = useState<AppOrder[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState<StatusFilter>('All');
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const [actionLoading, setActionLoading] = useState<string | null>(null); // order id being actioned
-    const [noteInput, setNoteInput] = useState<Record<string, string>>({});
+    const [activeFilter, setActiveFilter] = useState<StatusFilter>('All');
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
 
     const fetchOrders = useCallback(async () => {
         setLoading(true);
@@ -65,8 +70,8 @@ const AppOrders: React.FC = () => {
 
     const navigate = useNavigate();
 
-    const updateStatus = async (id: string, status: 'Approved' | 'Rejected') => {
-        setActionLoading(`${id}-${status}`);
+    const updateOrderStatus = async (id: string, status: 'Rejected') => {
+        setActionLoading(id + status);
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(`${constants.baseURL}/api/app/admin/orders/${id}/status`, {
@@ -75,30 +80,27 @@ const AppOrders: React.FC = () => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({ status, note: noteInput[id] || '' }),
+                body: JSON.stringify({ status }),
             });
             if (!res.ok) throw new Error('Failed to update');
-            // Update locally
-            setOrders(prev => prev.map(o =>
-                o.id === id ? { ...o, status, adminNote: noteInput[id] || '' } : o
-            ));
-            return true;
+            await fetchOrders();
         } catch (e) {
             console.error(e);
-            alert('Failed to update order status');
-            return false;
         } finally {
             setActionLoading(null);
         }
     };
 
-    const displayed = filter === 'All' ? orders : orders.filter(o => o.status === filter);
+    /** Visible orders based on filter — "Approved" is treated as "Pending" bucket for UX */
+    const visibleOrders = (activeFilter === 'All'
+        ? orders
+        : orders.filter(o => o.status === activeFilter)
+    );
 
-    const counts = {
-        All: orders.length,
-        Pending: orders.filter(o => o.status === 'Pending').length,
-        Approved: orders.filter(o => o.status === 'Approved').length,
-        Rejected: orders.filter(o => o.status === 'Rejected').length,
+    /** Count for tab badge */
+    const countFor = (tab: StatusFilter) => {
+        if (tab === 'All') return orders.length;
+        return orders.filter(o => o.status === tab).length;
     };
 
     return (
@@ -106,44 +108,46 @@ const AppOrders: React.FC = () => {
             <PageMeta title="App Orders | FMCG" description="Review and approve orders from the customer app" />
             <PageBreadcrumb pageTitle="App Orders" />
 
-            {/* Filter tabs */}
-            <div className="flex gap-2 mb-6 flex-wrap">
-                {STATUS_TABS.map(tab => (
-                    <button
-                        key={tab}
-                        onClick={() => setFilter(tab)}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                            filter === tab
-                                ? 'bg-brand-500 text-white shadow'
-                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-brand-400'
-                        }`}
-                    >
-                        {tab}
-                        <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${
-                            filter === tab ? 'bg-white/25 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
-                        }`}>
-                            {counts[tab]}
-                        </span>
-                    </button>
-                ))}
+            {/* Header actions */}
+            <div className="flex gap-2 mb-6 flex-wrap justify-end">
                 <button
                     onClick={fetchOrders}
-                    className="ml-auto px-4 py-2 rounded-lg text-sm font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-brand-500 transition-colors"
+                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-brand-500 transition-colors"
                 >
                     ↻ Refresh
                 </button>
             </div>
 
+            {/* Status filter tabs */}
+            <div className="flex gap-2 mb-4 flex-wrap">
+                {STATUS_TABS.map(tab => (
+                    <button
+                        key={tab}
+                        onClick={() => setActiveFilter(tab)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                            activeFilter === tab
+                                ? 'bg-brand-500 text-white'
+                                : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-brand-500'
+                        }`}
+                    >
+                        {tab}
+                        {tab !== 'All' && (
+                            <span className="ml-1 opacity-70">({countFor(tab)})</span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
             {loading ? (
                 <div className="text-center py-16 text-gray-400">Loading orders…</div>
-            ) : displayed.length === 0 ? (
-                <div className="text-center py-16 text-gray-400">No {filter !== 'All' ? filter.toLowerCase() : ''} orders</div>
+            ) : visibleOrders.length === 0 ? (
+                <div className="text-center py-16 text-gray-400">No orders</div>
             ) : (
                 <div className="space-y-4">
-                    {displayed.map(order => {
-                        const s = statusStyle[order.status];
+                    {visibleOrders.map(order => {
+                        const s = statusStyle[order.status] || statusStyle['Pending'];
                         const isOpen = expandedId === order.id;
-                        const isPending = order.status === 'Pending';
+                        const isActioning = actionLoading !== null;
 
                         return (
                             <div
@@ -161,7 +165,7 @@ const AppOrders: React.FC = () => {
                                             <span className="font-bold text-gray-900 dark:text-white text-sm">
                                                 {order.partyName}
                                             </span>
-                                            <span className="text-xs text-gray-400">#{order.id.slice(-6)}</span>
+                                            <span className="text-xs text-gray-400">#{order.id}</span>
                                         </div>
                                         <div className="text-xs text-gray-400 mt-0.5 flex gap-3">
                                             <span>{new Date(order.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
@@ -173,7 +177,9 @@ const AppOrders: React.FC = () => {
                                             ₹{order.totalAmount.toFixed(2)}
                                         </span>
                                         <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${s.pill}`}>
-                                            {order.status}
+                                            {order.status === 'Invoiced' && order.invoiceSeries && order.invoiceBillNo
+                                                ? `✓ ${order.invoiceSeries}${order.invoiceBillNo}`
+                                                : order.status}
                                         </span>
                                         <svg className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -185,9 +191,12 @@ const AppOrders: React.FC = () => {
                                 {isOpen && (
                                     <div className="border-t border-gray-100 dark:border-gray-700 px-5 pb-5 pt-4">
                                         {/* Party info */}
-                                        <div className="mb-3 text-xs text-gray-500 flex gap-4">
+                                        <div className="mb-3 text-xs text-gray-500 flex gap-4 flex-wrap">
                                             <span>Party Code: <strong className="text-gray-800 dark:text-gray-200">{order.partyCode}</strong></span>
                                             {order.notes && <span>Note: {order.notes}</span>}
+                                            {order.adminNote && (
+                                                <span className="text-red-500">Admin Note: {order.adminNote}</span>
+                                            )}
                                         </div>
 
                                         {/* Items table */}
@@ -220,45 +229,89 @@ const AppOrders: React.FC = () => {
                                             </table>
                                         </div>
 
-                                        {/* Admin note + action buttons (only for pending) */}
-                                        {isPending ? (
-                                            <div className="space-y-3">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Optional note to party…"
-                                                    value={noteInput[order.id] || ''}
-                                                    onChange={e => setNoteInput(prev => ({ ...prev, [order.id]: e.target.value }))}
-                                                    className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                                                />
-                                                <div className="flex gap-3">
+                                        {/* Action buttons */}
+                                        <div className="mt-4 space-y-2">
+
+                                            {/* ── INVOICED ─────────────────────────── */}
+                                            {order.status === 'Invoiced' && (
+                                                <>
+                                                    {/* Invoiced badge */}
+                                                    <div className="w-full flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold py-2.5 rounded-lg text-sm">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        Invoiced ✓&nbsp;
+                                                        <span className="font-black text-blue-800 dark:text-blue-200">
+                                                            {order.invoiceSeries}{order.invoiceBillNo}
+                                                        </span>
+                                                    </div>
+                                                    {/* Re-Invoice */}
                                                     <button
-                                                        onClick={async () => {
-                                                            const success = await updateStatus(order.id, 'Approved');
-                                                            if (success) {
-                                                                navigate('/invoicing', { state: { prefilledOrder: order } });
-                                                            }
-                                                        }}
-                                                        disabled={actionLoading === `${order.id}-Approved` || actionLoading === `${order.id}-Rejected`}
-                                                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white font-bold py-2.5 rounded-lg text-sm transition-colors"
+                                                        onClick={() => navigate('/invoicing', { state: { prefilledOrder: order } })}
+                                                        className="w-full flex items-center justify-center gap-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-brand-500 hover:text-brand-500 font-semibold py-2 rounded-lg text-sm transition-colors"
                                                     >
-                                                        {actionLoading === `${order.id}-Approved` ? 'Saving…' : '✓ Approve'}
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                        Re-Invoice
                                                     </button>
+                                                </>
+                                            )}
+
+                                            {/* ── REJECTED ─────────────────────────── */}
+                                            {order.status === 'Rejected' && (
+                                                <>
+                                                    <div className="w-full flex items-center justify-center gap-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 font-bold py-2.5 rounded-lg text-sm">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        Rejected
+                                                    </div>
+                                                    {/* Re-Invoice */}
                                                     <button
-                                                        onClick={() => updateStatus(order.id, 'Rejected')}
-                                                        disabled={actionLoading === `${order.id}-Approved` || actionLoading === `${order.id}-Rejected`}
-                                                        className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white font-bold py-2.5 rounded-lg text-sm transition-colors"
+                                                        onClick={() => navigate('/invoicing', { state: { prefilledOrder: order } })}
+                                                        className="w-full flex items-center justify-center gap-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-brand-500 hover:text-brand-500 font-semibold py-2 rounded-lg text-sm transition-colors"
                                                     >
-                                                        {actionLoading === `${order.id}-Rejected` ? 'Saving…' : '✕ Reject'}
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                        Re-Invoice
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {/* ── PENDING / APPROVED ───────────────── */}
+                                            {(order.status === 'Pending' || order.status === 'Approved') && (
+                                                <div className="flex gap-2">
+                                                    {/* Create Invoice */}
+                                                    <button
+                                                        onClick={() => navigate('/invoicing', { state: { prefilledOrder: order } })}
+                                                        className="flex-1 bg-brand-500 hover:bg-brand-600 text-white font-bold py-2.5 rounded-lg text-sm transition-colors"
+                                                    >
+                                                        Create Invoice
+                                                    </button>
+                                                    {/* Reject */}
+                                                    <button
+                                                        onClick={() => updateOrderStatus(order.id, 'Rejected')}
+                                                        disabled={isActioning}
+                                                        className="flex items-center justify-center gap-1.5 px-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900 font-semibold py-2.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+                                                    >
+                                                        {actionLoading === order.id + 'Rejected' ? (
+                                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        )}
+                                                        Reject
                                                     </button>
                                                 </div>
-                                            </div>
-                                        ) : (
-                                            order.adminNote && (
-                                                <div className="text-sm text-gray-500 bg-gray-50 dark:bg-gray-700 rounded-lg px-3 py-2">
-                                                    <strong>Admin note:</strong> {order.adminNote}
-                                                </div>
-                                            )
-                                        )}
+                                            )}
+
+                                        </div>
                                     </div>
                                 )}
                             </div>

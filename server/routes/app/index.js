@@ -24,12 +24,31 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { transliterate } = require('transliteration');
 
+const jwt = require('jsonwebtoken');
 const { getDbfData, ensureDirectoryExistence } = require('../utilities');
 const appDb = require('../../db/app/appDb');
 
 const BCRYPT_ROUNDS = 10;
 const TEMP_PASSWORD = '1234';
 const SESSION_DAYS = 30;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+
+/**
+ * Admin middleware — validates the main CMS JWT token (sent by the admin dashboard).
+ * The /api/app routes are mounted BEFORE the global middleware, so admin routes
+ * need their own JWT check.
+ */
+const requireAdminJwtAuth = async (req, res, next) => {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'No token provided' });
+    try {
+        jwt.verify(token, JWT_SECRET); // throws if invalid/expired
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: 'Invalid or expired admin token' });
+    }
+};
 
 // Initialise SQLite tables on startup
 appDb.initDb().then(() => {
@@ -339,6 +358,99 @@ router.get('/ledger', requireAppAuth, async (req, res) => {
     }
 });
 
+// ── Products Cache (file-change based) ───────────────────────────────────────
+let _productsCache = null;
+let _productBrandMapCache = null;
+let _lastCheckTime = 0;
+let _lastFileMtimes = {};
+const MIN_CHECK_INTERVAL = 60 * 1000; // check file changes at most once per minute
+
+const _sourceFiles = () => [
+    path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'billdtl.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'purdtl.json'),
+    path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'transfer.json'),
+    path.join(__dirname, '../../db/godown.json'),
+];
+
+async function _haveSourceFilesChanged() {
+    const files = _sourceFiles();
+    for (const file of files) {
+        try {
+            const stat = await fs.stat(file);
+            const mtime = stat.mtime.getTime();
+            if (!_lastFileMtimes[file] || _lastFileMtimes[file] !== mtime) {
+                return true;
+            }
+        } catch { return true; } // file missing = treat as changed
+    }
+    return false;
+}
+
+async function _snapshotMtimes() {
+    const files = _sourceFiles();
+    for (const file of files) {
+        try {
+            const stat = await fs.stat(file);
+            _lastFileMtimes[file] = stat.mtime.getTime();
+        } catch { /* ignore */ }
+    }
+}
+
+async function getEnrichedProducts() {
+    const now = Date.now();
+
+    // If cache exists and we checked recently, skip file-stat check entirely
+    if (_productsCache && now - _lastCheckTime < MIN_CHECK_INTERVAL) {
+        return { jsonData: _productsCache, productBrandMap: _productBrandMapCache };
+    }
+
+    // Check if source files actually changed
+    const changed = await _haveSourceFilesChanged();
+    _lastCheckTime = now;
+
+    if (_productsCache && !changed) {
+        return { jsonData: _productsCache, productBrandMap: _productBrandMapCache };
+    }
+
+    console.log(`[app/products] Source files changed, rebuilding cache...`);
+
+    const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
+    let jsonData;
+    try {
+        const data = await fs.readFile(jsonPath, 'utf8');
+        jsonData = JSON.parse(data);
+    } catch (e) {
+        const dbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF');
+        jsonData = await getDbfData(dbfPath);
+    }
+
+    const stockRouter = require('../stock');
+    const stockData = await stockRouter.calculateCurrentStock();
+
+    jsonData = jsonData.map(p => {
+        const itemStock = stockData[p.CODE] || {};
+        const totalStock = Object.values(itemStock).reduce((sum, qty) => sum + (qty || 0), 0);
+        return { ...p, stock: totalStock };
+    });
+
+    jsonData = jsonData.filter(p => p.stock > 0 && p.PRODUCT && p.PRODUCT.trim() !== '');
+
+    const productBrandsList = await appDb.getProductBrands().catch(() => []);
+    const productBrandMap = {};
+    productBrandsList.forEach(pb => {
+        if (pb.basepack_code && pb.brand_code) {
+            productBrandMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+        }
+    });
+
+    _productsCache = jsonData;
+    _productBrandMapCache = productBrandMap;
+    await _snapshotMtimes();
+    console.log(`[app/products] Cache ready: ${jsonData.length} in-stock products`);
+    return { jsonData, productBrandMap };
+}
+
 // ── Products Route ────────────────────────────────────────────────────────────
 
 /**
@@ -348,41 +460,62 @@ router.get('/ledger', requireAppAuth, async (req, res) => {
  */
 router.get('/products', async (req, res) => {
     try {
-        const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
-        let jsonData;
-        try {
-            const data = await fs.readFile(jsonPath, 'utf8');
-            jsonData = JSON.parse(data);
-        } catch (e) {
-            const dbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF');
-            jsonData = await getDbfData(dbfPath);
-        }
+        const { jsonData: cachedProducts, productBrandMap } = await getEnrichedProducts();
+        let jsonData = [...cachedProducts]; // shallow copy so we don't mutate cache
 
-        // Fetch current stock
-        const stockRouter = require('../stock');
-        const stockData = await stockRouter.calculateCurrentStock();
+        // ── Fuzzy search helpers (pure JS, no extra deps) ──────────────────────
 
-        // Calculate total stock per product
-        jsonData = jsonData.map(p => {
-            const itemStock = stockData[p.CODE] || {};
-            const totalStock = Object.values(itemStock).reduce((sum, qty) => sum + (qty || 0), 0);
-            return { ...p, stock: totalStock };
-        });
-
-        // Only in-stock, non-empty products
-        jsonData = jsonData.filter(p => p.stock > 0 && p.PRODUCT && p.PRODUCT.trim() !== '');
-
-        // Get product brands mapping
-        const productBrandsList = await appDb.getProductBrands().catch(() => []);
-        const productBrandMap = {};
-        productBrandsList.forEach(pb => {
-            if (pb.basepack_code && pb.brand_code) {
-                productBrandMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+        /**
+         * Levenshtein edit distance between two strings.
+         * Returns integer number of single-char edits needed.
+         */
+        const levenshtein = (a, b) => {
+            if (a === b) return 0;
+            if (a.length === 0) return b.length;
+            if (b.length === 0) return a.length;
+            const dp = Array.from({ length: a.length + 1 }, (_, i) =>
+                Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+            );
+            for (let i = 1; i <= a.length; i++) {
+                for (let j = 1; j <= b.length; j++) {
+                    dp[i][j] = a[i - 1] === b[j - 1]
+                        ? dp[i - 1][j - 1]
+                        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+                }
             }
-        });
+            return dp[a.length][b.length];
+        };
 
-        // Search filter
+        /**
+         * Returns a similarity score 0–1 (1 = identical).
+         * Uses Levenshtein normalised by max length.
+         */
+        const strSimilarity = (a, b) => {
+            const maxLen = Math.max(a.length, b.length);
+            if (maxLen === 0) return 1;
+            return 1 - levenshtein(a, b) / maxLen;
+        };
+
+        /**
+         * Best fuzzy score of `needle` against any word-token in `haystack`.
+         * haystack is a lowercase product name string.
+         */
+        const bestTokenSimilarity = (needle, haystack) => {
+            if (!needle || !haystack) return 0;
+            // Check if needle is a prefix/substring of any token
+            const tokens = haystack.split(/[\s\-\/]+/).filter(Boolean);
+            let best = 0;
+            for (const tok of tokens) {
+                if (tok.startsWith(needle) || tok.includes(needle)) return 1; // exact hit
+                const sim = strSimilarity(needle, tok.substring(0, needle.length + 2));
+                if (sim > best) best = sim;
+            }
+            return best;
+        };
+
+        // ── Search filter ───────────────────────────────────────────────────────
         const query = req.query.q;
+        let isFuzzyResult = false;
         if (query) {
             let queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
             
@@ -467,10 +600,56 @@ router.get('/products', async (req, res) => {
                 return { ...p, _searchScore: score };
             });
             
-            // Filter and sort by score
-            jsonData = scoredData
+            // ── Primary filter: exact/substring/transliteration matches ─────────
+            const exactMatches = scoredData
                 .filter(p => p._searchScore > 0)
                 .sort((a, b) => b._searchScore - a._searchScore);
+
+            if (exactMatches.length > 0) {
+                // We have good matches — use them
+                jsonData = exactMatches;
+            } else {
+                // ── Fuzzy fallback: tolerate typos via Levenshtein ─────────────
+                isFuzzyResult = true;
+
+                // Only non-number query words participate in fuzzy matching
+                const fuzzyWords = expandedWords.filter(w => w.length >= 3 && isNaN(parseFloat(w)));
+
+                const fuzzyScored = jsonData.map(p => {
+                    const prodLower = (p.PRODUCT || '').toLowerCase();
+                    const codeLower = (p.CODE || '').toLowerCase();
+                    let fuzzyScore = 0;
+
+                    for (const word of fuzzyWords) {
+                        // Best similarity of this word token vs product name tokens
+                        const sim = bestTokenSimilarity(word, prodLower);
+                        // Threshold: at least 0.6 similarity (tolerates ~40% edits)
+                        if (sim >= 0.6) {
+                            fuzzyScore += Math.round(sim * 50);
+                        }
+                        // Also fuzzy match against product CODE
+                        const codeSim = strSimilarity(word, codeLower.substring(0, word.length + 2));
+                        if (codeSim >= 0.7) {
+                            fuzzyScore += Math.round(codeSim * 30);
+                        }
+                    }
+
+                    // Number matching still applies
+                    for (const num of numbers) {
+                        const mrp = parseFloat(p.MRP1 || '0');
+                        const rate = parseFloat(p.RATE1 || '0');
+                        if (mrp === num || rate === num) fuzzyScore += 50;
+                        else if (prodLower.includes(num.toString())) fuzzyScore += 20;
+                    }
+
+                    return { ...p, _searchScore: fuzzyScore, _fuzzy: fuzzyScore > 0 };
+                });
+
+                jsonData = fuzzyScored
+                    .filter(p => p._searchScore > 0)
+                    .sort((a, b) => b._searchScore - a._searchScore)
+                    .slice(0, 40); // cap fuzzy results to top 40
+            }
         }
 
         // Brand filter
@@ -566,6 +745,10 @@ router.get('/products', async (req, res) => {
             return null;
         };
 
+        const productMeta = await appDb.getAllProductMeta().catch(() => []);
+        const metaMap = {};
+        productMeta.forEach(m => metaMap[m.product_code] = m);
+
         const results = jsonData.slice(startIndex, startIndex + limit).map(p => {
             let productSchemes = [];
             if (schemesMap[p.CODE]) {
@@ -580,9 +763,12 @@ router.get('/products', async (req, res) => {
                 }));
             }
 
+            const meta = metaMap[p.CODE] || {};
+            const img = meta.image_url || findImage(p.PRODUCT, p.CODE, p.IT_DESC2);
+
             return {
                 CODE: p.CODE,
-                PRODUCT: p.PRODUCT,
+                PRODUCT: meta.nickname || p.PRODUCT, // override product name with nickname if present
                 UNIT_1: p.UNIT_1,
                 UNIT_2: p.UNIT_2,
                 MULT_F: p.MULT_F,
@@ -590,12 +776,13 @@ router.get('/products', async (req, res) => {
                 MRP1: p.MRP1,
                 PACK: p.PACK,
                 stock: p.stock,
-                image_url: findImage(p.PRODUCT, p.CODE, p.IT_DESC2),
-                schemes: productSchemes
+                image_url: img,
+                schemes: productSchemes,
+                brand_code: meta.brand_code || productBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || ''
             };
         });
 
-        res.json({ data: results, total: jsonData.length, page, limit });
+        res.json({ data: results, total: jsonData.length, page, limit, isFuzzy: isFuzzyResult });
     } catch (error) {
         console.error('[app/products]', error);
         res.status(500).json({ error: 'Failed to fetch products' });
@@ -663,7 +850,7 @@ router.get('/past-invoices', requireAppAuth, async (req, res) => {
 
         // Filter bills by the user's party code
         const userCode = String(req.appPartyCode).trim().toUpperCase();
-        let userInvoices = bills.filter(b => String(b.C_CODE || '').trim().toUpperCase() === userCode);
+        let userInvoices = bills.filter(b => b && String(b.C_CODE || '').trim().toUpperCase() === userCode);
 
         // Sort by date (newest first)
         userInvoices.sort((a, b) => {
@@ -728,8 +915,43 @@ router.post('/orders', requireAppAuth, async (req, res) => {
             console.error('[app/orders POST] error calculating schemes', err);
         }
 
+        // Calculate the next T series bill number to assign a unique ID
+        let maxTBill = 0;
+        
+        const checkMax = (data, getSeries, getBillNo) => {
+            if (!Array.isArray(data)) return;
+            data.forEach(entry => {
+                const s = getSeries(entry)?.toUpperCase();
+                const b = Number(getBillNo(entry));
+                if (s === 'T' && !isNaN(b)) {
+                    if (b > maxTBill) maxTBill = b;
+                }
+            });
+        };
+
+        try {
+            const invData = await fs.readFile(path.join(__dirname, '../../db/invoicing.json'), 'utf8').then(JSON.parse);
+            checkMax(invData, e => e.series, e => e.billNo);
+        } catch (e) {}
+        
+        try {
+            const appInvData = await fs.readFile(path.join(__dirname, '../../db/approved/invoicing.json'), 'utf8').then(JSON.parse);
+            checkMax(appInvData, e => e.series, e => e.billNo);
+        } catch (e) {}
+        
+        try {
+            const billdtlData = await fs.readFile(path.join(process.env.DBF_FOLDER_PATH, 'data/json/billdtl.json'), 'utf8').then(JSON.parse);
+            checkMax(billdtlData, e => e.SERIES, e => e.BILL);
+        } catch (e) {}
+
+        checkMax(orders, e => e.series, e => e.billNo);
+
+        const nextTBillNo = maxTBill + 1;
+
         const newOrder = {
-            id: Date.now().toString(),
+            id: `T${nextTBillNo}`,
+            series: 'T',
+            billNo: nextTBillNo,
             date: new Date().toISOString(),
             status: 'Pending',
             partyCode: req.appPartyCode,
@@ -783,7 +1005,7 @@ router.patch('/admin/orders/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status, note } = req.body;
 
-    const validStatuses = ['Approved', 'Rejected', 'Pending'];
+    const validStatuses = ['Approved', 'Rejected', 'Pending', 'Invoiced'];
     if (!validStatuses.includes(status)) {
         return res.status(400).json({ error: `status must be one of: ${validStatuses.join(', ')}` });
     }
@@ -806,6 +1028,38 @@ router.patch('/admin/orders/:id/status', async (req, res) => {
 });
 
 /**
+ * PATCH /api/app/admin/orders/:id/mark-invoiced
+ * Body: { billNo: string, series: string }
+ * Marks an app order as Invoiced and stores the bill reference.
+ */
+router.patch('/admin/orders/:id/mark-invoiced', async (req, res) => {
+    const { id } = req.params;
+    const { billNo, series } = req.body;
+
+    if (!billNo || !series) {
+        return res.status(400).json({ error: 'billNo and series are required' });
+    }
+
+    try {
+        const orders = await readOrders();
+        const idx = orders.findIndex(o => o.id === id);
+        if (idx === -1) return res.status(404).json({ error: 'Order not found' });
+
+        orders[idx].status = 'Invoiced';
+        orders[idx].invoiceBillNo = billNo;
+        orders[idx].invoiceSeries = series;
+        orders[idx].invoiceRef = `${series}-${billNo}`;
+        orders[idx].updatedAt = new Date().toISOString();
+
+        await writeOrders(orders);
+        res.json({ success: true, order: orders[idx] });
+    } catch (err) {
+        console.error('[app/admin/orders/mark-invoiced PATCH]', err);
+        res.status(500).json({ error: 'Failed to mark order as invoiced' });
+    }
+});
+
+/**
  * GET /api/app/admin/stats
  * Returns count of pending/approved/rejected orders.
  */
@@ -817,6 +1071,7 @@ router.get('/admin/stats', async (req, res) => {
             pending: orders.filter(o => o.status === 'Pending').length,
             approved: orders.filter(o => o.status === 'Approved').length,
             rejected: orders.filter(o => o.status === 'Rejected').length,
+            invoiced: orders.filter(o => o.status === 'Invoiced').length,
         };
         res.json(stats);
     } catch (err) {
@@ -830,10 +1085,7 @@ router.get('/admin/stats', async (req, res) => {
  * Headers: Authorization: Bearer <token>
  * Body: { productCode, imageUrl }
  */
-router.post('/admin/product-image', requireAppAuth, async (req, res) => {
-    if (req.appPartyCode !== 'ADMIN' && req.appPartyCode !== '8081121020') {
-        return res.status(403).json({ error: 'Not authorized' });
-    }
+router.post('/admin/product-image', requireAdminJwtAuth, async (req, res) => {
     const { productCode, imageUrl } = req.body;
     if (!productCode || !imageUrl) return res.status(400).json({ error: 'productCode and imageUrl required' });
     
@@ -852,7 +1104,7 @@ router.post('/admin/product-image', requireAppAuth, async (req, res) => {
     }
 
     try {
-        await appDb.updateProductImage(productCode, finalUrl);
+        await appDb.updateProductMetaImage(productCode, finalUrl);
         res.json({ success: true, imageUrl: finalUrl });
     } catch(err) {
         console.error('[app/admin/product-image POST]', err);
@@ -864,10 +1116,7 @@ router.post('/admin/product-image', requireAppAuth, async (req, res) => {
  * GET /api/app/admin/amazon-search
  * Query: q=search_term
  */
-router.get('/admin/amazon-search', requireAppAuth, async (req, res) => {
-    if (req.appPartyCode !== 'ADMIN' && req.appPartyCode !== '8081121020') {
-        return res.status(403).json({ error: 'Not authorized' });
-    }
+router.get('/admin/amazon-search', requireAdminJwtAuth, async (req, res) => {
     const q = req.query.q;
     if (!q) return res.status(400).json({ error: 'Query parameter q required' });
 
@@ -923,15 +1172,183 @@ router.patch('/admin/users/:partyCode/reset-password', async (req, res) => {
 
 /**
  * GET /api/app/brands
- * Returns all brands for the frontend.
+ * Returns merged brands (brands_custom overrides brands table) for the frontend.
  */
 router.get('/brands', async (req, res) => {
     try {
-        const brands = await appDb.getAllBrands();
-        res.json(brands);
+        const [baseBrands, customBrands, productBrandsList, productMeta] = await Promise.all([
+            appDb.getAllBrands(),
+            appDb.getAllCustomBrands(),
+            appDb.getProductBrands().catch(() => []),
+            appDb.getAllProductMeta().catch(() => [])
+        ]);
+
+        // Build basepack -> brand_code map
+        const bpBrandMap = {};
+        productBrandsList.forEach(pb => {
+            if (pb.basepack_code && pb.brand_code)
+                bpBrandMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+        });
+
+        // Build product_code -> brand_code map from meta overrides
+        const metaBrandMap = {};
+        productMeta.forEach(m => { if (m.brand_code) metaBrandMap[m.product_code] = m.brand_code; });
+
+        // Count in-stock products per brand (reuse cached enriched products)
+        const countMap = {};
+        try {
+            const { jsonData: enrichedProducts } = await getEnrichedProducts();
+
+            enrichedProducts.forEach(p => {
+                const brandCode = metaBrandMap[p.CODE] || bpBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || '';
+                if (brandCode) countMap[brandCode] = (countMap[brandCode] || 0) + 1;
+            });
+        } catch (e) { /* PMPL/stock unavailable — skip count filtering */ }
+
+        // Custom brands override base brands by brand_code
+        const customMap = {};
+        customBrands.forEach(b => { customMap[b.brand_code] = b; });
+
+        // Start with base brands, map to unified structure
+        const merged = baseBrands.map(b => {
+            const custom = customMap[b.brand_code];
+            return {
+                brand_code: b.brand_code,
+                brand_desc: custom ? custom.brand_name : b.brand_desc,
+                image_url: custom ? (custom.image_url || b.image_url) : b.image_url,
+                is_custom: !!custom,
+                product_count: countMap[b.brand_code] || 0
+            };
+        });
+
+        // Add custom-only brands that have no base counterpart
+        customBrands.forEach(b => {
+            if (!merged.find(m => m.brand_code === b.brand_code)) {
+                merged.push({
+                    brand_code: b.brand_code,
+                    brand_desc: b.brand_name,
+                    image_url: b.image_url,
+                    is_custom: true,
+                    product_count: countMap[b.brand_code] || 0
+                });
+            }
+        });
+
+        // Filter out brands with no in-stock products, then sort
+        const active = merged.filter(b => b.product_count > 0);
+        active.sort((a, b) => (a.brand_desc || '').localeCompare(b.brand_desc || ''));
+        res.json(active);
     } catch (err) {
         console.error('[app/brands]', err);
         res.status(500).json({ error: 'Failed to fetch brands' });
+    }
+});
+
+/**
+ * GET /api/app/admin/brands
+ * Returns all brands with product counts from product_meta and base mappings.
+ */
+router.get('/admin/brands', async (req, res) => {
+    try {
+        const [baseBrands, customBrands, productsBase, productMeta] = await Promise.all([
+            appDb.getAllBrands(),
+            appDb.getAllCustomBrands(),
+            appDb.getProductBrands().catch(() => []),
+            appDb.getAllProductMeta().catch(() => [])
+        ]);
+
+        // 1. Get all products to count correctly
+        const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
+        let jsonData;
+        try {
+            const data = await fs.readFile(jsonPath, 'utf8');
+            jsonData = JSON.parse(data);
+        } catch (e) {
+            const dbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF');
+            jsonData = await getDbfData(dbfPath);
+        }
+
+        // 2. Maps for quick lookup
+        const metaMap = {};
+        productMeta.forEach(m => metaMap[m.product_code] = m);
+
+        const baseMap = {};
+        productsBase.forEach(pb => {
+            if (pb.basepack_code) baseMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+        });
+
+        // 3. Count products per brand
+        const brandProductCount = {};
+        jsonData.forEach(p => {
+            if (!p.CODE) return;
+            const meta = metaMap[p.CODE];
+            const basepack = p.IT_DESC2 ? String(p.IT_DESC2).trim() : null;
+            
+            // Custom brand code from meta overrides base brand code
+            const brandCode = (meta && meta.brand_code) || (basepack ? baseMap[basepack] : null);
+            
+            if (brandCode) {
+                brandProductCount[brandCode] = (brandProductCount[brandCode] || 0) + 1;
+            }
+        });
+
+        const customMap = {};
+        customBrands.forEach(b => { customMap[b.brand_code] = b; });
+
+        const merged = baseBrands.map(b => {
+            const custom = customMap[b.brand_code];
+            return {
+                brand_code: b.brand_code,
+                brand_name: custom ? custom.brand_name : b.brand_desc,
+                image_url: custom ? (custom.image_url || b.image_url) : b.image_url,
+                is_custom: !!custom,
+                custom_id: custom ? custom.id : null,
+                product_count: brandProductCount[b.brand_code] || 0
+            };
+        });
+
+        customBrands.forEach(b => {
+            if (!merged.find(m => m.brand_code === b.brand_code)) {
+                merged.push({
+                    brand_code: b.brand_code,
+                    brand_name: b.brand_name,
+                    image_url: b.image_url,
+                    is_custom: true,
+                    custom_id: b.id,
+                    product_count: brandProductCount[b.brand_code] || 0
+                });
+            }
+        });
+
+        merged.sort((a, b) => (a.brand_name || '').localeCompare(b.brand_name || ''));
+        res.json(merged);
+    } catch (err) {
+        console.error('[app/admin/brands]', err);
+        res.status(500).json({ error: 'Failed to fetch brands' });
+    }
+});
+
+/**
+ * POST /api/app/admin/brands
+ * Upsert a brand into brands_custom (by brand_code).
+ */
+router.post('/admin/brands', async (req, res) => {
+    try {
+        const { brand_code, brand_name, image_url } = req.body;
+        if (!brand_code || !brand_name) return res.status(400).json({ error: 'brand_code and brand_name required' });
+
+        const existing = await appDb.getAllCustomBrands();
+        const found = existing.find(b => b.brand_code === brand_code);
+
+        if (found) {
+            await appDb.updateCustomBrand(found.id, { brand_name, image_url });
+        } else {
+            await appDb.createCustomBrand({ brand_code, brand_name, image_url });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[app/admin/brands POST]', err);
+        res.status(500).json({ error: 'Failed to upsert brand' });
     }
 });
 
@@ -1000,6 +1417,159 @@ router.delete('/admin/schemes/:id', async (req, res) => {
     } catch (err) {
         console.error('[app/admin/schemes DELETE]', err);
         res.status(500).json({ error: 'Failed to delete scheme' });
+    }
+});
+
+// ── App Listings / Products Admin ─────────────────────────────────────────────
+
+/**
+ * GET /api/app/admin/products
+ */
+router.get('/admin/products', async (req, res) => {
+    try {
+        const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
+        let jsonData;
+        try {
+            const data = await fs.readFile(jsonPath, 'utf8');
+            jsonData = JSON.parse(data);
+        } catch (e) {
+            const dbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF');
+            jsonData = await getDbfData(dbfPath);
+        }
+
+        // Get product brands mapping
+        const productBrandsList = await appDb.getProductBrands().catch(() => []);
+        const productBrandMap = {};
+        productBrandsList.forEach(pb => {
+            if (pb.basepack_code && pb.brand_code) {
+                productBrandMap[String(pb.basepack_code).trim()] = String(pb.brand_code).trim();
+            }
+        });
+
+        const productImages = await appDb.getAllProductImages().catch(() => []);
+        
+        const findImage = (productName, code, basepack) => {
+            if (!productName) return null;
+            const name = productName.toUpperCase().trim();
+            for (const img of productImages) {
+                if (basepack && img.basepack_code && String(img.basepack_code).trim() === String(basepack).trim()) {
+                    return img.image_url;
+                }
+                if (img.basepack_code && code && String(img.basepack_code).trim() === String(code).trim()) {
+                    return img.image_url;
+                }
+                if (!img.itemvarient_desc) continue;
+                const desc = img.itemvarient_desc.toUpperCase().trim();
+                const matchLen = Math.min(12, name.length, desc.length);
+                if (matchLen >= 8 && name.substring(0, matchLen) === desc.substring(0, matchLen)) {
+                    return img.image_url;
+                }
+            }
+            return null;
+        };
+
+        const productMeta = await appDb.getAllProductMeta().catch(() => []);
+        const metaMap = {};
+        productMeta.forEach(m => {
+            metaMap[m.product_code] = m;
+        });
+
+        // We only show active products usually, but admin should see all
+        // Let's filter out products with empty CODE or PRODUCT just to be safe
+        jsonData = jsonData.filter(p => p.PRODUCT && p.CODE && p.PRODUCT.trim() !== '');
+
+        const results = jsonData.map(p => {
+            const meta = metaMap[p.CODE] || {};
+            const img = meta.image_url || findImage(p.PRODUCT, p.CODE, p.IT_DESC2);
+            return {
+                CODE: p.CODE,
+                PRODUCT: p.PRODUCT,
+                UNIT_1: p.UNIT_1,
+                UNIT_2: p.UNIT_2,
+                MULT_F: p.MULT_F,
+                RATE1: p.RATE1,
+                MRP1: p.MRP1,
+                PACK: p.PACK,
+                nickname: meta.nickname || '',
+                brand_code: meta.brand_code || productBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || '',
+                image_url: img || ''
+            };
+        });
+
+        res.json(results);
+    } catch (err) {
+        console.error('[app/admin/products]', err);
+        res.status(500).json({ error: 'Failed to fetch products' });
+    }
+});
+
+/**
+ * PUT /api/app/admin/products/:code/meta
+ */
+router.put('/admin/products/:code/meta', async (req, res) => {
+    try {
+        const product_code = req.params.code;
+        await appDb.upsertProductMeta(product_code, req.body);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[app/admin/products/:code/meta]', err);
+        res.status(500).json({ error: 'Failed to update product meta' });
+    }
+});
+
+// ── Custom Brands Admin ───────────────────────────────────────────────────────
+
+/**
+ * GET /api/app/admin/brands_custom
+ */
+router.get('/admin/brands_custom', async (req, res) => {
+    try {
+        const brands = await appDb.getAllCustomBrands();
+        res.json(brands);
+    } catch (err) {
+        console.error('[app/admin/brands_custom]', err);
+        res.status(500).json({ error: 'Failed to fetch custom brands' });
+    }
+});
+
+/**
+ * POST /api/app/admin/brands_custom
+ */
+router.post('/admin/brands_custom', async (req, res) => {
+    try {
+        const result = await appDb.createCustomBrand(req.body);
+        res.json({ success: true, id: result.id });
+    } catch (err) {
+        console.error('[app/admin/brands_custom POST]', err);
+        res.status(500).json({ error: 'Failed to create custom brand' });
+    }
+});
+
+/**
+ * PUT /api/app/admin/brands_custom/:id
+ */
+router.put('/admin/brands_custom/:id', async (req, res) => {
+    try {
+        const success = await appDb.updateCustomBrand(req.params.id, req.body);
+        if (!success) return res.status(404).json({ error: 'Brand not found' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[app/admin/brands_custom PUT]', err);
+        res.status(500).json({ error: 'Failed to update custom brand' });
+    }
+});
+
+/**
+ * DELETE /api/app/admin/brands_custom/:id
+ */
+router.delete('/admin/brands_custom/:id', async (req, res) => {
+    try {
+        const success = await appDb.deleteCustomBrand(req.params.id);
+        if (!success) return res.status(404).json({ error: 'Brand not found' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[app/admin/brands_custom DELETE]', err);
+        res.status(500).json({ error: 'Failed to delete custom brand' });
     }
 });
 
