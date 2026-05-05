@@ -61,7 +61,7 @@ The app features multiple "Home Page Concepts" for A/B testing or design selecti
 - **`app/src/lib/cache.ts`**: A robust **IndexedDB-backed** caching layer.
     - **Stale-While-Revalidate (SWR)**: Fetches from cache instantly for zero-latency UI, then revalidates in the background.
     - **TTL Enforcement**: 5-minute cache expiry for prices and stock.
-    - **Visual Indicators**: Displays a "⚡ Prices are being updated..." status when showing stale data to ensure transparency.
+
 - **Asset Bundling**: Logo and other critical branding assets are imported as modules (`import logoUrl from '../../public/logo.png'`) to ensure they are hashed and correctly served by Vite in production environments.
 
 ## 6. Directory Structure Summary
