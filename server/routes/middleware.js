@@ -12,7 +12,8 @@ const PUBLIC_API_PATHS = [
   '/api/internal/invoice-data/',
   '/api/push/subscribe',
   '/api/approve-from-notification',
-  '/api/test-details/'
+  '/api/test-details/',
+  '/api/app/',  // App routes have their own auth — exclude from global middleware
 ];
 
 // Extract JWT token from Authorization header
