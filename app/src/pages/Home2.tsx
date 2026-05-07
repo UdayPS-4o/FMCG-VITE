@@ -5,7 +5,7 @@
  */
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { fetchProducts, fetchBrands } from '../lib/api';
-const logoUrl = '/logo.png';
+import logoUrl from '../../icons/icon-192.webp';
 import { useStore, type Product } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';

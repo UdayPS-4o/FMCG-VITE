@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "acme-client": "^5.4.0",
     "ask-sdk-core": "^2.14.0",
     "ask-sdk-model": "^1.86.0",
     "axios": "^1.15.2",

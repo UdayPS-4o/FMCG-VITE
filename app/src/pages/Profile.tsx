@@ -135,7 +135,7 @@ const Profile = () => {
                                             </div>
                                             <div>
                                                 <div className="text-xs text-gray-500 font-medium">{item.date}</div>
-                                                <div className="text-sm font-semibold text-gray-800">{item.book || 'N/A'}</div>
+                                                <div className="text-sm font-semibold text-gray-800 line-clamp-2">{item.narration || item.book || 'N/A'}</div>
                                             </div>
                                         </div>
                                         <div className="text-right">
@@ -280,8 +280,32 @@ const Profile = () => {
                                             />
                                         </div>
                                         <button 
-                                            onClick={() => { 
+                                            onClick={async () => { 
                                                 if (offlineAmount && Number(offlineAmount) > 0) {
+                                                    const newMessage = {
+                                                        id: Date.now().toString(),
+                                                        recipientId: 1, // Defaulting admin ID to 1
+                                                        recipientName: 'Admin',
+                                                        message: `Pickup requested for ₹${offlineAmount} by ${user?.name || user?.partyCode}`,
+                                                        photoAttachment: null,
+                                                        sentAt: new Date().toISOString(),
+                                                        sentBy: user?.partyCode || 'user',
+                                                        isRead: false
+                                                    };
+                                                    
+                                                    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace('/api/app', '');
+                                                    try {
+                                                        await fetch(baseUrl + '/api/messages', {
+                                                            method: 'POST',
+                                                            headers: {
+                                                                'Content-Type': 'application/json'
+                                                            },
+                                                            body: JSON.stringify(newMessage)
+                                                        });
+                                                    } catch (err) {
+                                                        console.error('Failed to send message:', err);
+                                                    }
+
                                                     alert('Pickup Requested for ₹' + offlineAmount); 
                                                     setShowPayModal(false); 
                                                     setPayMode('selection'); 

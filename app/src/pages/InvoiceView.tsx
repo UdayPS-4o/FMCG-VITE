@@ -109,7 +109,7 @@ const InvoiceView = () => {
         const product = {
             CODE: item.item,
             PRODUCT: item.particular,
-            UNIT_1: item.unit1 || 'PCS',
+            UNIT_1: item.unit1 || item.unit || 'PCS',
             UNIT_2: item.unit2 || 'BOX',
             MULT_F: item.pcBx || '1',
             RATE1: item.rate,

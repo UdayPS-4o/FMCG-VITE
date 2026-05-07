@@ -146,23 +146,29 @@ router.post('/webhook', async (req, res) => {
 
       console.log('[Alexa] Processing voice command:', voiceText);
 
-      try {
-        const parsed = await parseCommandWithGemini(voiceText);
-        const replyText = parsed.reply || 'Theek hai, command process ho raha hai.';
+      // ✅ Respond to Alexa IMMEDIATELY to avoid 8-second timeout
+      // Gemini processing happens in the background
+      res.json(alexaResponse(
+        'Theek hai, command process ho raha hai.',
+        'Koi aur kaam hai?'
+      ));
 
-        if (parsed.actions && parsed.actions.length > 0) {
-          await queueCommand(parsed.actions, voiceText);
-          console.log('[Alexa] Queued', parsed.actions.length, 'action(s)');
+      // 🔄 Process Gemini in background (fire-and-forget)
+      setImmediate(async () => {
+        try {
+          const parsed = await parseCommandWithGemini(voiceText);
+          if (parsed.actions && parsed.actions.length > 0) {
+            await queueCommand(parsed.actions, voiceText);
+            console.log('[Alexa] Queued', parsed.actions.length, 'action(s) for:', voiceText);
+          } else {
+            console.log('[Alexa] No actions returned for:', voiceText);
+          }
+        } catch (err) {
+          console.error('[Alexa] Background Gemini error:', err.message);
+          // Still queue a fallback command so the frontend gets notified
+          await queueCommand([{ type: 'show_toast', message: 'Voice command received: ' + voiceText }], voiceText).catch(() => {});
         }
-
-        return res.json(alexaResponse(replyText, 'Koi aur kaam hai?'));
-      } catch (err) {
-        console.error('[Alexa] Gemini error:', err.message);
-        return res.json(alexaResponse(
-          'Server se response aane mein problem ho rahi hai. Thodi der baad try karein.',
-          'Phir se try karein.'
-        ));
-      }
+      });
     }
 
     // Unknown request type

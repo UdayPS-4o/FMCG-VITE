@@ -73,7 +73,7 @@ const Cart = () => {
             <div className="p-3 space-y-3">
                 {cart.map(item => {
                     const conversion = parseFloat(item.product.MULT_F || '1') || 1;
-                    const hasMultipleUnits = conversion > 1;
+                    const hasMultipleUnits = conversion > 1 || item.qtyBoxes > 0;
                     
                     return (
                         <div key={item.product.CODE} className="flex gap-3 bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
