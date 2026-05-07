@@ -5,7 +5,7 @@
  */
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { fetchProducts, fetchBrands, getImageUrl } from '../lib/api';
-const logoUrl = '/logo.png';
+import logoUrl from '../../icons/icon-192.webp';
 import { getStale, setCache } from '../lib/cache';
 import { useStore, type Product } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';

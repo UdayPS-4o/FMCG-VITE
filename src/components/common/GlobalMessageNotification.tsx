@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import useAuth from '../../hooks/useAuth';
+import constants from '../../constants';
 
 interface MessageData {
   id: string;
@@ -19,88 +20,56 @@ const GlobalMessageNotification: React.FC = () => {
 
   const [selectedAttachment, setSelectedAttachment] = useState<string | null>(null);
 
-  // Load messages from localStorage
+  // Load messages from the backend API
   useEffect(() => {
-    const loadMessages = () => {
+    const fetchMessages = async () => {
       try {
-        const storedMessages = localStorage.getItem('userMessages');
-        
-        if (storedMessages) {
-          const parsedMessages = JSON.parse(storedMessages);
+        const response = await fetch(`${constants.baseURL}/api/messages`);
+        if (response.ok) {
+          const data = await response.json();
           // Filter messages for current user
-          const userMessages = user ? parsedMessages.filter((msg: MessageData) => msg.recipientId === user.id) : [];
+          const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
+          const userMessages = user ? data.messages.filter((msg: MessageData) => msg.recipientId === user.id || (isAdmin && msg.recipientId === 1)) : [];
           setMessages(userMessages);
         }
       } catch (error) {
-        console.error('Error loading messages:', error);
+        console.error('Error fetching messages:', error);
       }
     };
 
-    loadMessages();
+    fetchMessages();
     
-    // Listen for storage changes to update messages in real-time
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'userMessages') {
-        loadMessages();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    // Poll for new messages every 5 seconds since we don't have WebSockets set up
+    const intervalId = setInterval(fetchMessages, 5000);
+    return () => clearInterval(intervalId);
   }, [user]);
 
-  const markMessageAsRead = (messageId: string) => {
+  const markMessageAsRead = async (messageId: string) => {
     try {
-      // Get all messages from localStorage
-      const storedMessages = localStorage.getItem('userMessages');
-      if (storedMessages) {
-        const allMessages = JSON.parse(storedMessages);
-        // Find and update the specific message
-        const updatedMessages = allMessages.map((msg: MessageData) => 
-          msg.id === messageId ? { ...msg, isRead: true } : msg
-        );
-        // Save back to localStorage
-        localStorage.setItem('userMessages', JSON.stringify(updatedMessages));
-        
-        // Update local state
+      const response = await fetch(`${constants.baseURL}/api/messages/${messageId}/read`, {
+        method: 'PUT'
+      });
+      if (response.ok) {
         setMessages(prev => prev.map(msg => 
           msg.id === messageId ? { ...msg, isRead: true } : msg
         ));
-        
-        // Trigger storage event for other windows/tabs
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: 'userMessages',
-          newValue: JSON.stringify(updatedMessages),
-          storageArea: localStorage
-        }));
       }
     } catch (error) {
       console.error('Error marking message as read:', error);
     }
   };
 
-  const markAllMessagesAsRead = () => {
+  const markAllMessagesAsRead = async () => {
+    if (!user) return;
     try {
-      // Get all messages from localStorage
-      const storedMessages = localStorage.getItem('userMessages');
-      if (storedMessages) {
-        const allMessages = JSON.parse(storedMessages);
-        // Mark all user's messages as read
-        const updatedMessages = allMessages.map((msg: MessageData) => 
-          msg.recipientId === user?.id ? { ...msg, isRead: true } : msg
-        );
-        // Save back to localStorage
-        localStorage.setItem('userMessages', JSON.stringify(updatedMessages));
-        
-        // Update local state
+      const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
+      const response = await fetch(`${constants.baseURL}/api/messages/read-all`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, isAdmin })
+      });
+      if (response.ok) {
         setMessages(prev => prev.map(msg => ({ ...msg, isRead: true })));
-        
-        // Trigger storage event for other windows/tabs
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: 'userMessages',
-          newValue: JSON.stringify(updatedMessages),
-          storageArea: localStorage
-        }));
       }
     } catch (error) {
       console.error('Error marking all messages as read:', error);

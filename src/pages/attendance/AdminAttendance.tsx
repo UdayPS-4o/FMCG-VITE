@@ -1019,6 +1019,7 @@ const AdminAttendance: React.FC = () => {
       // Mock successful message sending
       // In a real implementation, this would send to the backend API
       const messagePayload = {
+        id: Date.now().toString(),
         recipientId: messageModal.userId,
         recipientName: messageModal.userName,
         message: messageData.message.trim(),
@@ -1028,24 +1029,20 @@ const AdminAttendance: React.FC = () => {
         isRead: false
       };
 
-      // Store message in localStorage for demo purposes
-      // In production, this would be handled by the backend
-      const existingMessages = JSON.parse(localStorage.getItem('userMessages') || '[]');
-      const newMessage = {
-        id: Date.now().toString(),
-        ...messagePayload
-      };
-      existingMessages.push(newMessage);
-      localStorage.setItem('userMessages', JSON.stringify(existingMessages));
-
-      // Manually trigger storage event for same-window notification updates
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'userMessages',
-        newValue: JSON.stringify(existingMessages),
-        storageArea: localStorage
-      }));
-
-      console.log('Message sent:', newMessage);
+      try {
+        const response = await fetch(`${constants.baseURL}/api/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify(messagePayload)
+        });
+        if (!response.ok) throw new Error('Failed to send message');
+        console.log('Message sent:', messagePayload);
+      } catch (error) {
+        console.error('Error sending message:', error);
+      }
 
       setToast({ message: `Message sent to ${messageModal.userName} successfully!`, type: 'success' });
       setMessageModal(null);

@@ -1,0 +1,6 @@
+# Ignore all cert/key files — never commit private keys to git
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12

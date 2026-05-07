@@ -2,9 +2,12 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 const bodyParser = require('body-parser');
 var cookieParser = require('cookie-parser');
-const fs = require('fs').promises;
+const fsAsync = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const morgan = require('morgan');
+const http = require('http');
+const https = require('https');
 const app = express();
 const PORT = process.env.PORT || 8000;
 
@@ -34,8 +37,8 @@ app.use(
         'http://127.0.0.1:3000',
         'http://127.0.0.1:3001',
         'https://ekta-enterprises.com',
+        'https://test.ekta-enterprises.com',
         'https://app.ekta-enterprises.com',
-        'https://test.ekla-enterprises.com',
         'https://server.udayps.cfd',
         'http://localhost:5173',
         'http://127.0.0.1:5173',
@@ -187,7 +190,7 @@ app.get('/admin', async (req, res) => {
 app.post('/addUser', async (req, res) => {
   const { name, number, perms, routes, password, powers, subgroup } = req.body;
   console.log('Adding user', number, perms, routes, powers, password, subgroup);
-  let users = await fs.readFile('./db/users.json');
+  let users = await fsAsync.readFile('./db/users.json');
   users = JSON.parse(users);
   if (users.find((user) => user.username === number)) {
     const user = users.find((user) => user.username === number);
@@ -196,7 +199,7 @@ app.post('/addUser', async (req, res) => {
     user.routes = routes;
     user.password = password;
     user.powers = powers;
-    fs.writeFile('./db/users.json', JSON.stringify(users, null, 2));
+    fsAsync.writeFile('./db/users.json', JSON.stringify(users, null, 2));
     res.redirect('/admin');
     return;
   } else {
@@ -209,12 +212,17 @@ app.post('/addUser', async (req, res) => {
       powers: powers,
     };
     users.push(user);
-    fs.writeFile('./db/users.json', JSON.stringify(users, null, 2));
+    fsAsync.writeFile('./db/users.json', JSON.stringify(users, null, 2));
     res.redirect('/admin');
   }
 });
 
 app.get('/json/users', (req, res) => {
+  const users = require('./db/users.json');
+  res.send(users);
+});
+
+app.get('/users', (req, res) => {
   const users = require('./db/users.json');
   res.send(users);
 });
@@ -243,11 +251,62 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end(); // Send "No Content" response for favicon requests
 });
 
-// Initialize server
+// Initialize server — supports both HTTP (:80) and HTTPS (:443)
 const initServer = () => {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  const SSL_KEY_PATH  = process.env.SSL_KEY_PATH  || path.join(__dirname, 'certs', 'privkey.pem');
+  const SSL_CERT_PATH = process.env.SSL_CERT_PATH || path.join(__dirname, 'certs', 'fullchain.pem');
+
+  const certsExist = fsSync.existsSync(SSL_KEY_PATH) && fsSync.existsSync(SSL_CERT_PATH);
+
+  if (certsExist) {
+    // ── HTTPS server on :443 ──────────────────────────────────────────────
+    const sslOptions = {
+      key:  fsSync.readFileSync(SSL_KEY_PATH),
+      cert: fsSync.readFileSync(SSL_CERT_PATH),
+    };
+    const httpsServer = https.createServer(sslOptions, app);
+    httpsServer.listen(443, '0.0.0.0', () => {
+      console.log('HTTPS server running on port 443');
+    });
+    httpsServer.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error('[ERROR] Port 443 already in use. Waiting for pm2 to retry...');
+        process.exit(1); // clean exit so pm2 restarts once port is free
+      } else throw err;
+    });
+
+    // ── HTTP server on :80 — redirect everything to HTTPS ─────────────────
+    const redirectApp = express();
+    redirectApp.use((req, res) => {
+      const host = req.headers.host ? req.headers.host.replace(/:\d+$/, '') : 'server.ekta-enterprises.com';
+      res.redirect(301, `https://${host}${req.url}`);
+    });
+    const httpServer = http.createServer(redirectApp);
+    httpServer.listen(80, '0.0.0.0', () => {
+      console.log('HTTP server running on port 80 (redirecting to HTTPS)');
+    });
+    httpServer.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error('[ERROR] Port 80 already in use. Waiting for pm2 to retry...');
+        process.exit(1);
+      } else throw err;
+    });
+  } else {
+    // ── Fallback: HTTP-only on :80 (certs not found) ──────────────────────
+    console.warn('[WARN] SSL certificates not found. Running HTTP-only on port 80.');
+    console.warn(`       Looked for key:  ${SSL_KEY_PATH}`);
+    console.warn(`       Looked for cert: ${SSL_CERT_PATH}`);
+    const httpFallback = http.createServer(app);
+    httpFallback.listen(80, '0.0.0.0', () => {
+      console.log('HTTP server running on port 80');
+    });
+    httpFallback.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error('[ERROR] Port 80 already in use. Waiting for pm2 to retry...');
+        process.exit(1);
+      } else throw err;
+    });
+  }
 };
 
 initServer();
