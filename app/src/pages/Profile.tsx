@@ -342,7 +342,7 @@ const Profile = () => {
                                             <ChevronRight size={18} className="text-gray-400 group-hover:text-indigo-600" />
                                         </button>
                                         
-                                        <a href="phonepe://pay?pa=0490008700003292@pnb&pn=EKTA%20ENTERPRISES&cu=INR" className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-purple-50 hover:border-purple-200 transition-colors text-left group">
+                                        <a href="phonepe://pay?pa=9826623188m@pnb&pn=EKTA%20ENTERPRISES&cu=INR" className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-purple-50 hover:border-purple-200 transition-colors text-left group">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold text-xl shadow-sm">
                                                     पे
@@ -355,7 +355,7 @@ const Profile = () => {
                                             <ChevronRight size={18} className="text-gray-400 group-hover:text-purple-600" />
                                         </a>
 
-                                        <a href="tez://upi/pay?pa=0490008700003292@pnb&pn=EKTA%20ENTERPRISES&cu=INR" className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-colors text-left group">
+                                        <a href="tez://upi/pay?pa=9826623188m@pnb&pn=EKTA%20ENTERPRISES&cu=INR" className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-colors text-left group">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-700 font-bold text-xl shadow-sm border border-gray-200">
                                                     G

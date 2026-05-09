@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { subscribeToPush, urlBase64ToUint8Array, getVapidKey } from '../../services/pushService';
 import { toast } from 'react-toastify';
 import constants from '../../constants';
+import { Loader2, Plus, X } from 'lucide-react';
 
 interface PushToken {
     id: number;
@@ -31,6 +32,14 @@ const PushNotifications: React.FC = () => {
     const [imageUrl, setImageUrl] = useState('');
     const [sending, setSending] = useState(false);
     const [usersMetadata, setUsersMetadata] = useState<any[]>([]);
+    
+    // Search UI State
+    const [searchTarget, setSearchTarget] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+
+    // Image Upload State
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const imageInputRef = useRef<HTMLInputElement>(null);
     
     const titleRef = useRef<HTMLInputElement>(null);
     const messageRef = useRef<HTMLTextAreaElement>(null);
@@ -192,6 +201,46 @@ const PushNotifications: React.FC = () => {
         }
     };
 
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploadingImage(true);
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const base64String = reader.result as string;
+            try {
+                const token = localStorage.getItem('token');
+                const res = await fetch(`${constants.baseURL}/api/push/upload-image`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        imageBase64: base64String,
+                        filename: file.name
+                    })
+                });
+                
+                if (!res.ok) throw new Error('Upload failed');
+                
+                const data = await res.json();
+                if (data.url) {
+                    setImageUrl(constants.baseURL + data.url);
+                    toast.success('Image uploaded successfully!');
+                }
+            } catch (err) {
+                console.error(err);
+                toast.error('Failed to upload image');
+            } finally {
+                setUploadingImage(false);
+                if (imageInputRef.current) imageInputRef.current.value = '';
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
     const handleInjectVariable = (variable: string) => {
         const ref = lastFocused === 'title' ? titleRef : messageRef;
         if (ref.current) {
@@ -276,40 +325,144 @@ const PushNotifications: React.FC = () => {
                             </div>
                             
                             {targetMode === 'USER' && (
-                                <div>
-                                    <input
-                                        type="text"
-                                        list="users-list"
-                                        value={targetValue}
-                                        onChange={(e) => setTargetValue(e.target.value)}
-                                        placeholder="Search User ID or Name..."
-                                        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:ring-blue-500 focus:border-blue-500 transition-all"
-                                    />
-                                    <datalist id="users-list">
-                                        {uniqueUsers.map(uid => {
-                                            const userObj = usersMetadata.find(u => u.username === uid);
-                                            const label = userObj ? `${userObj.name} (${uid})` : uid;
-                                            return <option key={uid} value={uid}>{label}</option>
-                                        })}
-                                    </datalist>
+                                <div className="relative">
+                                    {targetValue ? (
+                                        <div className="flex items-center gap-3 p-3 border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20 rounded-xl shadow-sm">
+                                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-800/50 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold shadow-sm">
+                                                {targetValue.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                                                    {usersMetadata.find(u => u.username === targetValue)?.name || 'Unknown User'}
+                                                </div>
+                                                <div className="text-sm text-blue-600/80 dark:text-blue-400/80 truncate">@{targetValue}</div>
+                                            </div>
+                                            <button type="button" onClick={() => setTargetValue('')} className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-full text-gray-400 hover:text-red-500 transition-colors shadow-sm bg-white/50 dark:bg-gray-800/50">
+                                                <X className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                <svg className="w-5 h-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={searchTarget}
+                                                onChange={(e) => setSearchTarget(e.target.value)}
+                                                onFocus={() => setShowDropdown(true)}
+                                                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                                                placeholder="Search by User ID or Name..."
+                                                className="w-full pl-11 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all shadow-sm text-gray-900 dark:text-white placeholder-gray-400"
+                                            />
+                                            {showDropdown && (
+                                                <div className="absolute z-20 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto overflow-x-hidden ring-1 ring-black ring-opacity-5">
+                                                    {uniqueUsers
+                                                        .filter(uid => {
+                                                            const u = usersMetadata.find(um => um.username === uid);
+                                                            const searchStr = `${uid} ${u?.name || ''}`.toLowerCase();
+                                                            return searchStr.includes(searchTarget.toLowerCase());
+                                                        })
+                                                        .map(uid => {
+                                                            const userObj = usersMetadata.find(u => u.username === uid);
+                                                            return (
+                                                                <div 
+                                                                    key={uid}
+                                                                    onClick={() => {
+                                                                        setTargetValue(uid);
+                                                                        setSearchTarget('');
+                                                                        setShowDropdown(false);
+                                                                    }}
+                                                                    className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer border-b border-gray-50 dark:border-gray-700/30 last:border-0 flex items-center gap-3 transition-colors"
+                                                                >
+                                                                    <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-gray-700 flex items-center justify-center text-blue-600 dark:text-gray-300 font-bold text-sm">
+                                                                        {uid.charAt(0).toUpperCase()}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{userObj?.name || 'Unknown'}</div>
+                                                                        <div className="text-xs text-gray-500 dark:text-gray-400">@{uid}</div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                    })}
+                                                    {uniqueUsers.filter(uid => {
+                                                        const u = usersMetadata.find(um => um.username === uid);
+                                                        const searchStr = `${uid} ${u?.name || ''}`.toLowerCase();
+                                                        return searchStr.includes(searchTarget.toLowerCase());
+                                                    }).length === 0 && (
+                                                        <div className="px-4 py-6 text-sm text-gray-400 text-center flex flex-col items-center gap-2">
+                                                            <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                            No users found
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             
                             {targetMode === 'SUBGROUP' && (
-                                <div>
-                                    <input
-                                        type="text"
-                                        list="subgroups-list"
-                                        value={targetValue}
-                                        onChange={(e) => setTargetValue(e.target.value)}
-                                        placeholder="Search Subgroup Code or Name..."
-                                        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:ring-blue-500 focus:border-blue-500 transition-all"
-                                    />
-                                    <datalist id="subgroups-list">
-                                        {uniqueSubgroups.map((sg: any) => (
-                                            <option key={sg} value={sg}>{sg}</option>
-                                        ))}
-                                    </datalist>
+                                <div className="relative">
+                                    {targetValue ? (
+                                        <div className="flex items-center gap-3 p-3 border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/20 rounded-xl shadow-sm">
+                                            <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-800/50 flex items-center justify-center text-purple-600 dark:text-purple-300 font-bold shadow-sm">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                                                    {targetValue}
+                                                </div>
+                                                <div className="text-sm text-purple-600/80 dark:text-purple-400/80 truncate">Subgroup targeting</div>
+                                            </div>
+                                            <button type="button" onClick={() => setTargetValue('')} className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-full text-gray-400 hover:text-red-500 transition-colors shadow-sm bg-white/50 dark:bg-gray-800/50">
+                                                <X className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                <svg className="w-5 h-5 text-gray-400 group-focus-within:text-purple-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={searchTarget}
+                                                onChange={(e) => setSearchTarget(e.target.value)}
+                                                onFocus={() => setShowDropdown(true)}
+                                                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                                                placeholder="Search by Subgroup Code or Name..."
+                                                className="w-full pl-11 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all shadow-sm text-gray-900 dark:text-white placeholder-gray-400"
+                                            />
+                                            {showDropdown && (
+                                                <div className="absolute z-20 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto ring-1 ring-black ring-opacity-5">
+                                                    {uniqueSubgroups
+                                                        .filter((sg: any) => String(sg).toLowerCase().includes(searchTarget.toLowerCase()))
+                                                        .map((sg: any) => (
+                                                            <div 
+                                                                key={sg}
+                                                                onClick={() => {
+                                                                    setTargetValue(sg);
+                                                                    setSearchTarget('');
+                                                                    setShowDropdown(false);
+                                                                }}
+                                                                className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer border-b border-gray-50 dark:border-gray-700/30 last:border-0 flex items-center gap-3 transition-colors"
+                                                            >
+                                                                <div className="w-8 h-8 rounded-full bg-purple-50 dark:bg-gray-700 flex items-center justify-center text-purple-600 dark:text-gray-300 font-bold text-sm">
+                                                                    S
+                                                                </div>
+                                                                <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{sg}</div>
+                                                            </div>
+                                                        ))}
+                                                    {uniqueSubgroups.filter((sg: any) => String(sg).toLowerCase().includes(searchTarget.toLowerCase())).length === 0 && (
+                                                        <div className="px-4 py-6 text-sm text-gray-400 text-center flex flex-col items-center gap-2">
+                                                            <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                            No subgroups found
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -371,13 +524,30 @@ const PushNotifications: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Image URL (Optional)</label>
-                                    <input
-                                        type="text"
-                                        value={imageUrl}
-                                        onChange={(e) => setImageUrl(e.target.value)}
-                                        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
-                                        placeholder="https://..."
-                                    />
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={imageUrl}
+                                            onChange={(e) => setImageUrl(e.target.value)}
+                                            className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 dark:text-white rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                                            placeholder="https://... or upload"
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={() => imageInputRef.current?.click()} 
+                                            className="shrink-0 bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 p-2.5 rounded-lg border border-gray-300 dark:border-gray-600 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300 shadow-sm"
+                                            title="Upload Image"
+                                        >
+                                            {uploadingImage ? <Loader2 className="w-5 h-5 animate-spin text-blue-500" /> : <Plus className="w-5 h-5" />}
+                                        </button>
+                                        <input 
+                                            type="file" 
+                                            ref={imageInputRef} 
+                                            className="hidden" 
+                                            accept="image/*" 
+                                            onChange={handleImageUpload} 
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>

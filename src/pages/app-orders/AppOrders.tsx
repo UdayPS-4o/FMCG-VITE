@@ -11,6 +11,8 @@ interface OrderItem {
     qtyPcs: number;
     qtyBoxes: number;
     rate: string | number;
+    mrp: string | number;
+    sch?: number;
     netAmount: number;
 }
 
@@ -229,6 +231,8 @@ const AppOrders: React.FC = () => {
                                                 <thead className="bg-gray-50 dark:bg-gray-700">
                                                     <tr>
                                                         <th className="text-left px-3 py-2 text-xs text-gray-500 font-semibold">Product</th>
+                                                        <th className="text-center px-3 py-2 text-xs text-gray-500 font-semibold">MRP</th>
+                                                        <th className="text-center px-3 py-2 text-xs text-gray-500 font-semibold">Sch%</th>
                                                         <th className="text-center px-3 py-2 text-xs text-gray-500 font-semibold">Boxes</th>
                                                         <th className="text-center px-3 py-2 text-xs text-gray-500 font-semibold">Pcs</th>
                                                         <th className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">Amount</th>
@@ -238,6 +242,8 @@ const AppOrders: React.FC = () => {
                                                     {order.items.map((item, i) => (
                                                         <tr key={i} className="border-t border-gray-100 dark:border-gray-700">
                                                             <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{item.productName}</td>
+                                                            <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">₹{item.mrp || '—'}</td>
+                                                            <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{item.sch ? `${item.sch}%` : '—'}</td>
                                                             <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{item.qtyBoxes || '—'}</td>
                                                             <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{item.qtyPcs || '—'}</td>
                                                             <td className="px-3 py-2 text-right font-medium text-gray-800 dark:text-gray-200">₹{item.netAmount.toFixed(2)}</td>
@@ -246,7 +252,7 @@ const AppOrders: React.FC = () => {
                                                 </tbody>
                                                 <tfoot className="bg-gray-50 dark:bg-gray-700">
                                                     <tr>
-                                                        <td colSpan={3} className="px-3 py-2 text-sm font-bold text-gray-700 dark:text-gray-200 text-right">Total</td>
+                                                        <td colSpan={5} className="px-3 py-2 text-sm font-bold text-gray-700 dark:text-gray-200 text-right">Total</td>
                                                         <td className="px-3 py-2 text-right font-bold text-gray-900 dark:text-white">₹{order.totalAmount.toFixed(2)}</td>
                                                     </tr>
                                                 </tfoot>

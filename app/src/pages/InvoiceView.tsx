@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getInvoiceData } from '../lib/api';
+import { getInvoiceData, fetchProducts } from '../lib/api';
 import { ChevronLeft, Download, ShoppingCart, Plus, Package, Check } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 
@@ -105,32 +105,91 @@ const InvoiceView = () => {
         window.open(url, '_blank');
     };
 
-    const handleReorder = (item: any) => {
-        const product = {
-            CODE: item.item,
-            PRODUCT: item.particular,
-            UNIT_1: item.unit1 || item.unit || 'PCS',
-            UNIT_2: item.unit2 || 'BOX',
-            MULT_F: item.pcBx || '1',
-            RATE1: item.rate,
-            MRP1: item.mrp,
-            PACK: item.pack
-        };
+    const handleReorder = async (item: any) => {
+        setAddedItemId(item.item || item.particular);
         let pcs = 0, boxes = 0;
         if (item.unit?.toUpperCase() === 'BOX') {
             boxes = parseInt(item.qty, 10) || 1;
         } else {
             pcs = parseInt(item.qty, 10) || 1;
         }
-        addToCart(product as any, pcs, boxes);
-        
-        setAddedItemId(item.item || item.particular);
+
+        try {
+            const res = await fetchProducts(1, 1, '', '', '', item.item);
+            let productToUse: any = {
+                CODE: item.item,
+                PRODUCT: item.particular,
+                UNIT_1: item.unit1 || item.unit || 'PCS',
+                UNIT_2: item.unit2 || 'BOX',
+                MULT_F: item.pcBx || '1',
+                RATE1: item.rate,
+                MRP1: item.mrp,
+                PACK: item.pack
+            };
+
+            if (res.data && res.data.length > 0) {
+                const found = res.data.find((p: any) => p.CODE === item.item);
+                if (found) productToUse = found;
+            }
+
+            addToCart(productToUse, pcs, boxes);
+        } catch (e) {
+            console.error(e);
+        }
+
         setTimeout(() => setAddedItemId(null), 1000);
     };
 
-    const handleReorderAll = () => {
+    const handleReorderAll = async () => {
         if (!data || !data.items) return;
-        data.items.forEach((item: any) => handleReorder(item));
+        const codes = data.items.map((i: any) => i.item).filter(Boolean).join(',');
+        try {
+            const res = await fetchProducts(1, 1000, '', '', '', codes);
+            const productsMap = new Map(res.data?.map((p: any) => [p.CODE, p]));
+
+            data.items.forEach((item: any) => {
+                let pcs = 0, boxes = 0;
+                if (item.unit?.toUpperCase() === 'BOX') {
+                    boxes = parseInt(item.qty, 10) || 1;
+                } else {
+                    pcs = parseInt(item.qty, 10) || 1;
+                }
+
+                const productToUse = productsMap.get(item.item) || {
+                    CODE: item.item,
+                    PRODUCT: item.particular,
+                    UNIT_1: item.unit1 || item.unit || 'PCS',
+                    UNIT_2: item.unit2 || 'BOX',
+                    MULT_F: item.pcBx || '1',
+                    RATE1: item.rate,
+                    MRP1: item.mrp,
+                    PACK: item.pack
+                };
+
+                addToCart(productToUse, pcs, boxes);
+            });
+        } catch (e) {
+            console.error(e);
+            // Fallback
+            data.items.forEach((item: any) => {
+                let pcs = 0, boxes = 0;
+                if (item.unit?.toUpperCase() === 'BOX') {
+                    boxes = parseInt(item.qty, 10) || 1;
+                } else {
+                    pcs = parseInt(item.qty, 10) || 1;
+                }
+                addToCart({
+                    CODE: item.item,
+                    PRODUCT: item.particular,
+                    UNIT_1: item.unit1 || item.unit || 'PCS',
+                    UNIT_2: item.unit2 || 'BOX',
+                    MULT_F: item.pcBx || '1',
+                    RATE1: item.rate,
+                    MRP1: item.mrp,
+                    PACK: item.pack
+                } as any, pcs, boxes);
+            });
+        }
     };
 
     return (

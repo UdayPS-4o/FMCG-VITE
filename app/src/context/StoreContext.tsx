@@ -36,6 +36,7 @@ export interface CartItem {
     qtyPcs: number;
     qtyBoxes: number;
     totalQty: number;    // total in base unit (pcs)
+    sch: number;
     netAmount: number;
 }
 
@@ -141,12 +142,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 if (totalQty <= 0) return prev.filter(item => item.product.CODE !== product.CODE);
                 return prev.map(item =>
                     item.product.CODE === product.CODE
-                        ? { ...item, qtyPcs: pcs, qtyBoxes: boxes, totalQty, netAmount }
+                        ? { ...item, qtyPcs: pcs, qtyBoxes: boxes, totalQty, netAmount, sch: schemeDiscount }
                         : item
                 );
             }
             if (totalQty <= 0) return prev;
-            return [...prev, { product, qtyPcs: pcs, qtyBoxes: boxes, totalQty, netAmount }];
+            return [...prev, { product, qtyPcs: pcs, qtyBoxes: boxes, totalQty, netAmount, sch: schemeDiscount }];
         });
     };
 

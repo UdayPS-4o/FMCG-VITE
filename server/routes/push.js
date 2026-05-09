@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const webpush = require('web-push');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const admin = require('firebase-admin');
@@ -425,5 +426,45 @@ const sendNotificationToAdmins = async (payload) => {
         console.error('A critical error occurred during admin notification sending:', err);
     }
 };
+
+// Upload image for push notifications
+router.post('/upload-image', async (req, res) => {
+    try {
+        const { imageBase64, filename } = req.body;
+        
+        if (!imageBase64 || !filename) {
+            return res.status(400).json({ error: 'Image data and filename are required' });
+        }
+
+        // Extract base64 data
+        const matches = imageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        
+        if (!matches || matches.length !== 3) {
+            return res.status(400).json({ error: 'Invalid base64 string' });
+        }
+        
+        const fileExt = filename.split('.').pop();
+        const newFilename = `push_img_${Date.now()}.${fileExt}`;
+        const uploadDir = path.join(__dirname, '../../public/uploads');
+        
+        // Ensure upload directory exists
+        try {
+            await fsPromises.access(uploadDir);
+        } catch (e) {
+            await fsPromises.mkdir(uploadDir, { recursive: true });
+        }
+        
+        const filePath = path.join(uploadDir, newFilename);
+        const imageBuffer = Buffer.from(matches[2], 'base64');
+        
+        await fsPromises.writeFile(filePath, imageBuffer);
+        
+        const imageUrl = `/uploads/${newFilename}`;
+        res.json({ url: imageUrl, success: true });
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        res.status(500).json({ error: 'Failed to upload image' });
+    }
+});
 
 module.exports = { router, sendNotificationToAdmins };
