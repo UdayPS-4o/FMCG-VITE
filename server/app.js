@@ -102,6 +102,10 @@ const alexaRoutes = require('./routes/alexa');
 app.use('/api/alexa', alexaRoutes);
 
 // Register dashboard routes
+// Register messages routes (No auth required for mobile app to send pickup requests)
+const messagesRoutes = require('./routes/messages');
+app.use('/api/messages', messagesRoutes);
+
 // set middleware to check if user is logged in
 // Apply this BEFORE routes that need authentication
 const middleware = require('./routes/middleware');
@@ -292,17 +296,21 @@ const initServer = () => {
       } else throw err;
     });
   } else {
-    // ── Fallback: HTTP-only on :80 (certs not found) ──────────────────────
-    console.warn('[WARN] SSL certificates not found. Running HTTP-only on port 80.');
+    // ── Fallback: HTTP-only on configured PORT (certs not found) ───────────
+    const PORT = process.env.PORT || 8000;
+    console.warn(`[WARN] SSL certificates not found. Running HTTP-only on port ${PORT}.`);
     console.warn(`       Looked for key:  ${SSL_KEY_PATH}`);
     console.warn(`       Looked for cert: ${SSL_CERT_PATH}`);
     const httpFallback = http.createServer(app);
-    httpFallback.listen(80, '0.0.0.0', () => {
-      console.log('HTTP server running on port 80');
+    httpFallback.listen(PORT, '0.0.0.0', () => {
+      console.log(`HTTP server running on port ${PORT}`);
     });
     httpFallback.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
-        console.error('[ERROR] Port 80 already in use. Waiting for pm2 to retry...');
+        console.error(`[ERROR] Port ${PORT} already in use. Waiting for pm2 to retry...`);
+        process.exit(1);
+      } else if (err.code === 'EACCES') {
+        console.error(`[ERROR] Permission denied for port ${PORT}. Try a different port (>= 1024).`);
         process.exit(1);
       } else throw err;
     });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, Plus, ShoppingCart, Loader2, Check } from 'lucide-react';
-import { getOrders } from '../lib/api';
+import { getOrders, fetchProducts } from '../lib/api';
 import { useStore, type Product } from '../context/StoreContext';
 
 interface OrderItem {
@@ -52,27 +52,66 @@ const OrderView = () => {
             .finally(() => setLoading(false));
     }, [id]);
 
-    const handleReorder = (item: OrderItem) => {
-        const product = {
-            CODE: item.productCode,
-            PRODUCT: item.productName,
-            UNIT_1: 'PCS',
-            UNIT_2: 'BOX',
-            MULT_F: '1',
-            RATE1: '0', 
-            image_url: item.image_url
-        } as unknown as Product;
-
-        addToCart(product, item.qtyPcs, item.qtyBoxes);
-        
-        // Show checkmark animation
+    const handleReorder = async (item: OrderItem) => {
         setAddedItemId(item.productCode);
+        try {
+            const res = await fetchProducts(1, 1, '', '', '', item.productCode);
+            let productToUse: any = {
+                CODE: item.productCode,
+                PRODUCT: item.productName,
+                UNIT_1: 'PCS',
+                UNIT_2: 'BOX',
+                MULT_F: '1',
+                RATE1: '0', 
+                image_url: item.image_url
+            };
+            
+            if (res.data && res.data.length > 0) {
+                const found = res.data.find((p: any) => p.CODE === item.productCode);
+                if (found) productToUse = found;
+            }
+            
+            addToCart(productToUse, item.qtyPcs, item.qtyBoxes);
+        } catch (e) {
+            console.error(e);
+        }
         setTimeout(() => setAddedItemId(null), 1000);
     };
 
-    const handleReorderAll = () => {
+    const handleReorderAll = async () => {
         if (!order) return;
-        order.items.forEach(item => handleReorder(item));
+        const codes = order.items.map(i => i.productCode).join(',');
+        try {
+            const res = await fetchProducts(1, 1000, '', '', '', codes);
+            const productsMap = new Map(res.data?.map((p: any) => [p.CODE, p]));
+            
+            order.items.forEach(item => {
+                const productToUse = productsMap.get(item.productCode) || {
+                    CODE: item.productCode,
+                    PRODUCT: item.productName,
+                    UNIT_1: 'PCS',
+                    UNIT_2: 'BOX',
+                    MULT_F: '1',
+                    RATE1: '0',
+                    image_url: item.image_url
+                };
+                addToCart(productToUse, item.qtyPcs, item.qtyBoxes);
+            });
+        } catch (e) {
+            console.error(e);
+            // Fallback
+            order.items.forEach(item => {
+                addToCart({
+                    CODE: item.productCode,
+                    PRODUCT: item.productName,
+                    UNIT_1: 'PCS',
+                    UNIT_2: 'BOX',
+                    MULT_F: '1',
+                    RATE1: '0',
+                    image_url: item.image_url
+                } as unknown as Product, item.qtyPcs, item.qtyBoxes);
+            });
+        }
     };
 
     if (loading) {

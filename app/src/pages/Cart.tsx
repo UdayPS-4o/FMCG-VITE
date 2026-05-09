@@ -14,15 +14,25 @@ const Cart = () => {
         setLoading(true);
         try {
             const orderData = {
-                items: cart.map(item => ({
-                    productCode: item.product.CODE,
-                    productName: item.product.PRODUCT,
-                    qtyPcs: item.qtyPcs,
-                    qtyBoxes: item.qtyBoxes,
-                    rate: item.product.RATE1,
-                    netAmount: item.netAmount,
-                    image_url: item.product.image_url
-                })),
+                items: cart.map(item => {
+                    const pcsRate = parseFloat(item.product.RATE1 || '0');
+                    let finalRate = pcsRate;
+                    if (item.qtyBoxes > 0 && item.qtyPcs === 0) {
+                        const multF = parseFloat(item.product.MULT_F || '1') || 1;
+                        finalRate = pcsRate * multF;
+                    }
+                    return {
+                        productCode: item.product.CODE,
+                        productName: item.product.PRODUCT,
+                        qtyPcs: item.qtyPcs,
+                        qtyBoxes: item.qtyBoxes,
+                        rate: finalRate,
+                        mrp: item.product.MRP1,
+                        sch: item.sch,
+                        netAmount: item.netAmount,
+                        image_url: item.product.image_url
+                    };
+                }),
                 totalAmount: cartTotal
             };
 

@@ -91,14 +91,15 @@ export const fetchActiveSchemes = async () => {
 
 // ── Products ─────────────────────────────────────────────────────────────────
 
-export const fetchProducts = async (page = 1, limit = 20, query = '', brand = '', sort = '') => {
+export const fetchProducts = async (page = 1, limit = 20, query = '', brand = '', sort = '', codes = '') => {
     const q = query ? `&q=${encodeURIComponent(query)}` : '';
     const b = brand ? `&brand=${encodeURIComponent(brand)}` : '';
     const s = sort ? `&sort=${encodeURIComponent(sort)}` : '';
+    const c = codes ? `&codes=${encodeURIComponent(codes)}` : '';
     const token = getToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${API_URL}/products?page=${page}&limit=${limit}${q}${b}${s}`, { headers });
+    const res = await fetch(`${API_URL}/products?page=${page}&limit=${limit}${q}${b}${s}${c}`, { headers });
     if (!res.ok) throw new Error('Failed to fetch products');
     return res.json();
 };

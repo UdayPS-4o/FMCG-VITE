@@ -417,24 +417,28 @@ const InvoicingContent: React.FC = () => {
         }
 
         const multF = parseFloat(pmplItem?.MULT_F || '1') || 1;
-        const totalQty = (orderItem.qtyBoxes || 0) * multF + (orderItem.qtyPcs || 0);
+        const isBoxOnly = (orderItem.qtyBoxes || 0) > 0 && (orderItem.qtyPcs || 0) === 0;
+        const displayUnit = isBoxOnly ? (pmplItem?.UNIT_2 || 'BOX') : (pmplItem?.UNIT_1 || 'PCS');
+        const displayQty = isBoxOnly ? (orderItem.qtyBoxes || 0) : ((orderItem.qtyBoxes || 0) * multF + (orderItem.qtyPcs || 0));
+        const displayRate = orderItem.rate || pmplItem?.RATE1 || '0';
+        const amount = displayQty * parseFloat(String(displayRate));
 
         return {
           item: itemCode,
           godown: godownVal,
-          unit: pmplItem?.UNIT_1 || 'PCS',
+          unit: displayUnit,
           stock: String(stockLimit),
           pack: pmplItem?.PACK || '',
           gst: pmplItem?.TAXPAID === 'Y' ? '0' : String(pmplItem?.IGST || '0'),
           pcBx: String(multF),
-          mrp: String(pmplItem?.MRP1 || '0'),
-          rate: String(orderItem.rate || pmplItem?.RATE1 || '0'),
-          qty: String(totalQty),
+          mrp: String(orderItem.mrp || pmplItem?.MRP1 || '0'),
+          rate: String(displayRate),
+          qty: String(displayQty),
           cess: '0',
           schRs: idx === 0 && prefilledOrder.customDiscount ? String(prefilledOrder.customDiscount) : '0',
-          sch: '0',
+          sch: orderItem.sch !== undefined ? String(orderItem.sch) : '0',
           cd: '0',
-          amount: String(totalQty * parseFloat(String(orderItem.rate || pmplItem?.RATE1 || '0'))),
+          amount: String(amount),
           netAmount: String(orderItem.netAmount || 0),
           selectedItem: pmplItem,
           stockLimit: stockLimit,
@@ -442,6 +446,7 @@ const InvoicingContent: React.FC = () => {
           itemName: pmplItem?.PRODUCT || orderItem.productName,
         };
       });
+      console.log("Prefilled items mapped:", newItems);
 
       if (newItems.length > 0) {
         newItems.push({
