@@ -86,7 +86,7 @@ const OrderView = () => {
             const productsMap = new Map(res.data?.map((p: any) => [p.CODE, p]));
             
             order.items.forEach(item => {
-                const productToUse = productsMap.get(item.productCode) || {
+                const productToUse = (productsMap.get(item.productCode) || {
                     CODE: item.productCode,
                     PRODUCT: item.productName,
                     UNIT_1: 'PCS',
@@ -94,7 +94,7 @@ const OrderView = () => {
                     MULT_F: '1',
                     RATE1: '0',
                     image_url: item.image_url
-                };
+                }) as unknown as Product;
                 addToCart(productToUse, item.qtyPcs, item.qtyBoxes);
             });
         } catch (e) {

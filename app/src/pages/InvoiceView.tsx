@@ -155,7 +155,7 @@ const InvoiceView = () => {
                     pcs = parseInt(item.qty, 10) || 1;
                 }
 
-                const productToUse = productsMap.get(item.item) || {
+                const productToUse = (productsMap.get(item.item) || {
                     CODE: item.item,
                     PRODUCT: item.particular,
                     UNIT_1: item.unit1 || item.unit || 'PCS',
@@ -164,7 +164,7 @@ const InvoiceView = () => {
                     RATE1: item.rate,
                     MRP1: item.mrp,
                     PACK: item.pack
-                };
+                }) as unknown as any;
 
                 addToCart(productToUse, pcs, boxes);
             });
