@@ -279,11 +279,15 @@ router.post('/sync', async (req, res) => {
 
     const cashRecords = await cashDbf.findAll();
     let maxJb = 0;
+    let maxCp = 0;
     for (const rec of cashRecords) {
-        if (rec.VR && typeof rec.VR === 'string' && rec.VR.startsWith('JB-')) {
-            const num = parseInt(rec.VR.replace('JB-', ''), 10);
-            if (!isNaN(num) && num > maxJb) {
-                maxJb = num;
+        if (rec.VR && typeof rec.VR === 'string') {
+            if (rec.VR.startsWith('JB-')) {
+                const num = parseInt(rec.VR.replace('JB-', ''), 10);
+                if (!isNaN(num) && num > maxJb) maxJb = num;
+            } else if (rec.VR.startsWith('CP-')) {
+                const num = parseInt(rec.VR.replace('CP-', ''), 10);
+                if (!isNaN(num) && num > maxCp) maxCp = num;
             }
         }
     }
@@ -478,6 +482,39 @@ router.post('/sync', async (req, res) => {
               CR: 0,
               DR: cashDiscount,
               REMARK: remarkCd,
+              BILL: invoiceNo,
+              DT_BILL: invoiceDate,
+              E_TYPE: 'G',
+              PUR_CODE: supplierCode,
+              BILL2: bill2,
+              QDR: 0
+          });
+      }
+
+      // 6. Unloading Charges (₹1.50 per BOX)
+      const totalBoxes = Math.round((purchase.items || []).reduce((sum, it) => {
+          const unit = String(it.unit || 'BOX').toUpperCase();
+          if (unit !== 'BOX') return sum;
+          const qty = toFloat(it.qty, 3);
+          const code = it.itemCode || it.CODE || '';
+          const product = productMap[code] || {};
+          const multF = toFloat(product.MULT_F || 1, 0) || 1;
+          return sum + (multF > 1 ? qty / multF : qty);
+      }, 0));
+      const unloadingAmt = toFloat(totalBoxes * 1.5, 2);
+      if (unloadingAmt > 0) {
+          maxCp += 1;
+          const cpVrNo = `CP-${String(maxCp).padStart(6, '0')}`;
+          const suppName = (purchase.supplierName || supplier?.C_NAME || '').toUpperCase().substring(0, 20).trim();
+          const unloadRemark = `UNLOAD CHARGES ${invoiceNo} ${suppName}`.substring(0, 50).trim();
+          cashToInsert.push({
+              DATE: entryDate,
+              VR: cpVrNo,
+              M_GROUP1: 'EE',
+              C_CODE: 'EE093',
+              CR: 0,
+              DR: unloadingAmt,
+              REMARK: unloadRemark,
               BILL: invoiceNo,
               DT_BILL: invoiceDate,
               E_TYPE: 'G',

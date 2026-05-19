@@ -143,6 +143,12 @@ const MandatoryDocs: React.FC = () => {
              return true;
           });
           
+          // No pending docs → go straight to accounts master
+          if (pendingDays.length === 0) {
+            navigate('/account-master');
+            return;
+          }
+
           setRequiredDays(pendingDays);
           
           // Initialize doc state for pending days
@@ -188,6 +194,13 @@ const MandatoryDocs: React.FC = () => {
     }
     
     const uniqueDays = Array.from(new Set(days)).sort();
+
+    // No pending docs → go straight to accounts master
+    if (uniqueDays.length === 0) {
+      navigate('/account-master');
+      return;
+    }
+
     setRequiredDays(uniqueDays);
     
     // Initialize doc state for these days

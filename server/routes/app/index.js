@@ -38,15 +38,29 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
  * The /api/app routes are mounted BEFORE the global middleware, so admin routes
  * need their own JWT check.
  */
+const ADMIN_PARTY_CODES = ['ADMIN', '8081121020'];
+
 const requireAdminJwtAuth = async (req, res, next) => {
     const auth = req.headers['authorization'] || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
     if (!token) return res.status(401).json({ error: 'No token provided' });
+
+    // 1. Try CMS JWT first (admin dashboard)
     try {
-        jwt.verify(token, JWT_SECRET); // throws if invalid/expired
-        next();
+        jwt.verify(token, JWT_SECRET);
+        return next();
+    } catch (_) { /* not a JWT — fall through to app session check */ }
+
+    // 2. Accept app session tokens from admin party codes (mobile admin login)
+    try {
+        const session = await appDb.getSession(token);
+        if (session && ADMIN_PARTY_CODES.includes(session.party_code)) {
+            return next();
+        }
+        return res.status(401).json({ error: 'Admin access required' });
     } catch (err) {
-        return res.status(401).json({ error: 'Invalid or expired admin token' });
+        console.error('[requireAdminJwtAuth] session check failed:', err);
+        return res.status(401).json({ error: 'Auth check failed' });
     }
 };
 
@@ -1076,6 +1090,73 @@ const writeOrders = async (orders) => {
     return Promise.all(promises);
 };
 
+// ── Bidirectional mirror watcher ───────────────────────────────────────────────
+// When dbf_folder_path/orders/orders.json is changed externally (e.g. by another
+// process / desktop app), copy it back into server/db/app/orders.json so the
+// server always serves the latest data.
+// A "syncing" flag prevents the watcher from echo-looping when writeOrders itself
+// writes to the mirror file.
+
+let _mirrorSyncInProgress = false;
+
+const startMirrorWatcher = () => {
+    if (!process.env.DBF_FOLDER_PATH) return;
+
+    const mirrorPath = path.join(process.env.DBF_FOLDER_PATH, 'orders', 'orders.json');
+
+    // Use a debounce so rapid successive writes only trigger one sync
+    let debounceTimer = null;
+
+    const syncFromMirror = async () => {
+        if (_mirrorSyncInProgress) return; // skip – we wrote this ourselves
+        try {
+            const raw = await fs.readFile(mirrorPath, 'utf8');
+            JSON.parse(raw); // validate JSON before overwriting
+            _mirrorSyncInProgress = true;
+            await fs.writeFile(ordersPath, raw);
+            console.log('[orders] Mirror → primary sync complete');
+        } catch (e) {
+            // File may be mid-write or not valid JSON yet; ignore silently
+        } finally {
+            _mirrorSyncInProgress = false;
+        }
+    };
+
+    // Ensure the directory exists before trying to watch
+    ensureDirectoryExistence(mirrorPath).then(() => {
+        // Create the file if it doesn't exist so fs.watch has a target
+        fs.access(mirrorPath).catch(() => fs.writeFile(mirrorPath, '[]'));
+
+        const fsSync = require('fs');
+        fsSync.watch(mirrorPath, (eventType) => {
+            if (eventType !== 'change') return;
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(syncFromMirror, 300);
+        });
+
+        console.log(`[orders] Watching mirror file: ${mirrorPath}`);
+    }).catch(e => {
+        console.warn('[orders] Could not start mirror watcher:', e.message);
+    });
+};
+
+// Also patch writeOrders to set the flag so the watcher ignores our own writes
+const _origWriteOrders = writeOrders;
+const writeOrdersWithFlag = async (orders) => {
+    _mirrorSyncInProgress = true;
+    try {
+        await _origWriteOrders(orders);
+    } finally {
+        // Clear flag after a short delay (enough for the watcher event to fire)
+        setTimeout(() => { _mirrorSyncInProgress = false; }, 500);
+    }
+};
+
+// Replace writeOrders references below with the flagged version
+// (we reassign the const via a wrapper — routes below call writeOrders by closure)
+// Start the watcher when this module loads
+startMirrorWatcher();
+
 /**
  * GET /api/app/orders
  * Headers: Authorization: Bearer <token>
@@ -1232,7 +1313,7 @@ router.post('/orders', requireAppAuth, async (req, res) => {
         };
 
         orders.push(newOrder);
-        await writeOrders(orders);
+        await writeOrdersWithFlag(orders);
 
         res.json({ success: true, order: newOrder });
     } catch (err) {
@@ -1288,7 +1369,7 @@ router.patch('/admin/orders/:id/status', async (req, res) => {
         orders[idx].adminNote = note || '';
         orders[idx].updatedAt = new Date().toISOString();
 
-        await writeOrders(orders);
+        await writeOrdersWithFlag(orders);
         res.json({ success: true, order: orders[idx] });
     } catch (err) {
         console.error('[app/admin/orders PATCH]', err);
@@ -1320,7 +1401,7 @@ router.patch('/admin/orders/:id/mark-invoiced', async (req, res) => {
         orders[idx].invoiceRef = `${series}-${billNo}`;
         orders[idx].updatedAt = new Date().toISOString();
 
-        await writeOrders(orders);
+        await writeOrdersWithFlag(orders);
         res.json({ success: true, order: orders[idx] });
     } catch (err) {
         console.error('[app/admin/orders/mark-invoiced PATCH]', err);

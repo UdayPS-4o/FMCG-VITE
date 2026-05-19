@@ -169,36 +169,63 @@ router.get('/schemes/preview', async (req, res) => {
         const shikharData = JSON.parse(allJsonContent);
 
         const matchedSchemes = [];
+        const seenIds = new Set();
         let totalProcessed = 0;
         let totalMatched = 0;
 
+        // Helper: normalise a raw scheme entry from any Shikhar field into our format
+        const normaliseScheme = (s) => ({
+            discount:    parseFloat(s.discount ?? s.scheme_discount ?? s.slab_discount ?? 0),
+            activitycode: s.activitycode ?? s.activity_code ?? s.activityCode ?? 0,
+            scheme_desc: s.scheme_desc ?? s.schemename ?? s.scheme_name ?? '',
+            slab_start:  parseFloat(s.scheme_slab_start ?? s.slab_start ?? s.slabstart ?? s.min_qty ?? 1),
+            slab_end:    parseFloat(s.scheme_slab_end   ?? s.slab_end   ?? s.slabend   ?? s.max_qty ?? 99999),
+        });
+
         if (shikharData.brands && Array.isArray(shikharData.brands)) {
             for (const brand of shikharData.brands) {
-                if (brand.products && Array.isArray(brand.products)) {
-                    for (const product of brand.products) {
-                        totalProcessed++;
-                        const basepackCode = product.basepack_code;
-                        if (!basepackCode) continue;
+                if (!brand.products || !Array.isArray(brand.products)) continue;
 
-                        const pmplCodes = pmplMap[basepackCode];
+                for (const product of brand.products) {
+                    totalProcessed++;
+                    const basepackCode = product.basepack_code;
+                    if (!basepackCode) continue;
 
-                        if (pmplCodes && pmplCodes.length > 0 && product.new_schemes_info && Array.isArray(product.new_schemes_info)) {
-                            totalMatched++;
-                            for (const pmplCode of pmplCodes) {
-                                for (const scheme of product.new_schemes_info) {
-                                    matchedSchemes.push({
-                                        id: `${basepackCode}_${pmplCode}_${scheme.activitycode}_${scheme.scheme_slab_start}`,
-                                        basepack_code: basepackCode,
-                                        pmpl_code: pmplCode,
-                                        product_desc: product.itemvarient_desc || product.itemvarientdesc || '',
-                                        discount: scheme.discount,
-                                        activitycode: scheme.activitycode,
-                                        scheme_desc: scheme.scheme_desc || '',
-                                        slab_start: scheme.scheme_slab_start,
-                                        slab_end: scheme.scheme_slab_end
-                                    });
-                                }
-                            }
+                    const pmplCodes = pmplMap[basepackCode];
+                    if (!pmplCodes || pmplCodes.length === 0) continue;
+
+                    // Collect schemes from ALL possible fields
+                    const rawSchemes = [
+                        ...(Array.isArray(product.new_schemes_info)   ? product.new_schemes_info   : []),
+                        ...(Array.isArray(product.groupscheme_info)    ? product.groupscheme_info    : []),
+                        ...(Array.isArray(product.scheme_info)         ? product.scheme_info         : []),
+                        ...(Array.isArray(product.schemes_info)        ? product.schemes_info        : []),
+                        ...(Array.isArray(product.bulk_offers)         ? product.bulk_offers         : []),
+                    ];
+
+                    if (rawSchemes.length === 0) continue;
+                    totalMatched++;
+
+                    for (const pmplCode of pmplCodes) {
+                        for (const raw of rawSchemes) {
+                            const s = normaliseScheme(raw);
+                            // Skip entries with no actual discount
+                            if (!s.discount || s.discount <= 0) continue;
+                            const id = `${basepackCode}_${pmplCode}_${s.activitycode}_${s.slab_start}_${s.slab_end}`;
+                            if (seenIds.has(id)) continue;
+                            seenIds.add(id);
+
+                            matchedSchemes.push({
+                                id,
+                                basepack_code: basepackCode,
+                                pmpl_code: pmplCode,
+                                product_desc: product.itemvarient_desc || product.itemvarientdesc || '',
+                                discount:     s.discount,
+                                activitycode: s.activitycode,
+                                scheme_desc:  s.scheme_desc,
+                                slab_start:   s.slab_start,
+                                slab_end:     s.slab_end,
+                            });
                         }
                     }
                 }
@@ -217,6 +244,7 @@ router.get('/schemes/preview', async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to preview schemes', error: error.message });
     }
 });
+
 
 // POST /api/schemes/import
 router.post('/schemes/import', async (req, res) => {
@@ -294,26 +322,90 @@ router.post('/schemes/import', async (req, res) => {
 });
 
 // POST /api/schemes/scrape
-router.post('/schemes/scrape', (req, res) => {
+router.post('/schemes/scrape', async (req, res) => {
     try {
-        const scraperPath = path.join(__dirname, '../../scraper_puppeteer.cjs');
+        const jsPath  = path.join(__dirname, '../../scraper_puppeteer.js');
+        const cjsPath = path.join(__dirname, '../../scraper_puppeteer.cjs');
         const cwdPath = path.join(__dirname, '../../');
-        
-        console.log(`Starting scraper process from: ${scraperPath}`);
-        
-        exec(`node "${scraperPath}"`, { cwd: cwdPath }, (error, stdout, stderr) => {
+
+        // Sync .js -> .cjs (package.json has "type":"module" so .js = ESM; .cjs = CommonJS)
+        await fs.copyFile(jsPath, cjsPath);
+        console.log('Synced scraper_puppeteer.js → .cjs');
+
+        exec(`node "${cjsPath}"`, { cwd: cwdPath, timeout: 15 * 60 * 1000 }, (error, stdout, stderr) => {
             if (error) {
-                console.error(`Scraper error: ${error.message}`);
-                console.error(`Scraper stderr: ${stderr}`);
-                return res.status(500).json({ success: false, message: 'Scraping failed', error: error.message });
+                console.error('Scraper error:', error.message);
+                console.error('Scraper stderr:', stderr);
+                return res.status(500).json({ success: false, message: 'Scraping failed', error: error.message, stderr });
             }
-            
-            console.log(`Scraper output: ${stdout}`);
+            console.log('Scraper output:', stdout);
             res.json({ success: true, message: 'Successfully scraped latest schemes and updated all.json' });
         });
     } catch (error) {
-         console.error('Error triggering scrape:', error);
-         res.status(500).json({ success: false, message: 'Server error during scrape initiation', error: error.message });
+        console.error('Error triggering scrape:', error);
+        res.status(500).json({ success: false, message: 'Server error during scrape initiation', error: error.message });
+    }
+});
+
+// POST /api/schemes/update-cookies
+// Body: { cookieValue: "<URL-encoded base64 'data' cookie value>", hulid: "HUL-..." (optional) }
+router.post('/schemes/update-cookies', async (req, res) => {
+    try {
+        const { cookieValue, hulid } = req.body;
+
+        if (!cookieValue || typeof cookieValue !== 'string' || cookieValue.trim().length < 20) {
+            return res.status(400).json({ success: false, message: 'cookieValue is required and must be a valid non-empty string.' });
+        }
+
+        const scraperPath = path.join(__dirname, '../../scraper_puppeteer.js');
+        let scraperContent = await fs.readFile(scraperPath, 'utf8');
+
+        // Replace the "value" field of the 'data' cookie
+        // Matches: "name": "data", ... "value": "<old value>"
+        const dataValueRegex = /(\/\/ *data cookie[\s\S]*?)?("name"\s*:\s*"data"[\s\S]*?"value"\s*:\s*")([^"]+)(")/;
+        
+        // Simpler pattern: replace value of the object that has "name": "data"
+        // We'll use a targeted replace of the first occurrence of:
+        //   "name": "data", ...next lines... "value": "<old>"
+        // Strategy: split on the section, replace just the value string
+        const newValue = cookieValue.trim();
+
+        // Replace the data cookie value by pattern: look for 'name": "data"' block and then replace its value
+        const updated = scraperContent.replace(
+            /("name"\s*:\s*"data"[^}]*?"value"\s*:\s*")([^"]+)(")/s,
+            `$1${newValue}$3`
+        );
+
+        if (updated === scraperContent) {
+            return res.status(500).json({ success: false, message: 'Could not find the data cookie value in scraper file to replace. Check the scraper file format.' });
+        }
+
+        // Also update hulid header if provided
+        let finalContent = updated;
+        if (hulid && typeof hulid === 'string' && hulid.trim().length > 0) {
+            finalContent = finalContent.replace(
+                /("hulid"\s*:\s*")([^"]+)(")/,
+                `$1${hulid.trim()}$3`
+            );
+        }
+
+        await fs.writeFile(scraperPath, finalContent, 'utf8');
+
+        // Clear the scraper cache so next run fetches fresh data
+        const cacheDir = path.join(__dirname, '../../cache');
+        try {
+            const cacheFiles = await fs.readdir(cacheDir);
+            await Promise.all(cacheFiles.map(f => fs.unlink(path.join(cacheDir, f))));
+            console.log(`Cleared ${cacheFiles.length} cache files after cookie update.`);
+        } catch (cacheErr) {
+            // Cache dir might not exist yet — not a fatal error
+            console.warn('Could not clear cache dir:', cacheErr.message);
+        }
+
+        res.json({ success: true, message: 'Cookie updated successfully. Cache cleared. You can now run Download Schemes.' });
+    } catch (error) {
+        console.error('Error updating cookies:', error);
+        res.status(500).json({ success: false, message: 'Failed to update cookies', error: error.message });
     }
 });
 
