@@ -177,6 +177,10 @@ app.use(attendanceRoutes);
 const aiRoutes = require('./routes/ai');
 app.use('/api/ai', aiRoutes);
 
+// Activity log routes
+const activityRoutes = require('./routes/activity');
+app.use('/api/activity', activityRoutes);
+
 // App Routes has been moved up
 
 // Endpoint to get data from CMPL.DBF and return as JSON
