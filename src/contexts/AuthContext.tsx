@@ -173,6 +173,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (userData.success && userData.token) {
           setToken(userData.token);
           setUser(userData.user);
+          localStorage.setItem('user', JSON.stringify(userData.user));
           return true;
         }
       }

@@ -72,9 +72,19 @@ const Login: React.FC = () => {
       if (success) {
         // Wait briefly for AuthContext to update state
         setTimeout(() => {
+          const userStr = localStorage.getItem('user');
+          if (userStr) {
+            try {
+              const userObj = JSON.parse(userStr);
+              if (userObj.routeAccess && userObj.routeAccess.includes('Admin')) {
+                navigate('/dashboard');
+                return;
+              }
+            } catch (e) {
+              console.error('Error parsing user data', e);
+            }
+          }
           // After successful login, redirect to attendance
-          // The checkIsAuth will automatically run in AuthContext 
-          // and navigate will occur there or we can redirect to a default route
           navigate('/attendance');
         }, 100);
       } else {
