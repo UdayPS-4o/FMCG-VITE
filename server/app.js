@@ -69,8 +69,8 @@ app.use(morgan('dev'));
 app.use(cookieParser());
 
 const spawn = require('child_process').spawn;// app.use(express.static(80/public'));
-app.use(bodyParser.json({ limit: '50mb' })); // for parsing application/json with increased limit for images
-app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' })); // for parsing application/x-www-form-urlencoded
+app.use(bodyParser.json({ limit: '200mb' })); // for parsing application/json with increased limit for images
+app.use(bodyParser.urlencoded({ extended: true, limit: '200mb' })); // for parsing application/x-www-form-urlencoded
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -261,7 +261,7 @@ app.get('/favicon.ico', (req, res) => {
 
 // Initialize server — supports both HTTP (:80) and HTTPS (:443)
 const initServer = () => {
-  const SSL_KEY_PATH  = process.env.SSL_KEY_PATH  || path.join(__dirname, 'certs', 'privkey.pem');
+  const SSL_KEY_PATH = process.env.SSL_KEY_PATH || path.join(__dirname, 'certs', 'privkey.pem');
   const SSL_CERT_PATH = process.env.SSL_CERT_PATH || path.join(__dirname, 'certs', 'fullchain.pem');
 
   const certsExist = fsSync.existsSync(SSL_KEY_PATH) && fsSync.existsSync(SSL_CERT_PATH);
@@ -269,7 +269,7 @@ const initServer = () => {
   if (certsExist) {
     // ── HTTPS server on :443 ──────────────────────────────────────────────
     const sslOptions = {
-      key:  fsSync.readFileSync(SSL_KEY_PATH),
+      key: fsSync.readFileSync(SSL_KEY_PATH),
       cert: fsSync.readFileSync(SSL_CERT_PATH),
     };
     const httpsServer = https.createServer(sslOptions, app);
