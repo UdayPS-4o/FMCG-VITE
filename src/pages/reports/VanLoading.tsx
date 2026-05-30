@@ -7,6 +7,7 @@ import MultiSelect from '../../components/form/MultiSelect';
 import RadioSm from '../../components/form/input/RadioSm';
 import Badge from '../../components/ui/badge/Badge';
 import useActivityTracker from '../../hooks/useActivityTracker';
+import useAuth from '../../hooks/useAuth';
 
 // Define the structure of van loading data
 interface VanLoadingItem {
@@ -53,8 +54,8 @@ const VanLoadingContent: React.FC = () => {
   const [reportData, setReportData] = useState<VanLoadingItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [hasAdminAccess, setHasAdminAccess] = useState<boolean>(false);
+  const { user } = useAuth();
+  const hasAdminAccess = Boolean(user?.routeAccess?.includes('Admin'));
   const { logActivity } = useActivityTracker();
   const [hoveredItem, setHoveredItem] = useState<VanLoadingItem | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -175,18 +176,6 @@ const VanLoadingContent: React.FC = () => {
   };
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const userData = JSON.parse(storedUser);
-        setUser(userData);
-        // Check if user has admin access
-        setHasAdminAccess(userData.routeAccess && userData.routeAccess.includes('Admin'));
-      } catch (e) {
-        console.error("Failed to parse user data from localStorage", e);
-      }
-
-    }
     return () => {
       if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);

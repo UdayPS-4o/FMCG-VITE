@@ -28,7 +28,7 @@ export interface User {
     subgroupCode?: string;
   }>;
   defaultSeries?: {
-    reports(reports: any): string;
+    reports?: string;
     billing?: string;
     cashReceipt?: string;
     cashPayment?: string;
@@ -39,6 +39,7 @@ export interface User {
   allowPastDateEntries?: boolean;
   requireMandatoryDocs?: boolean;
   mandatoryDocsFromDate?: string;
+  reportsAccess?: string[];
 }
 
 // Helper functions to handle the transition from subgroup to subgroups

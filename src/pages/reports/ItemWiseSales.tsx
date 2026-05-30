@@ -6,6 +6,7 @@ import { useInvoiceContext } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import constants from '../../constants';
 import useActivityTracker from '../../hooks/useActivityTracker';
+import useAuth from '../../hooks/useAuth';
 
 // Define the structure of a sales report item
 interface SalesReportItem {
@@ -122,9 +123,7 @@ const ItemWiseSalesContent: React.FC = () => {
   };
 
   const { pmplData, partyOptions: contextPartyOptions } = useInvoiceContext();
-  // const itemAutocompleteRef = useRef<AutocompleteRefHandle>(null); // Not for MultiSelect
-  const [user, setUser] = useState<User | null>(null);
-
+  const { user } = useAuth();
   const { logActivity } = useActivityTracker();
 
   // Handlers for dynamic series and bill number filters
@@ -193,17 +192,6 @@ const ItemWiseSalesContent: React.FC = () => {
   // Refs to track previous date values to determine if dates actually changed
   const prevFromDateRef = useRef<string | undefined>(undefined);
   const prevToDateRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse user data from localStorage", e);
-      }
-    }
-  }, []);
 
   // Effect to fetch companies
   useEffect(() => {

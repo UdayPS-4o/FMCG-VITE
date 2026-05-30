@@ -78,6 +78,17 @@ const useAttendanceCheck = (): AttendanceCheckResult => {
     } else {
       setIsLoading(false);
     }
+    
+    // Listen for custom event to update state across components without full reload
+    const handleAttendanceMarked = () => {
+      console.log('Attendance marked event received, updating state');
+      setHasMarkedToday(true);
+    };
+    
+    window.addEventListener('attendanceMarked', handleAttendanceMarked);
+    return () => {
+      window.removeEventListener('attendanceMarked', handleAttendanceMarked);
+    };
   }, [user, isAuthenticated]);
 
   // Determine if navigation should be hidden

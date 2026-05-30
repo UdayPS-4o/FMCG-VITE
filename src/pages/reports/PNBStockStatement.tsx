@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import constants from '../../constants';
 import useActivityTracker from '../../hooks/useActivityTracker';
+import useAuth from '../../hooks/useAuth';
 
 // Define User type
 interface User {
@@ -42,27 +43,14 @@ interface SummaryData {
 
 const PNBStockStatement: React.FC = () => {
   const { logActivity } = useActivityTracker();
-  const [hasAdminAccess, setHasAdminAccess] = useState<boolean>(false);
+  const { user } = useAuth();
+  const hasAdminAccess = Boolean(user?.routeAccess?.includes('Admin'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stockData, setStockData] = useState<StockItem[]>([]);
   const [debtorData, setDebtorData] = useState<DebtorBalance[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [reportGenerated, setReportGenerated] = useState(false);
-
-  // Check user access on component mount
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const userData = JSON.parse(storedUser);
-        // Check if user has admin access
-        setHasAdminAccess(userData.routeAccess && userData.routeAccess.includes('Admin'));
-      } catch (e) {
-        console.error("Failed to parse user data from localStorage", e);
-      }
-    }
-  }, []);
 
   const generateReport = async () => {
     setLoading(true);

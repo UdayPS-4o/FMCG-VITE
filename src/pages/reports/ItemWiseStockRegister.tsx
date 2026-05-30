@@ -7,6 +7,7 @@ import useActivityTracker from '../../hooks/useActivityTracker';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import Toast from '../../components/ui/toast/Toast';
+import useAuth from '../../hooks/useAuth';
 
 // Define interfaces
 interface TransactionDetail {
@@ -90,8 +91,9 @@ const convertToPcsAndBoxFormat = (totalPcs: number, multF: number, displayInBoxP
 };
 
 const ItemWiseStockRegister: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const { user } = useAuth();
   const { logActivity } = useActivityTracker();
+
   const [fromDate, setFromDate] = useState<string>(getLocalDateDDMMYYYY(new Date()));
   const [toDate, setToDate] = useState<string>(getLocalDateDDMMYYYY(new Date()));
   const [selectedItem, setSelectedItem] = useState<Option | null>(null);
@@ -115,18 +117,6 @@ const ItemWiseStockRegister: React.FC = () => {
     message: '',
     type: 'info'
   });
-
-  // Get user data from localStorage
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse user data from localStorage", e);
-      }
-    }
-  }, []);
 
   // Fetch initial data
   useEffect(() => {

@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import PageMeta from "../../components/common/PageMeta";
 import AuthLayout from "./AuthPageLayout";
 import constants from '../../constants';
+import useAuth from '../../hooks/useAuth';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [mobile, setMobile] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -65,67 +67,18 @@ const Login: React.FC = () => {
     }
     
     try {
-      const response = await fetch(constants.baseURL + '/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          mobile,
-          password,
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (data.success && data.token) {
-          // Store the JWT token in localStorage
-          localStorage.setItem('token', data.token);
-          
-          // Fetch user details after successful login
-          try {
-            const authResponse = await fetch(constants.baseURL + '/api/checkIsAuth', {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${data.token}`
-              }
-            });
-
-            if (authResponse.ok) {
-              const authData = await authResponse.json();
-              if (authData.authenticated && authData.user) {
-                // Store user details in localStorage
-                localStorage.setItem('user', JSON.stringify(authData.user));
-                
-                if (authData.user.routeAccess && authData.user.routeAccess.includes('Admin')) {
-                  navigate('/dashboard');
-                } else {
-                  navigate('/attendance');
-                }
-              } else {
-                 // Clear potentially stale user data if auth check fails after login
-                 localStorage.removeItem('user');
-                 navigate('/attendance');
-              }
-            } else {
-               // Clear potentially stale user data if auth check fails after login
-               localStorage.removeItem('user');
-               console.error('Failed to fetch user details after login.');
-               navigate('/attendance');
-            }
-          } catch (authErr) {
-            // Clear potentially stale user data if auth check fails after login
-            localStorage.removeItem('user');
-            console.error('Error fetching user details after login:', authErr);
-            navigate('/attendance');
-          }
-        } else {
-          setError('Login failed. Please check your credentials.');
-        }
+      const success = await login(mobile, password);
+      
+      if (success) {
+        // Wait briefly for AuthContext to update state
+        setTimeout(() => {
+          // After successful login, redirect to attendance
+          // The checkIsAuth will automatically run in AuthContext 
+          // and navigate will occur there or we can redirect to a default route
+          navigate('/attendance');
+        }, 100);
       } else {
-        const errorData = await response.json();
-        setError(errorData.message || 'Invalid username or password');
+        setError('Login failed. Please check your credentials.');
       }
     } catch (err) {
       console.error('Login request failed:', err);

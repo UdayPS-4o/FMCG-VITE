@@ -9,14 +9,14 @@ import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
 import apiCache from '../../utils/apiCache';
-import useAuth from "../../hooks/useAuth";
+import useAuth, { getUserSubgroups } from "../../hooks/useAuth"; // assuming getUserSubgroups is exported from AuthContext, wait! No, we should import from AuthContext
 
 // Utility function to center an element in the viewport
 const centerElementInViewport = (element: HTMLElement) => {
   if (!element) return;
   element.scrollIntoView({
     behavior: 'smooth',
-    block: 'center' 
+    block: 'center'
   });
 };
 
@@ -140,18 +140,18 @@ const CashPayment: React.FC = () => {
       if (e.key === 'Enter' && !e.shiftKey) {
         const activeElement = document.activeElement as HTMLElement;
         if (!activeElement || !activeElement.id) return;
-        
+
         e.preventDefault();
-        
+
         const currentIndex = fieldOrder.indexOf(activeElement.id);
-        
+
         if (currentIndex >= 0 && currentIndex < fieldOrder.length - 1) {
           const nextFieldId = fieldOrder[currentIndex + 1];
           const nextField = document.getElementById(nextFieldId) as HTMLElement | null; // Ensure it can be null
           if (nextField) {
             nextField.focus();
             centerElementInViewport(nextField); // Center the newly focused field
-            
+
             if (nextField instanceof HTMLInputElement) {
               const inputLength = nextField.value.length;
               nextField.setSelectionRange(inputLength, inputLength);
@@ -160,14 +160,14 @@ const CashPayment: React.FC = () => {
         }
       }
     };
-    
+
     fieldOrder.forEach(fieldId => {
       const element = document.getElementById(fieldId);
       if (element) {
         element.addEventListener('keydown', handleKeyDown);
       }
     });
-    
+
     return () => {
       fieldOrder.forEach(fieldId => {
         const element = document.getElementById(fieldId);
@@ -230,6 +230,8 @@ const CashPayment: React.FC = () => {
 
   // Fetch edit data if in edit mode
   useEffect(() => {
+    if (!user) return; // Wait for user to load before fetching party lists
+
     if (id) {
       setIsEditMode(true);
       const fetchEditData = async () => {
@@ -265,12 +267,12 @@ const CashPayment: React.FC = () => {
             voucherNo: paymentToEdit.voucherNo,
             narration: paymentToEdit.narration,
           };
-          
+
           setFormValues(updatedValues);
 
           // Use apiCache for CMPL data
           const partyData = await apiCache.fetchWithCache<CmplEntry[]>(`${constants.baseURL}/cmpl`);
-          
+
           // Use apiCache for balance data
           const balanceData = await apiCache.fetchWithCache<BalanceResponse>(`${constants.baseURL}/json/balance`);
 
@@ -287,40 +289,46 @@ const CashPayment: React.FC = () => {
 
           // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
           let filteredPartyData = partyData ? partyData.filter((party) => !party.C_CODE.endsWith('000')) : [];
-          
-          if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-            console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
-            
-            // Get all subgroup prefixes from user's assigned subgroups
-            const subgroupPrefixes = user.subgroups.map((sg: any) => 
-              sg.subgroupCode.substring(0, 2).toUpperCase()
-            );
-            
-            console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
-            
-            // Filter parties: include if EE prefix OR if C_CODE starts with any of the user's subgroup prefixes
-            filteredPartyData = filteredPartyData.filter((party) => {
-              const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-              // Always include if prefix is EE
-              if (partyPrefix === 'EE') {
-                return true;
-              }
-              // Otherwise, include if it matches one of the user's subgroup prefixes
-              return subgroupPrefixes.includes(partyPrefix);
-            });
-            
-            console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups and EE inclusion`);
-          } else if (isAdmin) {
+
+          if (isAdmin) {
             console.log('User is admin - showing all parties without filtering');
+          } else {
+            const userSubgroups = getUserSubgroups(user);
+            if (userSubgroups.length > 0) {
+              console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
+
+              // Get all subgroup prefixes from user's assigned subgroups
+              const subgroupPrefixes = userSubgroups.map((sg: any) =>
+                (sg.subgroupCode || '').substring(0, 2).toUpperCase()
+              ).filter(Boolean);
+
+              console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+
+              // Filter parties: include if EE prefix OR if C_CODE starts with any of the user's subgroup prefixes
+              filteredPartyData = filteredPartyData.filter((party) => {
+                const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+                // Always include if prefix is EE
+                if (partyPrefix === 'EE') {
+                  return true;
+                }
+                return subgroupPrefixes.includes(partyPrefix);
+              });
+
+              console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups and EE inclusion`);
+            } else {
+              console.log('User is not admin and has no subgroups - hiding all non-EE parties');
+              // Still show EE parties even if no subgroups
+              filteredPartyData = filteredPartyData.filter(party => party.C_CODE.substring(0, 2).toUpperCase() === 'EE');
+            }
           }
 
           const partyList = filteredPartyData.map((party) => {
             // Get balance for this party
             const balance = balanceMap.get(party.C_CODE);
-            
+
             // Check if balance is non-zero (either greater or in negative)
             const hasNonZeroBalance = balance && balance.toString().trim() !== '0 CR' && balance.toString().trim() !== '0 DR';
-            
+
             return {
               value: party.C_CODE,
               label: `${party.C_NAME} | ${party.C_CODE}`,
@@ -328,13 +336,13 @@ const CashPayment: React.FC = () => {
           });
 
           setPartyOptions(partyList);
-          
+
           setParty(partyList.find((p: PartyOption) => p.value === paymentToEdit.party));
 
           // Fetch S/M options from /cmpl and filter
           const cmplData = await apiCache.fetchWithCache<any[]>(`${constants.baseURL}/cmpl`);
           if (Array.isArray(cmplData)) {
-            const smList = cmplData.filter(item => 
+            const smList = cmplData.filter(item =>
               item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
             );
             const smApiOptions = smList.map((item: any) => ({
@@ -344,7 +352,7 @@ const CashPayment: React.FC = () => {
             setSmOptions(smApiOptions);
 
             // Set S/M if editing and S/M code exists on payment
-            if (paymentToEdit.sm) { 
+            if (paymentToEdit.sm) {
               const currentSm = smApiOptions.find((s: PartyOption) => s.value === paymentToEdit.sm);
               if (currentSm) {
                 setSm(currentSm);
@@ -353,9 +361,9 @@ const CashPayment: React.FC = () => {
           } else {
             console.warn('CMPL data for S/M is not an array:', cmplData);
             setSmOptions([]);
-             setToastMessage('Failed to fetch S/M options (CMPL data invalid)');
-             setToastType('error');
-             setShowToast(true);
+            setToastMessage('Failed to fetch S/M options (CMPL data invalid)');
+            setToastType('error');
+            setShowToast(true);
           }
 
         } catch (error) {
@@ -373,7 +381,7 @@ const CashPayment: React.FC = () => {
           // Use apiCache for CMPL data
           const partyData = await apiCache.fetchWithCache<CmplEntry[]>(`${constants.baseURL}/cmpl`);
           const cmplData = partyData; // Define cmplData variable to fix reference errors
-          
+
           // Use apiCache for balance data
           const balanceData = await apiCache.fetchWithCache<BalanceResponse>(`${constants.baseURL}/json/balance`);
 
@@ -387,43 +395,49 @@ const CashPayment: React.FC = () => {
 
           // Check if user is admin
           const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
-          
+
           // Filter parties based on user's subgroup if applicable and exclude C_CODE ending with "000"
           let filteredPartyData = partyData ? partyData.filter((party) => !party.C_CODE.endsWith('000')) : [];
-          
-          if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-            console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
-            
-            // Get all subgroup prefixes from user's assigned subgroups
-            const subgroupPrefixes = user.subgroups.map((sg: any) => 
-              sg.subgroupCode.substring(0, 2).toUpperCase()
-            );
-            
-            console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
-            
-            // Filter parties: include if EE prefix OR if C_CODE starts with any of the user's subgroup prefixes
-            filteredPartyData = filteredPartyData.filter((party) => {
-              const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-              // Always include if prefix is EE
-              if (partyPrefix === 'EE') {
-                return true;
-              }
-              // Otherwise, include if it matches one of the user's subgroup prefixes
-              return subgroupPrefixes.includes(partyPrefix);
-            });
-            
-            console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups and EE inclusion`);
-          } else if (isAdmin) {
+
+          if (isAdmin) {
             console.log('User is admin - showing all parties without filtering');
+          } else {
+            const userSubgroups = getUserSubgroups(user);
+            if (userSubgroups.length > 0) {
+              console.log(`Filtering parties by user's assigned subgroups, but always including EE prefix`);
+
+              // Get all subgroup prefixes from user's assigned subgroups
+              const subgroupPrefixes = userSubgroups.map((sg: any) =>
+                (sg.subgroupCode || '').substring(0, 2).toUpperCase()
+              ).filter(Boolean);
+
+              console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+
+              // Filter parties: include if EE prefix OR if C_CODE starts with any of the user's subgroup prefixes
+              filteredPartyData = filteredPartyData.filter((party) => {
+                const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+                // Always include if prefix is EE
+                if (partyPrefix === 'EE') {
+                  return true;
+                }
+                return subgroupPrefixes.includes(partyPrefix);
+              });
+
+              console.log(`Filtered to ${filteredPartyData.length} parties based on user's subgroups and EE inclusion`);
+            } else {
+              console.log('User is not admin and has no subgroups - hiding all non-EE parties');
+              // Still show EE parties even if no subgroups
+              filteredPartyData = filteredPartyData.filter(party => party.C_CODE.substring(0, 2).toUpperCase() === 'EE');
+            }
           }
 
           const partyList = filteredPartyData.map((party) => {
             // Get balance for this party
             const balance = balanceMap.get(party.C_CODE);
-            
+
             // Check if balance is non-zero (either greater or in negative)
             const hasNonZeroBalance = balance && balance.toString().trim() !== '0 CR' && balance.toString().trim() !== '0 DR';
-            
+
             return {
               value: party.C_CODE,
               label: `${party.C_NAME} | ${party.C_CODE}`,
@@ -431,10 +445,10 @@ const CashPayment: React.FC = () => {
           });
 
           setPartyOptions(partyList);
-          
+
           // Process S/M options from the same CMPL data
           if (Array.isArray(cmplData)) {
-            const smList = cmplData.filter(item => 
+            const smList = cmplData.filter(item =>
               item.C_CODE && item.C_CODE.startsWith('SM') && !item.C_CODE.endsWith('000')
             );
             const smApiOptions = smList.map((item: any) => ({
@@ -450,7 +464,7 @@ const CashPayment: React.FC = () => {
             setToastType('error');
             setShowToast(true);
           }
-          
+
           // Clear expired cache entries
           apiCache.clearExpiredCache();
         } catch (error) {
@@ -459,7 +473,7 @@ const CashPayment: React.FC = () => {
           setShowToast(true);
         }
       };
-      
+
       fetchDataForNewEntry(); // Renamed from fetchPartyData
     }
   }, [id, user]);
@@ -467,9 +481,9 @@ const CashPayment: React.FC = () => {
   // Filter SM options based on user's role and assigned SM code
   const filteredSmOptions = useMemo(() => {
     if (!user || !smOptions) return [];
-    
+
     const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
-    
+
     if (!isAdmin && user.smCode) {
       const userSm = smOptions.find(option => option.value === user.smCode);
       return userSm ? [userSm] : [];
@@ -488,7 +502,7 @@ const CashPayment: React.FC = () => {
   useEffect(() => {
     if (user && smOptions && smOptions.length > 0 && !isEditMode) {
       const isAdmin = user.routeAccess && user.routeAccess.includes('Admin');
-      
+
       if (user.smCode && !isAdmin) {
         const userSm = smOptions.find(option => option.value === user.smCode);
         if (userSm) {
@@ -509,40 +523,40 @@ const CashPayment: React.FC = () => {
             ...(voucherIdInfo && voucherIdInfo.hash && { 'If-None-Match': voucherIdInfo.hash })
           }
         });
-        
+
         // If the response is 304 Not Modified, we don't need to update state
         if (response.status === 304) {
           console.log('Voucher ID info unchanged, using cached data');
           return;
         }
-        
+
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
-        
+
         const data = await response.json();
         const etag = response.headers.get('ETag');
-        
+
         setVoucherIdInfo({ ...data, hash: etag }); // Store data and etag
-        
+
         // Set the next voucher number (using nextReceiptNo from API response)
         setVoucherNo(data.nextReceiptNo.toString());
-        
+
         // Apply default series if available and get its next number
         if (user?.defaultSeries?.cashPayment) {
           const series = user.defaultSeries.cashPayment.toUpperCase();
-          const seriesNextNumber = data.nextSeries && data.nextSeries[series] 
-            ? data.nextSeries[series] 
+          const seriesNextNumber = data.nextSeries && data.nextSeries[series]
+            ? data.nextSeries[series]
             : 1;
-          
+
           const updatedValues = {
             ...formValues,
             series: series,
             voucherNo: seriesNextNumber.toString()
           };
-          
+
           setFormValues(updatedValues);
-          
+
           // Generate narration based on voucher number and series
           setTimeout(() => updateNarration(updatedValues), 0);
         } else {
@@ -550,9 +564,9 @@ const CashPayment: React.FC = () => {
             ...formValues,
             voucherNo: data.nextReceiptNo.toString() // Fallback to general next number
           };
-          
+
           setFormValues(updatedValues);
-          
+
           // Generate narration based on voucher number
           setTimeout(() => updateNarration(updatedValues), 0);
         }
@@ -574,17 +588,17 @@ const CashPayment: React.FC = () => {
       // Only auto-update voucher number if it hasn't been manually edited
       // or when the series changes
       const series = formValues.series.toUpperCase();
-      const seriesNextNumber = voucherIdInfo.nextSeries && voucherIdInfo.nextSeries[series] 
-        ? voucherIdInfo.nextSeries[series] 
+      const seriesNextNumber = voucherIdInfo.nextSeries && voucherIdInfo.nextSeries[series]
+        ? voucherIdInfo.nextSeries[series]
         : 1; // Start with 1 for new series
-      
+
       const newVoucherNo = seriesNextNumber.toString();
-      
+
       setFormValues(prev => ({
         ...prev,
         voucherNo: newVoucherNo
       }));
-      
+
       // Update narration with the new voucher number and series
       setTimeout(() => {
         updateNarration({
@@ -605,9 +619,9 @@ const CashPayment: React.FC = () => {
         }
       });
       const data = await response.json();
-      
+
       setVoucherNo(data.nextReceiptNo.toString());
-      
+
       // Apply default series if available
       if (user?.defaultSeries?.cashPayment && !isEditMode) {
         const updatedValues = {
@@ -616,7 +630,7 @@ const CashPayment: React.FC = () => {
           voucherNo: data.nextReceiptNo.toString()
         };
         setFormValues(updatedValues);
-        
+
         // Generate narration based on voucher number and series
         setTimeout(() => updateNarration(updatedValues), 0);
       } else {
@@ -625,7 +639,7 @@ const CashPayment: React.FC = () => {
           voucherNo: data.nextReceiptNo.toString()
         };
         setFormValues(updatedValues);
-        
+
         // Generate narration based on voucher number
         setTimeout(() => updateNarration(updatedValues), 0);
       }
@@ -652,16 +666,16 @@ const CashPayment: React.FC = () => {
       // Only allow numeric values, max 6 digits
       const numericValue = value.replace(/\D/g, '');
       const truncatedValue = numericValue.slice(0, 6);
-      
+
       setFormValues(prev => {
         const updated = {
           ...prev,
           [name]: truncatedValue
         };
-        
+
         // Update narration when voucherNo changes (even if empty)
         setTimeout(() => updateNarration(updated), 0);
-        
+
         return updated;
       });
     } else {
@@ -671,12 +685,12 @@ const CashPayment: React.FC = () => {
           ...prev,
           [name]: value
         };
-        
+
         // Update narration when amount changes
         if (name === 'amount') {
           setTimeout(() => updateNarration(updated), 0);
         }
-        
+
         return updated;
       });
     }
@@ -684,12 +698,12 @@ const CashPayment: React.FC = () => {
 
   // Specific handler for DatePicker
   const handleDateChange = (dateString: string) => {
-      setFormValues(prev => {
-          const updated = { ...prev, date: dateString };
-          // Optionally update narration if needed when date changes
-          // updateNarration(updated);
-          return updated;
-      });
+    setFormValues(prev => {
+      const updated = { ...prev, date: dateString };
+      // Optionally update narration if needed when date changes
+      // updateNarration(updated);
+      return updated;
+    });
   };
 
   // Update narration when series changes
@@ -698,25 +712,25 @@ const CashPayment: React.FC = () => {
     // Only allow alphabetic characters and convert to uppercase
     const alphabeticValue = value.replace(/[^A-Za-z]/g, '');
     const uppercaseValue = alphabeticValue.toUpperCase();
-    
+
     setFormValues(prev => {
       const updated = {
         ...prev,
         series: uppercaseValue
       };
-      
+
       // Update narration when series changes
       setTimeout(() => updateNarration(updated), 0);
       return updated;
     });
   };
-  
+
   // Function to automatically generate narration
   const updateNarration = (values: FormValues) => {
-    const voucherText = values.series 
+    const voucherText = values.series
       ? `VR.No.${values.series}-${values.voucherNo || ""}`
       : `VR.No.${values.voucherNo || ""}`;
-    
+
     setFormValues(prev => ({
       ...prev,
       narration: `TO CASH AS PER ${voucherText}`
@@ -737,30 +751,30 @@ const CashPayment: React.FC = () => {
 
     // Validation for S/M field (if not disabled/auto-selected)
     if (!sm && !isSmDisabled) {
-        setToastMessage('S/M selection is required.');
-        setToastType('error');
-        setShowToast(true);
-        return;
+      setToastMessage('S/M selection is required.');
+      setToastType('error');
+      setShowToast(true);
+      return;
     }
 
     // Validate other required fields if necessary
     if (!formValues.amount || parseFloat(formValues.amount) <= 0) {
-        setToastMessage('Amount is required and must be positive.');
-        setToastType('error');
-        setShowToast(true);
-        return;
+      setToastMessage('Amount is required and must be positive.');
+      setToastType('error');
+      setShowToast(true);
+      return;
     }
-     if (!formValues.date) {
-        setToastMessage('Date is required.');
-        setToastType('error');
-        setShowToast(true);
-        return;
+    if (!formValues.date) {
+      setToastMessage('Date is required.');
+      setToastType('error');
+      setShowToast(true);
+      return;
     }
     if (!formValues.voucherNo) {
-        setToastMessage('Voucher No. is required.');
-        setToastType('error');
-        setShowToast(true);
-        return;
+      setToastMessage('Voucher No. is required.');
+      setToastType('error');
+      setShowToast(true);
+      return;
     }
 
     setIsSubmitting(true);
@@ -834,11 +848,11 @@ const CashPayment: React.FC = () => {
     <div className="bg-gray-50 dark:bg-gray-900">
       <PageMeta title="Cash Payments" description="Cash Payments Form" />
       <PageBreadcrumb pageTitle="Cash Payments" />
-      
+
       <div className="container mx-auto px-0 py-4 md:max-w-3xl">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">Cash Payment Form</h2>
-          
+
           <FormComponent onSubmit={(e) => e.preventDefault()}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="col-span-1">
@@ -880,15 +894,15 @@ const CashPayment: React.FC = () => {
                   )}
                 </div>
               </div>
-              
+
               <div className="col-span-1">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-1">
-                    <Input 
+                    <Input
                       ref={seriesInputRef}
                       id="series"
-                      name="series" 
-                      label="Series" 
+                      name="series"
+                      label="Series"
                       value={formValues.series}
                       onChange={handleSeriesChange}
                       required
@@ -897,7 +911,7 @@ const CashPayment: React.FC = () => {
                       disabled={user && user.canSelectSeries === false}
                     />
                   </div>
-                  
+
                   <div className="col-span-1">
                     <Input
                       id="voucherNo"
@@ -910,10 +924,10 @@ const CashPayment: React.FC = () => {
                     />
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4 mt-4">
                   <div className="col-span-1">
-                    <Input 
+                    <Input
                       id="amount"
                       name="amount"
                       type="number"
@@ -924,9 +938,9 @@ const CashPayment: React.FC = () => {
                       className="w-full"
                     />
                   </div>
-                  
+
                   <div className="col-span-1">
-                    <Input 
+                    <Input
                       id="discount"
                       name="discount"
                       type="number"
@@ -937,9 +951,9 @@ const CashPayment: React.FC = () => {
                     />
                   </div>
                 </div>
-                
+
                 <div className="mt-4">
-                  <Input 
+                  <Input
                     id="narration"
                     name="narration"
                     type="text"
@@ -952,7 +966,7 @@ const CashPayment: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="mt-6 flex justify-end space-x-4">
               <button
                 type="button"
@@ -993,7 +1007,7 @@ const CashPayment: React.FC = () => {
           </FormComponent>
         </div>
       </div>
-      
+
       {showToast && (
         <Toast
           message={toastMessage}

@@ -5,6 +5,7 @@ import Input from '../../components/form/input/Input';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import constants from '../../constants';
 import useActivityTracker from '../../hooks/useActivityTracker';
+import useAuth from '../../hooks/useAuth';
 
 // Define the structure of a purchase report item
 interface PurchaseReportItem {
@@ -103,7 +104,7 @@ const ItemWisePurchaseContent: React.FC = () => {
   const [companyOptions, setCompanyOptions] = useState<CompanyOptionType[]>([]);
   const [selectedCompanyCodes, setSelectedCompanyCodes] = useState<string[]>([]);
   const [companyLoadingError, setCompanyLoadingError] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const { user } = useAuth();
 
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const { logActivity } = useActivityTracker();
@@ -137,17 +138,6 @@ const ItemWisePurchaseContent: React.FC = () => {
   const fetchReportAbortControllerRef = useRef<AbortController | null>(null);
   const prevFromDateRef = useRef<string | undefined>(undefined);
   const prevToDateRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse user data from localStorage", e);
-      }
-    }
-  }, []);
 
   useEffect(() => {
     const fetchCompanies = async () => {

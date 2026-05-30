@@ -34,6 +34,7 @@ interface User {
   allowPastDateEntries?: boolean;
   requireMandatoryDocs?: boolean;
   mandatoryDocsFromDate?: string;
+  reportsAccess?: string[];
 }
 
 interface SubGroup {
@@ -61,6 +62,22 @@ const AddUser: React.FC = () => {
     'Cash Payments',
     'Reports',
   ]);
+
+  const availableReports = [
+    "Item Wise Sales",
+    "Item Wise Purchase",
+    "Godown Stock Register",
+    "Item Wise Stock Register",
+    "Bills Delivery Register",
+    "Cash Book",
+    "Party Ledger",
+    "Print Van Loading",
+    "PNB Stock Statement",
+    "PNB Statement",
+    "GSTR - Match Pur. B2B with GSTR2A",
+    "Shikhar Scheme Update",
+    "Godrej Scheme Update"
+  ];
 
   const [powersOptions] = useState<string[]>(['Read', 'Write', 'Delete']);
   const [subgroupOptions, setSubgroupOptions] = useState<SubGroup[]>([]);
@@ -93,6 +110,8 @@ const AddUser: React.FC = () => {
   const [allowPastDateEntries, setAllowPastDateEntries] = useState<boolean>(false);
   const [requireMandatoryDocs, setRequireMandatoryDocs] = useState<boolean>(false);
   const [mandatoryDocsFromDate, setMandatoryDocsFromDate] = useState<string>('');
+  const [reportsAccess, setReportsAccess] = useState<string[]>([]);
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState<boolean>(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -144,6 +163,13 @@ const AddUser: React.FC = () => {
         // Handle godown access rights
         if (userToEdit.godownAccess) {
           setGodownAccess(userToEdit.godownAccess);
+        }
+
+        // Handle reports access rights
+        if (userToEdit.reportsAccess) {
+          setReportsAccess(userToEdit.reportsAccess);
+        } else {
+          setReportsAccess([]);
         }
 
         // Handle subgroups (can be either old format with single subgroup or new format with array)
@@ -355,7 +381,8 @@ const AddUser: React.FC = () => {
         godownAccess,
         allowPastDateEntries,
         requireMandatoryDocs,
-        mandatoryDocsFromDate: requireMandatoryDocs ? mandatoryDocsFromDate : undefined
+        mandatoryDocsFromDate: requireMandatoryDocs ? mandatoryDocsFromDate : undefined,
+        reportsAccess: routeAccess.includes('Reports') ? reportsAccess : undefined
       };
 
       if (isEdit && userId) {
@@ -443,6 +470,7 @@ const AddUser: React.FC = () => {
     setAllowPastDateEntries(false);
     setRequireMandatoryDocs(false);
     setMandatoryDocsFromDate('');
+    setReportsAccess([]);
     setIsEdit(false);
     setUserId(null);
     setFormKey(prevKey => prevKey + 1);
@@ -564,15 +592,25 @@ const AddUser: React.FC = () => {
                   <MultiSelect
                     key={`subgroups-${formKey}`}
                     label="Sub Groups"
-                    options={subgroupOptions.map(sg => ({
-                      text: sg.title,
-                      value: sg.subgroupCode
-                    }))}
+                    options={[
+                      ...subgroupOptions.map(sg => ({
+                        text: sg.title,
+                        value: sg.subgroupCode
+                      })),
+                      // Include already selected subgroups that aren't in the API options
+                      ...subgroups
+                        .filter(sg => !subgroupOptions.some(opt => opt.subgroupCode === sg.subgroupCode))
+                        .map(sg => ({
+                          text: sg.title || sg.subgroupCode,
+                          value: sg.subgroupCode
+                        }))
+                    ]}
                     value={subgroups.map(sg => sg.subgroupCode)}
                     onChange={(values) => {
                       // Convert selected values back to SubGroup objects
                       const selectedSubgroups = values.map(value => {
-                        const selected = subgroupOptions.find(sg => sg.subgroupCode === value);
+                        const selected = subgroupOptions.find(sg => sg.subgroupCode === value) || 
+                                         subgroups.find(sg => sg.subgroupCode === value);
                         return selected || { title: value, subgroupCode: value };
                       });
                       setSubgroups(selectedSubgroups);
@@ -583,20 +621,38 @@ const AddUser: React.FC = () => {
                   />
                 </div>
                 <div className="relative">
-                  <MultiSelect
-                    label="Route Access"
-                    options={routeAccessOptions.map(ra => ({
-                      text: ra,
-                      value: ra
-                    }))}
-                    value={routeAccess}
-                    onChange={(values) => {
-                      setRouteAccess(values);
-                    }}
-                    allowFiltering={true}
-                    selectOnEnter={true}
-                    matchThreshold={3}
-                  />
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <MultiSelect
+                        label="Route Access"
+                        options={routeAccessOptions.map(ra => ({
+                          text: ra,
+                          value: ra
+                        }))}
+                        value={routeAccess}
+                        onChange={(values) => {
+                          const addedReports = !routeAccess.includes('Reports') && values.includes('Reports');
+                          setRouteAccess(values);
+                          if (addedReports) {
+                            setIsReportsModalOpen(true);
+                          }
+                        }}
+                        allowFiltering={true}
+                        selectOnEnter={true}
+                        matchThreshold={3}
+                      />
+                    </div>
+                    {routeAccess.includes('Reports') && (
+                      <button
+                        type="button"
+                        onClick={() => setIsReportsModalOpen(true)}
+                        className="px-3 py-2 bg-brand-50 text-brand-600 border border-brand-200 rounded hover:bg-brand-100 mb-[1px]"
+                        style={{ height: '42px', flexShrink: 0 }}
+                      >
+                        Configure Reports
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="relative">
                   <MultiSelect
@@ -777,6 +833,64 @@ const AddUser: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Reports Access Modal */}
+      {isReportsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto outline-none focus:outline-none">
+          <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => setIsReportsModalOpen(false)}></div>
+          <div className="relative w-full max-w-lg mx-auto my-6 z-[60]">
+            <div className="relative flex flex-col w-full bg-white dark:bg-gray-800 border-0 rounded-lg shadow-lg outline-none focus:outline-none">
+              <div className="flex items-start justify-between p-5 border-b border-solid border-gray-200 dark:border-gray-700 rounded-t">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Configure Reports Access
+                </h3>
+                <button
+                  className="p-1 ml-auto bg-transparent border-0 text-gray-500 float-right text-3xl leading-none font-semibold outline-none focus:outline-none"
+                  onClick={() => setIsReportsModalOpen(false)}
+                >
+                  <span className="text-gray-500 h-6 w-6 text-2xl block outline-none focus:outline-none">
+                    ×
+                  </span>
+                </button>
+              </div>
+              <div className="relative p-6 flex-auto max-h-[60vh] overflow-y-auto">
+                <div className="mb-4 flex gap-4">
+                  <button type="button" onClick={() => setReportsAccess(availableReports)} className="text-sm text-brand-600 hover:underline">Select All</button>
+                  <button type="button" onClick={() => setReportsAccess([])} className="text-sm text-brand-600 hover:underline">Deselect All</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {availableReports.map((report) => (
+                    <label key={report} className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                        checked={reportsAccess.includes(report)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setReportsAccess([...reportsAccess, report]);
+                          } else {
+                            setReportsAccess(reportsAccess.filter(r => r !== report));
+                          }
+                        }}
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300 select-none">{report}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-end p-6 border-t border-solid border-gray-200 dark:border-gray-700 rounded-b">
+                <button
+                  className="bg-brand-500 text-white hover:bg-brand-600 font-bold uppercase text-sm px-6 py-3 rounded shadow outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150"
+                  type="button"
+                  onClick={() => setIsReportsModalOpen(false)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
