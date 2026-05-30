@@ -151,6 +151,7 @@ interface User {
     title: string;
     subgroupCode?: string;
   } | null;
+  reportsAccess?: string[];
 }
 
 // Create an admin attendance icon
@@ -441,12 +442,14 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         if (item.name === "Reports") {
           if (!user.routeAccess.includes('Reports')) return false;
           
-          // Filter reports for non-admins
-          if (!user.routeAccess.includes('Admin')) {
+          if (user.reportsAccess && user.reportsAccess.length > 0) {
+            item.subItems = item.subItems.filter(r => user.reportsAccess?.includes(r.name));
+          } else if (!user.routeAccess.includes('Admin')) {
+            // Filter reports for non-admins if no explicit reportsAccess is set
             item.subItems = item.subItems.filter(r => r.name !== "PNB Statement" && r.name !== "Shikhar Scheme Update" && r.name !== "Godrej Scheme Update");
           }
           
-          return true;
+          return item.subItems.length > 0;
         }
 
         // For Database section, filter subitems based on user access

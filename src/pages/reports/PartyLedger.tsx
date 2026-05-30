@@ -4,6 +4,7 @@ import useAuth from '../../hooks/useAuth';
 import useActivityTracker from '../../hooks/useActivityTracker';
 import constants from '../../constants';
 import apiCache from '../../utils/apiCache';
+import { getUserSubgroups } from '../../contexts/AuthContext';
 
 interface PartyOption {
   value: string;
@@ -196,25 +197,34 @@ const PartyLedger: React.FC = () => {
           });
         }
 
+        if (!user) return; // Wait for user context to load
+
         // Check if user is admin
         const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
+        const userSubgroups = getUserSubgroups(user);
 
         // Filter parties (exclude C_CODE ending with "000")
         let filteredParties = cmplData ? cmplData.filter(p => !p.C_CODE.endsWith('000')) : [];
 
-        if (!isAdmin && user && user.subgroups && user.subgroups.length > 0) {
-          console.log(`Filtering parties by user's assigned subgroups`);
-          const subgroupPrefixes = user.subgroups.map((sg: any) =>
-            sg.subgroupCode.substring(0, 2).toUpperCase()
-          );
-          console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
-          filteredParties = filteredParties.filter(p => {
-            const partyPrefix = p.C_CODE.substring(0, 2).toUpperCase();
-            return subgroupPrefixes.includes(partyPrefix);
-          });
-          console.log(`Filtered to ${filteredParties.length} parties based on user's subgroups`);
-        } else if (isAdmin) {
+        if (isAdmin) {
           console.log('User is admin - showing all parties without filtering');
+        } else {
+          if (userSubgroups.length > 0) {
+            console.log(`Filtering parties by user's assigned subgroups`);
+            const subgroupPrefixes = userSubgroups.map((sg: any) =>
+              (sg.subgroupCode || '').substring(0, 2).toUpperCase()
+            ).filter(Boolean);
+            
+            console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+            filteredParties = filteredParties.filter(p => {
+              const partyPrefix = p.C_CODE.substring(0, 2).toUpperCase();
+              return subgroupPrefixes.includes(partyPrefix);
+            });
+            console.log(`Filtered to ${filteredParties.length} parties based on user's subgroups`);
+          } else {
+            console.log('User is not admin and has no subgroups - hiding all parties');
+            filteredParties = [];
+          }
         }
 
         const partyList = filteredParties.map((party) => {

@@ -344,22 +344,27 @@ const Attendance: React.FC = () => {
       if (response.ok) {
         setToast({ message: 'Attendance marked successfully!', type: 'success' });
         setCapturedImage(null);
+        
+        // Dispatch event to instantly update AppLayout state across the app
+        window.dispatchEvent(new Event('attendanceMarked'));
+        
         setTimeout(() => {
-          if (user?.requireMandatoryDocs) {
-            navigate('/mandatory-docs');
-          } else {
-            // Check redundant permissions before redirecting
-            // The user might not have access to Account Master or Dashboard
-            if (hasAccess('Account Master')) {
-              navigate('/account-master');
-            } else if (hasAccess('Dashboard')) {
-              navigate('/dashboard');
-            } else if (hasAccess('Invoicing')) {
-              navigate('/invoicing');
+          // Only auto-navigate if they haven't already clicked elsewhere in the sidebar
+          if (window.location.pathname === '/attendance') {
+            if (user?.requireMandatoryDocs) {
+              window.location.href = '/mandatory-docs';
             } else {
-              // Stay on attendance page if no other access
-              // But refresh the state to show "Attendance Already Marked"
-              window.location.reload();
+              // Check redundant permissions before redirecting
+              if (hasAccess('Account Master')) {
+                window.location.href = '/account-master';
+              } else if (hasAccess('Dashboard')) {
+                window.location.href = '/dashboard';
+              } else if (hasAccess('Invoicing')) {
+                window.location.href = '/invoicing';
+              } else {
+                // Stay on attendance page if no other access
+                window.location.reload();
+              }
             }
           }
         }, 3000);

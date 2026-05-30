@@ -1220,11 +1220,11 @@ router.get('/past-invoices', requireAppAuth, async (req, res) => {
 /**
  * POST /api/app/orders
  * Headers: Authorization: Bearer <token>
- * Body: { items: [...], totalAmount, notes? }
+ * Body: { items: [...], totalAmount, notes?, paymentMode? }
  * partyCode is taken from the session — not trusted from client.
  */
 router.post('/orders', requireAppAuth, async (req, res) => {
-    const { items, totalAmount, notes } = req.body;
+    const { items, totalAmount, notes, paymentMode } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: 'items array is required' });
     }
@@ -1310,6 +1310,7 @@ router.post('/orders', requireAppAuth, async (req, res) => {
             totalAmount: totalAmount || 0,
             customDiscount: customDiscount,
             notes: notes || '',
+            paymentMode: paymentMode || 'Cash',
         };
 
         orders.push(newOrder);
@@ -1319,6 +1320,63 @@ router.post('/orders', requireAppAuth, async (req, res) => {
     } catch (err) {
         console.error('[app/orders POST]', err);
         res.status(500).json({ error: 'Failed to place order' });
+    }
+});
+
+/**
+ * PATCH /api/app/orders/:id
+ * Headers: Authorization: Bearer <token>
+ * Body: { items: [...], totalAmount }
+ * Allows the owner of a PENDING (not yet Approved / Invoiced) order to update it.
+ * Items can be removed (by omitting them), qty changed, or new items added.
+ */
+router.patch('/orders/:id', requireAppAuth, async (req, res) => {
+    const { id } = req.params;
+    const { items, totalAmount, paymentMode, notes } = req.body;
+
+    if (!items || !Array.isArray(items)) {
+        return res.status(400).json({ error: 'items array is required' });
+    }
+
+    try {
+        const orders = await readOrders();
+        const idx = orders.findIndex(o => o.id === id);
+
+        if (idx === -1) return res.status(404).json({ error: 'Order not found' });
+
+        const order = orders[idx];
+
+        // Ownership check
+        if (order.partyCode !== req.appPartyCode) {
+            return res.status(403).json({ error: 'You can only edit your own orders' });
+        }
+
+        // Status check – only Pending orders can be edited
+        if (order.status !== 'Pending') {
+            return res.status(400).json({ error: `Order cannot be edited — current status is "${order.status}"` });
+        }
+
+        // If items array is empty, cancel the whole order
+        if (items.length === 0) {
+            orders[idx].status = 'Rejected';
+            orders[idx].adminNote = 'Cancelled by customer';
+            orders[idx].updatedAt = new Date().toISOString();
+            await writeOrdersWithFlag(orders);
+            return res.json({ success: true, order: orders[idx], cancelled: true });
+        }
+
+        orders[idx].items = items;
+        orders[idx].totalAmount = totalAmount || 0;
+        if (paymentMode !== undefined) orders[idx].paymentMode = paymentMode;
+        if (notes !== undefined) orders[idx].notes = notes;
+        orders[idx].updatedAt = new Date().toISOString();
+        orders[idx].customerEdited = true;
+
+        await writeOrdersWithFlag(orders);
+        res.json({ success: true, order: orders[idx] });
+    } catch (err) {
+        console.error('[app/orders PATCH]', err);
+        res.status(500).json({ error: 'Failed to update order' });
     }
 });
 

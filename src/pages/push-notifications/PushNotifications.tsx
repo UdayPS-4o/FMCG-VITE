@@ -41,6 +41,11 @@ const PushNotifications: React.FC = () => {
     const [uploadingImage, setUploadingImage] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
     
+    // Product Link State
+    const [searchProductQuery, setSearchProductQuery] = useState('');
+    const [productResults, setProductResults] = useState<any[]>([]);
+    const [showProductDropdown, setShowProductDropdown] = useState(false);
+    
     const titleRef = useRef<HTMLInputElement>(null);
     const messageRef = useRef<HTMLTextAreaElement>(null);
     const [lastFocused, setLastFocused] = useState<'title' | 'message'>('message');
@@ -57,6 +62,28 @@ const PushNotifications: React.FC = () => {
             });
         }
     }, []);
+
+    useEffect(() => {
+        if (!searchProductQuery.trim()) {
+            setProductResults([]);
+            return;
+        }
+        const delay = setTimeout(async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const res = await fetch(`${constants.baseURL}/api/app/products?limit=10&q=${encodeURIComponent(searchProductQuery)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setProductResults(data.data || []);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }, 500);
+        return () => clearTimeout(delay);
+    }, [searchProductQuery]);
 
     const fetchTokens = async () => {
         setLoadingTokens(true);
@@ -509,6 +536,48 @@ const PushNotifications: React.FC = () => {
                                     placeholder="Message body. Your current balance is {{balance}}."
                                     required
                                 />
+                            </div>
+
+                            <div className="mb-2 relative">
+                                <label className="block text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                    Link an Item (Auto-fills Image & Action URL)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={searchProductQuery}
+                                    onChange={(e) => setSearchProductQuery(e.target.value)}
+                                    onFocus={() => setShowProductDropdown(true)}
+                                    onBlur={() => setTimeout(() => setShowProductDropdown(false), 200)}
+                                    className="w-full p-2.5 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 dark:text-white rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 transition-colors placeholder-blue-300 dark:placeholder-blue-700"
+                                    placeholder="Search for a product to attach..."
+                                />
+                                {showProductDropdown && productResults.length > 0 && (
+                                    <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                        {productResults.map(prod => (
+                                            <div 
+                                                key={prod.CODE}
+                                                className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-0 flex items-center gap-3"
+                                                onClick={() => {
+                                                    if (prod.image_url) setImageUrl(prod.image_url);
+                                                    setUrl(`/search?q=${prod.CODE}`);
+                                                    setSearchProductQuery('');
+                                                    setShowProductDropdown(false);
+                                                }}
+                                            >
+                                                {prod.image_url ? (
+                                                    <img src={prod.image_url} alt="" className="w-8 h-8 object-contain rounded bg-gray-50" />
+                                                ) : (
+                                                    <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-400">N/A</div>
+                                                )}
+                                                <div>
+                                                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{prod.PRODUCT}</div>
+                                                    <div className="text-xs text-gray-500">Code: {prod.CODE}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">

@@ -6,6 +6,7 @@ import './scrollbar.css'; // Import the scrollbar styles
 import DeleteConfirmation from '../ui/DeleteConfirmation';
 import { useNavigate } from 'react-router-dom';
 import { TableSkeletonLoader } from '../ui/skeleton/SkeletonLoader';
+import useAuth from '../../hooks/useAuth';
 
 // Add formatItemsDisplay helper function
 const formatItemsDisplay = (items: any): string => {
@@ -175,28 +176,10 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   // Add state for SM options
   const [smOptions, setSmOptions] = useState<{value: string, label: string}[]>([]);
 
-  // Get user state from localStorage
-  const [user, setUser] = useState<User | null>(null);
+  // Get user state from useAuth
+  const { user } = useAuth();
 
   const navigate = useNavigate();
-
-  // Fetch user data from localStorage
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse user data from localStorage", e);
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        navigate('/login'); 
-      }
-    } else {
-      // Redirect to login if no user data
-      navigate('/login'); 
-    }
-  }, [navigate]);
 
   useEffect(() => {
     // Fetch data only when user is loaded

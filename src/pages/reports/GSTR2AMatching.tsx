@@ -3,6 +3,7 @@ import Input from '../../components/form/input/Input';
 import constants from '../../constants';
 import useGoBack from '../../hooks/useGoBack';
 import useActivityTracker from '../../hooks/useActivityTracker';
+import useAuth from '../../hooks/useAuth';
 
 // Define User type
 interface User {
@@ -116,24 +117,9 @@ interface ComparisonResult {
 
 const GSTR2AMatching: React.FC = () => {
   const goBack = useGoBack();
-  const [user, setUser] = useState<User | null>(null);
+  const { user } = useAuth();
   const { logActivity } = useActivityTracker();
-  const [hasAdminAccess, setHasAdminAccess] = useState<boolean>(false);
-
-  // Check user access on component mount
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const userData = JSON.parse(storedUser);
-        setUser(userData);
-        // Check if user has admin access
-        setHasAdminAccess(userData.routeAccess && userData.routeAccess.includes('Admin'));
-      } catch (e) {
-        console.error("Failed to parse user data from localStorage", e);
-      }
-    }
-  }, []);
+  const hasAdminAccess = Boolean(user?.routeAccess?.includes('Admin'));
 
   // Custom back navigation for internal steps
   const handleBackNavigation = () => {

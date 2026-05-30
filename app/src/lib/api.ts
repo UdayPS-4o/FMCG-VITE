@@ -141,6 +141,7 @@ export const placeOrder = async (orderData: {
     items: any[];
     totalAmount: number;
     notes?: string;
+    paymentMode?: string | null;
 }) => {
     const res = await fetch(`${API_URL}/orders`, {
         method: 'POST',
@@ -149,6 +150,22 @@ export const placeOrder = async (orderData: {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to place order');
+    return data;
+};
+
+export const updateOrder = async (orderId: string, orderData: {
+    items: any[];
+    totalAmount: number;
+    paymentMode?: string | null;
+    notes?: string;
+}) => {
+    const res = await fetch(`${API_URL}/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify(orderData),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update order');
     return data;
 };
 

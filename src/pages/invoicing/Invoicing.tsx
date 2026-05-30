@@ -12,6 +12,7 @@ import Toast from '../../components/ui/toast/Toast';
 import { InvoiceContext, useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
+import useAuth from '../../hooks/useAuth';
 
 // Utility function to center an element in the viewport
 const centerElementInViewport = (element: HTMLElement) => {
@@ -61,7 +62,7 @@ interface InvoiceDraft {
 
 const InvoicingContent: React.FC = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const { user } = useAuth();
   const [draftExistsInStorage, setDraftExistsInStorage] = useState<boolean>(false);
   const [showLoadDraftButton, setShowLoadDraftButton] = useState<boolean>(false);
 
@@ -75,23 +76,6 @@ const InvoicingContent: React.FC = () => {
   const billNoRef = useRef<InputRefHandle>(null);
   const addAnotherItemButtonRef = useRef<HTMLButtonElement>(null); // This is local
   const collapsibleItemRefs = useRef<Array<React.RefObject<CollapsibleItemSectionRefHandle>>>([]); // This is local
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse user data from localStorage", e);
-        // Handle potential corrupt data: clear storage and redirect to login?
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        navigate('/login'); 
-      }
-    }
-    // If no user data, potentially redirect to login or show an error
-    // else { navigate('/login'); } // Uncomment if redirect is desired
-  }, [navigate]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [searchItems, setSearchItems] = useState<string>('');

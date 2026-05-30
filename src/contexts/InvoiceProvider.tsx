@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { InvoiceContext, ItemData } from './InvoiceContext';
 import constants from '../constants';
 import apiCache from '../utils/apiCache';
+import useAuth, { getUserSubgroups } from '../hooks/useAuth';
 
 interface InvoiceProviderProps {
   children: React.ReactNode;
@@ -37,8 +38,7 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
   const [partyOptions, setPartyOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
-  const userRef = useRef<any>(null);
+  const { user } = useAuth();
   const [invoiceIdInfo, setInvoiceIdInfo] = useState<{
     nextInvoiceId: number;
     nextSeries: Record<string, number>;
@@ -47,38 +47,10 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
     nextSeries: {},
   });
   const dataFetched = useRef<boolean>(false);
-
-  // First fetch the current user data
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        const response = await fetch(`${constants.baseURL}/api/checkIsAuth`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.authenticated && data.user) {
-            setUser(data.user);
-            userRef.current = data.user;
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-      }
-    };
-
-    fetchUserData();
-  }, []);
-
+  
   useEffect(() => {
     // Avoid refetching data if we've already done it or if user is still loading
-    if (dataFetched.current) {
+    if (!user || dataFetched.current) {
       return;
     }
 
@@ -123,9 +95,9 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           let filteredGodowns = allGodowns;
 
           // If user has godownAccess restrictions, filter the godowns
-          if (userRef.current && userRef.current.godownAccess && userRef.current.godownAccess.length > 0) {
+          if (user && user.godownAccess && user.godownAccess.length > 0) {
             filteredGodowns = allGodowns.filter(godown =>
-              userRef.current.godownAccess.includes(godown.value)
+              user.godownAccess.includes(godown.value)
             );
             console.log(`Filtered to ${filteredGodowns.length} godowns based on user's access`);
           }
@@ -145,29 +117,33 @@ const InvoiceProvider: React.FC<InvoiceProviderProps> = ({
           );
 
           // Check if user is an admin
-          const currentUser = userRef.current;
-          const isAdmin = currentUser && currentUser.routeAccess && currentUser.routeAccess.includes('Admin');
+          const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
 
-          // Only filter parties if user is not an admin and has assigned subgroups
-          if (!isAdmin && currentUser && currentUser.subgroups && currentUser.subgroups.length > 0) {
-            console.log(`Filtering parties by user's assigned subgroups`);
-
-            // Get all subgroup prefixes from user's assigned subgroups
-            const subgroupPrefixes = currentUser.subgroups.map(sg =>
-              sg.subgroupCode.substring(0, 2).toUpperCase()
-            );
-
-            console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
-
-            // Filter parties where C_CODE starts with any of the user's subgroup prefixes
-            dtParties = dtParties.filter(party => {
-              const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
-              return subgroupPrefixes.includes(partyPrefix);
-            });
-
-            console.log(`Filtered to ${dtParties.length} parties based on user's subgroups`);
-          } else if (isAdmin) {
+          if (isAdmin) {
             console.log('User is admin - showing all parties without filtering');
+          } else {
+            const userSubgroups = getUserSubgroups(user);
+            if (userSubgroups.length > 0) {
+              console.log(`Filtering parties by user's assigned subgroups`);
+
+              // Get all subgroup prefixes from user's assigned subgroups
+              const subgroupPrefixes = userSubgroups.map((sg: any) =>
+                (sg.subgroupCode || '').substring(0, 2).toUpperCase()
+              ).filter(Boolean);
+
+              console.log(`User's subgroup prefixes: ${subgroupPrefixes.join(', ')}`);
+
+              // Filter parties where C_CODE starts with any of the user's subgroup prefixes
+              dtParties = dtParties.filter(party => {
+                const partyPrefix = party.C_CODE.substring(0, 2).toUpperCase();
+                return subgroupPrefixes.includes(partyPrefix);
+              });
+
+              console.log(`Filtered to ${dtParties.length} parties based on user's subgroups`);
+            } else {
+              console.log('User is not admin and has no subgroups - hiding all parties');
+              dtParties = [];
+            }
           }
 
           // Get balance information
