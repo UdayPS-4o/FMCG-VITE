@@ -1397,6 +1397,52 @@ router.get('/gstr2a-purchase-data', async (req, res) => {
 });
 
 // GST API Proxy Routes
+
+// Helper to extract GST credentials from sv.vcc
+router.get('/gst-credentials', async (req, res) => {
+  try {
+    const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
+    if (!DBF_FOLDER_PATH) {
+      return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
+    }
+    const svPath = path.join(DBF_FOLDER_PATH, 'data', 'sv.vcc');
+    
+    // Read sv.vcc manually since it's a VFP DBF with unsupported field types for standard libraries
+    const buf = await fs.readFile(svPath);
+    const headerLength = buf.readUInt16LE(8);
+    let pos = 32;
+    const fields = [];
+    while (buf[pos] !== 0x0D && pos < buf.length) {
+      const name = buf.toString('utf8', pos, pos + 11).replace(/\0/g, '').trim();
+      const type = String.fromCharCode(buf[pos + 11]);
+      let length = buf[pos + 16];
+      if (length === 0 && type === 'C') length = 256;
+      fields.push({ name, type, length });
+      pos += 32;
+    }
+    pos = headerLength + 1; // Start of records + skip deleted flag
+    const record = {};
+    fields.forEach(f => {
+      const val = buf.toString('utf8', pos, pos + f.length).replace(/\0/g, '').trim();
+      record[f.name] = val;
+      pos += f.length;
+    });
+
+    res.json({
+      aspid: record.ASPID || '',
+      password: record.ASPPWD || '',
+      gstin: record.PARTYGST || '',
+      // Using SV_CL_ID (SMS Client ID) as requested for the GST portal username, stripping any potential wrapping quotes
+      username: (record.SV_CL_ID || '').replace(/^['"]|['"]$/g, ''),
+      // In case they need the GST password too
+      gstpwd: record.GSTPWD || ''
+    });
+  } catch (error) {
+    console.error('Error reading GST credentials from sv.vcc:', error);
+    res.status(500).json({ message: 'Failed to read GST credentials', error: error.message });
+  }
+});
+
 // Route to request OTP from GST API
 router.post('/gst-otp-request', async (req, res) => {
   try {
@@ -1419,6 +1465,10 @@ router.post('/gst-otp-request', async (req, res) => {
     console.error('GST OTP Request Error:', error.message);
     if (error.response) {
       console.error('GST API Response:', error.response.status, error.response.data);
+      return res.status(error.response.status).json({
+        error: 'GST API Error',
+        details: error.response.data
+      });
     }
     res.status(500).json({ 
       error: 'Failed to request OTP from GST API',
@@ -1449,6 +1499,10 @@ router.post('/gst-auth-token', async (req, res) => {
     console.error('GST Auth Token Error:', error.message);
     if (error.response) {
       console.error('GST API Response:', error.response.status, error.response.data);
+      return res.status(error.response.status).json({
+        error: 'GST API Error',
+        details: error.response.data
+      });
     }
     res.status(500).json({ 
       error: 'Failed to get auth token from GST API',
@@ -1480,6 +1534,10 @@ router.post('/gst-download-gstr2a', async (req, res) => {
     console.error('GST GSTR2A Download Error:', error.message);
     if (error.response) {
       console.error('GST API Response:', error.response.status, error.response.data);
+      return res.status(error.response.status).json({
+        error: 'GST API Error',
+        details: error.response.data
+      });
     }
     res.status(500).json({ 
       error: 'Failed to download GSTR2A data from GST API',

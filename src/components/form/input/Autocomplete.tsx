@@ -135,9 +135,19 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   // Scroll to highlighted item
   useEffect(() => {
     if (isOpen && highlightedIndex >= 0 && dropdownRef.current) {
-      const optionElement = dropdownRef.current.children[highlightedIndex] as HTMLElement;
-      if (optionElement) {
-        optionElement.scrollIntoView({ block: 'nearest' });
+      // Find the highlighted element using data attribute to be resilient to DOM structure changes
+      const highlightedElement = dropdownRef.current.querySelector(`[data-index="${highlightedIndex}"]`) as HTMLElement;
+      if (highlightedElement) {
+        const container = dropdownRef.current;
+        const offsetBottom = highlightedElement.offsetTop + highlightedElement.offsetHeight;
+        const offsetTop = highlightedElement.offsetTop;
+        
+        // Manual scroll to avoid window jumping (scrollIntoView often causes the page to scroll)
+        if (offsetBottom > container.scrollTop + container.clientHeight) {
+          container.scrollTop = offsetBottom - container.clientHeight;
+        } else if (offsetTop < container.scrollTop) {
+          container.scrollTop = offsetTop;
+        }
       }
     }
   }, [highlightedIndex, isOpen]);
@@ -502,6 +512,7 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
                       </div>
                     )}
                     <div
+                      data-index={index}
                       className={`px-4 py-3 text-sm cursor-pointer text-gray-700 dark:text-gray-200 transition-colors duration-150 ${inStock
                         ? 'border-l-[3px] border-green-500 bg-green-50/50 dark:bg-green-900/10 hover:bg-green-100/60 dark:hover:bg-green-900/20'
                         : 'hover:bg-brand-50 dark:hover:bg-brand-900/10'
