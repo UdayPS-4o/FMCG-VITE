@@ -101,7 +101,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
                     }}
                     style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: active ? pal.acc : pal.lt, color: active ? '#fff' : pal.acc, border: `1px solid ${active ? pal.acc : pal.lt}`, cursor: 'pointer' }}
                   >
-                    {s.discount}% ≥{s.slab1}
+                    {s.discount}% on purchase of {s.slab1} pcs and more
                   </button>
                 );
               })}

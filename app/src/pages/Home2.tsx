@@ -70,7 +70,7 @@ const MultiDrawer = ({ product, onClose, pal }: { product: Product; onClose: () 
               return (
                 <button key={i} onClick={() => upd(s.slab1 % conv, Math.floor(s.slab1 / conv))}
                   style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, border: 'none', cursor: 'pointer', background: active ? pal.acc : pal.lt, color: active ? '#fff' : pal.acc }}>
-                  {s.discount}% off ≥{s.slab1} pcs
+                  {s.discount}% on purchase of {s.slab1} pcs and more
                 </button>
               );
             })}
@@ -170,7 +170,7 @@ const MarketCard = ({ product, index, onOpenDrawer }: { product: Product; index:
                   }}
                   style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: active ? pal.acc : pal.lt, color: active ? '#fff' : pal.acc, border: `1px solid ${active ? pal.acc : pal.lt}`, cursor: 'pointer' }}
                 >
-                  {s.discount}% ≥{s.slab1}
+                  {s.discount}% on purchase of {s.slab1} pcs and more
                 </button>
               );
             })}

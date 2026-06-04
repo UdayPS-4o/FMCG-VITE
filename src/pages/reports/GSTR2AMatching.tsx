@@ -160,6 +160,29 @@ const GSTR2AMatching: React.FC = () => {
 
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
 
+  // GST Credentials state
+  const [gstCredentials, setGstCredentials] = useState<{ gstin: string, username: string, aspid: string, password: string } | null>(null);
+
+  // Fetch credentials on mount
+  useEffect(() => {
+    const fetchCredentials = async () => {
+      try {
+        const response = await fetch(`${constants.baseURL}/api/reports/gst-credentials`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setGstCredentials(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch GST credentials:', err);
+      }
+    };
+    fetchCredentials();
+  }, []);
+
   const handleHideColumn = (columnName: string) => {
     setHiddenColumns(prev => [...prev, columnName]);
   };
@@ -199,6 +222,12 @@ const GSTR2AMatching: React.FC = () => {
     setLoading(true);
     setError(null);
 
+    if (!gstCredentials) {
+      setError('GST credentials not loaded yet. Please wait or check your backend connection.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(`${constants.baseURL}/api/reports/gst-otp-request`, {
         method: 'POST',
@@ -207,10 +236,10 @@ const GSTR2AMatching: React.FC = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
-          gstin: '23AJBPS6285R1ZF',
-          username: 'ektaseoni123',
-          aspid: '1672501821',
-          password: 'sHUBHAM@288'
+          gstin: gstCredentials.gstin,
+          username: gstCredentials.username,
+          aspid: gstCredentials.aspid,
+          password: gstCredentials.password
         })
       });
 
@@ -241,6 +270,12 @@ const GSTR2AMatching: React.FC = () => {
     setLoading(true);
     setError(null);
 
+    if (!gstCredentials) {
+      setError('GST credentials not loaded yet.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(`${constants.baseURL}/api/reports/gst-auth-token`, {
         method: 'POST',
@@ -249,11 +284,11 @@ const GSTR2AMatching: React.FC = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
-          gstin: '23AJBPS6285R1ZF',
-          username: 'ektaseoni123',
+          gstin: gstCredentials.gstin,
+          username: gstCredentials.username,
           otp: otp,
-          aspid: '1672501821',
-          password: 'sHUBHAM@288'
+          aspid: gstCredentials.aspid,
+          password: gstCredentials.password
         })
       });
 
@@ -283,6 +318,12 @@ const GSTR2AMatching: React.FC = () => {
     setLoading(true);
     setError(null);
 
+    if (!gstCredentials) {
+      setError('GST credentials not loaded yet.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const downloadPromises = [];
 
@@ -295,12 +336,12 @@ const GSTR2AMatching: React.FC = () => {
           },
           body: JSON.stringify({
             action: 'B2B',
-            gstin: '23AJBPS6285R1ZF',
+            gstin: gstCredentials.gstin,
             ret_period: month,
             authtoken: authToken,
-            username: 'ektaseoni123',
-            aspid: '1672501821',
-            password: 'sHUBHAM@288'
+            username: gstCredentials.username,
+            aspid: gstCredentials.aspid,
+            password: gstCredentials.password
           })
         }).then(res => res.json());
         downloadPromises.push(b2bPromise);
@@ -315,12 +356,12 @@ const GSTR2AMatching: React.FC = () => {
           },
           body: JSON.stringify({
             action: 'CDN',
-            gstin: '23AJBPS6285R1ZF',
+            gstin: gstCredentials.gstin,
             ret_period: month,
             authtoken: authToken,
-            username: 'ektaseoni123',
-            aspid: '1672501821',
-            password: 'sHUBHAM@288'
+            username: gstCredentials.username,
+            aspid: gstCredentials.aspid,
+            password: gstCredentials.password
           })
         }).then(res => res.json());
         downloadPromises.push(cdnPromise);
@@ -1201,25 +1242,37 @@ const GSTR2AMatching: React.FC = () => {
 
           {/* Summary */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-green-100 dark:bg-green-900 p-4 rounded">
+            <div 
+              onClick={() => setStatusFilter(statusFilter === 'Matched' ? 'All' : 'Matched')}
+              className={`bg-green-100 dark:bg-green-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Matched' ? 'ring-2 ring-green-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+            >
               <div className="text-green-800 dark:text-green-200 text-sm font-medium">Matched</div>
               <div className="text-green-900 dark:text-green-100 text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Matched').length}
               </div>
             </div>
-            <div className="bg-yellow-100 dark:bg-yellow-900 p-4 rounded">
+            <div 
+              onClick={() => setStatusFilter(statusFilter === 'Mismatched' ? 'All' : 'Mismatched')}
+              className={`bg-yellow-100 dark:bg-yellow-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Mismatched' ? 'ring-2 ring-yellow-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+            >
               <div className="text-yellow-800 dark:text-yellow-200 text-sm font-medium">Mismatched</div>
               <div className="text-yellow-900 dark:text-yellow-100 text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Mismatched').length}
               </div>
             </div>
-            <div className="bg-red-100 dark:bg-red-900 p-4 rounded">
+            <div 
+              onClick={() => setStatusFilter(statusFilter === 'Missing in GSTR2A' ? 'All' : 'Missing in GSTR2A')}
+              className={`bg-red-100 dark:bg-red-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Missing in GSTR2A' ? 'ring-2 ring-red-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+            >
               <div className="text-red-800 dark:text-red-200 text-sm font-medium">Missing in GSTR2A</div>
               <div className="text-red-900 dark:text-red-100 text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Missing in GSTR2A').length}
               </div>
             </div>
-            <div className="bg-blue-100 dark:bg-blue-900 p-4 rounded">
+            <div 
+              onClick={() => setStatusFilter(statusFilter === 'Missing in Purchase' ? 'All' : 'Missing in Purchase')}
+              className={`bg-blue-100 dark:bg-blue-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Missing in Purchase' ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+            >
               <div className="text-blue-800 dark:text-blue-200 text-sm font-medium">Missing in Purchase</div>
               <div className="text-blue-900 dark:text-blue-100 text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Missing in Purchase').length}
