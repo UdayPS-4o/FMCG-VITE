@@ -845,7 +845,7 @@ router.get('/purchase-filter-options', async (req, res) => {
     }
 });
 
-// GET /api/pnb-stock-statement - PNB Stock Statement Report
+// GET /api/reports/pnb-stock-statement - PNB Stock Statement Report
 router.get('/pnb-stock-statement', async (req, res) => {
     try {
         const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
@@ -853,406 +853,291 @@ router.get('/pnb-stock-statement', async (req, res) => {
             return res.status(500).json({ message: 'DBF_FOLDER_PATH environment variable not set.' });
         }
 
-        // Read required JSON files
-        const billdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'billdtl.json');
-        const purdtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'purdtl.json');
-        const transferPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'transfer.json');
-        const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
-        const stockPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'stock.json');
+        const path = require('path');
+        const fsPromises = require('fs').promises;
 
-        // Read all files
-        const [billdtlData, purdtlData, transferData, cmplData, stockData] = await Promise.all([
-            fs.readFile(billdtlPath, 'utf8').then(data => JSON.parse(data)),
-            fs.readFile(purdtlPath, 'utf8').then(data => JSON.parse(data)),
-            fs.readFile(transferPath, 'utf8').then(data => JSON.parse(data)),
-            fs.readFile(cmplPath, 'utf8').then(data => JSON.parse(data)),
-            fs.readFile(stockPath, 'utf8').then(data => JSON.parse(data))
+        // Accept period filter: month (1-12) and year (e.g. 2026)
+        const { month, year } = req.query;
+        const filterMonth = month ? parseInt(month, 10) : null;  // 1-based
+        const filterYear  = year  ? parseInt(year,  10) : null;
+
+        const billdtlPath  = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BILLDTL.json');
+        const purdtlPath   = path.join(DBF_FOLDER_PATH, 'data', 'json', 'purdtl.json');
+        const transferPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'TRANSFER.json');
+        const cmplPath     = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
+        const prodPath     = path.join(DBF_FOLDER_PATH, 'data', 'json', 'prod.json');
+
+        const [billdtlData, purdtlData, transferData, cmplData, prodData] = await Promise.all([
+            fsPromises.readFile(billdtlPath, 'utf8').then(d => JSON.parse(d)).catch(() => []),
+            fsPromises.readFile(purdtlPath,  'utf8').then(d => JSON.parse(d)).catch(() => []),
+            fsPromises.readFile(transferPath,'utf8').then(d => JSON.parse(d)).catch(() => []),
+            fsPromises.readFile(cmplPath,    'utf8').then(d => JSON.parse(d)).catch(() => []),
+            fsPromises.readFile(prodPath,    'utf8').then(d => JSON.parse(d)).catch(() => [])
         ]);
 
-        // Process stock data
-        const stockMap = new Map();
-        stockData.forEach(item => {
-            if (item.CODE) {
-                stockMap.set(item.CODE, {
-                    opening: parseFloat(item.OPENING || 0),
-                    purchase: parseFloat(item.PURCHASE || 0),
-                    sales: parseFloat(item.SALES || 0),
-                    transfer: parseFloat(item.TRANSFER || 0),
-                    closing: parseFloat(item.CLOSING || 0),
-                    product: item.PRODUCT || 'Unknown Product'
+        // Build product name map from prod.json
+        const prodNameMap = new Map();
+        prodData.forEach(p => { if (p.CODE) prodNameMap.set(p.CODE, p.PRODUCT || p.NAME || p.CODE); });
+
+        // Filter helper by period
+        const inPeriod = (dateStr) => {
+            if (!filterMonth || !filterYear) return true;
+            if (!dateStr) return false;
+            
+            const d = new Date(dateStr);
+            // Convert UTC DBF time to IST exactly
+            d.setMinutes(d.getMinutes() + d.getTimezoneOffset() + 330);
+            return d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonth;
+        };
+
+        // --- Calculate current stock ---
+        const itemStockMap = new Map();
+
+        const ensureItem = (code, product, unit, rate = 0) => {
+            if (!itemStockMap.has(code)) {
+                itemStockMap.set(code, {
+                    code, product: product || prodNameMap.get(code) || code, unit: unit || 'PCS',
+                    sales: 0, purchases: 0, transferOut: 0, transferIn: 0, rate: 0
                 });
             }
+            const item = itemStockMap.get(code);
+            if ((!item.product || item.product === code) && product) item.product = product;
+            if (rate > 0) item.rate = rate; // capture latest non-zero rate
+            return item;
+        };
+
+        billdtlData.forEach(row => {
+            if (!row.CODE || !row.QTY || row._deleted) return;
+            if (!inPeriod(row.DATE)) return;
+            const qty = parseFloat(row.QTY) || 0;
+            if (qty <= 0) return;
+            const rate = parseFloat(row.RATE) || parseFloat(row.MRP) || 0;
+            const item = ensureItem(row.CODE, row.PRODUCT, row.UNIT, rate);
+            item.sales += qty;
         });
 
-        // Calculate current stock from billdtl, purdtl, and transfer
-        const itemStockMap = new Map();
-        
-        // Process bill details (sales - reduce stock)
-        billdtlData.forEach(item => {
-            if (item.CODE && item.QTY) {
-                const code = item.CODE;
-                const qty = parseFloat(item.QTY) || 0;
-                if (!itemStockMap.has(code)) {
-                    itemStockMap.set(code, {
-                        code: code,
-                        product: item.PRODUCT || stockMap.get(code)?.product || 'Unknown Product',
-                        sales: 0,
-                        purchases: 0,
-                        transfers: 0
-                    });
-                }
-                itemStockMap.get(code).sales += qty;
-            }
+        purdtlData.forEach(row => {
+            if (!row.CODE || !row.QTY || row._deleted) return;
+            if (!inPeriod(row.DATE)) return;
+            const qty = parseFloat(row.QTY) || 0;
+            if (qty <= 0) return;
+            const rate = parseFloat(row.RATE) || parseFloat(row.MRP) || 0;
+            const item = ensureItem(row.CODE, row.PRODUCT, row.UNIT, rate);
+            item.purchases += qty;
         });
 
-        // Process purchase details (purchases - increase stock)
-        purdtlData.forEach(item => {
-            if (item.CODE && item.QTY) {
-                const code = item.CODE;
-                const qty = parseFloat(item.QTY) || 0;
-                if (!itemStockMap.has(code)) {
-                    itemStockMap.set(code, {
-                        code: code,
-                        product: item.PRODUCT || stockMap.get(code)?.product || 'Unknown Product',
-                        sales: 0,
-                        purchases: 0,
-                        transfers: 0
-                    });
-                }
-                itemStockMap.get(code).purchases += qty;
-            }
+        transferData.forEach(row => {
+            if (!row.CODE || !row.QTY || row._deleted) return;
+            if (!inPeriod(row.DATE)) return;
+            const qty = parseFloat(row.QTY) || 0;
+            if (qty <= 0) return;
+            ensureItem(row.CODE, row.PRODUCT, row.UNIT);
         });
 
-        // Process transfer details
-        transferData.forEach(item => {
-            if (item.CODE && item.QTY) {
-                const code = item.CODE;
-                const qty = parseFloat(item.QTY) || 0;
-                if (!itemStockMap.has(code)) {
-                    itemStockMap.set(code, {
-                        code: code,
-                        product: item.PRODUCT || stockMap.get(code)?.product || 'Unknown Product',
-                        sales: 0,
-                        purchases: 0,
-                        transfers: 0
-                    });
-                }
-                itemStockMap.get(code).transfers += qty;
-            }
-        });
-
-        // Generate stock data with current stock calculation
         const stockDataResult = [];
         for (const [code, data] of itemStockMap) {
-            const stockInfo = stockMap.get(code);
-            const currentStock = stockInfo ? stockInfo.closing : (data.purchases + data.transfers - data.sales);
-            
-            if (currentStock > 0) {
+            const closingStock = Math.round((data.purchases - data.sales) * 1000) / 1000;
+            if (closingStock > 0) {
                 stockDataResult.push({
-                    code: code,
+                    code,
                     product: data.product,
-                    currentStock: currentStock,
-                    unit: 'PCS' // Default unit
+                    currentStock: closingStock,
+                    unit: data.unit || 'PCS',
+                    purchases: data.purchases,
+                    sales: data.sales,
+                    rate: data.rate
                 });
             }
         }
 
-        // Process debtor balances from CMPL.json
+        // --- Read balance.json ---
+        const balancePath = path.join(__dirname, '../db/balance.json');
+        let balanceData = [];
+        try {
+            const bFile = await fsPromises.readFile(balancePath, 'utf8');
+            balanceData = JSON.parse(bFile).data || [];
+        } catch (e) {
+            console.error('Could not load balance.json, falling back to CMPL.json CUR_BAL');
+        }
+
+        const cmplMap = new Map();
+        cmplData.forEach(p => cmplMap.set(p.C_CODE, p));
+
+        // --- Debtors from CMPL where M_GROUP = DT ---
         const debtorData = [];
-        cmplData.forEach(company => {
-            const balance = parseFloat(company.CUR_BAL || company.CB_VAL || 0);
-            const drCr = company.DR || '';
-            
-            // Only include debtors (DR balances) with positive amounts
-            if (drCr === 'DR' && balance > 0) {
-                debtorData.push({
-                    code: company.C_CODE || 'Unknown',
-                    name: company.C_NAME || 'Unknown Company',
-                    balance: balance
-                });
-            }
-        });
+        if (balanceData.length > 0) {
+            balanceData.forEach(row => {
+                const party = cmplMap.get(row.partycode);
+                if (!party || party._deleted || party.M_GROUP !== 'DT') return;
+                
+                let amtStr = (row.result || '').toString().trim();
+                let isDr = amtStr.endsWith('DR');
+                let amt = parseFloat(amtStr.replace(/[^\d.]/g, '')) || 0;
+                
+                if (isDr && amt > 0) {
+                    debtorData.push({
+                        code:    party.C_CODE || '',
+                        name:    party.C_NAME || '',
+                        balance: amt,
+                        gstin:   party.C_GST  || party.C_CST || ''
+                    });
+                }
+            });
+        } else {
+            cmplData.forEach(party => {
+                if (party._deleted) return;
+                if (party.M_GROUP !== 'DT') return;
+                const balance = parseFloat(party.CUR_BAL || 0);
+                if (balance > 0) {
+                    debtorData.push({
+                        code:    party.C_CODE || '',
+                        name:    party.C_NAME || '',
+                        balance: balance,
+                        gstin:   party.C_GST  || party.C_CST || ''
+                    });
+                }
+            });
+        }
 
-        // Calculate summary data
-        const totalSales = billdtlData.reduce((sum, item) => {
-            return sum + (parseFloat(item.AMOUNT || item.AMT || 0));
-        }, 0);
+        // --- Creditors from CMPL where M_GROUP = CT ---
+        const creditorData = [];
+        if (balanceData.length > 0) {
+            balanceData.forEach(row => {
+                const party = cmplMap.get(row.partycode);
+                if (!party || party._deleted || party.M_GROUP !== 'CT') return;
+                
+                let amtStr = (row.result || '').toString().trim();
+                let isCr = amtStr.endsWith('CR');
+                let amt = parseFloat(amtStr.replace(/[^\d.]/g, '')) || 0;
+                
+                if (isCr && amt > 0) {
+                    creditorData.push({
+                        code:    party.C_CODE || '',
+                        name:    party.C_NAME || '',
+                        balance: amt,
+                        gstin:   party.C_GST  || party.C_CST || ''
+                    });
+                }
+            });
+        } else {
+            cmplData.forEach(party => {
+                if (party._deleted) return;
+                if (party.M_GROUP !== 'CT') return;
+                const balance = parseFloat(party.CUR_BAL || 0);
+                if (balance > 0) {
+                    creditorData.push({
+                        code:    party.C_CODE || '',
+                        name:    party.C_NAME || '',
+                        balance: balance,
+                        gstin:   party.C_GST  || party.C_CST || ''
+                    });
+                }
+            });
+        }
 
-        const totalPurchases = purdtlData.reduce((sum, item) => {
-            return sum + (parseFloat(item.AMOUNT || item.AMT || 0));
-        }, 0);
+        const filteredBills = billdtlData.filter(r => inPeriod(r.DATE) && !r._deleted);
+        const filteredPurs  = purdtlData.filter( r => inPeriod(r.DATE) && !r._deleted);
 
-        const summary = {
-            totalSales: totalSales,
-            totalPurchases: totalPurchases,
-            totalStockItems: stockDataResult.length,
-            totalDebtors: debtorData.length
+        const totalSales     = filteredBills.reduce((s, r) => s + (parseFloat(r.NET10 || r.AMT10 || r.AMOUNT || 0)), 0);
+        const totalPurchases = filteredPurs.reduce( (s, r) => s + (parseFloat(r.NET10 || r.AMT10 || r.AMOUNT || 0)), 0);
+
+        // --- Calculate Upto Last Month (FY starts 1 April) ---
+        // e.g. for May 2026: count sales from 1 Apr 2026 to 30 Apr 2026
+        const isInFYBeforePeriod = (dateStr) => {
+            if (!filterMonth || !filterYear || !dateStr) return false;
+            const d = new Date(dateStr);
+            d.setMinutes(d.getMinutes() + d.getTimezoneOffset() + 330);
+
+            // FY start: 1 April of current FY year
+            // If report month is Apr-Dec, FY started this year; if Jan-Mar, FY started last year
+            const fyStartYear = filterMonth >= 4 ? filterYear : filterYear - 1;
+            const fyStart = new Date(fyStartYear, 3, 1); // April = month index 3
+
+            // Upper bound: first day of the selected report month
+            const periodStart = new Date(filterYear, filterMonth - 1, 1);
+
+            return d >= fyStart && d < periodStart;
         };
+        const billsBefore = billdtlData.filter(r => isInFYBeforePeriod(r.DATE) && !r._deleted);
+        const pursBefore  = purdtlData.filter( r => isInFYBeforePeriod(r.DATE) && !r._deleted);
+        const salesUptoLastMonth     = billsBefore.reduce((s, r) => s + (parseFloat(r.NET10 || r.AMT10 || r.AMOUNT || 0)), 0);
+        const purchasesUptoLastMonth = pursBefore.reduce((s, r) => s + (parseFloat(r.NET10 || r.AMT10 || r.AMOUNT || 0)), 0);
 
-        // Sort data
         stockDataResult.sort((a, b) => a.code.localeCompare(b.code));
-        debtorData.sort((a, b) => a.code.localeCompare(b.code));
+        debtorData.sort((a,  b) => b.balance - a.balance);
+        creditorData.sort((a, b) => b.balance - a.balance);
 
         res.json({
-            stockData: stockDataResult,
-            debtorData: debtorData,
-            summary: summary
+            stockData:    stockDataResult,
+            debtorData,
+            creditorData,
+            summary: {
+                totalSales,
+                totalPurchases,
+                salesUptoLastMonth,
+                purchasesUptoLastMonth,
+                totalStockItems: stockDataResult.length,
+                totalDebtors:    debtorData.length,
+                period: filterMonth && filterYear ? { month: filterMonth, year: filterYear } : null
+            }
         });
 
     } catch (error) {
         console.error('Error generating PNB stock statement:', error);
-        if (error.code === 'ENOENT') {
-            res.status(404).json({ message: 'Required data files not found', error: error.message });
-        } else {
-            res.status(500).json({ message: 'Failed to generate PNB stock statement', error: error.message });
-        }
+        res.status(500).json({ message: 'Failed to generate PNB stock statement', error: error.message });
     }
 });
 
-// POST /api/reports/pnb-stock-statement/excel - Generate Excel file
+// POST /api/reports/pnb-stock-statement/excel - Generate Excel (Python zipfile, preserves VBA 100%)
 router.post('/pnb-stock-statement/excel', async (req, res) => {
+    const { execFile } = require('child_process');
+    const os           = require('os');
+    const path         = require('path');
+    const fsPromises   = require('fs').promises;
+    const fsUnlink     = require('fs').unlink;
     try {
-        const { stockData, debtorData, summaryData } = req.body;
-        
+        const { stockData, debtorData, creditorData, summaryData, period } = req.body;
         if (!stockData || !debtorData || !summaryData) {
             return res.status(400).json({ message: 'Missing required data for Excel generation' });
         }
 
-        // Read the template Excel file
-        const templatePath = path.join(__dirname, '../../0490008700003292_072025.xlsm');
-        let workbook;
-        
-        try {
-            const templateBuffer = await fs.readFile(templatePath);
-            workbook = XLSX.read(templateBuffer, { type: 'buffer' });
-workbook = XLSX.read(templateBuffer, { type: 'buffer', bookVBA: true, cellStyles: true, cellNF: true, cellDates: true });
-         } catch (error) {
-            console.error('Error reading template file:', error);
-            // Create a new workbook if template is not found
-            workbook = XLSX.utils.book_new();
-            
-            // Create basic structure similar to template
-            const basicInfoSheet = XLSX.utils.aoa_to_sheet([
-                ['Name of the Borrower', 'EKTA ENTEPRISES'],
-                ['CBS Customer ID', 'C00000968'],
-                ['A/c Number', '0490008700003292'],
-                ['Branch IFSC', 'PUNB0049000'],
-                ['Facility', 'CC'],
-                ['Sanctioned Limit (in Absolute Rs.)', '39000000'],
-                ['Periodicity', 'Monthly'],
-                ['Period ended', 'July'],
-                ['Year', new Date().getFullYear()],
-                [],
-                ['Signature of Borrower'],
-                [],
-                ['*Yellow Colour cells are input fields']
-            ]);
-            XLSX.utils.book_append_sheet(workbook, basicInfoSheet, 'Basic Info');
-        }
+        const templatePath = path.join(__dirname, '../../0490008700003292_052026.xlsm');
+        const scriptPath   = path.join(__dirname, '../pnb_excel_gen.py');
+        const tmpDir       = os.tmpdir();
+        const tmpData      = path.join(tmpDir, 'pnb_data_' + Date.now() + '.json');
+        const tmpOut       = path.join(tmpDir, 'pnb_out_'  + Date.now() + '.xlsm');
 
-        // Sheet 2: Inventory Details - Preserve existing format and add data
-        const inventorySheetName = 'Inventory Details';
-        let inventorySheet;
-        
-        if (workbook.SheetNames.includes(inventorySheetName)) {
-            // Get existing sheet to preserve formatting
-            inventorySheet = workbook.Sheets[inventorySheetName];
-            
-            // Find the starting row for data (after headers)
-            // Look for the row with "Sr. NO." to determine data start
-            let dataStartRow = 15; // Default fallback
-            const range = XLSX.utils.decode_range(inventorySheet['!ref']);
-            
-            for (let row = 0; row <= range.e.r; row++) {
-                const cellRef = XLSX.utils.encode_cell({ r: row, c: 0 });
-                const cell = inventorySheet[cellRef];
-                if (cell && cell.v && cell.v.toString().includes('Sr. NO.')) {
-                    dataStartRow = row + 1;
-                    break;
+        // Write JSON data to temp file
+        await fsPromises.writeFile(tmpData, JSON.stringify({ stockData, debtorData, period, summaryData }));
+
+        // Run Python script
+        await new Promise((resolve, reject) => {
+            execFile('python', [scriptPath, templatePath, tmpOut, tmpData], { timeout: 30000 },
+                (err, stdout, stderr) => {
+                    if (err) return reject(new Error(stderr || err.message));
+                    if (!stdout.startsWith('OK:')) return reject(new Error('Python error: ' + stdout + stderr));
+                    resolve();
                 }
-            }
-            
-            // Add stock data starting from the identified row
-            stockData.forEach((item, index) => {
-                const rowIndex = dataStartRow + index;
-                
-                // Add data to specific cells while preserving formatting
-                const cells = [
-                    { col: 0, value: index + 1 }, // Sr. NO.
-                    { col: 1, value: 'Main Godown' }, // Where Lying
-                    { col: 2, value: item.product }, // Particular of Goods
-                    { col: 3, value: item.currentStock }, // Quantity
-                    { col: 4, value: 0 }, // Rate - to be filled manually
-                    { col: 5, value: 0 }, // Value - calculated as Qty * Rate
-                    { col: 6, value: '' } // Remarks
-                ];
-                
-                cells.forEach(({ col, value }) => {
-                    const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col });
-                    const destCell = inventorySheet[cellRef] || {};
-                    // Copy style from the template's first data row to preserve formatting
-                    const styleRef = XLSX.utils.encode_cell({ r: dataStartRow, c: col });
-                    const styleCell = inventorySheet[styleRef];
-                    if (styleCell && styleCell.s) destCell.s = styleCell.s;
-                    if (styleCell && styleCell.z) destCell.z = styleCell.z;
-                    destCell.v = value;
-                    destCell.t = typeof value === 'number' ? 'n' : 's';
-                    inventorySheet[cellRef] = destCell;
-                });
-            });
-            
-            // Update the sheet range to include new data
-            const newRange = XLSX.utils.decode_range(inventorySheet['!ref']);
-            newRange.e.r = Math.max(newRange.e.r, dataStartRow + stockData.length - 1);
-            inventorySheet['!ref'] = XLSX.utils.encode_range(newRange);
-        } else {
-            // Fallback: create new sheet if template doesn't exist
-            const inventoryData = [
-                ['Particular', '', '', '', '', '', 'Value (in Absolute Rs)', '', '*Yellow Colour cells are input fields'],
-                ['Inventory received on Job work (1)', '', '', '', '', '', '', '', '*All values are to be filled in absolute terms'],
-                ['Inventory procured under LC (2)'],
-                ['Obsolete Inventory (3)', '', '', '', '', '', '', '', '', '', 'Raw Material'],
-                ['Sub Total (1+2+3)', '', '', '', '', '', '0', '', '', '', 'Stores'],
-                ['', '', '', '', '', '', '', '', '', '', 'Stock in Progress'],
-                ['Sr. NO.', 'Where Lying', 'Particular of Goods', 'Quantity', 'Rate  (in Absolute Rs)', 'Value (in Absolute Rs)', 'Remarks (if any)', '', '', '', 'Finished Goods'],
-            ];
-
-            // Add stock data to inventory sheet
-            stockData.forEach((item, index) => {
-                inventoryData.push([
-                    index + 1,
-                    'Main Godown', // Default location
-                    item.product,
-                    item.currentStock,
-                    0, // Rate - to be filled manually
-                    0, // Value - calculated as Qty * Rate
-                    '', // Remarks
-                    '', '', '', 'Spares'
-                ]);
-            });
-
-            // Add total row
-            inventoryData.push(['Total', '', '', '', '', '0']);
-
-            inventorySheet = XLSX.utils.aoa_to_sheet(inventoryData);
-            XLSX.utils.book_append_sheet(workbook, inventorySheet, inventorySheetName);
-        }
-
-        // Sheet 3: Debtor Details - Preserve existing format and add data
-        const debtorSheetName = 'Debtor Details';
-        let debtorSheet;
-        
-        if (workbook.SheetNames.includes(debtorSheetName)) {
-            // Get existing sheet to preserve formatting
-            debtorSheet = workbook.Sheets[debtorSheetName];
-            
-            // Find the starting row for debtor data (after headers)
-            // Look for the row with "Name of Debtors" to determine data start
-            let dataStartRow = 20; // Default fallback
-            const range = XLSX.utils.decode_range(debtorSheet['!ref']);
-            
-            for (let row = 0; row <= range.e.r; row++) {
-                const cellRef = XLSX.utils.encode_cell({ r: row, c: 0 });
-                const cell = debtorSheet[cellRef];
-                if (cell && cell.v && cell.v.toString().includes('Name of Debtors')) {
-                    dataStartRow = row + 1;
-                    break;
-                }
-            }
-            
-            // Add debtor data starting from the identified row
-            debtorData.forEach((debtor, index) => {
-                const rowIndex = dataStartRow + index;
-                
-                // Add data to specific cells while preserving formatting
-                const cells = [
-                    { col: 0, value: debtor.name }, // Name of Debtors
-                    { col: 1, value: '' }, // Invoice No - to be filled
-                    { col: 2, value: '' }, // Date of Invoice - to be filled
-                    { col: 3, value: '' }, // LEI/GST/PAN - to be filled
-                    { col: 4, value: debtor.balance }, // Upto 3 months
-                    { col: 5, value: 0 }, // > 3 months upto 6 months
-                    { col: 6, value: 0 }, // > 6 months upto 1 year
-                    { col: 7, value: 0 }, // More Than 1 Year
-                    { col: 8, value: debtor.balance } // Total
-                ];
-                
-                cells.forEach(({ col, value }) => {
-                    const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col });
-                    const destCell = debtorSheet[cellRef] || {};
-                    // Copy style from the template's first data row to preserve formatting
-                    const styleRef = XLSX.utils.encode_cell({ r: dataStartRow, c: col });
-                    const styleCell = debtorSheet[styleRef];
-                    if (styleCell && styleCell.s) destCell.s = styleCell.s;
-                    if (styleCell && styleCell.z) destCell.z = styleCell.z;
-                    destCell.v = value;
-                    destCell.t = typeof value === 'number' ? 'n' : 's';
-                    debtorSheet[cellRef] = destCell;
-                });
-            });
-            
-            // Update the sheet range to include new data
-            const newRange = XLSX.utils.decode_range(debtorSheet['!ref']);
-            newRange.e.r = Math.max(newRange.e.r, dataStartRow + debtorData.length - 1);
-            debtorSheet['!ref'] = XLSX.utils.encode_range(newRange);
-        } else {
-            // Fallback: create new sheet if template doesn't exist
-            const debtorSheetData = [
-                ['Advances taken through Bills/Oustanding under Bils discounted', '', '', '', '', '', '', '', 'Value In Absolute Rs.', '', '', 'Yellow Colour cells are input fields'],
-                ['', '', '', '', '', '', '', '', '', '', '', '*All values are to be filled in absolute terms'],
-                [],
-                ['Upto 3 months'],
-                ['> 3 months upto 6 months'],
-                ['> 6 months upto 1 year'],
-                ['More Than 1 Year'],
-                ['Total', '', '', '', '', '', '', '', '0'],
-                [],
-                ['Debtors (receivables including bills)', '', '', '', 'in Absolute Rs.'],
-                ['Name of Debtors', 'Invoice No.', 'Date of Invoice', 'LEI No./GST No./PAN of Debtor', 'Upto 3 months', '> 3 months upto 6 months', '> 6 months upto 1 year', 'More Than 1 Year', 'Total']
-            ];
-
-            // Add debtor data
-            debtorData.forEach((debtor) => {
-                debtorSheetData.push([
-                    debtor.name,
-                    '', // Invoice No - to be filled
-                    '', // Date of Invoice - to be filled
-                    '', // LEI/GST/PAN - to be filled
-                    debtor.balance, // Assuming all balances are upto 3 months
-                    0, // > 3 months upto 6 months
-                    0, // > 6 months upto 1 year
-                    0, // More Than 1 Year
-                    debtor.balance // Total
-                ]);
-            });
-
-            debtorSheet = XLSX.utils.aoa_to_sheet(debtorSheetData);
-            XLSX.utils.book_append_sheet(workbook, debtorSheet, debtorSheetName);
-        }
-
-        // Save the updated workbook back to the original template file
-        const excelBuffer = XLSX.write(workbook, { 
-            type: 'buffer', 
-            bookType: 'xlsm',
-            compression: true,
-            bookVBA: true // Preserve VBA macros when writing
+            );
         });
 
-        // Ensure a generated output directory exists and write there to preserve the original template
-        const outputDir = path.join(__dirname, '../../generated');
-        await fs.mkdir(outputDir, { recursive: true });
-        const timeStamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const outputPath = path.join(outputDir, `PNB_Stock_Statement_${timeStamp}.xlsm`);
+        // Read generated file
+        const outputBuffer = await fsPromises.readFile(tmpOut);
 
-        // Write the updated data to the new output file (do not overwrite the template)
-        await fs.writeFile(outputPath, excelBuffer);
+        // Cleanup temp files
+        fsUnlink(tmpData, () => {});
+        fsUnlink(tmpOut,  () => {});
 
-        // Send success response
-        res.json({ 
-            message: 'Excel file updated successfully', 
-            filePath: outputPath,
-            timestamp: new Date().toISOString()
-        });
+        const pMonthNumber = period ? period.month : (new Date().getMonth() + 1);
+        const mm = String(pMonthNumber).padStart(2, '0');
+        const pYear = period ? period.year : new Date().getFullYear();
+        const accountNumber = '0490008700003292'; // Using the account number from the template/screenshot
+        const filename = `${accountNumber}_${mm}${pYear}.xlsm`;
+
+        res.setHeader('Content-Type',        'application/vnd.ms-excel.sheet.macroEnabled.12');
+        res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+        res.setHeader('Content-Length',      outputBuffer.length);
+        res.send(outputBuffer);
 
     } catch (error) {
         console.error('Error generating Excel file:', error);
