@@ -7,6 +7,111 @@ import constants from '../../constants';
 import Toast from '../../components/ui/toast/Toast';
 import { PulseLoadAnimation } from '../../components/ui/loading';
 
+// ─── Attendance Calendar (reused in salary slip) ─────────────────────────────
+interface CalendarProps {
+  month: string; // 'YYYY-MM'
+  records: AttendanceRecord[];
+  weeklyOffDays: number[]; // 0=Sun … 6=Sat
+}
+
+const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, weeklyOffDays }) => {
+  const [year, mon] = month.split('-').map(Number);
+  const daysInMonth = new Date(year, mon, 0).getDate();
+  const startDow   = new Date(year, mon - 1, 1).getDay();
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  // Build record map (prefer 'present' over 'half_day' for the same date)
+  const recordMap: Record<string, AttendanceRecord> = {};
+  records.forEach(r => {
+    const d = r.date.substring(0, 10);
+    if (!recordMap[d] || r.status === 'present') recordMap[d] = r;
+  });
+
+  const getDayStyle = (day: number) => {
+    const dateStr = `${year}-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const dow    = new Date(year, mon - 1, day).getDay();
+    const record = recordMap[dateStr];
+
+    if (weeklyOffDays.includes(dow))
+      return { bg: 'bg-orange-400', text: 'text-white', label: 'Weekly Off' };
+    if (record) {
+      if (record.status === 'present')  return { bg: 'bg-green-500',  text: 'text-white', label: 'Present'  };
+      if (record.status === 'half_day') return { bg: 'bg-pink-400',   text: 'text-white', label: 'Half Day' };
+      if (record.status === 'absent')   return { bg: 'bg-red-400',    text: 'text-white', label: 'Absent'   };
+    }
+    return { bg: 'bg-gray-200 dark:bg-gray-600', text: 'text-gray-500 dark:text-gray-300', label: 'Not Marked' };
+  };
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const dayNames    = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const monthNames  = ['January','February','March','April','May','June',
+                       'July','August','September','October','November','December'];
+
+  return (
+    <div className="mt-4 pt-4 border-t border-blue-200 dark:border-gray-600">
+      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+        📅 Attendance Calendar — {monthNames[mon - 1]} {year}
+      </h4>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {dayNames.map(d => (
+          <div key={d} className="text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400 py-0.5">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div className="grid grid-cols-7 gap-[3px]">
+        {cells.map((day, idx) => {
+          if (day === null) return <div key={`pad-${idx}`} />;
+          const style   = getDayStyle(day);
+          const dateStr = `${year}-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+          const isToday = dateStr === todayStr;
+          return (
+            <div
+              key={day}
+              title={style.label}
+              className={`
+                flex items-center justify-center rounded-md h-7
+                text-[11px] font-medium
+                ${style.bg} ${style.text}
+                ${isToday ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-800' : ''}
+                transition-transform hover:scale-110 cursor-default
+              `}
+            >
+              {day}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2 border-t border-blue-100 dark:border-gray-700">
+        {[
+          { color: 'bg-green-500',  label: 'Present'    },
+          { color: 'bg-red-400',    label: 'Absent'     },
+          { color: 'bg-orange-400', label: 'Weekly Off' },
+          { color: 'bg-pink-400',   label: 'Half Day'   },
+          { color: 'bg-gray-300 dark:bg-gray-600', label: 'Not Marked' },
+        ].map(item => (
+          <div key={item.label} className="flex items-center gap-1">
+            <span className={`w-2.5 h-2.5 rounded-sm inline-block ${item.color}`} />
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface AttendanceRecord {
   id: string;
   userId: number;
@@ -20,7 +125,7 @@ interface AttendanceRecord {
     timestamp: number;
   };
   selfieData: string;
-  status: 'present' | 'absent';
+  status: 'present' | 'absent' | 'half_day';
 }
 
 interface SalaryAddition {
@@ -345,7 +450,7 @@ const AttendanceHistory: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="mt-4 pt-4 border-t border-blue-200 dark:border-gray-600">
+                   <div className="mt-4 pt-4 border-t border-blue-200 dark:border-gray-600">
                     <div className="flex justify-between items-center">
                       <span className="text-lg font-semibold text-gray-900 dark:text-white">Final Salary:</span>
                       <span className="text-xl font-bold text-green-600 dark:text-green-400">
@@ -353,6 +458,13 @@ const AttendanceHistory: React.FC = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* Attendance Calendar */}
+                  <AttendanceSalaryCalendar
+                    month={visibleSalarySlip.month}
+                    records={attendanceRecords}
+                    weeklyOffDays={visibleSalarySlip.weeklyOffDays}
+                  />
                 </div>
               )}
             </div>

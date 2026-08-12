@@ -165,6 +165,135 @@ layer(base);
   --z-index-999999: 999999;
 }
 
+/* =====================================================
+   🌿 SAGE GREEN THEME — tints every bg-white / bg-gray-* element
+   ===================================================== */
+.theme-sage {
+  /* Accent palette */
+  --color-brand-25:  #f0fdf4;
+  --color-brand-50:  #dcfce7;
+  --color-brand-100: #bbf7d0;
+  --color-brand-200: #86efac;
+  --color-brand-300: #4ade80;
+  --color-brand-400: #22c55e;
+  --color-brand-500: #16a34a;
+  --color-brand-600: #15803d;
+  --color-brand-700: #166534;
+  --color-brand-800: #14532d;
+  --color-brand-900: #052e16;
+  --color-brand-950: #021a0d;
+  --shadow-focus-ring: 0px 0px 0px 4px rgba(22, 163, 74, 0.15);
+
+  /* ✅ Tint the base palette so cards & body go green-tinted */
+  --color-white:    #f0fdf6;   /* cards: soft mint-white */
+  --color-gray-25:  #edfaf1;
+  --color-gray-50:  #e4f7eb;   /* body/page background */
+  --color-gray-100: #cff0da;   /* subtle borders & dividers */
+  --color-gray-200: #a8ddb9;
+  background-color: #e4f7eb;
+}
+.theme-sage body { background-color: #e4f7eb; }
+
+/* =====================================================
+   🔥 SAFFRON & SLATE THEME — warm cream tint throughout
+   ===================================================== */
+.theme-saffron {
+  /* Accent palette */
+  --color-brand-25:  #fffbeb;
+  --color-brand-50:  #fef3c7;
+  --color-brand-100: #fde68a;
+  --color-brand-200: #fcd34d;
+  --color-brand-300: #fbbf24;
+  --color-brand-400: #f59e0b;
+  --color-brand-500: #d97706;
+  --color-brand-600: #b45309;
+  --color-brand-700: #92400e;
+  --color-brand-800: #78350f;
+  --color-brand-900: #451a03;
+  --color-brand-950: #2a0f02;
+  --shadow-focus-ring: 0px 0px 0px 4px rgba(217, 119, 6, 0.15);
+
+  /* ✅ Tint the base palette so cards & body go warm-cream */
+  --color-white:    #fffcf5;   /* cards: warm white */
+  --color-gray-25:  #fff9ee;
+  --color-gray-50:  #fef5e4;   /* body/page background */
+  --color-gray-100: #fce8c4;   /* subtle borders & dividers */
+  --color-gray-200: #f8d49a;
+  background-color: #fef5e4;
+}
+.theme-saffron body { background-color: #fef5e4; }
+
+/* =====================================================
+   👑 ROYAL PURPLE + GOLD THEME (inspired by Ekta Enterprises UI)
+   Deep purple backgrounds · Rich gold buttons & accents
+   ===================================================== */
+.theme-indigo {
+  /* 🟡 GOLD accent palette — buttons, links, highlights */
+  --color-brand-25:  #fffdf0;
+  --color-brand-50:  #fef9d9;
+  --color-brand-100: #fdf0a0;
+  --color-brand-200: #fbe46a;
+  --color-brand-300: #f8d43a;
+  --color-brand-400: #e6be1a;
+  --color-brand-500: #c9a227;   /* Main gold — buttons */
+  --color-brand-600: #a8841f;
+  --color-brand-700: #8b6d18;
+  --color-brand-800: #6b5212;
+  --color-brand-900: #4a390d;
+  --color-brand-950: #2a2008;
+  --shadow-focus-ring: 0px 0px 0px 4px rgba(201, 162, 39, 0.25);
+
+  /* 🟣 DEEP PURPLE base — overrides every bg-white / bg-gray-* */
+  --color-white:     #2d1b5e;   /* cards: medium royal purple */
+  --color-gray-25:   #261550;   /* slightly deeper purple */
+  --color-gray-50:   #1e1040;   /* page body: deep purple */
+  --color-gray-100:  #3a2575;   /* panel borders & dividers */
+  --color-gray-200:  #4d3590;   /* border color */
+  --color-gray-300:  #6a50a8;   /* muted lines */
+  --color-gray-400:  #9580c0;   /* placeholder / icon color */
+  --color-gray-500:  #b5a0d5;   /* secondary text */
+  --color-gray-600:  #c8b5e5;   /* body text */
+  --color-gray-700:  #d8c8f0;   /* normal text (was dark on white) */
+  --color-gray-800:  #e8dcf8;   /* heading text */
+  --color-gray-900:  #f5f0ff;   /* primary heading */
+  --color-gray-950:  #faf5ff;
+  --color-gray-dark: #1a0d35;   /* sidebar background */
+  --color-black:     #f5f0ff;
+
+  /* Border default matches panel border */
+  background-color: #1e1040;
+}
+.theme-indigo body { background-color: #1e1040; }
+
+
+/* Header & sidebar inherit the dark purple via gray-dark / gray-900 overrides */
+
+/* =====================================================
+   Dark variants for Sage & Saffron (indigo is already dark)
+   ===================================================== */
+.theme-sage.dark,
+.theme-sage .dark {
+  --color-gray-dark: #162b1e;
+  --color-white:    #ffffff;
+  --color-gray-50:  #f9fafb;
+  --color-gray-100: #f2f4f7;
+  --color-gray-200: #e4e7ec;
+  --color-gray-700: #344054;
+  --color-gray-800: #1d2939;
+  --color-gray-900: #101828;
+}
+.theme-saffron.dark,
+.theme-saffron .dark {
+  --color-gray-dark: #231a0d;
+  --color-white:    #ffffff;
+  --color-gray-50:  #f9fafb;
+  --color-gray-100: #f2f4f7;
+  --color-gray-200: #e4e7ec;
+  --color-gray-700: #344054;
+  --color-gray-800: #1d2939;
+  --color-gray-900: #101828;
+}
+
 /*
   The default border color has changed to `currentColor` in Tailwind CSS v4,
   so we've added these compatibility styles to make sure everything still

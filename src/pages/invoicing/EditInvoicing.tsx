@@ -13,6 +13,7 @@ import { InvoiceContext, useInvoiceContext, type Option, type ItemData } from '.
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
 import useAuth from "../../hooks/useAuth";
+import Stretchy3DToggle from '../../components/ui/toggle/Stretchy3DToggle';
 
 // Utility function to center an element in the viewport
 const centerElementInViewport = (element: HTMLElement) => {
@@ -967,26 +968,13 @@ const EditInvoicingContent: React.FC<{
               </div>
             </div>
             <div className="flex items-center">
-              <div className="flex items-center space-x-2">
-                <span className="text-gray-700 dark:text-gray-300">CREDIT {cash === 'N' ? '(O)' : ''}</span>
-                <div className="relative inline-block">
-                  <input
-                    type="checkbox"
-                    id="cash-toggle"
-                    className="sr-only peer"
-                    checked={cash === 'Y'}
-                    onChange={toggleCash}
-                    autoComplete="off"
-                  />
-                  <label
-                    htmlFor="cash-toggle"
-                    className="block w-14 h-8 rounded-full bg-gray-300 dark:bg-gray-700 transition-colors duration-300 relative peer-checked:bg-green-500"
-                  >
-                    <span className="absolute top-1 left-1 w-6 h-6 rounded-full bg-white dark:bg-gray-900 shadow-sm transition-transform duration-300 peer-checked:translate-x-6"></span>
-                  </label>
-                </div>
-                <span className="text-gray-700 dark:text-gray-300">CASH {cash === 'Y' ? '(O)' : ''}</span>
-              </div>
+              <Stretchy3DToggle
+                id="cash-toggle"
+                checked={cash === 'Y'}
+                onChange={toggleCash}
+                offLabel="CREDIT"
+                onLabel="CASH"
+              />
             </div>
           </div>
 

@@ -55,6 +55,7 @@ interface StoredSalaryCalculation {
   userName: string;
   month: string;
   monthlySalary: number;
+  totalDaysInMonth?: number;
   totalWorkingDays: number;
   weeklyOffDays: number[];
   weeklyOffDaysCount: number;
@@ -65,9 +66,16 @@ interface StoredSalaryCalculation {
     absentDays: number;
     totalRecorded: number;
   };
+  weeklyOff?: {
+    totalWeeklyOffDays: number;
+    paidDays: number;
+    unpaidDays: number;
+    paidAmount: number;
+  };
   salary: {
     presentDaysSalary: number;
     halfDaysSalary: number;
+    weeklyOffPaidAmount?: number;
     totalEarnedSalary: number;
     absentDaysDeduction: number;
     halfDaysDeduction: number;
@@ -111,20 +119,19 @@ interface MandatoryDocsData {
   bankSlips: string[];
 }
 
-const PresentDaysTooltip: React.FC<{ userId: number; month: string; targetValue: React.ReactNode }> = ({ userId, month, targetValue }) => {
+const PresentDaysTooltip: React.FC<{ userId: number; month: string; targetValue: React.ReactNode; weeklyOffDays?: number[] }> = ({ userId, month, targetValue, weeklyOffDays = [] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
-    
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
@@ -161,86 +168,147 @@ const PresentDaysTooltip: React.FC<{ userId: number; month: string; targetValue:
   };
 
   const toggleTooltip = () => {
-    if (!isOpen) {
-      fetchRecords();
-    }
+    if (!isOpen) fetchRecords();
     setIsOpen(!isOpen);
   };
 
-  const formatDateShort = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric'
+  // Build calendar data for the month
+  const buildCalendar = () => {
+    const [year, mon] = month.split('-').map(Number);
+    const firstDay = new Date(year, mon - 1, 1);
+    const daysInMonth = new Date(year, mon, 0).getDate();
+    const startDow = firstDay.getDay(); // 0=Sun
+
+    // Map attendance records by date string YYYY-MM-DD
+    const recordMap: Record<string, AttendanceRecord> = {};
+    records.forEach(r => {
+      const d = r.date.substring(0, 10);
+      // prefer 'present' over 'half_day' if multiple records on same day
+      if (!recordMap[d] || r.status === 'present') {
+        recordMap[d] = r;
+      }
     });
+
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    // cells: null = padding, number = day
+    const cells: (number | null)[] = [];
+    for (let i = 0; i < startDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+    return { cells, recordMap, year, mon, daysInMonth, todayStr };
   };
 
+  const getDayStyle = (day: number, recordMap: Record<string, AttendanceRecord>, year: number, mon: number, todayStr: string) => {
+    const dateStr = `${year}-${String(mon).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dow = new Date(year, mon - 1, day).getDay();
+    const record = recordMap[dateStr];
+
+    if (weeklyOffDays.includes(dow)) {
+      return { bg: 'bg-orange-400', text: 'text-white', label: 'Weekly Off' };
+    }
+    if (record) {
+      if (record.status === 'present') return { bg: 'bg-green-500', text: 'text-white', label: 'Present' };
+      if (record.status === 'half_day') return { bg: 'bg-pink-400', text: 'text-white', label: 'Half Day' };
+      if (record.status === 'absent') return { bg: 'bg-red-400', text: 'text-white', label: 'Absent' };
+    }
+    // No record (marked or unmarked) — grey
+    return { bg: 'bg-gray-200 dark:bg-gray-600', text: 'text-gray-500 dark:text-gray-300', label: 'Not Marked' };
+  };
+
+  const { cells, recordMap, year, mon, todayStr } = buildCalendar();
+
+  const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
   return (
-    <div 
-      className="relative flex items-center" 
-      ref={tooltipRef}
-    >
-      <div 
-        className="cursor-pointer border-b border-dashed border-gray-400 dark:border-gray-500 font-medium text-gray-900 dark:text-white group"
+    <div className="relative flex items-center" ref={tooltipRef}>
+      <div
+        className="cursor-pointer border-b border-dashed border-gray-400 dark:border-gray-500 font-medium text-gray-900 dark:text-white"
         onClick={toggleTooltip}
       >
         {targetValue}
       </div>
-      
+
       {isOpen && (
-        <div className="absolute z-50 left-1/2 bottom-full -translate-x-1/2 mb-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 text-sm">
-          <div className="font-semibold text-gray-900 dark:text-white mb-2 pb-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-            <span>Attendance Details</span>
-            <div className="flex items-center space-x-2">
-              <span>{month}</span>
-              <button 
-                onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-          {loading ? (
-            <div className="text-center py-4 text-gray-500">Loading...</div>
-          ) : records.length > 0 ? (
-            <div 
-              className="max-h-48 overflow-y-auto w-full pr-1 pointer-events-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full"
-              onWheel={(e) => e.stopPropagation()}
+        <div
+          className="absolute z-50 left-1/2 bottom-full -translate-x-1/2 mb-2 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-4 text-sm"
+          style={{ width: '300px' }}
+        >
+          {/* Header */}
+          <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
+            <span className="font-semibold text-gray-900 dark:text-white text-sm">
+              {monthNames[mon - 1]} {year}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-base leading-none"
             >
-            <table className="w-full text-xs text-left">
-              <thead className="bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 top-0 sticky z-10">
-                <tr>
-                  <th className="px-2 py-1.5 font-medium rounded-tl">Date</th>
-                  <th className="px-2 py-1.5 font-medium">Time</th>
-                  <th className="px-2 py-1.5 font-medium rounded-tr">Status</th>
-                </tr>
-              </thead>
-              <tbody className="text-gray-600 dark:text-gray-400">
-                {records.map(r => (
-                  <tr key={r.id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="px-2 py-1.5 whitespace-nowrap">{formatDateShort(r.date)}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">{r.time}</td>
-                    <td className="px-2 py-1.5">
-                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap ${
-                        r.status === 'present' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
-                        r.status === 'half_day' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' :
-                        'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-                      }`}>
-                        {r.status === 'present' ? 'Present' : r.status === 'half_day' ? 'Half Day' : 'Absent'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-           </div>
+              ✕
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-6 text-gray-500 text-xs">Loading...</div>
           ) : (
-            <div className="text-center py-4 text-gray-500 text-xs">No records found.</div>
+            <>
+              {/* Day headers */}
+              <div className="grid grid-cols-7 mb-1">
+                {dayNames.map(d => (
+                  <div key={d} className="text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400 py-0.5">
+                    {d}
+                  </div>
+                ))}
+              </div>
+
+              {/* Calendar cells */}
+              <div className="grid grid-cols-7 gap-[3px]">
+                {cells.map((day, idx) => {
+                  if (day === null) {
+                    return <div key={`pad-${idx}`} />;
+                  }
+                  const style = getDayStyle(day, recordMap, year, mon, todayStr);
+                  const dateStr = `${year}-${String(mon).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const isToday = dateStr === todayStr;
+                  return (
+                    <div
+                      key={day}
+                      title={style.label}
+                      className={`
+                        relative flex items-center justify-center rounded-md
+                        text-[11px] font-medium h-7
+                        ${style.bg} ${style.text}
+                        ${isToday ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-800' : ''}
+                        transition-transform hover:scale-110 cursor-default
+                      `}
+                    >
+                      {day}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+                {[
+                  { color: 'bg-green-500', label: 'Present' },
+                  { color: 'bg-red-400', label: 'Absent' },
+                  { color: 'bg-orange-400', label: 'Weekly Off' },
+                  { color: 'bg-pink-400', label: 'Half Day' },
+                  { color: 'bg-gray-300 dark:bg-gray-600', label: 'Not Marked' },
+                ].map(item => (
+                  <div key={item.label} className="flex items-center gap-1">
+                    <span className={`w-2.5 h-2.5 rounded-sm inline-block ${item.color}`} />
+                    <span className="text-[10px] text-gray-600 dark:text-gray-400">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
-          
-          {/* Tooltip triangle indicator */}
-          <div className="absolute top-full left-1/2 -ml-2 border-4 border-transparent border-t-white dark:border-t-gray-800 drop-shadow-sm"></div>
+
+          {/* Tooltip arrow */}
+          <div className="absolute top-full left-1/2 -ml-2 border-4 border-transparent border-t-white dark:border-t-gray-800 drop-shadow-sm" />
         </div>
       )}
     </div>
@@ -252,7 +320,9 @@ const AdminAttendance: React.FC = () => {
   const { user, hasAccess } = useAuth();
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [userLocations, setUserLocations] = useState<UserLocation[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const [datePreset, setDatePreset] = useState<string>('today');
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -384,17 +454,32 @@ const AdminAttendance: React.FC = () => {
     }
 
     const today = getIndianDate();
-    setSelectedDate(today);
+    setFromDate(today);
+    setToDate(today);
 
     fetchUsers();
     fetchUserLocations();
   }, [hasAccess, navigate]);
 
   useEffect(() => {
-    if (selectedDate) {
+    if (fromDate || toDate) {
       fetchAttendanceRecords();
     }
-  }, [selectedDate, selectedUser]);
+  }, [fromDate, toDate, selectedUser]);
+
+  // Resolve date preset → fromDate and toDate
+  useEffect(() => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const today = new Date();
+    switch (datePreset) {
+      case 'today':     setFromDate(fmt(today)); setToDate(fmt(today)); break;
+      case 'yesterday': { const y = new Date(today); y.setDate(y.getDate() - 1); setFromDate(fmt(y)); setToDate(fmt(y)); break; }
+      case 'thisMonth': { const mStart = new Date(today.getFullYear(), today.getMonth(), 1); const mEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0); setFromDate(fmt(mStart)); setToDate(fmt(mEnd)); break; }
+      case 'lastMonth': { const lmStart = new Date(today.getFullYear(), today.getMonth() - 1, 1); const lmEnd = new Date(today.getFullYear(), today.getMonth(), 0); setFromDate(fmt(lmStart)); setToDate(fmt(lmEnd)); break; }
+      // 'custom' — user picks manually, don't override
+    }
+  }, [datePreset]);
 
   useEffect(() => {
     fetchStoredSalaries();
@@ -452,7 +537,8 @@ const AdminAttendance: React.FC = () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          date: selectedDate,
+          fromDate: fromDate,
+          toDate: toDate,
           userId: selectedUser || null
         })
       });
@@ -662,7 +748,7 @@ const AdminAttendance: React.FC = () => {
           userId: salaryModal.userId,
           monthlySalary: parseFloat(salaryData.monthlySalary),
           weeklyOffDays: salaryData.weeklyOffDays, // Array of day numbers
-          month: salaryData.month || selectedDate.substring(0, 7), // YYYY-MM format
+          month: salaryData.month || fromDate.substring(0, 7), // YYYY-MM format
           additions: salaryData.additions,
           deductions: salaryData.deductions
         })
@@ -1077,6 +1163,11 @@ const AdminAttendance: React.FC = () => {
   const generateSalarySlipHTML = (salary: StoredSalaryCalculation) => {
     const weekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const weeklyOffDaysText = salary.weeklyOffDays.map(day => weekDays[day]).join(', ');
+    const totalDays = salary.totalDaysInMonth || salary.totalWorkingDays + salary.weeklyOffDaysCount;
+    const wo = salary.weeklyOff;
+    const woNote = wo
+      ? `${wo.paidDays} of ${wo.totalWeeklyOffDays} weekly-off day(s) are paid (all other days in those weeks were present).`
+      : '';
 
     return `
       <!DOCTYPE html>
@@ -1084,50 +1175,88 @@ const AdminAttendance: React.FC = () => {
       <head>
         <title>Salary Slip - ${salary.userName}</title>
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
-          .company-name { font-size: 24px; font-weight: bold; color: #333; }
-          .slip-title { font-size: 18px; margin-top: 10px; }
-          .employee-info { margin-bottom: 20px; }
-          .salary-details { width: 100%; border-collapse: collapse; }
-          .salary-details th, .salary-details td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          .salary-details th { background-color: #f2f2f2; }
-          .total-row { font-weight: bold; background-color: #e8f5e8; }
-          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          .header { text-align: center; border-bottom: 2px solid #2e7d32; padding-bottom: 10px; margin-bottom: 20px; }
+          .company-name { font-size: 24px; font-weight: bold; color: #2e7d32; }
+          .slip-title { font-size: 18px; margin-top: 6px; color: #555; }
+          .meta { display: flex; justify-content: space-between; margin-bottom: 18px; font-size: 13px; }
+          .meta p { margin: 2px 0; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+          th, td { border: 1px solid #ddd; padding: 7px 10px; text-align: left; font-size: 13px; }
+          th { background: #e8f5e9; font-weight: 600; }
+          .section-header td { background: #f1f8e9; font-weight: bold; font-size: 13px; }
+          .total-row td { background: #e8f5e9; font-weight: bold; }
+          .final-row td { background: #1b5e20; color: #fff; font-weight: bold; font-size: 14px; }
+          .deduction { color: #c62828; }
+          .addition { color: #2e7d32; }
+          .note { font-size: 11px; color: #666; font-style: italic; margin-top: 3px; }
+          .footer { margin-top: 24px; text-align: center; font-size: 11px; color: #888; border-top: 1px solid #ddd; padding-top: 10px; }
         </style>
       </head>
       <body>
         <div class="header">
-          <div class="company-name">Your Company Name</div>
+          <div class="company-name">Ekta Enterprises</div>
           <div class="slip-title">Salary Slip</div>
         </div>
-        
-        <div class="employee-info">
-          <p><strong>Employee Name:</strong> ${salary.userName}</p>
-          <p><strong>Month:</strong> ${salary.month}</p>
-          <p><strong>Generated On:</strong> ${new Date().toLocaleDateString()}</p>
+
+        <div class="meta">
+          <div>
+            <p><strong>Employee Name:</strong> ${salary.userName}</p>
+            <p><strong>Month:</strong> ${salary.month}</p>
+          </div>
+          <div style="text-align:right">
+            <p><strong>Generated On:</strong> ${new Date().toLocaleDateString()}</p>
+            <p><strong>Calculated On:</strong> ${new Date(salary.calculatedAt).toLocaleDateString()}</p>
+          </div>
         </div>
-        
-        <table class="salary-details">
-          <tr><th>Description</th><th>Days/Amount</th><th>Amount</th></tr>
-          <tr><td>Monthly Salary</td><td>-</td><td>₹${salary.monthlySalary.toFixed(2)}</td></tr>
-          <tr><td>Total Working Days</td><td>${salary.totalWorkingDays}</td><td>-</td></tr>
+
+        <table>
+          <tr><th>Description</th><th>Days/Count</th><th>Amount</th></tr>
+
+          <!-- Base Info -->
+          <tr><td>Monthly Salary (${totalDays} days)</td><td>-</td><td>&#8377;${salary.monthlySalary.toFixed(2)}</td></tr>
           <tr><td>Weekly Off Days</td><td>${weeklyOffDaysText} (${salary.weeklyOffDaysCount} days)</td><td>-</td></tr>
-          <tr><td>Daily Salary</td><td>-</td><td>₹${salary.dailySalary.toFixed(2)}</td></tr>
-          <tr><td colspan="3"><strong>Attendance Summary</strong></td></tr>
-          <tr><td>Present Days</td><td>${salary.attendance.presentDays}</td><td>₹${salary.salary.presentDaysSalary.toFixed(2)}</td></tr>
-          <tr><td>Half Days</td><td>${salary.attendance.halfDays}</td><td>₹${salary.salary.halfDaysSalary.toFixed(2)}</td></tr>
-          <tr><td>Absent Days</td><td>${salary.attendance.absentDays}</td><td>-₹${salary.salary.absentDaysDeduction.toFixed(2)}</td></tr>
+          <tr><td><strong>Daily Salary</strong> (&#8377;${salary.monthlySalary.toFixed(0)} &divide; ${totalDays} days)</td><td>-</td><td><strong>&#8377;${salary.dailySalary.toFixed(2)}</strong></td></tr>
+
+          <!-- Attendance -->
+          <tr class="section-header"><td colspan="3">Attendance Earnings</td></tr>
+          <tr><td>Present Days</td><td>${salary.attendance.presentDays}</td><td class="addition">&#8377;${salary.salary.presentDaysSalary.toFixed(2)}</td></tr>
+          <tr><td>Half Days</td><td>${salary.attendance.halfDays}</td><td class="addition">&#8377;${salary.salary.halfDaysSalary.toFixed(2)}</td></tr>
+
+          <!-- Weekly Off Paid Leaves -->
+          <tr class="section-header"><td colspan="3">Weekly Off Paid Leaves</td></tr>
+          ${wo ? `
+          <tr>
+            <td>
+              Weekly Off (Paid) &mdash; <span class="note">${woNote}</span>
+            </td>
+            <td>${wo.paidDays}</td>
+            <td class="addition">&#8377;${wo.paidAmount.toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td>Weekly Off (Unpaid) &mdash; <span class="note">Weeks with absent/unmarked working days</span></td>
+            <td>${wo.unpaidDays}</td>
+            <td>&#8377;0.00</td>
+          </tr>
+          ` : `<tr><td colspan="3">N/A (legacy record)</td></tr>`}
+
+          <!-- Absent count (info only, no deduction) -->
+          <tr><td>Absent Days (info only)</td><td>${salary.attendance.absentDays}</td><td>&#8377;0.00</td></tr>
+
           ${salary.additions && salary.additions.length > 0 ? `
-          <tr><td colspan="3"><strong>Additions</strong></td></tr>
-          ${salary.additions.map(addition => `<tr><td>${addition.description}</td><td>-</td><td>+₹${addition.amount.toFixed(2)}</td></tr>`).join('')}` : ''}
+          <tr class="section-header"><td colspan="3">Additions</td></tr>
+          ${salary.additions.map(a => `<tr><td>${a.description}</td><td>-</td><td class="addition">+&#8377;${Number(a.amount).toFixed(2)}</td></tr>`).join('')}
+          ` : ''}
+
           ${salary.deductions && salary.deductions.length > 0 ? `
-          <tr><td colspan="3"><strong>Deductions</strong></td></tr>
-          ${salary.deductions.map(deduction => `<tr><td>${deduction.description}</td><td>-</td><td>-₹${deduction.amount.toFixed(2)}</td></tr>`).join('')}` : ''}
-          <tr><td><strong>Total Earned Salary</strong></td><td>-</td><td><strong>₹${salary.salary.totalEarnedSalary.toFixed(2)}</strong></td></tr>
-          <tr class="total-row"><td><strong>Final Salary</strong></td><td>-</td><td><strong>₹${(salary.salary.finalSalary || salary.salary.totalEarnedSalary).toFixed(2)}</strong></td></tr>
+          <tr class="section-header"><td colspan="3">Deductions</td></tr>
+          ${salary.deductions.map(d => `<tr><td>${d.description}</td><td>-</td><td class="deduction">-&#8377;${Number(d.amount).toFixed(2)}</td></tr>`).join('')}
+          ` : ''}
+
+          <tr class="total-row"><td>Total Earned Salary</td><td>-</td><td>&#8377;${salary.salary.totalEarnedSalary.toFixed(2)}</td></tr>
+          <tr class="final-row"><td>Final Salary</td><td>-</td><td>&#8377;${(salary.salary.finalSalary || salary.salary.totalEarnedSalary).toFixed(2)}</td></tr>
         </table>
-        
+
         <div class="footer">
           <p>This is a computer-generated salary slip.</p>
           <p>Calculated on: ${new Date(salary.calculatedAt).toLocaleString()}</p>
@@ -1202,16 +1331,43 @@ const AdminAttendance: React.FC = () => {
               {/* Filters */}
               <div className="mb-6">
                 <div className="flex flex-wrap gap-4 items-end">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <div className="flex flex-col gap-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Select Date
                     </label>
-                    <input
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
-                    />
+                    <div className="flex gap-2 items-center">
+                      {/* Preset quick-select */}
+                      <select
+                        value={datePreset}
+                        onChange={(e) => setDatePreset(e.target.value)}
+                        className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      >
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="thisMonth">This Month</option>
+                        <option value="lastMonth">Last Month</option>
+                        <option value="custom">Custom Date</option>
+                      </select>
+                      {/* Raw date picker (From) — always visible */}
+                      <input
+                        type="date"
+                        value={fromDate}
+                        onChange={(e) => { setDatePreset('custom'); setFromDate(e.target.value); }}
+                        className={`bg-gray-50 border text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                          datePreset === 'custom' ? 'border-blue-400 dark:border-blue-500' : 'border-gray-300 dark:border-gray-600 opacity-75'
+                        }`}
+                      />
+                      <span className="text-gray-500 dark:text-gray-400 font-medium px-1">to</span>
+                      {/* Raw date picker (To) — always visible */}
+                      <input
+                        type="date"
+                        value={toDate}
+                        onChange={(e) => { setDatePreset('custom'); setToDate(e.target.value); }}
+                        className={`bg-gray-50 border text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                          datePreset === 'custom' ? 'border-blue-400 dark:border-blue-500' : 'border-gray-300 dark:border-gray-600 opacity-75'
+                        }`}
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -1245,7 +1401,7 @@ const AdminAttendance: React.FC = () => {
                             if (user) {
                               setSalaryModal({ userId: user.id, userName: user.name });
                               // Load persisted data for the current month
-                              const currentMonth = selectedDate.substring(0, 7);
+                              const currentMonth = fromDate.substring(0, 7);
                               const persistedData = loadSalaryDataFromStorage(user.id, currentMonth);
                               if (persistedData) {
                                 setSalaryData(persistedData);
@@ -1355,10 +1511,11 @@ const AdminAttendance: React.FC = () => {
                                 </div>
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400 block mb-1">Present Days:</span>
-                                  <PresentDaysTooltip 
-                                    userId={salary.userId} 
-                                    month={salary.month} 
-                                    targetValue={salary.attendance.presentDays} 
+                                  <PresentDaysTooltip
+                                    userId={salary.userId}
+                                    month={salary.month}
+                                    targetValue={salary.attendance.presentDays}
+                                    weeklyOffDays={salary.weeklyOffDays}
                                   />
                                 </div>
                                 <div>
@@ -1396,14 +1553,14 @@ const AdminAttendance: React.FC = () => {
                         No Attendance Records Found
                       </h3>
                       <p className="text-gray-600 dark:text-gray-400">
-                        No attendance records found for {formatDate(selectedDate)}
+                        No attendance records found for {fromDate === toDate ? formatDate(fromDate) : `${formatDate(fromDate)} to ${formatDate(toDate)}`}
                       </p>
                     </div>
                   ) : (
                     <>
                       <div className="mb-4">
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Showing {attendanceRecords.length} record(s) for {formatDate(selectedDate)}
+                          Showing {attendanceRecords.length} record(s) for {fromDate === toDate ? formatDate(fromDate) : `${formatDate(fromDate)} to ${formatDate(toDate)}`}
                         </p>
                       </div>
 
@@ -1661,7 +1818,7 @@ const AdminAttendance: React.FC = () => {
                   </label>
                   <input
                     type="month"
-                    value={salaryData.month || selectedDate.substring(0, 7)}
+                    value={salaryData.month || fromDate.substring(0, 7)}
                     max={getIndianMonth()}
                     onChange={(e) => {
                       const newMonth = e.target.value;
@@ -1765,7 +1922,7 @@ const AdminAttendance: React.FC = () => {
                 <div className="text-sm text-gray-600 dark:text-gray-400">
                   <p>Calculation will be based on:</p>
                   <ul className="list-disc list-inside mt-1">
-                    <li>Attendance records for {salaryData.month || selectedDate.substring(0, 7)}</li>
+                    <li>Attendance records for {salaryData.month || fromDate.substring(0, 7)}</li>
                     <li>Present days = Full pay</li>
                     <li>Half days = 50% pay</li>
                     <li>Absent days = No pay</li>
@@ -1932,7 +2089,7 @@ const AdminAttendance: React.FC = () => {
               {/* Salary Slip Preview */}
               <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-lg mb-6">
                 <div className="text-center border-b-2 border-gray-300 pb-4 mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Your Company Name</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">EKTA ENTERPRISES </h2>
                   <p className="text-lg text-gray-600 dark:text-gray-400 mt-2">Salary Slip</p>
                 </div>
 
@@ -1966,14 +2123,11 @@ const AdminAttendance: React.FC = () => {
                     </thead>
                     <tbody>
                       <tr>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">Monthly Salary</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">
+                          Monthly Salary ({printSlipModal.totalDaysInMonth ?? (printSlipModal.totalWorkingDays + printSlipModal.weeklyOffDaysCount)} days)
+                        </td>
                         <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">-</td>
                         <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-900 dark:text-white">₹{printSlipModal.monthlySalary.toFixed(2)}</td>
-                      </tr>
-                      <tr>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">Total Working Days</td>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">{printSlipModal.totalWorkingDays}</td>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-900 dark:text-white">-</td>
                       </tr>
                       <tr>
                         <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">Daily Salary</td>
@@ -1994,9 +2148,39 @@ const AdminAttendance: React.FC = () => {
                         <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-900 dark:text-white">₹{printSlipModal.salary.halfDaysSalary.toFixed(2)}</td>
                       </tr>
                       <tr>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">Absent Days</td>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">{printSlipModal.attendance.absentDays}</td>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-red-600 dark:text-red-400">-₹{printSlipModal.salary.absentDaysDeduction.toFixed(2)}</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-500 dark:text-gray-400">Absent Days (info only)</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-500 dark:text-gray-400">{printSlipModal.attendance.absentDays}</td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-500 dark:text-gray-400">₹0.00</td>
+                      </tr>
+                      {/* Weekly Off Paid Leaves */}
+                      <tr className="bg-gray-100 dark:bg-gray-800">
+                        <td colSpan={3} className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-semibold text-gray-900 dark:text-white">Weekly Off Paid Leaves</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">
+                          Weekly Off (Paid)
+                          {printSlipModal.weeklyOff && (
+                            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                              — all working days present in those weeks
+                            </span>
+                          )}
+                        </td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-white">
+                          {printSlipModal.weeklyOff?.paidDays ?? 0}
+                        </td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-green-600 dark:text-green-400">
+                          ₹{(printSlipModal.weeklyOff?.paidAmount ?? 0).toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-500 dark:text-gray-400">
+                          Weekly Off (Unpaid)
+                          <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">— absent/unmarked days in those weeks</span>
+                        </td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-500 dark:text-gray-400">
+                          {printSlipModal.weeklyOff?.unpaidDays ?? 0}
+                        </td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-500 dark:text-gray-400">₹0.00</td>
                       </tr>
                       <tr className="bg-gray-100 dark:bg-gray-800">
                         <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-bold text-gray-900 dark:text-white">Total Earned Salary</td>

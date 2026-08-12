@@ -7,6 +7,7 @@ export default function ThemeTogglerTwo() {
       onClick={toggleTheme}
       className="inline-flex items-center justify-center text-white transition-colors rounded-full size-14 bg-brand-500 hover:bg-brand-600"
     >
+      {/* Sun icon — shown in dark mode */}
       <svg
         className="hidden dark:block"
         width="20"
@@ -22,6 +23,7 @@ export default function ThemeTogglerTwo() {
           fill="currentColor"
         />
       </svg>
+      {/* Moon icon — shown in light mode */}
       <svg
         className="dark:hidden"
         width="20"

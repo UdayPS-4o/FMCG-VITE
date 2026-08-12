@@ -1101,7 +1101,7 @@ router.post('/pnb-stock-statement/excel', async (req, res) => {
             return res.status(400).json({ message: 'Missing required data for Excel generation' });
         }
 
-        const templatePath = path.join(__dirname, '../../0490008700003292_052026.xlsm');
+        const templatePath = path.join(__dirname, '../../Annexure-1.xlsm');
         const scriptPath   = path.join(__dirname, '../pnb_excel_gen.py');
         const tmpDir       = os.tmpdir();
         const tmpData      = path.join(tmpDir, 'pnb_data_' + Date.now() + '.json');

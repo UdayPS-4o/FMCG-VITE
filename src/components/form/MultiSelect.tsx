@@ -29,101 +29,163 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   selectOnEnter = false,
   matchThreshold = 3,
 }) => {
-  const [selectedOptions, setSelectedOptions] =
-    useState<string[]>(defaultSelected);
+  const [selectedOptions, setSelectedOptions] = useState<string[]>(defaultSelected);
   const [isOpen, setIsOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
+  // Index of the currently keyboard-highlighted option (-1 = none)
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  // Update internal state when value prop changes (controlled component)
+  // Update internal state when controlled value prop changes
   useEffect(() => {
     if (value !== undefined) {
       setSelectedOptions(value);
     }
   }, [value]);
 
+  // Reset highlight when the filtered list changes (e.g. user types)
+  const filteredOptions = options.filter(
+    option =>
+      !selectedOptions.includes(option.value) &&
+      (!filterText || option.text.toLowerCase().includes(filterText.toLowerCase()))
+  );
+
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [filterText, isOpen]);
+
+  // Auto-scroll highlighted item into view
+  useEffect(() => {
+    if (highlightedIndex >= 0 && listRef.current) {
+      const highlighted = listRef.current.querySelector(
+        `[data-index="${highlightedIndex}"]`
+      ) as HTMLElement | null;
+      if (highlighted) {
+        highlighted.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [highlightedIndex]);
+
   const toggleDropdown = () => {
     if (!disabled) {
-      setIsOpen((prev) => !prev);
-      // Reset filter when opening dropdown
+      setIsOpen(prev => !prev);
       if (!isOpen) setFilterText("");
     }
   };
 
   const handleSelect = (optionValue: string) => {
-    const newSelectedOptions = selectedOptions.includes(optionValue)
-      ? selectedOptions.filter((val) => val !== optionValue)
+    const newSelected = selectedOptions.includes(optionValue)
+      ? selectedOptions.filter(v => v !== optionValue)
       : [...selectedOptions, optionValue];
 
-    // If component is controlled, only call onChange
     if (value !== undefined) {
-      onChange?.(newSelectedOptions);
+      onChange?.(newSelected);
     } else {
-      // If uncontrolled, update internal state and call onChange
-      setSelectedOptions(newSelectedOptions);
-      onChange?.(newSelectedOptions);
+      setSelectedOptions(newSelected);
+      onChange?.(newSelected);
     }
     setFilterText("");
+    setHighlightedIndex(-1);
+    // Keep focus on input after selection so keyboard navigation continues
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const removeOption = (optionValue: string) => {
-    const newSelectedOptions = selectedOptions.filter((opt) => opt !== optionValue);
-    
-    // If component is controlled, only call onChange
+    const newSelected = selectedOptions.filter(v => v !== optionValue);
     if (value !== undefined) {
-      onChange?.(newSelectedOptions);
+      onChange?.(newSelected);
     } else {
-      // If uncontrolled, update internal state and call onChange
-      setSelectedOptions(newSelectedOptions);
-      onChange?.(newSelectedOptions);
+      setSelectedOptions(newSelected);
+      onChange?.(newSelected);
     }
   };
 
-  // Handle outside click to close dropdown
+  // Close on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         setFilterText("");
+        setHighlightedIndex(-1);
       }
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle keyboard events for filtering and selection
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!isOpen) {
+    if (disabled) return;
+
+    // Open dropdown on any meaningful key if closed
+    if (!isOpen && e.key !== "Tab" && e.key !== "Escape") {
       setIsOpen(true);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlightedIndex(0);
+      }
       return;
     }
 
-    if (e.key === 'Enter' && selectOnEnter && filterText.length >= matchThreshold && filteredOptions.length > 0) {
-      // Get the first option that starts with the filter text
-      const firstMatch = filteredOptions.find(
-        option => option.text.toLowerCase().startsWith(filterText.toLowerCase())
-      );
-      
-      if (firstMatch) {
-        handleSelect(firstMatch.value);
+    switch (e.key) {
+      case "ArrowDown":
         e.preventDefault();
-      }
+        setHighlightedIndex(prev =>
+          filteredOptions.length === 0 ? -1 : (prev + 1) % filteredOptions.length
+        );
+        break;
+
+      case "ArrowUp":
+        e.preventDefault();
+        setHighlightedIndex(prev =>
+          filteredOptions.length === 0
+            ? -1
+            : (prev - 1 + filteredOptions.length) % filteredOptions.length
+        );
+        break;
+
+      case "Enter":
+        e.preventDefault();
+        if (highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
+          // Select the currently highlighted item
+          handleSelect(filteredOptions[highlightedIndex].value);
+        } else if (
+          selectOnEnter &&
+          filterText.length >= matchThreshold &&
+          filteredOptions.length > 0
+        ) {
+          // Fallback: select first option that starts with the filter text
+          const firstMatch = filteredOptions.find(option =>
+            option.text.toLowerCase().startsWith(filterText.toLowerCase())
+          );
+          if (firstMatch) {
+            handleSelect(firstMatch.value);
+          }
+        }
+        break;
+
+      case "Escape":
+        setIsOpen(false);
+        setFilterText("");
+        setHighlightedIndex(-1);
+        break;
+
+      case "Backspace":
+        // Remove last selected tag when filter is empty
+        if (!filterText && selectedOptions.length > 0) {
+          removeOption(selectedOptions[selectedOptions.length - 1]);
+        }
+        break;
+
+      default:
+        break;
     }
   };
 
   const selectedValuesText = selectedOptions.map(
-    (value) => options.find((option) => option.value === value)?.text || ""
-  );
-
-  // Filter options based on input text and remove already selected ones
-  const filteredOptions = options.filter(
-    option => 
-      !selectedOptions.includes(option.value) && 
-      (!filterText || option.text.toLowerCase().includes(filterText.toLowerCase()))
+    v => options.find(option => option.value === v)?.text || ""
   );
 
   return (
@@ -137,7 +199,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
           <div onClick={toggleDropdown} className="w-full">
             <div className="flex min-h-[2.75rem] multi-select-container rounded-lg border border-gray-300 py-1 pl-2 pr-2 shadow-theme-xs outline-hidden transition focus:border-brand-300 focus:shadow-focus-ring dark:border-gray-700 dark:focus:border-brand-300 overflow-hidden">
               <div className="flex flex-wrap items-center w-full gap-1">
-                {selectedValuesText.length > 0 && (
+                {selectedValuesText.length > 0 &&
                   selectedValuesText.map((text, index) => (
                     <div
                       key={index}
@@ -146,7 +208,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                       <span className="truncate max-w-[160px]">{text}</span>
                       <div className="flex-shrink-0 flex ml-0.5">
                         <div
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation();
                             removeOption(selectedOptions[index]);
                           }}
@@ -169,17 +231,16 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                         </div>
                       </div>
                     </div>
-                  ))
-                )}
+                  ))}
                 <input
                   ref={inputRef}
                   placeholder={selectedValuesText.length > 0 ? "" : "Select option"}
                   className="flex-1 min-w-[60px] h-7 p-1 text-sm bg-transparent border-0 outline-hidden appearance-none placeholder:text-gray-500 focus:border-0 focus:outline-hidden focus:ring-0 dark:text-gray-300 dark:placeholder:text-gray-500"
                   readOnly={!allowFiltering}
                   value={filterText}
-                  onChange={(e) => allowFiltering && setFilterText(e.target.value)}
+                  onChange={e => allowFiltering && setFilterText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  onClick={(e) => {
+                  onClick={e => {
                     if (allowFiltering) {
                       e.stopPropagation();
                       setIsOpen(true);
@@ -216,22 +277,29 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
 
           {isOpen && (
             <div
+              ref={listRef}
               className="absolute left-0 z-50 w-full max-h-60 overflow-y-auto bg-white rounded-lg shadow-lg mt-1 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
-              onClick={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
             >
               <div className="flex flex-col w-full">
                 {filteredOptions.length > 0 ? (
                   filteredOptions.map((option, index) => (
                     <div
                       key={index}
-                      className={`w-full cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-900/10 ${
-                        index < filteredOptions.length - 1 ? "border-b border-gray-200 dark:border-gray-700" : ""
+                      data-index={index}
+                      className={`w-full cursor-pointer transition-colors duration-100 ${
+                        index < filteredOptions.length - 1
+                          ? "border-b border-gray-200 dark:border-gray-700"
+                          : ""
+                      } ${
+                        highlightedIndex === index
+                          ? "bg-brand-100 dark:bg-brand-700/40 ring-inset ring-1 ring-brand-400"
+                          : "hover:bg-brand-50 dark:hover:bg-brand-900/10"
                       }`}
                       onClick={() => handleSelect(option.value)}
+                      onMouseEnter={() => setHighlightedIndex(index)}
                     >
-                      <div
-                        className="relative flex w-full items-center p-2 pl-2"
-                      >
+                      <div className="relative flex w-full items-center p-2 pl-2">
                         <div className="mx-2 leading-6 text-gray-800 dark:text-white/90">
                           {option.text}
                         </div>

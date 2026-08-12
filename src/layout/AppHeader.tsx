@@ -325,9 +325,9 @@ const AppHeader: React.FC = () => {
                     </div>
                   </div>
                 )}
-                {/* Theme Toggle in Dropdown */} 
+                {/* Theme Picker in Dropdown */}
                 <div className="px-4 py-2 flex items-center justify-between">
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Theme</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">🎨 Theme</span>
                   <ThemeToggleButton />
                 </div>
                 {/* Logout Button in Dropdown */} 

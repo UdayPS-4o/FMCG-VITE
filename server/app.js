@@ -259,6 +259,8 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end(); // Send "No Content" response for favicon requests
 });
 
+const { acmeChallengeMiddleware, initAutoSslRenewal } = require('./utils/sslRenewal');
+
 // Initialize server — supports both HTTP (:80) and HTTPS (:443)
 const initServer = () => {
   const SSL_KEY_PATH = process.env.SSL_KEY_PATH || path.join(__dirname, 'certs', 'privkey.pem');
@@ -275,6 +277,8 @@ const initServer = () => {
     const httpsServer = https.createServer(sslOptions, app);
     httpsServer.listen(443, '0.0.0.0', () => {
       console.log('HTTPS server running on port 443');
+      // Initialize automated background SSL renewal (checks every 12h, hot-reloads TLS context)
+      initAutoSslRenewal(httpsServer);
     });
     httpsServer.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
@@ -285,6 +289,7 @@ const initServer = () => {
 
     // ── HTTP server on :80 — redirect everything to HTTPS ─────────────────
     const redirectApp = express();
+    redirectApp.use(acmeChallengeMiddleware);
     redirectApp.use((req, res) => {
       const host = req.headers.host ? req.headers.host.replace(/:\d+$/, '') : 'server.ekta-enterprises.com';
       res.redirect(301, `https://${host}${req.url}`);
