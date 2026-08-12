@@ -24,6 +24,7 @@ interface AutocompleteProps {
 // Define handle types for the ref
 export interface AutocompleteRefHandle {
   focus: () => void;
+  focusAndOpen: () => void;
 }
 
 const customScrollbarStyles = `
@@ -101,6 +102,10 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
   useImperativeHandle(ref, () => ({
     focus: () => {
       inputRef.current?.focus();
+    },
+    focusAndOpen: () => {
+      inputRef.current?.focus();
+      setIsOpen(true);
     }
   }));
 
@@ -294,9 +299,10 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
+          // handleOptionSelect already calls onEnter internally — do NOT call it again here
           handleOptionSelect(filteredOptions[highlightedIndex]);
-        }
-        if (onEnter) {
+        } else if (onEnter) {
+          // No highlighted item selected, just fire onEnter
           onEnter();
         }
       } else if (e.key === 'Escape') {
@@ -309,9 +315,11 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
       if (onEnter) {
         const exactMatch = options.find(opt => opt.label.toLowerCase() === searchTerm.toLowerCase() || opt.value.toLowerCase() === searchTerm.toLowerCase());
         if (exactMatch && (!selectedOption || selectedOption.value !== exactMatch.value)) {
+          // handleOptionSelect calls onEnter — don't call it again
           handleOptionSelect(exactMatch);
+        } else {
+          onEnter();
         }
-        onEnter();
       }
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       if (!isOpen && searchTerm) {

@@ -163,9 +163,9 @@ const PNBStockStatement: React.FC = () => {
       const blob = await response.blob();
       const url  = window.URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      const monthName = MONTHS[selectedMonth - 1].label.substring(0, 3);
+      const mm   = String(selectedMonth).padStart(2, '0');
       a.href     = url;
-      a.download = `PNB_Stock_Statement_${monthName}${selectedYear}.xlsm`;
+      a.download = `0490008700003292_${mm}${selectedYear}.xlsm`;
       document.body.appendChild(a);
       a.click();
       a.remove();

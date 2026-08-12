@@ -388,13 +388,18 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
       }
 
       if (!autoSelectedGodown) {
-        const godownElementWrapper = document.getElementById(`godown-${index}`);
-        if (godownAutocompleteRef.current && godownElementWrapper) {
-          godownAutocompleteRef.current.focus();
-          setTimeout(() => {
+        // The godown Autocomplete has key={`godown-${index}-${item.item}`}, so when item.item
+        // changes it fully REMOUNTS. We must wait for the new instance to mount and assign its ref
+        // before calling focus. 150ms is enough for React to finish the remount cycle.
+        setTimeout(() => {
+          const godownElementWrapper = document.getElementById(`godown-${index}`);
+          if (godownAutocompleteRef.current && godownElementWrapper) {
+            // focusAndOpen() focuses the input AND explicitly sets isOpen=true,
+            // bypassing any onFocus timing issues.
+            godownAutocompleteRef.current.focusAndOpen();
             centerElementInViewport(godownElementWrapper);
-          }, 50); 
-        }
+          }
+        }, 150);
       }
     }
   }, [shouldFocusGodownDOM, expanded, item.item, stockList, godownOptions, handleGodownChange, index, item.selectedItem]);
@@ -578,7 +583,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
     },
     focusGodown: () => {
       if (godownAutocompleteRef.current) {
-        godownAutocompleteRef.current.focus();
+        godownAutocompleteRef.current.focusAndOpen();
         const el = document.getElementById(`godown-${index}`);
         if (el) centerElementInViewport(el);
       }
@@ -628,13 +633,18 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   }, [expanded, shouldFocusOnExpand]);
 
   // Action for Item Name Autocomplete Enter
+  // NOTE: This fires at the same time as handleItemChange (which updates item.item in state).
+  // We use a short delay so the React state update has committed before we read item.item.
   const handleItemNameEnter = () => {
     setInitialInteraction(false);
-    if (item.item && !item.godown) {
-      setShouldFocusGodownDOM(true); // Trigger godown auto-selection or focus
-    } else if (item.item && item.godown && qtyInputRef.current) {
-      qtyInputRef.current.focus(); // If godown already selected (e.g. auto-selected), focus QTY
-    }
+    setTimeout(() => {
+      // Re-read the latest item state via a ref-based approach isn't feasible here,
+      // so we trigger the godown focus unconditionally — the godown useEffect will
+      // auto-select if only one godown has stock, or focus the Godown dropdown.
+      // handleItemChange already sets setShouldFocusGodownDOM(true) on new item selection,
+      // but if the item was already selected before Enter was pressed, we need this fallback.
+      setShouldFocusGodownDOM(true);
+    }, 50);
   };
   
   // Action for Godown Autocomplete Enter

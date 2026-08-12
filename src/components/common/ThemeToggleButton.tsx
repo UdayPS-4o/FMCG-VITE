@@ -1,41 +1,127 @@
-import { useTheme } from "../../context/ThemeContext";
+import { useRef, useState, useEffect } from "react";
+import { useTheme, THEMES, type Theme } from "../../context/ThemeContext";
 
 export const ThemeToggleButton: React.FC = () => {
-  const { toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close panel on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const current = THEMES.find((t) => t.id === theme) ?? THEMES[0];
+
+  // Icons for the toggle button
+  const SunIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path fillRule="evenodd" clipRule="evenodd"
+        d="M10 1.54a.75.75 0 01.75.75v1.25a.75.75 0 01-1.5 0V2.29A.75.75 0 0110 1.54zm0 5.25a3.21 3.21 0 100 6.42 3.21 3.21 0 000-6.42zm5.98-.71a.75.75 0 00-1.06-1.06l-.88.88a.75.75 0 001.06 1.06l.88-.88zM18.46 10a.75.75 0 01-.75.75h-1.25a.75.75 0 010-1.5h1.25a.75.75 0 01.75.75zm-2.54 4.92a.75.75 0 00-1.06-1.06l-.88.88a.75.75 0 001.06 1.06l.88-.88zM10 15.71a.75.75 0 01.75.75v1.25a.75.75 0 01-1.5 0v-1.25A.75.75 0 0110 15.71zM5.08 14.96a.75.75 0 10-1.06 1.06l.88.88a.75.75 0 001.06-1.06l-.88-.88zM4.29 10a.75.75 0 01-.75.75H2.29a.75.75 0 010-1.5h1.25A.75.75 0 014.29 10zM5.96 5.96A.75.75 0 104.9 4.9l-.88.88A.75.75 0 005.08 6.84l.88-.88z"
+        fill="currentColor"/>
+    </svg>
+  );
+
+  const MoonIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M17.45 11.97l.73.19c.085-.323-.054-.663-.34-.835a.75.75 0 00-.844.076l.454.569zM8.03 2.55l.55.51a.75.75 0 00-.672-1.236l.122.726zM12.92 13c-3.27 0-5.92-2.65-5.92-5.92H5.5a7.42 7.42 0 007.42 7.42V13zm4.02-1.58c-1.057.983-2.47 1.58-4.02 1.58v1.5a7.39 7.39 0 005.04-1.98l-1.02-1.1zm-.26.35c-.786 2.982-3.5 5.18-6.73 5.18v1.5a8.46 8.46 0 008.18-6.29l-1.45-.39zM10 18.46A8.46 8.46 0 011.54 10H.04A9.96 9.96 0 0010 19.96v-1.5zM1.54 10A8.46 8.46 0 018.2 1.83L7.82.1A9.96 9.96 0 00.04 10h1.5zM5.5 7.08A3.58 3.58 0 018.58 3.5V2a5.08 5.08 0 00-5.08 5.08H5.5z"
+        fill="currentColor"/>
+    </svg>
+  );
+
+  const PaletteIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c1.1 0 2-.9 2-2 0-.53-.21-1.01-.54-1.37-.32-.34-.51-.81-.51-1.3 0-1.1.9-2 2-2h2.35C19.33 15.33 22 12.95 22 10c0-4.41-4.48-8-10-8zm-5.5 9a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3-4a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3 4a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" fill="currentColor"/>
+    </svg>
+  );
+
+  const getIcon = () => {
+    if (theme === "light") return <SunIcon />;
+    if (theme === "dark") return <MoonIcon />;
+    return <PaletteIcon />;
+  };
 
   return (
-    <button
-      onClick={toggleTheme}
-      className="relative flex items-center justify-center text-gray-500 transition-colors bg-white border border-gray-200 rounded-full hover:text-dark-900 h-11 w-11 hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-    >
-      <svg
-        className="hidden dark:block"
-        width="20"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
+    <div ref={ref} className="relative">
+      {/* Trigger Button */}
+      <button
+        id="theme-picker-trigger"
+        onClick={() => setOpen((o) => !o)}
+        title={`Theme: ${current.label}`}
+        className="relative flex items-center justify-center text-gray-500 transition-colors bg-white border border-gray-200 rounded-full hover:text-gray-700 h-11 w-11 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+        style={{
+          color: theme !== "light" && theme !== "dark" ? current.accent : undefined,
+          borderColor: theme !== "light" && theme !== "dark" ? `${current.accent}55` : undefined,
+        }}
       >
-        <path
-          fillRule="evenodd"
-          clipRule="evenodd"
-          d="M9.99998 1.5415C10.4142 1.5415 10.75 1.87729 10.75 2.2915V3.5415C10.75 3.95572 10.4142 4.2915 9.99998 4.2915C9.58577 4.2915 9.24998 3.95572 9.24998 3.5415V2.2915C9.24998 1.87729 9.58577 1.5415 9.99998 1.5415ZM10.0009 6.79327C8.22978 6.79327 6.79402 8.22904 6.79402 10.0001C6.79402 11.7712 8.22978 13.207 10.0009 13.207C11.772 13.207 13.2078 11.7712 13.2078 10.0001C13.2078 8.22904 11.772 6.79327 10.0009 6.79327ZM5.29402 10.0001C5.29402 7.40061 7.40135 5.29327 10.0009 5.29327C12.6004 5.29327 14.7078 7.40061 14.7078 10.0001C14.7078 12.5997 12.6004 14.707 10.0009 14.707C7.40135 14.707 5.29402 12.5997 5.29402 10.0001ZM15.9813 5.08035C16.2742 4.78746 16.2742 4.31258 15.9813 4.01969C15.6884 3.7268 15.2135 3.7268 14.9207 4.01969L14.0368 4.90357C13.7439 5.19647 13.7439 5.67134 14.0368 5.96423C14.3297 6.25713 14.8045 6.25713 15.0974 5.96423L15.9813 5.08035ZM18.4577 10.0001C18.4577 10.4143 18.1219 10.7501 17.7077 10.7501H16.4577C16.0435 10.7501 15.7077 10.4143 15.7077 10.0001C15.7077 9.58592 16.0435 9.25013 16.4577 9.25013H17.7077C18.1219 9.25013 18.4577 9.58592 18.4577 10.0001ZM14.9207 15.9806C15.2135 16.2735 15.6884 16.2735 15.9813 15.9806C16.2742 15.6877 16.2742 15.2128 15.9813 14.9199L15.0974 14.036C14.8045 13.7431 14.3297 13.7431 14.0368 14.036C13.7439 14.3289 13.7439 14.8038 14.0368 15.0967L14.9207 15.9806ZM9.99998 15.7088C10.4142 15.7088 10.75 16.0445 10.75 16.4588V17.7088C10.75 18.123 10.4142 18.4588 9.99998 18.4588C9.58577 18.4588 9.24998 18.123 9.24998 17.7088V16.4588C9.24998 16.0445 9.58577 15.7088 9.99998 15.7088ZM5.96356 15.0972C6.25646 14.8043 6.25646 14.3295 5.96356 14.0366C5.67067 13.7437 5.1958 13.7437 4.9029 14.0366L4.01902 14.9204C3.72613 15.2133 3.72613 15.6882 4.01902 15.9811C4.31191 16.274 4.78679 16.274 5.07968 15.9811L5.96356 15.0972ZM4.29224 10.0001C4.29224 10.4143 3.95645 10.7501 3.54224 10.7501H2.29224C1.87802 10.7501 1.54224 10.4143 1.54224 10.0001C1.54224 9.58592 1.87802 9.25013 2.29224 9.25013H3.54224C3.95645 9.25013 4.29224 9.58592 4.29224 10.0001ZM4.9029 5.9637C5.1958 6.25659 5.67067 6.25659 5.96356 5.9637C6.25646 5.6708 6.25646 5.19593 5.96356 4.90303L5.07968 4.01915C4.78679 3.72626 4.31191 3.72626 4.01902 4.01915C3.72613 4.31204 3.72613 4.78692 4.01902 5.07981L4.9029 5.9637Z"
-          fill="currentColor"
+        {getIcon()}
+        {/* Active theme indicator dot */}
+        <span
+          className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-900"
+          style={{ backgroundColor: current.accent }}
         />
-      </svg>
-      <svg
-        className="dark:hidden"
-        width="20"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M17.4547 11.97L18.1799 12.1611C18.265 11.8383 18.1265 11.4982 17.8401 11.3266C17.5538 11.1551 17.1885 11.1934 16.944 11.4207L17.4547 11.97ZM8.0306 2.5459L8.57989 3.05657C8.80718 2.81209 8.84554 2.44682 8.67398 2.16046C8.50243 1.8741 8.16227 1.73559 7.83948 1.82066L8.0306 2.5459ZM12.9154 13.0035C9.64678 13.0035 6.99707 10.3538 6.99707 7.08524H5.49707C5.49707 11.1823 8.81835 14.5035 12.9154 14.5035V13.0035ZM16.944 11.4207C15.8869 12.4035 14.4721 13.0035 12.9154 13.0035V14.5035C14.8657 14.5035 16.6418 13.7499 17.9654 12.5193L16.944 11.4207ZM16.7295 11.7789C15.9437 14.7607 13.2277 16.9586 10.0003 16.9586V18.4586C13.9257 18.4586 17.2249 15.7853 18.1799 12.1611L16.7295 11.7789ZM10.0003 16.9586C6.15734 16.9586 3.04199 13.8433 3.04199 10.0003H1.54199C1.54199 14.6717 5.32892 18.4586 10.0003 18.4586V16.9586ZM3.04199 10.0003C3.04199 6.77289 5.23988 4.05695 8.22173 3.27114L7.83948 1.82066C4.21532 2.77574 1.54199 6.07486 1.54199 10.0003H3.04199ZM6.99707 7.08524C6.99707 5.52854 7.5971 4.11366 8.57989 3.05657L7.48132 2.03522C6.25073 3.35885 5.49707 5.13487 5.49707 7.08524H6.99707Z"
-          fill="currentColor"
-        />
-      </svg>
-    </button>
+      </button>
+
+      {/* Theme Picker Dropdown */}
+      {open && (
+        <div
+          className="absolute right-0 mt-2 w-52 origin-top-right rounded-2xl border border-gray-100 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 overflow-hidden z-[99999]"
+          style={{ animation: "themePickerIn 0.15s ease" }}
+        >
+          <div className="px-3 pt-3 pb-1">
+            <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">
+              Choose Theme
+            </p>
+          </div>
+          <div className="px-2 pb-2 flex flex-col gap-0.5">
+            {THEMES.map((t) => {
+              const isActive = theme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  id={`theme-option-${t.id}`}
+                  onClick={() => { setTheme(t.id as Theme); setOpen(false); }}
+                  className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-left
+                    ${isActive
+                      ? "bg-gray-50 dark:bg-white/[0.06] text-gray-900 dark:text-white"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:text-gray-900 dark:hover:text-white"
+                    }`}
+                >
+                  {/* Colour swatch */}
+                  <span
+                    className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-white shadow-sm"
+                    style={{
+                      backgroundColor: t.accent,
+                      boxShadow: isActive ? `0 0 0 2px ${t.accent}` : undefined,
+                    }}
+                  />
+                  <span className="flex-1">{t.emoji} {t.label}</span>
+                  {/* Tick */}
+                  {isActive && (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-gray-900 dark:text-white flex-shrink-0">
+                      <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes themePickerIn {
+          from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0); }
+        }
+      `}</style>
+    </div>
   );
 };

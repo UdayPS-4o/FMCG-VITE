@@ -13,6 +13,7 @@ import { InvoiceContext, useInvoiceContext, type ItemData } from '../../contexts
 import InvoiceProvider from '../../contexts/InvoiceProvider';
 import InvoicingSkeletonLoader from '../../components/ui/skeleton/SkeletonLoader';
 import useAuth from '../../hooks/useAuth';
+import Stretchy3DToggle from '../../components/ui/toggle/Stretchy3DToggle';
 
 // Utility function to center an element in the viewport
 const centerElementInViewport = (element: HTMLElement) => {
@@ -1081,21 +1082,13 @@ const InvoicingContent: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center h-full">
-                <div
-                  className={`relative inline-block w-16 h-8 cursor-pointer rounded-full transition-colors ease-in-out duration-200 ${
-                    cash === 'Y' ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                  onClick={toggleCash}
-                >
-                  <span
-                    className={`absolute left-1 top-1 inline-block w-6 h-6 rounded-full bg-white shadow transform transition-transform duration-200 ${
-                      cash === 'Y' ? 'translate-x-8' : 'translate-x-0'
-                    }`}
-                  />
-                </div>
-                <div className="ml-3 text-gray-700 dark:text-gray-300 text-sm">
-                  {cash === 'Y' ? 'Cash' : 'Credit'}
-                </div>
+                <Stretchy3DToggle
+                  id="cash-toggle"
+                  checked={cash === 'Y'}
+                  onChange={toggleCash}
+                  offLabel="Credit"
+                  onLabel="Cash"
+                />
               </div>
             </div>
           </div>

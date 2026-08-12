@@ -437,8 +437,15 @@ app.post('/api/attendance/admin/records', verifyToken, requireAdmin, async (req,
       const data = await fs.readFile(attendanceFilePath, 'utf8');
       const attendanceRecords = JSON.parse(data);
       
-      // Filter records for the specific date and optionally by user
-      let filteredRecords = attendanceRecords.filter(record => record.date === date);
+      let filteredRecords = attendanceRecords;
+      
+      // Filter records for the specific date range
+      if (req.body.fromDate && req.body.toDate) {
+        filteredRecords = filteredRecords.filter(record => record.date >= req.body.fromDate && record.date <= req.body.toDate);
+      } else if (date) {
+        // Fallback for single date compatibility
+        filteredRecords = filteredRecords.filter(record => record.date === date);
+      }
       
       if (userId) {
         filteredRecords = filteredRecords.filter(record => record.userId === parseInt(userId));
@@ -765,31 +772,86 @@ app.post('/api/attendance/admin/calculate-salary', verifyToken, requireAdmin, as
     // Get total working days in the month (excluding weekly offs)
     const totalWorkingDays = totalDaysInMonth - weeklyOffDaysCount;
     
-    // Calculate daily salary
-    const dailySalary = parseFloat(monthlySalary) / totalWorkingDays;
-    
-    // Calculate earned salary
+    // ─── NEW CALCULATION LOGIC ───────────────────────────────────────────────
+    // Daily salary = monthly salary / total calendar days in month
+    const dailySalary = parseFloat(monthlySalary) / totalDaysInMonth;
+
+    // Build a set of present/half-day date strings for quick lookup
+    const presentDates = new Set(
+      userRecords.filter(r => r.status === 'present').map(r => r.date.substring(0, 10))
+    );
+    const halfDayDates = new Set(
+      userRecords.filter(r => r.status === 'half_day').map(r => r.date.substring(0, 10))
+    );
+
+    // Calculate earned salary from present/half days
     const presentDaysSalary = presentDays * dailySalary;
-    const halfDaysSalary = halfDays * (dailySalary * 0.5);
-    const totalEarnedSalary = presentDaysSalary + halfDaysSalary;
-    
-    // Calculate deductions
-    const absentDaysDeduction = absentDays * dailySalary;
-    const halfDaysDeduction = halfDays * (dailySalary * 0.5);
-    
-    // Calculate total additions and deductions
-    const totalAdditions = additions.reduce((sum, addition) => sum + (parseFloat(addition.amount) || 0), 0);
-    const totalDeductions = deductions.reduce((sum, deduction) => sum + (parseFloat(deduction.amount) || 0), 0);
-    
-    // Calculate final salary (earned salary + additions - attendance deductions - custom deductions)
-    const finalSalary = totalEarnedSalary + totalAdditions - absentDaysDeduction - halfDaysDeduction - totalDeductions;
-    
+    const halfDaysSalary    = halfDays * (dailySalary * 0.5);
+
+    // ─── Weekly Off Paid Leaves ──────────────────────────────────────────────
+    // For each weekly-off day in the month, check if ALL working days in the
+    // same ISO week (Mon-Sun, bounded to this month) were marked present.
+    // Only then is that weekly-off day paid.
+    let weeklyOffPaidDays   = 0;
+    let weeklyOffUnpaidDays = 0;
+
+    for (let day = 1; day <= totalDaysInMonth; day++) {
+      const date = new Date(year, monthNum - 1, day);
+      const dow  = date.getDay(); // 0=Sun … 6=Sat
+
+      if (!weeklyOffDays.includes(dow)) continue; // not a weekly-off day
+
+      // Find the Mon-Sun week window that contains this date
+      // We look at all calendar days in the month within ±6 days that are NOT weekly-off days
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - ((dow + 6) % 7)); // Monday of that week
+      const weekEnd   = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6); // Sunday of that week
+
+      // Collect all working days in this week (within the month)
+      let allPresent = true;
+      let hasWorkingDay = false;
+
+      for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+        if (d.getMonth() !== monthNum - 1) continue; // outside this month
+        const ddow = d.getDay();
+        if (weeklyOffDays.includes(ddow)) continue; // skip other weekly-off days
+
+        hasWorkingDay = true;
+        const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        // Must be present (not half-day, not absent, not unmarked)
+        if (!presentDates.has(dStr)) {
+          allPresent = false;
+          break;
+        }
+      }
+
+      if (hasWorkingDay && allPresent) {
+        weeklyOffPaidDays++;
+      } else {
+        weeklyOffUnpaidDays++;
+      }
+    }
+
+    const weeklyOffPaidAmount = weeklyOffPaidDays * dailySalary;
+
+    // No deduction for absent days — salary is purely pay-for-work-done.
+    // (present days + half days + paid weekly offs) × daily rate
+    const totalEarnedSalary = presentDaysSalary + halfDaysSalary + weeklyOffPaidAmount;
+
+    // Custom additions / deductions only
+    const totalAdditions  = additions.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
+    const totalDeductions = deductions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+
+    const finalSalary = totalEarnedSalary + totalAdditions - totalDeductions;
+
     const salaryCalculation = {
       userId: parseInt(userId),
       month,
       monthlySalary: parseFloat(monthlySalary),
-      weeklyOffDays: weeklyOffDays,
-      weeklyOffDaysCount: weeklyOffDaysCount,
+      weeklyOffDays,
+      weeklyOffDaysCount,
+      totalDaysInMonth,
       totalWorkingDays,
       dailySalary: Math.round(dailySalary * 100) / 100,
       attendance: {
@@ -798,18 +860,25 @@ app.post('/api/attendance/admin/calculate-salary', verifyToken, requireAdmin, as
         absentDays,
         totalRecorded: userRecords.length
       },
-      salary: {
-        presentDaysSalary: Math.round(presentDaysSalary * 100) / 100,
-        halfDaysSalary: Math.round(halfDaysSalary * 100) / 100,
-        totalEarnedSalary: Math.round(totalEarnedSalary * 100) / 100,
-        absentDaysDeduction: Math.round(absentDaysDeduction * 100) / 100,
-        halfDaysDeduction: Math.round(halfDaysDeduction * 100) / 100,
-        totalAdditions: Math.round(totalAdditions * 100) / 100,
-        totalDeductions: Math.round(totalDeductions * 100) / 100,
-        finalSalary: Math.round(finalSalary * 100) / 100
+      weeklyOff: {
+        totalWeeklyOffDays:   weeklyOffDaysCount,
+        paidDays:             weeklyOffPaidDays,
+        unpaidDays:           weeklyOffUnpaidDays,
+        paidAmount:           Math.round(weeklyOffPaidAmount * 100) / 100,
       },
-      additions: additions,
-      deductions: deductions,
+      salary: {
+        presentDaysSalary:    Math.round(presentDaysSalary * 100) / 100,
+        halfDaysSalary:       Math.round(halfDaysSalary * 100) / 100,
+        weeklyOffPaidAmount:  Math.round(weeklyOffPaidAmount * 100) / 100,
+        totalEarnedSalary:    Math.round(totalEarnedSalary * 100) / 100,
+        absentDaysDeduction:  0, // no deduction — pay-for-work-done model
+        halfDaysDeduction:    0, // no deduction — half-day already earns half rate
+        totalAdditions:       Math.round(totalAdditions * 100) / 100,
+        totalDeductions:      Math.round(totalDeductions * 100) / 100,
+        finalSalary:          Math.round(finalSalary * 100) / 100
+      },
+      additions,
+      deductions,
       calculatedAt: new Date().toISOString(),
       calculatedBy: req.user.userId
     };

@@ -5,6 +5,7 @@
   "main": "app.js",
   "scripts": {
     "start": "nodemon -e .js app.js",
+    "renew-cert": "node scripts/renew-cert.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

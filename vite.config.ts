@@ -24,6 +24,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    exclude: ['@splinetool/runtime'],
+  },
   server: {
     allowedHosts: ["giant-wasps-fold.loca.lt"],
     port: 3000,
