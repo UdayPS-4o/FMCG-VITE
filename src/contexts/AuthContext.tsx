@@ -1,6 +1,29 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
+import { Preferences } from '@capacitor/preferences';
 import constants from '../constants';
+
+// Store credentials in native SharedPreferences so background.js CapacitorKV can read them
+const saveCredentialsForBackground = async (token: string, userId: string | number) => {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await Preferences.set({ key: 'bg_token', value: token });
+    await Preferences.set({ key: 'bg_userId', value: String(userId) });
+  } catch (e) {
+    console.warn('Failed to save background credentials:', e);
+  }
+};
+
+const clearCredentialsForBackground = async () => {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await Preferences.remove({ key: 'bg_token' });
+    await Preferences.remove({ key: 'bg_userId' });
+  } catch (e) {
+    console.warn('Failed to clear background credentials:', e);
+  }
+};
 
 // Define user types
 interface UserPowers {
@@ -174,6 +197,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setToken(userData.token);
           setUser(userData.user);
           localStorage.setItem('user', JSON.stringify(userData.user));
+          // Save credentials to native KV so BackgroundRunner can use them
+          await saveCredentialsForBackground(userData.token, userData.user?.id || '');
           return true;
         }
       }
@@ -199,6 +224,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(null);
       removeToken();
       localStorage.removeItem('user');
+      // Clear background runner credentials
+      await clearCredentialsForBackground();
       
       // Use window.location instead of navigate for a full refresh
       window.location.href = '/login';
@@ -206,6 +233,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error('Logout error:', error);
       setUser(null);
       removeToken();
+      await clearCredentialsForBackground();
       window.location.href = '/login';
     }
   };

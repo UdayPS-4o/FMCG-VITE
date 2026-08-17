@@ -7,6 +7,18 @@ const axios = require('axios'); // Added for API calls
 const { DbfORM } = require('../../dbf-orm');
 const { getPartyByCode } = require('../utilities');
 
+// --- WhatsApp Rate Limiter ---
+// Delay between messages to avoid spam detection (milliseconds).
+// WhatsApp flags accounts sending rapid bursts; a 4–6 s gap mimics human pacing.
+const WHATSAPP_DELAY_MS = 4000; // 4 seconds between each WhatsApp message
+const SMS_DELAY_MS = 1000;      // 1 second between each SMS (less restrictive)
+
+/** Returns a promise that resolves after `ms` milliseconds */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+// --- End WhatsApp Rate Limiter ---
+
 // Define DBF file paths using environment variable
 const dbfFolderPath = process.env.DBF_FOLDER_PATH;
 const billDbfPath = path.join(dbfFolderPath, 'data', 'BILL.DBF');
@@ -805,6 +817,13 @@ router.post('/sync', async (req, res) => {
             console.log(`[Invoicing Sync] Mock URL: http://localhost:4292/sendMessage?filePath=${encodeURIComponent(apiFilePath)}&fileName=${encodeURIComponent(apiFileName)}`);
             messagesAttempted++;
             try {
+              // --- Rate limit: wait before sending to avoid WhatsApp spam detection ---
+              if (messagesAttempted > 1) {
+                console.log(`[Invoicing Sync] Rate limiter: waiting ${WHATSAPP_DELAY_MS}ms before next WhatsApp message (message #${messagesAttempted})...`);
+                await sleep(WHATSAPP_DELAY_MS);
+              }
+              // --- End Rate limit ---
+
               // Send WhatsApp PDF message
               const sendMessageResponse = await axios.get('http://localhost:4292/sendMessage', {
                 params: {
@@ -825,6 +844,11 @@ router.post('/sync', async (req, res) => {
               
               // Send SMS using TextLocal API
               try {
+                // --- Rate limit: short pause before SMS to avoid back-to-back bursts ---
+                console.log(`[Invoicing Sync] Rate limiter: waiting ${SMS_DELAY_MS}ms before SMS for ${billKey}...`);
+                await sleep(SMS_DELAY_MS);
+                // --- End Rate limit ---
+
                 // Format the SMS message
                 let customerName = customerData?.C_NAME || invoice.partyName || '';
                 customerName = customerName.substring(0, 30);
