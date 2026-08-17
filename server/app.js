@@ -106,6 +106,59 @@ app.use('/api/alexa', alexaRoutes);
 const messagesRoutes = require('./routes/messages');
 app.use('/api/messages', messagesRoutes);
 
+// ── /whatsapp reverse-proxy ───────────────────────────────────────────────────
+// Contract: this server terminates TLS for server.ekta-enterprises.com.
+// Any request arriving at /whatsapp/* has the prefix stripped and is
+// forwarded to the whatsapp-aisensy microservice on port 4292:
+//
+//   /whatsapp/webhook/aisensy  →  http://127.0.0.1:4292/webhook/aisensy
+//   /whatsapp/files/<file>     →  http://127.0.0.1:4292/files/<file>
+//   /whatsapp/health           →  http://127.0.0.1:4292/health
+//
+// whatsapp-aisensy.js MUST be running before requests reach these paths.
+// ─────────────────────────────────────────────────────────────────────────────
+const httpProxy = http.createServer; // already imported above
+app.use('/whatsapp', (req, res) => {
+  const WHATSAPP_PORT = process.env.WHATSAPP_PORT || 4292;
+  // Strip /whatsapp prefix — req.url already has it removed by Express
+  const targetPath = req.url || '/';
+
+  const proxyReq = http.request(
+    {
+      hostname: '127.0.0.1',
+      port    : WHATSAPP_PORT,
+      path    : targetPath,
+      method  : req.method,
+      headers : {
+        ...req.headers,
+        host            : `127.0.0.1:${WHATSAPP_PORT}`,
+        'x-forwarded-for': req.ip || req.connection.remoteAddress,
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host' : req.headers.host || 'server.ekta-enterprises.com',
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    }
+  );
+
+  proxyReq.on('error', (err) => {
+    console.error('[PROXY /whatsapp] Error forwarding to port 4292:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({
+        error  : 'Bad Gateway',
+        detail : 'whatsapp-aisensy service unavailable on port 4292',
+        message: err.message,
+      });
+    }
+  });
+
+  // Pipe the incoming body through to the upstream service
+  req.pipe(proxyReq, { end: true });
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // set middleware to check if user is logged in
 // Apply this BEFORE routes that need authentication
 const middleware = require('./routes/middleware');
