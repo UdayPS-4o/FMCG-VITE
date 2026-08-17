@@ -3,7 +3,7 @@
 import type React from "react";
 import { createContext, useState, useContext, useEffect } from "react";
 
-export type Theme = "light" | "dark" | "sage" | "saffron" | "indigo";
+export type Theme = "light" | "dark" | "sage" | "saffron" | "indigo" | "glass";
 
 export type ThemeInfo = {
   id: Theme;
@@ -18,6 +18,7 @@ export const THEMES: ThemeInfo[] = [
   { id: "sage",    label: "Sage",    emoji: "🌿",  accent: "#16a34a" },
   { id: "saffron", label: "Saffron", emoji: "🔥",  accent: "#d97706" },
   { id: "indigo",  label: "Royal",   emoji: "👑",  accent: "#c9a227" },
+  { id: "glass",   label: "Glass",   emoji: "💎",  accent: "#06b6d4" },
 ];
 
 type ThemeContextType = {
@@ -29,7 +30,7 @@ type ThemeContextType = {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 // All class names that might be on <html>
-const ALL_THEME_CLASSES = ["dark", "theme-sage", "theme-saffron", "theme-indigo"];
+const ALL_THEME_CLASSES = ["dark", "theme-sage", "theme-saffron", "theme-indigo", "theme-glass"];
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
@@ -40,6 +41,7 @@ function applyTheme(theme: Theme) {
   if (theme === "sage")    root.classList.add("theme-sage");
   if (theme === "saffron") root.classList.add("theme-saffron");
   if (theme === "indigo")  root.classList.add("theme-indigo");
+  if (theme === "glass")   root.classList.add("theme-glass");
   // "light" → no extra class
 }
 
@@ -51,7 +53,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") as Theme | null;
-    const valid: Theme[] = ["light", "dark", "sage", "saffron", "indigo"];
+    const valid: Theme[] = ["light", "dark", "sage", "saffron", "indigo", "glass"];
     const initial: Theme = saved && valid.includes(saved) ? saved : "dark";
     setThemeState(initial);
     setIsInitialized(true);

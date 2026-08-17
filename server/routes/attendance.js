@@ -506,21 +506,73 @@ app.post('/api/attendance/admin/user-history', verifyToken, requireAdmin, async 
 app.get('/api/attendance/admin/locations', verifyToken, requireAdmin, async (req, res) => {
   try {
     const locationsFilePath = path.join(__dirname, '..', 'db', 'locations', 'current.json');
-    
+    const attendanceFilePath = path.join(__dirname, '..', 'db', 'attendance', 'records.json');
+
+    // Load current live location updates
+    let liveLocations = [];
     try {
       const data = await fs.readFile(locationsFilePath, 'utf8');
-      const locations = JSON.parse(data);
-      
-      res.status(200).json({ success: true, locations });
+      liveLocations = JSON.parse(data);
     } catch (error) {
-      // File doesn't exist, return empty array
-      res.status(200).json({ success: true, locations: [] });
+      liveLocations = [];
     }
+
+    // Build a map of userId → live location for quick lookup
+    const liveLocationMap = {};
+    for (const loc of liveLocations) {
+      liveLocationMap[String(loc.userId)] = loc;
+    }
+
+    // Load today's attendance records to include all present users
+    const todayIST = (() => {
+      const now = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      return new Date(now.getTime() + istOffset).toISOString().split('T')[0];
+    })();
+
+    let todayAttendance = [];
+    try {
+      const attData = await fs.readFile(attendanceFilePath, 'utf8');
+      const allRecords = JSON.parse(attData);
+      todayAttendance = allRecords.filter(r => r.date === todayIST && r.status === 'present');
+    } catch (error) {
+      todayAttendance = [];
+    }
+
+    // Merge: start with live locations, then add any attendance-only users
+    const merged = [...liveLocations];
+    const seenUserIds = new Set(liveLocations.map(l => String(l.userId)));
+
+    for (const record of todayAttendance) {
+      const uid = String(record.userId);
+      if (seenUserIds.has(uid)) continue; // already in live locations
+
+      // Add them using their check-in location as the last known position
+      if (record.location && record.location.latitude && record.location.longitude) {
+        merged.push({
+          userId: record.userId,
+          userName: record.userName,
+          currentLocation: {
+            latitude: record.location.latitude,
+            longitude: record.location.longitude,
+            accuracy: record.location.accuracy || null,
+            timestamp: record.timestamp
+          },
+          lastUpdated: record.timestamp,
+          source: 'attendance-checkin',
+          isBackgroundTracking: false
+        });
+        seenUserIds.add(uid);
+      }
+    }
+
+    res.status(200).json({ success: true, locations: merged });
   } catch (error) {
     console.error('Error fetching user locations:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch user locations' });
   }
 });
+
 
 // Update user location (continuous tracking)
 app.post('/api/attendance/location/update', verifyToken, async (req, res) => {

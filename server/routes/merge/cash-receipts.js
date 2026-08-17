@@ -6,6 +6,21 @@ const { DbfORM, DataTypes } = require('../../dbf-orm'); // Assuming dbf-orm is c
 const { format } = require('date-fns'); // For date formatting
 const axios = require('axios'); // Added for API calls
 
+// --- WhatsApp Rate Limiter ---
+// Delay between messages to avoid spam detection (milliseconds).
+// WhatsApp flags accounts sending rapid bursts; a 4–6 s gap mimics human pacing.
+const WHATSAPP_DELAY_MS = 4000; // 4 seconds between each WhatsApp message
+const SMS_DELAY_MS = 1000;      // 1 second between each SMS (less restrictive)
+
+/** Returns a promise that resolves after `ms` milliseconds */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Tracks how many WhatsApp messages have been sent in this sync run (reset per request)
+let whatsappMessageCount = 0;
+// --- End WhatsApp Rate Limiter ---
+
 // --- Helper function to format date and time ---
 function formatUserTime(date) {
   const d = new Date(date);
@@ -602,6 +617,14 @@ router.post('/sync', async (req, res) => {
           // Format the WhatsApp message
           const whatsappMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${amount.toFixed(2)} Receipt No.${receiptNo} on Date ${receiptDate}\nRegards\nEKTA ENTERPRISES`;
 
+          // --- Rate limit: wait before sending to avoid WhatsApp spam detection ---
+          if (whatsappMessageCount > 0) {
+            console.log(`[Cash Receipts Sync] Rate limiter: waiting ${WHATSAPP_DELAY_MS}ms before next WhatsApp message (message #${whatsappMessageCount + 1})...`);
+            await sleep(WHATSAPP_DELAY_MS);
+          }
+          whatsappMessageCount++;
+          // --- End Rate limit ---
+
           console.log(`[Cash Receipts Sync] Attempting to send WhatsApp text message for Receipt: ${receiptNo}, Mobile: ${mobileNumber}`);
           console.log(`[Cash Receipts Sync] Mock WhatsApp URL: http://localhost:4292/sendMessage?phoneNumber=${encodeURIComponent(mobileNumber)}&textMessage=${encodeURIComponent(whatsappMessage)}`);
 
@@ -623,6 +646,11 @@ router.post('/sync', async (req, res) => {
 
             // Send SMS using TextLocal API
             try {
+              // --- Rate limit: short pause before SMS ---
+              console.log(`[Cash Receipts Sync] Rate limiter: waiting ${SMS_DELAY_MS}ms before SMS for Receipt: ${receiptNo}...`);
+              await sleep(SMS_DELAY_MS);
+              // --- End Rate limit ---
+
               // Format the SMS message
               //format date to dd-mm-yyyy
               const formattedDate = format(new Date(receiptDate), 'dd-MM-yyyy');

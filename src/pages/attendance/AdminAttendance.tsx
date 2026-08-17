@@ -323,6 +323,7 @@ const AdminAttendance: React.FC = () => {
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [datePreset, setDatePreset] = useState<string>('today');
+  const [isPresetOpen, setIsPresetOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -620,11 +621,23 @@ const AdminAttendance: React.FC = () => {
       };
     }
 
+    const source = location.source || 'unknown';
+
+    // Special case: user only has check-in location (no background updates)
+    if (source === 'attendance-checkin') {
+      return {
+        status: 'Check-in Only',
+        color: 'text-blue-800',
+        bgColor: 'bg-blue-100',
+        icon: '📌',
+        description: 'Location at time of check-in (no live updates yet)'
+      };
+    }
+
     const lastUpdated = new Date(location.lastUpdated);
     const now = new Date();
     const diffMinutes = (now.getTime() - lastUpdated.getTime()) / (1000 * 60);
     const isBackgroundTracking = location.isBackgroundTracking || false;
-    const source = location.source || 'unknown';
 
     if (diffMinutes < 5) {
       return {
@@ -656,6 +669,7 @@ const AdminAttendance: React.FC = () => {
       };
     }
   };
+
 
   const refreshLocations = () => {
     fetchUserLocations();
@@ -1336,24 +1350,41 @@ const AdminAttendance: React.FC = () => {
                       Select Date
                     </label>
                     <div className="flex gap-2 items-center">
-                      {/* Preset quick-select */}
-                      <select
-                        value={datePreset}
-                        onChange={(e) => setDatePreset(e.target.value)}
-                        className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                      >
-                        <option value="today">Today</option>
-                        <option value="yesterday">Yesterday</option>
-                        <option value="thisMonth">This Month</option>
-                        <option value="lastMonth">Last Month</option>
-                        <option value="custom">Custom Date</option>
-                      </select>
+                      {/* Preset quick-select — custom dropdown (Chrome ignores CSS on native <option>) */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsPresetOpen(o => !o)}
+                          className="flex items-center justify-between gap-2 min-w-[130px] bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <span>{({ today: 'Today', yesterday: 'Yesterday', thisMonth: 'This Month', lastMonth: 'Last Month', custom: 'Custom Date' } as Record<string,string>)[datePreset] ?? 'Select'}</span>
+                          <svg className={`w-4 h-4 ml-1 transition-transform ${isPresetOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        {isPresetOpen && (
+                          <div className="absolute left-0 top-full mt-1 z-50 min-w-[130px] rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 shadow-lg overflow-hidden">
+                            {(['today','yesterday','thisMonth','lastMonth','custom'] as const).map((val) => (
+                              <button
+                                key={val}
+                                type="button"
+                                onClick={() => { setDatePreset(val); setIsPresetOpen(false); }}
+                                className={`w-full text-left px-4 py-2 text-sm ${
+                                  datePreset === val
+                                    ? 'bg-blue-500 text-white'
+                                    : 'text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600'
+                                }`}
+                              >
+                                {({ today: 'Today', yesterday: 'Yesterday', thisMonth: 'This Month', lastMonth: 'Last Month', custom: 'Custom Date' } as Record<string,string>)[val]}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       {/* Raw date picker (From) — always visible */}
                       <input
                         type="date"
                         value={fromDate}
                         onChange={(e) => { setDatePreset('custom'); setFromDate(e.target.value); }}
-                        className={`bg-gray-50 border text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                        className={`bg-gray-50 dark:bg-gray-700 border text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 ${
                           datePreset === 'custom' ? 'border-blue-400 dark:border-blue-500' : 'border-gray-300 dark:border-gray-600 opacity-75'
                         }`}
                       />
@@ -1363,7 +1394,7 @@ const AdminAttendance: React.FC = () => {
                         type="date"
                         value={toDate}
                         onChange={(e) => { setDatePreset('custom'); setToDate(e.target.value); }}
-                        className={`bg-gray-50 border text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                        className={`bg-gray-50 dark:bg-gray-700 border text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 ${
                           datePreset === 'custom' ? 'border-blue-400 dark:border-blue-500' : 'border-gray-300 dark:border-gray-600 opacity-75'
                         }`}
                       />

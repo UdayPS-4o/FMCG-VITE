@@ -260,6 +260,8 @@ layer(base);
   --color-gray-dark: #1a0d35;   /* sidebar background */
   --color-black:     #f5f0ff;
 
+  color-scheme: dark;
+
   /* Border default matches panel border */
   background-color: #1e1040;
 }
@@ -267,6 +269,90 @@ layer(base);
 
 
 /* Header & sidebar inherit the dark purple via gray-dark / gray-900 overrides */
+
+/* =====================================================
+   💎 iOS GLASS THEME — vibrant blur & translucency
+   Vibrant mesh background · Strong blur · White frosted borders
+   ===================================================== */
+.theme-glass {
+  /* 🔵 System Blue / iOS accent palette */
+  --color-brand-25:  #f5f9ff;
+  --color-brand-50:  #ebf4ff;
+  --color-brand-100: #dceafe;
+  --color-brand-200: #c2dcfe;
+  --color-brand-300: #99c6fd;
+  --color-brand-400: #6ea4fa;
+  --color-brand-500: #4982f6;
+  --color-brand-600: #2960ea;   /* iOS blue */
+  --color-brand-700: #224cd3;
+  --color-brand-800: #223fa8;
+  --color-brand-900: #223784;
+  --color-brand-950: #192350;
+  --shadow-focus-ring: 0px 0px 0px 4px rgba(41, 96, 234, 0.3);
+
+  /* 🌌 VIBRANT GLASS BASE — keep text variables solid to fix button text! */
+  --color-white:     #ffffff; /* MUST be solid for text-white (buttons) */
+  --color-gray-25:   rgba(255, 255, 255, 0.05); 
+  --color-gray-50:   transparent;               
+  --color-gray-100:  rgba(255, 255, 255, 0.15); /* borders/dividers */
+  --color-gray-200:  rgba(255, 255, 255, 0.25);
+  --color-gray-300:  rgba(255, 255, 255, 0.35);
+  --color-gray-400:  #cbd5e1; /* visible icon color */
+  --color-gray-500:  #94a3b8; /* visible secondary text */
+  --color-gray-600:  #f8fafc; /* text */
+  --color-gray-700:  #ffffff;
+  --color-gray-800:  #ffffff; /* primary text */
+  --color-gray-900:  #ffffff; /* headings */
+  --color-gray-950:  #ffffff;
+  --color-gray-dark: rgba(0, 0, 0, 0.25);
+  --color-black:     #ffffff;
+  
+  color-scheme: dark;
+
+  /* Dynamic iOS style mesh gradient background */
+  background-color: #0d0e15;
+  background-image: 
+    radial-gradient(at 10% 0%, rgba(65, 30, 160, 0.8) 0px, transparent 50%),
+    radial-gradient(at 90% 10%, rgba(15, 120, 160, 0.8) 0px, transparent 50%),
+    radial-gradient(at 90% 90%, rgba(140, 20, 80, 0.7) 0px, transparent 50%),
+    radial-gradient(at 10% 90%, rgba(20, 100, 120, 0.7) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(70, 30, 130, 0.6) 0px, transparent 60%);
+  background-attachment: fixed;
+  background-size: cover;
+  min-height: 100vh;
+}
+.theme-glass body {
+  background: transparent !important;
+  min-height: 100vh;
+}
+
+/* 🍎 iOS Glassmorphism effect applied explicitly to backgrounds so we don't break text */
+.theme-glass .bg-white,
+.theme-glass .dark\:bg-gray-900,
+.theme-glass .dark\:bg-gray-800,
+.theme-glass .bg-gray-dark,
+.theme-glass .rounded-2xl,
+.theme-glass .rounded-xl {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+}
+.theme-glass .bg-gray-100 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Fix floating labels in Input components: prevent them from becoming glass boxes */
+.theme-glass label.bg-white,
+.theme-glass label.bg-gray-50,
+.theme-glass label[class*="bg-gray-"] {
+  background-color: #0b0f19 !important; /* Matches base mesh color to cleanly cut borders */
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
 
 /* =====================================================
    Dark variants for Sage & Saffron (indigo is already dark)
@@ -303,6 +389,9 @@ layer(base);
   color utility to any element that depends on these defaults.
 */
 @layer base {
+  .dark {
+    color-scheme: dark;
+  }
   *,
   ::after,
   ::before,

@@ -13,6 +13,12 @@
     "dev:all": "npx concurrently -c \"bgBlue.bold,bgMagenta.bold,bgGreen.bold\" -n \"DASHBOARD,APP,SERVER\" --prefix \"[{name}]\" \"npm run dev\" \"cd app && npm run dev\" \"cd server && npm start\""
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/background-runner": "^3.0.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/geolocation": "^8.2.2",
+    "@capacitor/preferences": "^8.0.1",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@fullcalendar/core": "^6.1.15",
