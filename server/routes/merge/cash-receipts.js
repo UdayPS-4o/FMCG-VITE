@@ -614,9 +614,6 @@ router.post('/sync', async (req, res) => {
         const receiptDate = record.date || "Date N/A"; // Use record date
 
         if (mobileNumber && mobileNumber.trim() !== "") {
-          // Format the WhatsApp message
-          const whatsappMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${amount.toFixed(2)} Receipt No.${receiptNo} on Date ${receiptDate}\nRegards\nEKTA ENTERPRISES`;
-
           // --- Rate limit: wait before sending to avoid WhatsApp spam detection ---
           if (whatsappMessageCount > 0) {
             console.log(`[Cash Receipts Sync] Rate limiter: waiting ${WHATSAPP_DELAY_MS}ms before next WhatsApp message (message #${whatsappMessageCount + 1})...`);
@@ -625,23 +622,53 @@ router.post('/sync', async (req, res) => {
           whatsappMessageCount++;
           // --- End Rate limit ---
 
-          console.log(`[Cash Receipts Sync] Attempting to send WhatsApp text message for Receipt: ${receiptNo}, Mobile: ${mobileNumber}`);
-          console.log(`[Cash Receipts Sync] Mock WhatsApp URL: http://localhost:4292/sendMessage?phoneNumber=${encodeURIComponent(mobileNumber)}&textMessage=${encodeURIComponent(whatsappMessage)}`);
+          console.log(`[Cash Receipts Sync] Attempting to send WhatsApp via AOC API for Receipt: ${receiptNo}, Mobile: ${mobileNumber}`);
 
           try {
-            // Send WhatsApp text message
-            const sendMessageResponse = await axios.get('http://localhost:4292/sendMessage', {
-              params: {
-                phoneNumber: mobileNumber,
-                textMessage: whatsappMessage // Assuming the API supports textMessage parameter
-              }
-            });
+            // ── Format recipient number ─────────────────────────────────────
+            // AOC API expects E.164 format with country code (e.g. +919377888899)
+            const rawMobile = mobileNumber.replace(/\D/g, ''); // strip non-digits
+            const recipientNumber = rawMobile.startsWith('91') ? `+${rawMobile}` : `+91${rawMobile}`;
 
-            console.log(`[Cash Receipts Sync] WhatsApp Get query req params: ${JSON.stringify(sendMessageResponse.config.params)}`);
-            if (sendMessageResponse.status === 200) {
-              console.log(`[Cash Receipts Sync] WhatsApp message sent successfully for Receipt: ${receiptNo}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+            // ── Format date for display ─────────────────────────────────────
+            let formattedDate = receiptDate;
+            try { formattedDate = format(new Date(receiptDate), 'dd-MM-yyyy'); } catch (_) {}
+
+            // ── AOC WhatsApp API payload ────────────────────────────────────
+            // Template 'bankrec':
+            // "We Thankfully Acknowledge Receipt of Rs Amount : {{1}} Receipt No.{{2}} on Date {{3}} Regards Ekta Enterprises"
+            const aocPayload = {
+              from: process.env.AOC_WA_FROM || '+15554884507',
+              campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
+              to: recipientNumber,
+              type: 'template',
+              templateName: 'bankrec',
+              language: { code: 'en' }, // Required by AOC API
+              components: {
+                body: {
+                  params: [amount.toFixed(2), String(receiptNo), formattedDate],
+                },
+              },
+            };
+
+            console.log(`[Cash Receipts Sync] Calling AOC WhatsApp API for Receipt: ${receiptNo}. Recipient: ${recipientNumber}`);
+
+            const sendMessageResponse = await axios.post(
+              process.env.AOC_WA_API_URL || 'https://api.aoc-portal.com/v1/whatsapp',
+              aocPayload,
+              {
+                headers: {
+                  'apikey': process.env.AOC_WA_API_KEY || '',
+                  'Content-Type': 'application/json',
+                },
+                timeout: 30000, // 30 s
+              }
+            );
+
+            if (sendMessageResponse.status === 200 || sendMessageResponse.status === 201) {
+              console.log(`[Cash Receipts Sync] WhatsApp sent successfully for Receipt: ${receiptNo}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
             } else {
-              console.warn(`[Cash Receipts Sync] WhatsApp API call for Receipt: ${receiptNo} returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+              console.warn(`[Cash Receipts Sync] AOC API for Receipt: ${receiptNo} returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
             }
 
             // Send SMS using TextLocal API
@@ -651,19 +678,15 @@ router.post('/sync', async (req, res) => {
               await sleep(SMS_DELAY_MS);
               // --- End Rate limit ---
 
-              // Format the SMS message
-              //format date to dd-mm-yyyy
-              const formattedDate = format(new Date(receiptDate), 'dd-MM-yyyy');
               const smsMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${amount.toFixed(2)} on Date ${formattedDate} Regards Ekta Enterprises`;
 
-              // Make TextLocal API call
               const textLocalResponse = await axios.get('https://control.arihantglobal.in/fe/api/v1/send', {
                 params: {
                   username: 'ektaenterprises.trans',
                   password: 'sbe3d',
                   dltPrincipalEntityId: '1501397800000015092',
                   from: 'EKTAEN',
-                  to: "91" + mobileNumber.replace(/\D/g, ''), // Remove non-digit characters
+                  to: "91" + mobileNumber.replace(/\D/g, ''),
                   text: smsMessage,
                   unicode: false,
                 }
@@ -678,7 +701,7 @@ router.post('/sync', async (req, res) => {
               console.error(`[Cash Receipts Sync] Error sending SMS via TextLocal for Receipt: ${receiptNo}: ${smsError.message}`, smsError);
             }
           } catch (apiError) {
-            console.error(`[Cash Receipts Sync] Error calling WhatsApp sendMessage API for Receipt: ${receiptNo}: ${apiError.message}`, apiError);
+            console.error(`[Cash Receipts Sync] Error calling AOC WhatsApp API for Receipt: ${receiptNo}: ${apiError.message}`, apiError);
           }
         } else {
           // 'receiptNo' is now correctly in scope here
