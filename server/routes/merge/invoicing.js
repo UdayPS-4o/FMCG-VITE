@@ -813,8 +813,7 @@ router.post('/sync', async (req, res) => {
             const apiFilePath = path.join(pdfBaseDir, PdfFilename);
             const apiFileName = `${invoice.series}-${invoice.billNo}.pdf`;
 
-            console.log(`[Invoicing Sync] Attempting to send message for ${apiFileName} (Bill: ${billKey}), Mobile: ${mobileNumber}, PDF Path: ${apiFilePath}`);
-            console.log(`[Invoicing Sync] Mock URL: http://localhost:4292/sendMessage?filePath=${encodeURIComponent(apiFilePath)}&fileName=${encodeURIComponent(apiFileName)}`);
+            console.log(`[Invoicing Sync] Attempting to send WhatsApp message for ${apiFileName} (Bill: ${billKey}), Mobile: ${mobileNumber}`);
             messagesAttempted++;
             try {
               // --- Rate limit: wait before sending to avoid WhatsApp spam detection ---
@@ -824,22 +823,64 @@ router.post('/sync', async (req, res) => {
               }
               // --- End Rate limit ---
 
-              // Send WhatsApp PDF message
-              const sendMessageResponse = await axios.get('http://localhost:4292/sendMessage', {
-                params: {
-                  filePath: apiFilePath,
-                  fileName: apiFileName,
-                  phoneNumber: mobileNumber
-                }
-              });
+              // ── Build public PDF URL ────────────────────────────────────────
+              // The AOC API needs an internet-accessible HTTPS link for the PDF.
+              // We expose db/pdfs/ at /api/invoice-pdfs/ (see app.js).
+              const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://server.ekta-enterprises.com').replace(/\/$/, '');
+              const publicPdfUrl = `${PUBLIC_BASE_URL}/api/invoice-pdfs/${PdfFilename}`;
 
-              // console.log get query req params
-              console.log(`[Invoicing Sync] Get query req params: ${JSON.stringify(sendMessageResponse.config.params)}`);
-              if (sendMessageResponse.status === 200) {
-                console.log(`[Invoicing Sync] Message sent successfully for ${apiFileName} (Bill: ${billKey}). Response: ${JSON.stringify(sendMessageResponse.data)}`);
+              // ── Format recipient number ─────────────────────────────────────
+              // AOC API expects E.164 format with country code (e.g. +919377888899)
+              const rawMobile = mobileNumber.replace(/\D/g, ''); // strip non-digits
+              const recipientNumber = rawMobile.startsWith('91') ? `+${rawMobile}` : `+91${rawMobile}`;
+
+              // ── Build body params ───────────────────────────────────────────
+              // Template: "Dear {{1}} . Thank you for Purchasing Bill No. {{2}} For Amount : {{3}} Regards Ekta Enterprises"
+              let customerName = customerData?.C_NAME || invoice.partyName || '';
+              customerName = customerName.substring(0, 30);
+              const billNumberFormatted = `${invoice.series}-${invoice.billNo}`;
+              const billAmount = netAmountRounded.toFixed(2);
+
+              // ── AOC WhatsApp API payload ────────────────────────────────────
+              const aocPayload = {
+                from: process.env.AOC_WA_FROM || '+15554884507',
+                campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
+                to: recipientNumber,
+                type: 'template',
+                templateName: process.env.AOC_WA_TEMPLATE || 'invoice_genrated',
+                components: {
+                  body: {
+                    params: [customerName, billNumberFormatted, billAmount],
+                  },
+                  header: {
+                    type: 'document',
+                    document: {
+                      link: publicPdfUrl,
+                      filename: apiFileName,
+                    },
+                  },
+                },
+              };
+
+              console.log(`[Invoicing Sync] Calling AOC WhatsApp API for bill ${billKey}. PDF URL: ${publicPdfUrl}`);
+
+              const sendMessageResponse = await axios.post(
+                process.env.AOC_WA_API_URL || 'https://api.aoc-portal.com/v1/whatsapp',
+                aocPayload,
+                {
+                  headers: {
+                    'apikey': process.env.AOC_WA_API_KEY || '',
+                    'Content-Type': 'application/json',
+                  },
+                  timeout: 30000, // 30 s
+                }
+              );
+
+              if (sendMessageResponse.status === 200 || sendMessageResponse.status === 201) {
+                console.log(`[Invoicing Sync] WhatsApp sent successfully for ${apiFileName} (Bill: ${billKey}). Response: ${JSON.stringify(sendMessageResponse.data)}`);
                 messagesSent++;
               } else {
-                console.warn(`[Invoicing Sync] API call for ${apiFileName} (Bill: ${billKey}) returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+                console.warn(`[Invoicing Sync] AOC API for ${apiFileName} (Bill: ${billKey}) returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
               }
               
               // Send SMS using TextLocal API
