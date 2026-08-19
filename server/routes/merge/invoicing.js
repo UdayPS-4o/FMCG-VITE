@@ -848,6 +848,7 @@ router.post('/sync', async (req, res) => {
                 to: recipientNumber,
                 type: 'template',
                 templateName: process.env.AOC_WA_TEMPLATE || 'invoice_genrated',
+                language: { code: 'en' }, // Required by AOC API — must be object format
                 components: {
                   body: {
                     params: [customerName, billNumberFormatted, billAmount],
