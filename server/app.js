@@ -74,8 +74,29 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '200mb' })); // for parsi
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve PDFs statically from the db/pdfs directory
+// Serve PDFs statically from the db/pdfs directory (internal legacy path)
 app.use('/db/pdfs', express.static(path.join(__dirname, 'db', 'pdfs')));
+
+// ── Public PDF hosting for WhatsApp API attachments ───────────────────────────
+// The AOC WhatsApp API requires a *publicly reachable* HTTPS URL for document
+// attachments.  We expose invoice PDFs here — no auth middleware is applied to
+// this path so the external API server can download the file.
+//
+// Public URL pattern:
+//   https://server.ekta-enterprises.com/api/invoice-pdfs/<series>-<billNo>-<hash>.pdf
+//
+// This route is intentionally registered BEFORE the auth middleware (app.use(middleware))
+// so that the AOC API (which has no session cookie) can GET the PDF.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/invoice-pdfs', express.static(path.join(__dirname, 'db', 'pdfs'), {
+  // Only serve .pdf files from this route for safety
+  index: false,
+  setHeaders: (res, filePath) => {
+    if (!filePath.endsWith('.pdf')) {
+      res.status(403).end();
+    }
+  },
+}));
 
 const pdfRoutes = require('./routes/get/pdf');
 app.use("/api/generate-pdf", pdfRoutes.router);
