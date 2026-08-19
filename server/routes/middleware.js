@@ -13,7 +13,8 @@ const PUBLIC_API_PATHS = [
   '/api/push/subscribe',
   '/api/approve-from-notification',
   '/api/test-details/',
-  '/api/app/',  // App routes have their own auth — exclude from global middleware
+  '/api/app/',          // App routes have their own auth — exclude from global middleware
+  '/api/invoice-pdfs/', // Public PDF hosting for AOC WhatsApp API (no session needed)
 ];
 
 // Extract JWT token from Authorization header
