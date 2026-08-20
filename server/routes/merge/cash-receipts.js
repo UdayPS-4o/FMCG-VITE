@@ -646,7 +646,12 @@ router.post('/sync', async (req, res) => {
               language: { code: 'en' }, // Required by AOC API
               components: {
                 body: {
-                  params: [amount.toFixed(2), String(receiptNo), formattedDate],
+                  // {{2}} = "BY K-2632" (series + receiptNo with BY prefix)
+                  params: [
+                    amount.toFixed(2),
+                    'BY ' + (record.series ? record.series + '-' : '') + String(receiptNo),
+                    formattedDate,
+                  ],
                 },
               },
             };
