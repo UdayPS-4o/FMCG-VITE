@@ -89,8 +89,9 @@ export const ThemeToggleButton: React.FC = () => {
                   id={`theme-option-${t.id}`}
                   onClick={() => { setTheme(t.id as Theme); setOpen(false); }}
                   className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-left
+                    ${t.isSubTheme ? "pl-8 text-xs border-l-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600" : ""}
                     ${isActive
-                      ? "bg-gray-50 dark:bg-white/[0.06] text-gray-900 dark:text-white"
+                      ? (t.isSubTheme ? "bg-gray-50 dark:bg-white/[0.06] text-gray-900 dark:text-white border-l-2 border-gray-400 dark:border-gray-500!" : "bg-gray-50 dark:bg-white/[0.06] text-gray-900 dark:text-white")
                       : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:text-gray-900 dark:hover:text-white"
                     }`}
                 >

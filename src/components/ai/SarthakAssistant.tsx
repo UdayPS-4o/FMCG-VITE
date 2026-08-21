@@ -117,7 +117,9 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWakeWordDetected, setIsWakeWordDetected] = useState(false);
   const [isWakeWordListening, setIsWakeWordListening] = useState(false);
+  const isWakeWordListeningRef = useRef<boolean>(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const voiceEnabledRef = useRef<boolean>(true);
   const [hasShownActivationMessage, setHasShownActivationMessage] = useState(false);
   const [isReady, setIsReady] = useState(false); // New state to track readiness
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
@@ -139,6 +141,15 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
   const criticalAbortTimeoutRef = useRef<any>(null);
   const isCriticalAbortModeRef = useRef<boolean>(false);
 
+
+  // Keep ref in sync
+  useEffect(() => {
+    voiceEnabledRef.current = voiceEnabled;
+  }, [voiceEnabled]);
+
+  useEffect(() => {
+    isWakeWordListeningRef.current = isWakeWordListening;
+  }, [isWakeWordListening]);
 
   // Debug: Log when props change
   useEffect(() => {
@@ -296,7 +307,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
 
         const wakeWordDetected = wakeWords.some(word => fullTranscript.includes(word));
 
-        if (wakeWordDetected && !isOpen) {
+        if (wakeWordDetected) {
           // Extract command after wake word
           let commandAfterWakeWord = '';
           for (const wakeWord of wakeWords) {
@@ -353,6 +364,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
         
         if (event.error === 'not-allowed') {
           setVoiceEnabled(false);
+          voiceEnabledRef.current = false;
         } else if (event.error === 'aborted') {
           // Track abort events
           totalAbortsRef.current += 1;
@@ -396,9 +408,8 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
           wasAbortedRef.current = true;
           console.log('Wake word recognition aborted, marked to prevent restart');
         } else {
-          // Restart wake word listening on other errors with longer delay
           setTimeout(() => {
-            if (voiceEnabled && !isOpen && !isWakeWordListening && !isStartingWakeWordRef.current) {
+            if (voiceEnabledRef.current && !isListening && !isWakeWordListeningRef.current && !isStartingWakeWordRef.current) {
               console.log('Restarting wake word recognition after error:', event.error);
               startWakeWordListening();
             }
@@ -409,12 +420,14 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       // Add event handlers to track actual recognition state
       wakeWordRecognitionRef.current.addEventListener('start', () => {
         console.log('Wake word recognition actually started');
+        isWakeWordListeningRef.current = true;
         setIsWakeWordListening(true);
         isStartingWakeWordRef.current = false; // Clear the starting flag
       });
       
       wakeWordRecognitionRef.current.onend = () => {
         console.log('Wake word recognition actually ended');
+        isWakeWordListeningRef.current = false;
         setIsWakeWordListening(false);
         isStartingWakeWordRef.current = false; // Clear the starting flag
         
@@ -427,10 +440,10 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
         
         // Restart if voice is enabled and assistant is closed
         // Add additional checks to prevent restart loops
-        if (voiceEnabled && !isOpen && !isListening && !isStartingWakeWordRef.current) {
+        if (voiceEnabledRef.current && !isListening && !isStartingWakeWordRef.current) {
           setTimeout(() => {
             // Double-check conditions before restarting
-            if (voiceEnabled && !isOpen && !isListening && !isWakeWordListening && !isStartingWakeWordRef.current) {
+            if (voiceEnabledRef.current && !isListening && !isWakeWordListeningRef.current && !isStartingWakeWordRef.current) {
               console.log('Restarting wake word recognition after normal end');
               startWakeWordListening();
             }
@@ -523,6 +536,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       console.log('Voice capabilities initialized');
     } else {
       setVoiceEnabled(false);
+      voiceEnabledRef.current = false;
     }
   };
 
@@ -551,7 +565,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
       return;
     }
     
-    if (isWakeWordListening) {
+    if (isWakeWordListeningRef.current) {
       console.log('Wake word listening already active, skipping start');
       return;
     }
@@ -584,7 +598,7 @@ const SarthakAssistant: React.FC<SarthakAssistantProps> = (props) => {
         try {
           wakeWordRecognitionRef.current.stop();
           setTimeout(() => {
-            if (!isWakeWordListening && !isStartingWakeWordRef.current) {
+            if (!isWakeWordListeningRef.current && !isStartingWakeWordRef.current) {
               startWakeWordListening();
             }
           }, 1000);
@@ -1106,34 +1120,36 @@ Note: When user mentions a party name in Hindi (like सुरेश, राम,
   useEffect(() => {
     const hasPartyData = partyOptions && partyOptions.length > 0;
     
-    if (voiceEnabled && !isOpen && isReady && hasPartyData) {
+    if (voiceEnabled && isReady && hasPartyData && !isListening && !isPlaying) {
       console.log('Attempting to start wake word listening with party data available...');
       // Add a delay to prevent race conditions and debounce rapid changes
       const timeoutId = setTimeout(() => {
         // Double-check conditions before starting
-        if (voiceEnabled && !isOpen && isReady && hasPartyData && !isWakeWordListening && !isStartingWakeWordRef.current) {
+        if (voiceEnabled && isReady && hasPartyData && !isListening && !isPlaying && !isWakeWordListeningRef.current && !isStartingWakeWordRef.current) {
           startWakeWordListening();
         }
       }, 200);
       
       return () => clearTimeout(timeoutId);
-    } else if (isOpen) {
-      console.log('Assistant is open, stopping wake word listening');
-      stopWakeWordListening();
-      // Reset wake word detection state when opening
-      setIsWakeWordDetected(false);
-      setHasShownActivationMessage(false);
     } else {
       console.log('Conditions not met for starting wake word listening:', { 
         voiceEnabled, 
         isOpen, 
         isReady, 
         hasPartyData,
+        isListening,
+        isPlaying,
         partyOptionsLength: partyOptions?.length || 0
       });
       stopWakeWordListening();
+      
+      // Reset wake word detection state when opening
+      if (isOpen && !isListening && !isPlaying) {
+        setIsWakeWordDetected(false);
+        setHasShownActivationMessage(false);
+      }
     }
-  }, [voiceEnabled, isOpen, isReady, partyOptions]);
+  }, [voiceEnabled, isOpen, isReady, partyOptions, isListening, isPlaying]);
 
   // Focus input when chat opens
 

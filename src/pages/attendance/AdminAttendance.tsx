@@ -327,6 +327,7 @@ const AdminAttendance: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [dateSortOrder, setDateSortOrder] = useState<'none' | 'asc' | 'desc'>('none');
 
 
   // Gallery Modal State
@@ -1600,7 +1601,24 @@ const AdminAttendance: React.FC = () => {
                           <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                             <tr>
                               <th scope="col" className="px-6 py-3">User</th>
-                              <th scope="col" className="px-6 py-3">Date</th>
+                              <th
+                                scope="col"
+                                className="px-6 py-3 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                onClick={() =>
+                                  setDateSortOrder(prev =>
+                                    prev === 'none' || prev === 'desc' ? 'asc' : 'desc'
+                                  )
+                                }
+                                title="Click to sort by date"
+                              >
+                                <span className="inline-flex items-center gap-1">
+                                  Date
+                                  <span className="inline-flex flex-col leading-none" style={{ fontSize: '10px', lineHeight: 1 }}>
+                                    <span style={{ opacity: dateSortOrder === 'asc' ? 1 : 0.35, display: 'block', lineHeight: '1' }}>▲</span>
+                                    <span style={{ opacity: dateSortOrder === 'desc' ? 1 : 0.35, display: 'block', lineHeight: '1' }}>▼</span>
+                                  </span>
+                                </span>
+                              </th>
                               <th scope="col" className="px-6 py-3">Time</th>
                               <th scope="col" className="px-6 py-3">Status</th>
                               <th scope="col" className="px-6 py-3">Location</th>
@@ -1609,7 +1627,14 @@ const AdminAttendance: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {attendanceRecords.map((record) => (
+                            {[...attendanceRecords]
+                              .sort((a, b) => {
+                                if (dateSortOrder === 'none') return 0;
+                                const da = new Date(a.date).getTime();
+                                const db = new Date(b.date).getTime();
+                                return dateSortOrder === 'asc' ? da - db : db - da;
+                              })
+                              .map((record) => (
                               <React.Fragment key={record.id}>
                                 <tr className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                   <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
@@ -1688,7 +1713,7 @@ const AdminAttendance: React.FC = () => {
                                 </tr>
 
                               </React.Fragment>
-                            ))}
+                              ))}
                           </tbody>
                         </table>
                       </div>

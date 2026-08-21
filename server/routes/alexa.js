@@ -5,7 +5,6 @@ const path = require('path');
 const router = express.Router();
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const COMMANDS_FILE = path.join(__dirname, '..', 'db', 'alexa_commands.json');
 
@@ -52,6 +51,7 @@ const queueCommand = async (actions, voiceText) => {
  * Parse the voice command with Gemini and return { reply, actions }
  */
 const parseCommandWithGemini = async (voiceText) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
 
   const systemInstruction = `You are Sarthak, an AI assistant for an FMCG billing system called Ekta Enterprises.
