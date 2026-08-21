@@ -2,7 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const router = express.Router();
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// Get API key per-request or globally
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
 /**
@@ -24,6 +24,7 @@ const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
  * }
  */
 router.post('/chat', async (req, res) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
     return res.status(500).json({ error: 'Gemini API key not configured on server.' });
   }
@@ -95,6 +96,7 @@ router.post('/chat', async (req, res) => {
  * }
  */
 router.post('/chat/function-response', async (req, res) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
     return res.status(500).json({ error: 'Gemini API key not configured on server.' });
   }

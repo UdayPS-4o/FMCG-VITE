@@ -26,7 +26,7 @@ const PrintBulkCashReceipts: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<CashData[] | null>(null); // Handles multiple data items
+  const [data, setData] = useState<CashData[] | null>(null);
   const [isReceipt, setIsReceipt] = useState<boolean>(false);
   const [toast, setToast] = useState<{
     visible: boolean;
@@ -53,15 +53,11 @@ const PrintBulkCashReceipts: React.FC = () => {
     const queryKey = queryParams.keys().next().value || '';
     let value = queryParams.get(queryKey);
 
-    // Check if the value is an array (multiple values for same key) or comma-separated
     const allValues = queryParams.getAll(queryKey);
     if (allValues.length > 1) {
-      // Use the first value if multiple exist, assuming it's the comma-separated string
       value = allValues[0];
-      console.log('Multiple values found for', queryKey, 'using first value (potentially comma-separated):', value);
     } else if (value && value.includes(',')) {
-      // Value is already a comma-separated string
-      console.log('Comma-separated values found for', queryKey, ':', value);
+      // already comma-separated
     }
 
     return { queryKey, value };
@@ -69,8 +65,8 @@ const PrintBulkCashReceipts: React.FC = () => {
 
   const { queryKey, value } = getQueryParams();
   let isprinted = false;
+
   useEffect(() => {
-    // Determine if this is a receipt or payment based on the query key
     setIsReceipt(queryKey !== 'voucherNo');
 
     const fetchData = async () => {
@@ -83,11 +79,9 @@ const PrintBulkCashReceipts: React.FC = () => {
 
       try {
         const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Authentication required');
-        }
+        if (!token) throw new Error('Authentication required');
 
-        const ids = value.split(',').map(id => id.trim()).filter(id => id); // Split, trim, and filter empty IDs
+        const ids = value.split(',').map(id => id.trim()).filter(id => id);
         if (ids.length === 0) {
           setError('No valid identifiers provided');
           setLoading(false);
@@ -98,47 +92,30 @@ const PrintBulkCashReceipts: React.FC = () => {
         const fetchedDataArray: CashData[] = [];
 
         for (const id of ids) {
-          const paramKey = queryKey === 'voucherNo' ? 'voucherNo' : 'ReceiptNo'; // Ensuring correct case for ReceiptNo
+          const paramKey = queryKey === 'voucherNo' ? 'voucherNo' : 'ReceiptNo';
           const response = await fetch(`${constants.baseURL}/print?${paramKey}=${id}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
           });
-          if (!response.ok) {
-            throw new Error(`Failed to fetch data for ID: ${id}`);
-          }
+          if (!response.ok) throw new Error(`Failed to fetch data for ID: ${id}`);
           const responseData = await response.json();
-          fetchedDataArray.push(responseData); // Assuming API returns single object per ID
+          fetchedDataArray.push(responseData);
         }
 
-        console.log('Fetched data for all IDs:', fetchedDataArray);
         setData(fetchedDataArray);
         setLoading(false);
 
         const shouldAutoPrint = localStorage.getItem('autoPrint') == 'true';
-        // check for query param ?autoprint=true
         const autoPrint = window.location.search.includes('autoprint');
-        console.log("location:", window.location.search)
-        // setTimeout(() => {
         if (shouldAutoPrint || autoPrint) {
-          localStorage.removeItem('autoPrint'); // Clean up flag
-          // Delay auto-print to ensure the page is fully rendered
-          console.log('Auto-printing triggered');
+          localStorage.removeItem('autoPrint');
           if (!isprinted) {
             window.print();
-
-            setTimeout(() => {
-              navigate('/cash-receipt');
-            }, 2000);
+            setTimeout(() => { navigate('/cash-receipt'); }, 2000);
           }
           isprinted = true;
-          // const printBtn = document.querySelector("button.bg-blue-500.transition-colors") as HTMLButtonElement;
-          // printBtn.click();
         }
-        // }, 2000);
 
       } catch (err) {
-        console.error('Error fetching data:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to load data';
         setError(errorMessage);
         setLoading(false);
@@ -150,32 +127,20 @@ const PrintBulkCashReceipts: React.FC = () => {
   }, [queryKey, value]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({
-      visible: true,
-      message,
-      type
-    });
-
-    setTimeout(() => {
-      setToast(prev => ({ ...prev, visible: false }));
-    }, 3000);
+    setToast({ visible: true, message, type });
+    setTimeout(() => { setToast(prev => ({ ...prev, visible: false })); }, 3000);
   };
 
   const handlePrint = () => {
     window.print();
-
-    // Add event listener for after print
     const afterPrint = () => {
       window.removeEventListener('afterprint', afterPrint);
-      // Redirect to cash receipt page after print
       navigate('/cash-receipt');
     };
-
     window.addEventListener('afterprint', afterPrint);
   };
 
   const handleBack = () => {
-    // Navigate back based on whether it was receipt or payment context
     navigate(isReceipt ? '/db/cash-receipts' : '/db/cash-payments');
   };
 
@@ -190,37 +155,40 @@ const PrintBulkCashReceipts: React.FC = () => {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
-        <PageMeta title={`Error | Bulk Cash ${isReceipt ? 'Receipt' : 'Payment'} Print`} description={`Error loading bulk cash ${isReceipt ? 'receipt' : 'payment'} data`} />
+        <PageMeta title={`Error | Bulk Cash ${isReceipt ? 'Receipt' : 'Payment'} Print`} description="" />
         <div className="text-red-500 text-xl mb-4">{error}</div>
-        <button
-          onClick={handleBack}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-        >
+        <button onClick={handleBack} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
           Back to Cash {isReceipt ? 'Receipts' : 'Payments'}
         </button>
         {toast.visible && (
-          <Toast
-            message={toast.message}
-            type={toast.type}
+          <Toast message={toast.message} type={toast.type}
             onClose={() => setToast(prev => ({ ...prev, visible: false }))}
-            isVisible={toast.visible}
-          />
+            isVisible={toast.visible} />
         )}
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-full mx-auto">
-      <PageMeta title={`Bulk Cash ${isReceipt ? 'Receipt' : 'Payment'} Print`} description={`Print multiple cash ${isReceipt ? 'receipts' : 'payments'} details`} />
+    <div className="p-4 max-w-full mx-auto">
+      <PageMeta
+        title={`Bulk Cash ${isReceipt ? 'Receipt' : 'Payment'} Print`}
+        description={`Print multiple cash ${isReceipt ? 'receipts' : 'payments'} details`}
+      />
 
-      <div className="print:hidden mb-6 flex justify-between">
+      {/* ── Screen-only toolbar ── */}
+      <div className="print:hidden mb-4 flex justify-between items-center gap-4">
         <button
           onClick={handleBack}
           className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
         >
           Back
         </button>
+
+        <div className="text-sm text-gray-600 dark:text-gray-300 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded px-3 py-1">
+          💡 Set <strong>Pages per sheet = 1</strong> in the print dialog for best results
+        </div>
+
         <button
           onClick={handlePrint}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
@@ -229,247 +197,383 @@ const PrintBulkCashReceipts: React.FC = () => {
         </button>
       </div>
 
-      <div ref={printRef} className="bg-gray-900 text-white print:bg-white print:text-black overflow-hidden">
+      {/* ── 2-column receipt grid ── */}
+      <div ref={printRef} className="receipts-grid">
         {data && data.length > 0 && data.map((item, index) => (
-          <div
-            key={item.id || index}
-            className={`receipt-container mb-4 print:mb-0 ${index > 0 && index % 3 === 0 ? 'print-page-break-before' : ''}`}
-          >
+          <div key={item.id || index} className="receipt-container">
             <div className="receipt">
-              <header className="header">
-                <h1 className="text-white print:text-black font-bold text-xl">Ekta Enterprises</h1>
-                <h2 className="text-white print:text-black">GSTIN: 23AJBPS6285R1ZF , Mob: 9179174888, 9169164888, 9826623188</h2>
-                <p className="text-white print:text-black">Budhwari Bazar, Gn Road Seoni, Seoni</p>
+
+              <header className="receipt-header">
+                <div className="header-band">
+                  <h1>Ekta Enterprises</h1>
+                  <span className="receipt-label">{isReceipt ? 'CASH RECEIPT' : 'CASH PAYMENT'}</span>
+                </div>
+                <div className="header-sub">
+                  <span>GSTIN: <strong>23AJBPS6285R1ZF</strong></span>
+                  <span>Mob: <strong>9179174888 / 9169164888 / 9826623188</strong></span>
+                </div>
+                <div className="header-addr">Budhwari Bazar, Gn Road Seoni, Seoni (M.P.)</div>
               </header>
-              <div className="content">
-                <div className="details border-white print:border-black" style={{ margin: 0, padding: '10px 10px', fontSize: 'larger' }}>
-                  <div>
-                    Date: <span>{formatDate(item.date)}</span>
-                  </div>
-                  <div>
-                    Mode: <span>Cash</span>
-                  </div>
-                  <div>
-                    {isReceipt ? (
-                      <span> Receipt No: {item.series}-{item.receiptNo}</span>
-                    ) : (
-                      <span> Voucher No: {item.voucherNo}</span>
-                    )}
+
+              <div className="receipt-content">
+                <div className="details">
+                  <div className="detail-item"><span className="detail-label">Date</span><span className="detail-value">{formatDate(item.date)}</span></div>
+                  <div className="detail-item"><span className="detail-label">Mode</span><span className="detail-value">Cash</span></div>
+                  <div className="detail-item">
+                    <span className="detail-label">{isReceipt ? 'Receipt No' : 'Voucher No'}</span>
+                    <span className="detail-value receipt-no">
+                      {isReceipt ? `${item.series}-${item.receiptNo}` : item.voucherNo}
+                    </span>
                   </div>
                 </div>
-                <table className="border-white print:border-black">
+
+                <table>
                   <thead>
                     <tr>
-                      <th className="border-white print:border-black text-white print:text-black"> Name of A/c Head </th>
-                      <th className="border-white print:border-black text-white print:text-black">Code</th>
-                      <th className="border-white print:border-black text-white print:text-black">Amount</th>
+                      <th>Name of A/c Head</th>
+                      <th>Code</th>
+                      <th>Amount (₹)</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="text-white print:text-black">{item.C_NAME}</td>
-                      <td className="text-white print:text-black">{item.party}</td>
-                      <td id={`amount-${index}`} className="border-white print:border-black text-white print:text-black">{item.amount}</td>
+                      <td className="td-name">{item.C_NAME}</td>
+                      <td>{item.party}</td>
+                      <td id={`amount-${index}`} className="td-amount">{item.amount}</td>
                     </tr>
                     <tr>
-                      <td className="text-white print:text-black" colSpan={2}>
-                        {' '}
-                        By {isReceipt ? 'R/no' : 'V/no'}: {item.narration}
-                      </td>
-                      <td id={`amount-narration-${index}`} className="border-white print:border-black text-white print:text-black"> </td>
+                      <td colSpan={2} className="td-narration">By {isReceipt ? 'R/no' : 'V/no'}: {item.narration}</td>
+                      <td id={`amount-narration-${index}`}>&nbsp;</td>
                     </tr>
                   </tbody>
                 </table>
-                <div className="in-words border-white print:border-black text-white print:text-black">
-                  In Words: <span>{item.AmountInWords}</span>
+
+                <div className="in-words">
+                  <span className="iw-label">In Words:</span> <span className="iw-text">{item.AmountInWords}</span>
                 </div>
               </div>
-              <footer className="footer">
-                <div className="text-white print:text-black">Passed By</div>
-                <div className="text-white print:text-black">Cashier</div>
-                <div className="text-white print:text-black">Authorised Signatory</div>
+
+              <footer className="receipt-footer">
+                <div className="sig-block"><div className="sig-line"></div><div>Passed By</div></div>
+                <div className="sig-block"><div className="sig-line"></div><div>Cashier</div></div>
+                <div className="sig-block"><div className="sig-line"></div><div>Authorised Signatory</div></div>
               </footer>
+
             </div>
           </div>
         ))}
       </div>
 
-      <style>
-        {`
+      <style>{`
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+/* ══════════════════════════════════════════════
+   SCREEN — 2-column beautiful preview
+══════════════════════════════════════════════ */
+.receipts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  min-height: 100vh;
+}
+
+.receipt-container {
+  background: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 0;
+  box-sizing: border-box;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  overflow: hidden;
+}
+
 .receipt {
-  width: 100%;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  padding: 0;
-  font-family: Arial, sans-serif;
-  font-size: 0.7em;
+  font-family: 'Inter', Arial, sans-serif;
+  font-size: 0.88em;
+  color: #111;
 }
 
-.receipt-container + .receipt-container {
-  margin-top: 0px; 
-}
-
-.header h1 {
-  margin: 0;
-}
-
-.header p {
-  margin: 10px 0;
-}
-
-.content .details {
+/* ── Header band ── */
+.header-band {
+  background: linear-gradient(135deg, #1a5c2e 0%, #2e7d47 100%);
+  padding: 10px 14px 8px;
   display: flex;
   justify-content: space-between;
-  margin: 20px 0;
+  align-items: center;
 }
 
-.content .details div span {
-  font-weight: bold;
+.header-band h1 {
+  margin: 0;
+  font-size: 1.45em;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+.receipt-label {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.4);
+  white-space: nowrap;
+}
+
+.header-sub {
+  background: #f0fdf4;
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 14px;
+  font-size: 0.82em;
+  color: #374151;
+  border-bottom: 1px solid #d1fae5;
+  gap: 8px;
+}
+
+.header-addr {
+  background: #f9fafb;
+  padding: 3px 14px 6px;
+  font-size: 0.8em;
+  color: #6b7280;
+  border-bottom: 2px solid #2e7d47;
+}
+
+/* ── Details bar ── */
+.receipt-content {
+  padding: 10px 14px;
 }
 
 .details {
-  height: 100%;
-  margin: 0;
-  border: 1px solid;
-}
-
-table {
-  min-height: 100px;
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 20px;
-  table-layout: fixed;
-}
-
-table, th {
-  border: 1px solid;
-}
-
-th, td {
-  padding: 4px; 
-  text-align: left;
-  word-wrap: break-word;
-}
-
-.in-words {
-  font-weight: bold;
-  border-bottom: 1px solid;
-}
-
-.footer {
   display: flex;
   justify-content: space-between;
-  padding-top: 10px;
-  margin-top: 50px;
+  background: #f8fafc;
+  border: 1.5px solid #1a5c2e;
+  border-radius: 6px;
+  padding: 7px 12px;
+  margin: 0 0 10px;
+  gap: 6px;
 }
 
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.detail-label {
+  font-size: 0.72em;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: 0.95em;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 1px;
+}
+
+.receipt-no {
+  color: #1a5c2e;
+  font-size: 1.0em;
+}
+
+/* ── Table ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0;
+  table-layout: fixed;
+  min-height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+table thead tr {
+  background: #1a5c2e;
+}
+
+th {
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.82em;
+  padding: 6px 8px;
+  text-align: left;
+  border: none;
+  letter-spacing: 0.3px;
+}
+
+td {
+  padding: 6px 8px;
+  text-align: left;
+  word-wrap: break-word;
+  font-size: 0.88em;
+  border-bottom: 1px solid #e5e7eb;
+  color: #1f2937;
+}
+
+tbody tr:nth-child(even) { background: #f9fafb; }
+
+.td-name  { font-weight: 600; color: #111827; }
+.td-amount { font-weight: 700; color: #1a5c2e; font-size: 0.95em; }
+.td-narration { color: #4b5563; font-size: 0.84em; font-style: italic; }
+
+/* ── In Words ── */
+.in-words {
+  background: #f0fdf4;
+  border: 1.5px solid #1a5c2e;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 8px;
+  font-size: 0.88em;
+}
+
+.iw-label {
+  font-weight: 700;
+  color: #1a5c2e;
+  margin-right: 4px;
+}
+
+.iw-text {
+  font-weight: 600;
+  color: #111827;
+  font-style: italic;
+}
+
+/* ── Footer ── */
+.receipt-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 8px 14px 12px;
+  border-top: 1px dashed #d1d5db;
+  font-size: 0.8em;
+  color: #6b7280;
+}
+
+.sig-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 70px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.sig-line {
+  width: 80px;
+  height: 1px;
+  background: #9ca3af;
+  margin-bottom: 2px;
+}
+
+/* ══════════════════════════════════════════════
+   PRINT — same 2-column grid, clean & bold
+   Keep "Pages per sheet = 1" in dialog!
+══════════════════════════════════════════════ */
 @media print {
-  body {
-    background-color: white;
-    color: black;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    overflow-x: hidden;
-  }
-  
-  .receipt {
-    color: black;
-    width: 100%;
-    max-width: none;
-    font-size: 0.6em !important;
+  html, body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  .receipt .header h1 {
-    margin: 0 !important;
-    font-size: 1.2em !important;
-  }
-  
-  .receipt .header h2 {
-    margin: 1mm 0 !important;
-    font-size: 0.9em !important;
-  }
-  
-  .receipt .header p {
-    margin: 1mm 0 !important; 
-  }
-  
-  .receipt .content .details {
-    margin: 1.5mm 0 !important;
-    padding: 1.5mm !important;
-  }
-  
-  .receipt table {
-    margin-bottom: 1mm !important; 
-  }
-  
-  .receipt th, .receipt td {
-    padding: 2px !important;
-    font-size: 1em !important;
-  }
-  
-  .receipt .in-words {
-    margin: 1mm 0 !important;
-    padding: 1.5mm !important;
-  }
-  
-  .receipt .footer {
-    margin-top: 3mm !important; 
-    padding-top: 1.5mm !important;
-  }
-  
-  .details, table, th, .in-words {
-    border-color: black;
-  }
-  
-  td[id^="amount-"] { 
-    border-left-color: black !important; 
-    border-color: black; 
-  }
-  
-  .print\\:hidden {
-    display: none !important;
-  }
-  
-  .print\\:bg-white {
-    background-color: white !important;
-  }
-  
-  .print\\:text-black {
-    color: black !important;
-  }
-  
-  .print\\:border-black {
-    border-color: black !important;
-  }
-  
   @page {
     size: A4 portrait;
     margin: 5mm;
   }
 
-  .receipt-container {
-    page-break-inside: avoid; 
-    margin-bottom: 1mm !important;
-    height: 95mm !important; /* Increased height to ensure only 3 fit */
-    max-height: 95mm !important; 
-    overflow: hidden !important; 
+  .receipts-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 3mm !important;
+    padding: 0 !important;
+    background: white !important;
+    width: 100% !important;
     box-sizing: border-box !important;
+    min-height: unset !important;
   }
 
-  .print-page-break-before {
-    page-break-before: always !important;
+  .receipt-container {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    border: 0.4mm solid #555 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    background: white !important;
+    box-shadow: none !important;
   }
-  
-  /* Force page break after every 3rd receipt */
-  .receipt-container:nth-child(3n+1):not(:first-child) {
-    page-break-before: always !important;
+
+  .receipt { font-size: 0.78em !important; color: black !important; }
+
+  /* Header band — keep green for colour printers, graceful on B&W */
+  .header-band {
+    background: #1a5c2e !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    padding: 5px 8px 4px !important;
   }
+
+  .header-band h1 { font-size: 1.3em !important; color: #fff !important; }
+  .receipt-label  { font-size: 0.68em !important; }
+
+  .header-sub  { padding: 3px 8px !important; font-size: 0.78em !important; background: #f0fdf4 !important; print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+  .header-addr { padding: 2px 8px 4px !important; font-size: 0.76em !important; }
+
+  .receipt-content { padding: 5px 8px !important; }
+
+  .details {
+    padding: 4px 6px !important;
+    margin: 0 0 5px !important;
+    border-color: #1a5c2e !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .detail-label { font-size: 0.68em !important; }
+  .detail-value { font-size: 0.88em !important; }
+  .receipt-no   { font-size: 0.92em !important; }
+
+  table    { min-height: 36px !important; }
+  table thead tr { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+
+  th { padding: 4px 6px !important; font-size: 0.78em !important; }
+  td { padding: 4px 6px !important; font-size: 0.84em !important; }
+
+  .in-words {
+    padding: 4px 6px !important;
+    margin-top: 4px !important;
+    font-size: 0.82em !important;
+    border-color: #1a5c2e !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .receipt-footer {
+    margin-top: 4mm !important;
+    padding: 3px 8px 5px !important;
+    font-size: 0.76em !important;
+  }
+
+  .sig-line { width: 60px !important; }
+
+  .print\\:hidden { display: none !important; }
 }
-`}
-      </style>
+`}</style>
 
       {toast.visible && (
         <Toast
