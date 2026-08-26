@@ -75,7 +75,8 @@ app.get('/json/:file', verifyToken, async (req, res) => {
   const clientHash = req.headers['if-none-match'] || req.query.hash;
 
   try {
-    let data = (await fs.readFile(`./db/${file}.json`, 'utf8')) || '[]';
+    const filePath = path.join(__dirname, '..', '..', 'db', `${file}.json`);
+    let data = (await fs.readFile(filePath, 'utf8')) || '[]';
     const jsonData = JSON.parse(data);
 
     // Generate hash for the current data
@@ -110,7 +111,7 @@ app.get('/json/:file', verifyToken, async (req, res) => {
 app.get('/approved/json/:file', verifyToken, async (req, res) => {
   console.log('approved');
   const { file } = req.params;
-  const filePath = `./db/approved/${file}.json`;
+  const filePath = path.join(__dirname, '..', '..', 'db', 'approved', `${file}.json`);
   const clientHash = req.headers['if-none-match'] || req.query.hash;
 
   try {
