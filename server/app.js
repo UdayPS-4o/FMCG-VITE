@@ -92,7 +92,7 @@ app.use('/api/invoice-pdfs', express.static(path.join(__dirname, 'db', 'pdfs'), 
   // Only serve .pdf files from this route for safety
   index: false,
   setHeaders: (res, filePath) => {
-    if (!filePath.endsWith('.pdf')) {
+    if (!filePath.toLowerCase().endsWith('.pdf')) {
       res.status(403).end();
     }
   },
@@ -126,6 +126,11 @@ app.use('/api/alexa', alexaRoutes);
 // Register messages routes (No auth required for mobile app to send pickup requests)
 const messagesRoutes = require('./routes/messages');
 app.use('/api/messages', messagesRoutes);
+
+// WhatsApp Webhook from CXBot
+const whatsappWebhook = require('./routes/webhook/index');
+app.use('/api/webhook', whatsappWebhook);
+
 
 // ── /whatsapp reverse-proxy ───────────────────────────────────────────────────
 // Contract: this server terminates TLS for server.ekta-enterprises.com.
@@ -177,6 +182,191 @@ app.use('/whatsapp', (req, res) => {
 
   // Pipe the incoming body through to the upstream service
   req.pipe(proxyReq, { end: true });
+});
+// ── /api/whatsapp reverse-proxy → fmcg-api (port 3188) ──────────────────────
+// Strips /api/whatsapp prefix and forwards to the standalone API server.
+// Example: POST /api/whatsapp/balance → POST http://127.0.0.1:3188/api/balance
+// Registered BEFORE middleware so it bypasses auth.
+// Uses req.body (already parsed by bodyParser) instead of req.pipe to avoid
+// double-reading the consumed request stream.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/whatsapp', (req, res) => {
+  const API_PORT = 3188;
+  // req.url is stripped of /api/whatsapp by Express.
+  // For /api/whatsapp/balance → req.url="/balance" → target="/api/balance"
+  // For /api/whatsapp        → req.url="/"       → show info (not forwarded)
+  const suffix = req.url || '';
+
+  // ── LOG FULL REQUEST so we can debug CX BOT live flow ─────────────────────
+  console.log('[CXBOT /api/whatsapp] Method:', req.method, '| URL:', req.url);
+  console.log('[CXBOT /api/whatsapp] Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('[CXBOT /api/whatsapp] Query:', JSON.stringify(req.query));
+  console.log('[CXBOT /api/whatsapp] Body:', JSON.stringify(req.body));
+  // ──────────────────────────────────────────────────────────────────────────
+
+
+  // ── Normalize phoneNumber param ──────────────────────────────────────────
+  // CX BOT sends {{contact.phone}} as "+919179174888" or "919179174888".
+  // The FMCG API expects a 10-digit Indian mobile number ("9179174888").
+  // Strip leading '+', then strip country code '91' if number is 12 digits,
+  // then strip leading '0' if number is 11 digits.
+  let normalizedSuffix = suffix;
+  if (suffix.includes('phoneNumber=')) {
+    normalizedSuffix = suffix.replace(
+      /([?&]phoneNumber=)([^&]*)/g,
+      (match, key, val) => {
+        let num = decodeURIComponent(val).replace(/\s+/g, '');
+        num = num.replace(/^\+/, '');          // remove leading +
+        if (num.length === 12 && num.startsWith('91')) num = num.slice(2); // +91xxxxxxxxxx → 10 digits
+        if (num.length === 11 && num.startsWith('0'))  num = num.slice(1); // 0xxxxxxxxxx  → 10 digits
+        return key + encodeURIComponent(num);
+      }
+    );
+  }
+
+  const targetPath = normalizedSuffix === '/' ? '/' : '/api' + normalizedSuffix;
+
+  // Redirect bare /api/whatsapp to the API info
+  if (suffix === '/' || !suffix) {
+    return res.status(200).json({
+      service: 'FMCG Business API Proxy',
+      target: `http://127.0.0.1:${API_PORT}/`,
+      endpoints: [
+        'GET /api/whatsapp/balance?phoneNumber=',
+        'GET /api/whatsapp/ledger?phoneNumber=',
+        'GET /api/whatsapp/ledger/old?phoneNumber=',
+        'GET /api/whatsapp/bill?phoneNumber=&billNumber=',
+        'GET /api/whatsapp/stock?company=&phoneNumber=',
+        'GET /api/whatsapp/rate?phoneNumber=',
+        'GET /api/whatsapp/send-message?phoneNumber=',
+      ],
+      docs: 'https://server.ekta-enterprises.com/api/whatsapp/balance?phoneNumber=9876543210',
+    });
+  }
+
+  const proxyReq = http.request(
+    {
+      hostname: '127.0.0.1',
+      port: API_PORT,
+      path: targetPath,
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-forwarded-for': req.ip || req.connection.remoteAddress,
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host': req.headers.host || 'server.ekta-enterprises.com',
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    }
+  );
+
+  proxyReq.on('error', (err) => {
+    console.error('[PROXY /api/whatsapp] Error forwarding to port 3188:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: 'Bad Gateway',
+        detail: 'FMCG API service unavailable on port 3188',
+        message: err.message,
+      });
+    }
+  });
+
+  // Forward the parsed body instead of piping the consumed stream
+  if (req.body && Object.keys(req.body).length > 0) {
+    proxyReq.write(JSON.stringify(req.body));
+  }
+  proxyReq.end();
+});
+// ─────────────────────────────────────────────────────────────────────────────
+// ── /api/files reverse-proxy → fmcg-api (port 3188) ──────────────────────────
+// Forwards static file requests (PDFs, XLS) from the public domain to the
+// API server's file server.
+// Example: GET /api/files/LEDGER/9876543210.pdf → GET http://127.0.0.1:3188/files/LEDGER/9876543210.pdf
+// Registered BEFORE middleware so it bypasses auth.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/files', (req, res) => {
+  const API_PORT = 3188;
+  // Express strips /api/files from req.url, so we prepend /files for the upstream
+  const suffix = req.url || '';
+  const targetPath = '/files' + suffix;
+
+  const proxyReq = http.request(
+    {
+      hostname: '127.0.0.1',
+      port: API_PORT,
+      path: targetPath,
+      method: req.method,
+      headers: {
+        'x-forwarded-for': req.ip || req.connection.remoteAddress,
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host': req.headers.host || 'server.ekta-enterprises.com',
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    }
+  );
+
+  proxyReq.on('error', (err) => {
+    console.error('[PROXY /api/files] Error forwarding to port 3188:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: 'Bad Gateway',
+        detail: 'FMCG API file server unavailable on port 3188',
+        message: err.message,
+      });
+    }
+  });
+
+  proxyReq.end();
+});
+// ─────────────────────────────────────────────────────────────────────────────
+// ── /files reverse-proxy → fmcg-api (port 3188) ──────────────────────────────
+// Public file downloads — mirrors the /api/files proxy above so both
+// /files/* and /api/files/* work (the shorter path is what the API returns).
+// Example: GET /files/LEDGER/9876543210.pdf → GET http://127.0.0.1:3188/files/LEDGER/9876543210.pdf
+// Registered BEFORE middleware so it bypasses auth.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use('/files', (req, res) => {
+  const API_PORT = 3188;
+  // Express strips /files from req.url, prepend it back for upstream
+  const suffix = req.url || '';
+  const targetPath = '/files' + suffix;
+
+  const proxyReq = http.request(
+    {
+      hostname: '127.0.0.1',
+      port: API_PORT,
+      path: targetPath,
+      method: req.method,
+      headers: {
+        'x-forwarded-for': req.ip || req.connection.remoteAddress,
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host': req.headers.host || 'server.ekta-enterprises.com',
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    }
+  );
+
+  proxyReq.on('error', (err) => {
+    console.error('[PROXY /files] Error forwarding to port 3188:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: 'Bad Gateway',
+        detail: 'FMCG API file server unavailable on port 3188',
+        message: err.message,
+      });
+    }
+  });
+
+  proxyReq.end();
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
