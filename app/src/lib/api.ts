@@ -110,6 +110,18 @@ export const fetchBrands = async () => {
     return res.json();
 };
 
+/**
+ * WhatsApp deep-link auto-login.
+ * Called when /product/:code?phone=XXXXXXXXXX is opened.
+ * The server matches the phone against CMPL.json and issues a session token.
+ */
+export const identifyByPhone = async (phone: string) => {
+    const res = await fetch(`${API_URL}/identify-by-phone?phone=${encodeURIComponent(phone)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Identification failed');
+    return data; // { success, token, user, mustChangePassword }
+};
+
 export const fetchLedger = async () => {
     const res = await fetch(`${API_URL}/ledger`, { headers: authHeaders() });
     if (!res.ok) throw new Error('Failed to fetch ledger');
