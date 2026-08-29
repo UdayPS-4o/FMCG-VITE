@@ -135,19 +135,25 @@ app.use('/api/webhook', whatsappWebhook);
 // ── /whatsapp reverse-proxy ───────────────────────────────────────────────────
 // Contract: this server terminates TLS for server.ekta-enterprises.com.
 // Any request arriving at /whatsapp/* has the prefix stripped and is
-// forwarded to the whatsapp-aisensy microservice on port 4292:
+// forwarded to the whatsapp microservice (whatsapp.js) on port 4292:
 //
-//   /whatsapp/webhook/aisensy  →  http://127.0.0.1:4292/webhook/aisensy
-//   /whatsapp/files/<file>     →  http://127.0.0.1:4292/files/<file>
-//   /whatsapp/health           →  http://127.0.0.1:4292/health
+//   /whatsapp/webhook  →  http://127.0.0.1:4292/webhook
+//   /whatsapp/send     →  http://127.0.0.1:4292/send
+//   /whatsapp/files/<file> → http://127.0.0.1:4292/files/<file>
+//   /whatsapp/health   →  http://127.0.0.1:4292/health
 //
-// whatsapp-aisensy.js MUST be running before requests reach these paths.
+// whatsapp.js MUST be running before requests reach these paths.
+// Uses req.body (already parsed by bodyParser above) instead of req.pipe —
+// the request stream is already drained by the global bodyParser middleware,
+// so piping it directly hangs on any POST (bodyParser consumed it already).
 // ─────────────────────────────────────────────────────────────────────────────
-const httpProxy = http.createServer; // already imported above
 app.use('/whatsapp', (req, res) => {
   const WHATSAPP_PORT = process.env.WHATSAPP_PORT || 4292;
   // Strip /whatsapp prefix — req.url already has it removed by Express
   const targetPath = req.url || '/';
+
+  const hasBody = req.body && Object.keys(req.body).length > 0;
+  const bodyString = hasBody ? JSON.stringify(req.body) : '';
 
   const proxyReq = http.request(
     {
@@ -158,6 +164,8 @@ app.use('/whatsapp', (req, res) => {
       headers : {
         ...req.headers,
         host            : `127.0.0.1:${WHATSAPP_PORT}`,
+        'content-type'  : 'application/json',
+        'content-length': Buffer.byteLength(bodyString),
         'x-forwarded-for': req.ip || req.connection.remoteAddress,
         'x-forwarded-proto': 'https',
         'x-forwarded-host' : req.headers.host || 'server.ekta-enterprises.com',
@@ -174,14 +182,14 @@ app.use('/whatsapp', (req, res) => {
     if (!res.headersSent) {
       res.status(502).json({
         error  : 'Bad Gateway',
-        detail : 'whatsapp-aisensy service unavailable on port 4292',
+        detail : 'whatsapp service unavailable on port 4292',
         message: err.message,
       });
     }
   });
 
-  // Pipe the incoming body through to the upstream service
-  req.pipe(proxyReq, { end: true });
+  if (bodyString) proxyReq.write(bodyString);
+  proxyReq.end();
 });
 // ── /api/whatsapp reverse-proxy → fmcg-api (port 3188) ──────────────────────
 // Strips /api/whatsapp prefix and forwards to the standalone API server.
@@ -239,6 +247,8 @@ app.use('/api/whatsapp', (req, res) => {
         'GET /api/whatsapp/stock?company=&phoneNumber=',
         'GET /api/whatsapp/rate?phoneNumber=',
         'GET /api/whatsapp/send-message?phoneNumber=',
+        'GET  /api/backup/status',
+        'POST /api/backup/trigger',
       ],
       docs: 'https://server.ekta-enterprises.com/api/whatsapp/balance?phoneNumber=9876543210',
     });
@@ -363,6 +373,84 @@ app.use('/files', (req, res) => {
         detail: 'FMCG API file server unavailable on port 3188',
         message: err.message,
       });
+    }
+  });
+
+  proxyReq.end();
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── /pay reverse-proxy → fmcg-api (port 3188) ─────────────────────────────────
+// UPI app deep-link redirect pages (PhonePe/GPay/Paytm) served from fmcg-api.
+app.use('/pay', (req, res) => {
+  const API_PORT = 3188;
+  const suffix = req.url || '';
+  const targetPath = '/pay' + suffix;
+
+  const proxyReq = http.request(
+    {
+      hostname: '127.0.0.1',
+      port: API_PORT,
+      path: targetPath,
+      method: req.method,
+      headers: {
+        'x-forwarded-for': req.ip || req.connection.remoteAddress,
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host': req.headers.host || 'server.ekta-enterprises.com',
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    }
+  );
+
+  proxyReq.on('error', (err) => {
+    console.error('[PROXY /pay] Error forwarding to port 3188:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: 'Bad Gateway',
+        detail: 'FMCG API unavailable on port 3188',
+        message: err.message,
+      });
+    }
+  });
+
+  proxyReq.end();
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── /api/backup reverse-proxy → fmcg-api (port 3188) ──────────────────────────
+// Backups: GET /api/backup/status, POST /api/backup/trigger
+// Registered BEFORE middleware so it bypasses auth.
+app.use('/api/backup', (req, res) => {
+  const API_PORT = 3188;
+  const suffix = req.url || '';
+  const targetPath = '/api/backup' + suffix;
+
+  const proxyReq = http.request(
+    {
+      hostname: '127.0.0.1',
+      port: API_PORT,
+      path: targetPath,
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-forwarded-for': req.ip || req.connection.remoteAddress,
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host': req.headers.host || 'server.ekta-enterprises.com',
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    }
+  );
+
+  proxyReq.on('error', (err) => {
+    console.error('[PROXY /api/backup] Error forwarding to port 3188:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Bad Gateway', detail: 'FMCG API backup service unavailable on port 3188' });
     }
   });
 

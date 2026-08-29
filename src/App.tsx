@@ -63,6 +63,7 @@ import MandatoryDocs from './pages/mandatory-docs/MandatoryDocs';
 import AppOrders from './pages/app-orders/AppOrders';
 import AppSchemes from './pages/app-schemes/AppSchemes';
 import AppListings from './pages/app-listings/AppListings';
+import ProductPage from './pages/product/ProductPage';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -436,6 +437,9 @@ const AppRoutes = () => {
       <Route path="/internal/print/invoice/:id" element={<PdfInvoicePrintPage />} />
       <Route path="/print/bulk-cash-receipts" element={<PrintBulkCashReceipts />} />
       <Route path="/print/godown-stock/:godownCode" element={<PrintGodownStock />} />
+
+      {/* Public product page — accessible without login (used by Meta catalogue links) */}
+      <Route path="/product/:code" element={<ProductPage />} />
 
       {/* Fallback Route */}
       <Route path="*" element={<NotFound />} />

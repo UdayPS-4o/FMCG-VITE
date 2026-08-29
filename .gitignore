@@ -40,3 +40,10 @@ server/.env
 server/db
 
 public
+
+# Runtime-generated folders — logs and WhatsApp media
+server/webhook-logs/
+server/whatsapp-files/
+
+# Claude AI project files
+.claude/
