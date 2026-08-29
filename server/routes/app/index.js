@@ -376,6 +376,85 @@ router.post('/verify-otp', async (req, res) => {
 });
 
 /**
+ * GET /api/app/identify-by-phone?phone=XXXXXXXXXX
+ *
+ * WhatsApp deep-link auto-login.
+ * When the server sends a catalogue link to a customer via WhatsApp it can embed
+ * their number in the URL: /product/MK007?phone=9876543210
+ * The frontend calls this endpoint — no password required, because the link was
+ * delivered to the customer's own WhatsApp account (trusted channel).
+ *
+ * Returns the same shape as /verify-otp so the frontend can reuse the same
+ * login() call.
+ */
+router.get('/identify-by-phone', async (req, res) => {
+    let { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: 'phone is required' });
+
+    // Normalise: strip non-digits, take last 10 digits
+    phone = String(phone).replace(/\D/g, '');
+    if (phone.length > 10) phone = phone.slice(-10);
+    if (phone.length < 10) return res.status(400).json({ error: 'Invalid phone number' });
+
+    try {
+        const parties = await getCmplParties();
+
+        // Match against C_MOBILE or C_PHONE (normalize each to last 10 digits)
+        const normalize = (str) => {
+            if (!str) return '';
+            const digits = String(str).replace(/\D/g, '');
+            return digits.length >= 10 ? digits.slice(-10) : digits;
+        };
+
+        const party = parties.find(p =>
+            normalize(p.C_MOBILE) === phone ||
+            normalize(p.C_PHONE) === phone ||
+            normalize(p.WA_MOB) === phone
+        );
+
+        if (!party) {
+            return res.status(404).json({ error: 'Phone number not registered' });
+        }
+
+        const partyCode = party.C_CODE;
+
+        // Auto-register in SQLite if first time (same as normal login flow)
+        let dbUser = await appDb.getUserByPartyCode(partyCode);
+        if (!dbUser) {
+            const tempHash = await bcrypt.hash(TEMP_PASSWORD, BCRYPT_ROUNDS);
+            await appDb.createUser(partyCode, tempHash, 1);
+            dbUser = await appDb.getUserByPartyCode(partyCode);
+        }
+
+        // Issue a session token (1 day shorter than normal — 29 days)
+        const token = generateToken();
+        const expiresAt = new Date(Date.now() + (SESSION_DAYS - 1) * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .replace('T', ' ')
+            .split('.')[0];
+        await appDb.createSession(partyCode, token, expiresAt);
+
+        console.log(`[app/identify-by-phone] Auto-login for ${partyCode} via WhatsApp link`);
+
+        return res.json({
+            success: true,
+            token,
+            mustChangePassword: false, // skip change-password screen for WA logins
+            user: {
+                partyCode,
+                name: party.C_NAME,
+                mobile: party.C_MOBILE || party.C_PHONE || phone,
+                address: [party.C_ADD1, party.C_ADD2, party.C_PLACE].filter(Boolean).join(', '),
+                gst: party.C_GST || party.GSTNO || '',
+            }
+        });
+    } catch (err) {
+        console.error('[app/identify-by-phone]', err);
+        res.status(500).json({ error: 'Identification failed' });
+    }
+});
+
+/**
  * PATCH /api/app/change-password
  * Headers: Authorization: Bearer <token>
  * Body: { currentPassword, newPassword }
