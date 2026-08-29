@@ -41,9 +41,5 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_VAPID_PUBLIC_KEY': JSON.stringify('BMoDDiSzf7AavViREU6_M0Yez44WtpEUUi52Fkscvfd6uI1UfLXXGdzMOTDHbyATt5apBAe6o-eDgYBb33khRmI')
   },
-  build: {
-    rollupOptions: {
-      external: ['@capacitor/core', '@capacitor/preferences']
-    }
-  }
+  build: {}
 });
