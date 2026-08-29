@@ -1987,4 +1987,258 @@ router.delete('/admin/brands_custom/:id', async (req, res) => {
     }
 });
 
+// ── Facebook / Meta Catalogue Feed ───────────────────────────────────────────
+//
+// These three public (no-auth) routes expose the product catalogue in formats
+// that Meta Commerce Manager can consume on a daily schedule.
+//
+//   GET /api/app/facebook-feed.csv   – CSV feed (recommended for Commerce Manager)
+//   GET /api/app/facebook-feed.xml   – RSS 2.0 / Google Base XML feed (alternative)
+//   GET /api/app/facebook-feed/status – Diagnostics: item counts and skip reasons
+//
+// Configuration via env vars:
+//   FEED_SITE_BASE   – storefront base URL  (default https://app.ekta-enterprises.com)
+//   FEED_PRICE_MODE  – "rate" (default, MRP struck through) | "mrp" (hide distributor rate)
+//
+// Meta requirements:
+//   - id, title, description, availability, condition, price, link, image_link are mandatory
+//   - Items without image_link are skipped (Meta rejects them anyway)
+//   - Items with price=0 are skipped (non-product rows like FREIGHT & HAMALI)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FEED_SITE_BASE = process.env.FEED_SITE_BASE || 'https://app.ekta-enterprises.com';
+const FEED_PRICE_MODE = process.env.FEED_PRICE_MODE || 'rate'; // 'rate' | 'mrp'
+const FEED_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+let _feedCache = null;
+let _feedCacheTime = 0;
+
+/**
+ * Title-case a string (first letter of every word capitalised).
+ */
+function toTitleCase(str) {
+    if (!str) return '';
+    return str.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+/**
+ * Escape a string for safe CSV embedding (RFC 4180).
+ */
+function csvEscape(v) {
+    if (v == null) return '';
+    const s = String(v).replace(/"/g, '""');
+    return /[",\r\n]/.test(s) ? `"${s}"` : s;
+}
+
+/**
+ * Escape a string for safe XML embedding.
+ */
+function xmlEscape(v) {
+    if (v == null) return '';
+    return String(v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+/**
+ * Build the feed item list from the enriched product cache.
+ * Returns { items, skipped } where `skipped` is an array of
+ * { code, reason } objects for diagnostics.
+ */
+async function buildFeedItems() {
+    const now = Date.now();
+    if (_feedCache && now - _feedCacheTime < FEED_CACHE_TTL_MS) {
+        return _feedCache;
+    }
+
+    const { jsonData: products } = await getEnrichedProducts();
+
+    const items = [];
+    const skipped = [];
+
+    for (const p of products) {
+        const code = (p.CODE || '').trim();
+        if (!code) { skipped.push({ code: '(empty)', reason: 'No product code' }); continue; }
+
+        // Price guard
+        const rate = parseFloat(p.RATE1 || '0') || 0;
+        const mrp  = parseFloat(p.MRP1  || '0') || 0;
+        if (rate <= 0 && mrp <= 0) {
+            skipped.push({ code, reason: 'price is zero' });
+            continue;
+        }
+
+        // Image is mandatory for Meta
+        const imageUrl = p.image_url || p.IMAGE_URL || '';
+        if (!imageUrl) {
+            skipped.push({ code, reason: 'no image_url' });
+            continue;
+        }
+
+        // Determine price / sale_price
+        const effectiveMrp  = mrp  > 0 ? mrp  : rate;
+        const effectiveRate = rate > 0 ? rate : mrp;
+
+        let price, salePrice;
+        if (FEED_PRICE_MODE === 'mrp') {
+            price = effectiveMrp;
+            salePrice = null;
+        } else {
+            // "rate" mode: show MRP as price (struck-through), RATE1 as sale_price
+            price     = effectiveMrp > effectiveRate ? effectiveMrp : effectiveRate;
+            salePrice = effectiveMrp > effectiveRate ? effectiveRate : null;
+        }
+
+        // Brand lookup (already enriched onto product as brand_name)
+        const brand = p.brand_name || p.BRAND || 'Ekta Enterprises';
+
+        // Build description
+        const packInfo = [p.PACK, p.UNIT_1, p.UNIT_2].filter(Boolean).join(' | ');
+        const desc = [
+            toTitleCase(p.PRODUCT || code),
+            packInfo ? `Pack: ${packInfo}` : '',
+            `Code: ${code}`,
+        ].filter(Boolean).join('. ');
+
+        // Availability
+        const stock = typeof p.stock === 'number' ? p.stock : parseInt(p.stock || '0', 10);
+        const availability = stock > 0 ? 'in stock' : 'out of stock';
+
+        items.push({
+            id:           code.substring(0, 100),
+            title:        toTitleCase(p.PRODUCT || code).substring(0, 200),
+            description:  desc.substring(0, 9999),
+            availability,
+            condition:    'new',
+            price:        `${price.toFixed(2)} INR`,
+            sale_price:   salePrice != null ? `${salePrice.toFixed(2)} INR` : null,
+            link:         `${FEED_SITE_BASE}/product/${encodeURIComponent(code)}`,
+            image_link:   imageUrl,
+            brand:        brand.substring(0, 100),
+            quantity_to_sell_on_facebook: Math.max(0, Math.floor(stock)),
+        });
+    }
+
+    const result = { items, skipped, builtAt: new Date().toISOString(), total: products.length };
+    _feedCache = result;
+    _feedCacheTime = now;
+    console.log(`[facebook-feed] Built: ${items.length} items published, ${skipped.length} skipped`);
+    return result;
+}
+
+/**
+ * GET /api/app/facebook-feed.csv
+ * Returns a Meta-spec CSV product feed.
+ * PUBLIC — no auth required (Meta's crawler is unauthenticated).
+ */
+router.get('/facebook-feed.csv', async (req, res) => {
+    try {
+        const { items } = await buildFeedItems();
+
+        const COLS = ['id','title','description','availability','condition','price','sale_price','link','image_link','brand','quantity_to_sell_on_facebook'];
+
+        const rows = [
+            COLS.join(','),
+            ...items.map(item =>
+                COLS.map(col => csvEscape(item[col] != null ? item[col] : '')).join(',')
+            ),
+        ];
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="ekta-facebook-catalogue.csv"');
+        res.setHeader('Cache-Control', 'public, max-age=600'); // 10-min browser/CDN cache
+        res.send(rows.join('\r\n'));
+    } catch (err) {
+        console.error('[facebook-feed.csv]', err);
+        res.status(500).json({ error: 'Feed generation failed', detail: err.message });
+    }
+});
+
+/**
+ * GET /api/app/facebook-feed.xml
+ * Returns an RSS 2.0 / Google Base XML product feed (alternative format).
+ * PUBLIC — no auth required.
+ */
+router.get('/facebook-feed.xml', async (req, res) => {
+    try {
+        const { items } = await buildFeedItems();
+
+        const itemsXml = items.map(item => {
+            const salePriceLine = item.sale_price
+                ? `\n    <g:sale_price>${xmlEscape(item.sale_price)}</g:sale_price>`
+                : '';
+            return `  <item>
+    <g:id>${xmlEscape(item.id)}</g:id>
+    <g:title>${xmlEscape(item.title)}</g:title>
+    <g:description>${xmlEscape(item.description)}</g:description>
+    <g:link>${xmlEscape(item.link)}</g:link>
+    <g:image_link>${xmlEscape(item.image_link)}</g:image_link>
+    <g:availability>${xmlEscape(item.availability)}</g:availability>
+    <g:condition>${xmlEscape(item.condition)}</g:condition>
+    <g:price>${xmlEscape(item.price)}</g:price>${salePriceLine}
+    <g:brand>${xmlEscape(item.brand)}</g:brand>
+    <g:quantity_to_sell_on_facebook>${item.quantity_to_sell_on_facebook}</g:quantity_to_sell_on_facebook>
+  </item>`;
+        }).join('\n');
+
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">
+  <channel>
+    <title>Ekta Enterprises Product Catalogue</title>
+    <link>${FEED_SITE_BASE}</link>
+    <description>FMCG product catalogue for Meta Commerce Manager</description>
+${itemsXml}
+  </channel>
+</rss>`;
+
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=600');
+        res.send(xml);
+    } catch (err) {
+        console.error('[facebook-feed.xml]', err);
+        res.status(500).json({ error: 'Feed generation failed', detail: err.message });
+    }
+});
+
+/**
+ * GET /api/app/facebook-feed/status
+ * Diagnostic endpoint — returns item counts, skip reasons, and cache age.
+ * PUBLIC — safe to expose (no sensitive data).
+ */
+router.get('/facebook-feed/status', async (req, res) => {
+    try {
+        const { items, skipped, builtAt, total } = await buildFeedItems();
+
+        // Group skip reasons
+        const skipReasons = {};
+        for (const s of skipped) {
+            skipReasons[s.reason] = (skipReasons[s.reason] || 0) + 1;
+        }
+
+        res.json({
+            status: 'ok',
+            builtAt,
+            totalProductsInCache: total,
+            publishedItems: items.length,
+            skippedItems: skipped.length,
+            skipReasons,
+            feedUrls: {
+                csv: `${FEED_SITE_BASE.replace('app.', 'server.')}/api/app/facebook-feed.csv`,
+                xml: `${FEED_SITE_BASE.replace('app.', 'server.')}/api/app/facebook-feed.xml`,
+            },
+            config: {
+                FEED_SITE_BASE,
+                FEED_PRICE_MODE,
+            },
+        });
+    } catch (err) {
+        console.error('[facebook-feed/status]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
+
