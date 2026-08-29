@@ -12,6 +12,7 @@ import ChangePassword from './pages/ChangePassword';
 import InvoiceView from './pages/InvoiceView';
 import OrderView from './pages/OrderView';
 import { useStore } from './context/StoreContext';
+import ProductPage from './pages/ProductPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useStore();
@@ -56,6 +57,9 @@ function App() {
           <Route path="/invoice/:series/:billNo" element={<InvoiceView />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
+
+        {/* Public product page — used by Meta catalogue links, no login required */}
+        <Route path="/product/:code" element={<ProductPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
