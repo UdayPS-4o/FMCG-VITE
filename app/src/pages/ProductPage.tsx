@@ -4,7 +4,7 @@ import { fetchProducts, getImageUrl, identifyByPhone } from '../lib/api';
 import { useStore, type Product } from '../context/StoreContext';
 import {
     ArrowLeft, ShoppingCart, MessageCircle, Package, Tag,
-    Loader2, AlertCircle, CheckCircle, Star, User, Sparkles
+    Loader2, AlertCircle, CheckCircle, Star, User, Sparkles, Phone, X
 } from 'lucide-react';
 
 const ProductPage = () => {
@@ -20,13 +20,18 @@ const ProductPage = () => {
     const [addedToCart, setAddedToCart] = useState(false);
     const [imgError, setImgError] = useState(false);
 
-    // WhatsApp auto-login state
+    // WhatsApp auto-login via ?phone= URL param
     const [waIdentifying, setWaIdentifying] = useState(false);
-    const [waWelcome, setWaWelcome] = useState('');       // party name shown in banner
-    const [waError, setWaError] = useState('');           // non-blocking note if not found
+    const [waWelcome, setWaWelcome] = useState('');
     const waAttempted = useRef(false);
 
-    // ── WhatsApp auto-identification ──────────────────────────────────────────
+    // Manual phone entry flow (for catalogue links without ?phone=)
+    const [showPhoneInput, setShowPhoneInput] = useState(false);
+    const [phoneInput, setPhoneInput] = useState('');
+    const [phoneLoading, setPhoneLoading] = useState(false);
+    const [phoneError, setPhoneError] = useState('');
+
+    // ── Auto-identify via URL ?phone= param ──────────────────────────────────
     useEffect(() => {
         const phone = searchParams.get('phone');
         if (!phone || user || waAttempted.current) return;
@@ -37,26 +42,49 @@ const ProductPage = () => {
             try {
                 const data = await identifyByPhone(phone);
                 if (data.success && data.token && data.user) {
-                    // Store session — same as normal login
                     localStorage.setItem('app_token', data.token);
                     localStorage.setItem('app_user', JSON.stringify(data.user));
                     login(data.user, data.token);
                     setWaWelcome(data.user.name || 'Customer');
                 }
-            } catch (err: unknown) {
-                // Not found in CMPL — silently show a hint (don't block the page)
-                const msg = err instanceof Error ? err.message : '';
-                if (msg.includes('not registered')) {
-                    setWaError('Your number isn\'t registered yet. You can browse or order via WhatsApp.');
-                }
-                // Any other errors are silent (bad network etc.)
+            } catch {
+                // Silent fail — show manual input instead
             } finally {
                 setWaIdentifying(false);
             }
         };
-
         tryIdentify();
     }, [searchParams, user, login]);
+
+    // ── Manual phone entry ───────────────────────────────────────────────────
+    const handlePhoneSubmit = async () => {
+        const cleaned = phoneInput.replace(/\D/g, '');
+        if (cleaned.length < 10) {
+            setPhoneError('Enter a valid 10-digit WhatsApp number');
+            return;
+        }
+        setPhoneError('');
+        setPhoneLoading(true);
+        try {
+            const data = await identifyByPhone(cleaned);
+            if (data.success && data.token && data.user) {
+                localStorage.setItem('app_token', data.token);
+                localStorage.setItem('app_user', JSON.stringify(data.user));
+                login(data.user, data.token);
+                setWaWelcome(data.user.name || 'Customer');
+                setShowPhoneInput(false);
+            }
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : '';
+            if (msg.includes('not registered')) {
+                setPhoneError('This number is not registered with us. Contact: 8080121020');
+            } else {
+                setPhoneError('Could not verify. Try again or use WhatsApp button below.');
+            }
+        } finally {
+            setPhoneLoading(false);
+        }
+    };
 
     // ── Product fetch ─────────────────────────────────────────────────────────
     useEffect(() => {
@@ -83,7 +111,7 @@ const ProductPage = () => {
 
     const handleAddToCart = () => {
         if (!product) return;
-        if (!user) { navigate('/login'); return; }
+        if (!user) { setShowPhoneInput(true); return; }
         addToCart(product, qty, 0);
         setAddedToCart(true);
         setTimeout(() => setAddedToCart(false), 2000);
@@ -91,7 +119,7 @@ const ProductPage = () => {
 
     const handleWhatsApp = () => {
         const msg = product
-            ? `Hi, I'm interested in *${product.PRODUCT}* (Code: ${product.CODE}). Please share details.`
+            ? `Hi, I'm interested in *${product.PRODUCT}* (Code: ${product.CODE}).`
             : 'Hi, I need product information.';
         window.open(`https://wa.me/918080121020?text=${encodeURIComponent(msg)}`, '_blank');
     };
@@ -110,19 +138,13 @@ const ProductPage = () => {
         );
     }
 
-    // ── Not found ─────────────────────────────────────────────────────────────
     if (notFound || !product) {
         return (
             <div className="min-h-screen bg-[#f8f9fa] flex flex-col items-center justify-center px-6 text-center">
                 <AlertCircle size={48} className="text-gray-300 mb-4" />
                 <h1 className="text-xl font-semibold text-gray-700 mb-2">Product Not Found</h1>
-                <p className="text-gray-400 text-sm mb-6">
-                    This product doesn't exist or may be discontinued.
-                </p>
-                <Link
-                    to="/"
-                    className="px-5 py-2.5 bg-emerald-500 text-white rounded-xl font-medium text-sm hover:bg-emerald-600 transition-colors"
-                >
+                <p className="text-gray-400 text-sm mb-6">This product doesn't exist or may be discontinued.</p>
+                <Link to="/" className="px-5 py-2.5 bg-emerald-500 text-white rounded-xl font-medium text-sm">
                     Browse Products
                 </Link>
             </div>
@@ -136,33 +158,24 @@ const ProductPage = () => {
     const imageUrl = product.image_url ? getImageUrl(product.image_url) : null;
     const conversion = parseFloat(product.MULT_F) || 1;
 
+    const bannerVisible = !!waWelcome;
+
     return (
         <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
 
-            {/* ── WhatsApp welcome banner ── */}
+            {/* ── Welcome banner (auto-identified) ── */}
             {waWelcome && (
-                <div className="fixed top-0 left-0 right-0 z-[60] bg-[#25D366] text-white px-4 py-2.5 flex items-center gap-2 shadow-lg animate-slide-down">
+                <div className="fixed top-0 left-0 right-0 z-[60] bg-[#25D366] text-white px-4 py-2.5 flex items-center gap-2 shadow-lg">
                     <Sparkles size={16} className="shrink-0" />
                     <p className="text-sm font-medium flex-1">
-                        Welcome, <span className="font-bold">{waWelcome}</span>! You're signed in automatically.
+                        Welcome, <span className="font-bold">{waWelcome}</span>! Signed in automatically.
                     </p>
-                    <button onClick={() => setWaWelcome('')} className="text-white/70 hover:text-white text-lg leading-none">×</button>
-                </div>
-            )}
-
-            {/* ── Non-registered phone hint ── */}
-            {waError && !waWelcome && (
-                <div className="fixed top-0 left-0 right-0 z-[60] bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center gap-2">
-                    <AlertCircle size={14} className="text-amber-500 shrink-0" />
-                    <p className="text-xs text-amber-700 flex-1">{waError}</p>
-                    <button onClick={() => setWaError('')} className="text-amber-400 hover:text-amber-600 text-lg leading-none">×</button>
+                    <button onClick={() => setWaWelcome('')} className="text-white/70 hover:text-white text-xl leading-none">×</button>
                 </div>
             )}
 
             {/* ── Header ── */}
-            <header
-                className={`fixed left-0 right-0 z-50 bg-white border-b border-gray-100 px-4 py-3 transition-all ${waWelcome || waError ? 'top-[44px]' : 'top-0'}`}
-            >
+            <header className={`fixed left-0 right-0 z-50 bg-white border-b border-gray-100 px-4 py-3 ${bannerVisible ? 'top-[44px]' : 'top-0'}`}>
                 <div className="flex items-center gap-3">
                     <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-gray-600 hover:bg-gray-50 rounded-full">
                         <ArrowLeft size={20} />
@@ -171,15 +184,14 @@ const ProductPage = () => {
                         <h1 className="text-sm font-semibold text-gray-800 truncate">{product.PRODUCT}</h1>
                         <p className="text-xs text-gray-400">Code: {product.CODE}</p>
                     </div>
-                    <div className="flex items-center gap-1">
-                        {/* Show party name pill if auto-identified */}
-                        {user && waWelcome && (
-                            <div className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 rounded-full">
-                                <User size={11} className="text-emerald-600" />
-                                <span className="text-[11px] font-semibold text-emerald-700 max-w-[80px] truncate">{user.name}</span>
-                            </div>
-                        )}
-                        {user && (
+                    {user && (
+                        <div className="flex items-center gap-1">
+                            {waWelcome && (
+                                <div className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 rounded-full">
+                                    <User size={11} className="text-emerald-600" />
+                                    <span className="text-[11px] font-semibold text-emerald-700 max-w-[80px] truncate">{user.name}</span>
+                                </div>
+                            )}
                             <Link to="/cart" className="relative p-2 text-gray-600 hover:bg-gray-50 rounded-full">
                                 <ShoppingCart size={20} />
                                 {cart.length > 0 && (
@@ -188,13 +200,13 @@ const ProductPage = () => {
                                     </span>
                                 )}
                             </Link>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
             </header>
 
             {/* ── Content ── */}
-            <div className={`flex-1 pb-36 transition-all ${waWelcome || waError ? 'pt-[108px]' : 'pt-[64px]'}`}>
+            <div className={`flex-1 pb-48 ${bannerVisible ? 'pt-[108px]' : 'pt-[64px]'}`}>
 
                 {/* Product Image */}
                 <div className="bg-white">
@@ -215,18 +227,12 @@ const ProductPage = () => {
                 {/* Product Info */}
                 <div className="px-4 py-5 bg-white mt-2">
                     <div className="flex items-start justify-between gap-3 mb-3">
-                        <h2 className="text-lg font-bold text-gray-900 leading-tight flex-1">
-                            {product.PRODUCT}
-                        </h2>
+                        <h2 className="text-lg font-bold text-gray-900 leading-tight flex-1">{product.PRODUCT}</h2>
                         <span className={`shrink-0 mt-0.5 px-2.5 py-1 rounded-full text-xs font-semibold ${inStock ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
-                            {inStock
-                                ? <span className="flex items-center gap-1"><CheckCircle size={11} /> In Stock</span>
-                                : 'Out of Stock'
-                            }
+                            {inStock ? <span className="flex items-center gap-1"><CheckCircle size={11} /> In Stock</span> : 'Out of Stock'}
                         </span>
                     </div>
 
-                    {/* Price */}
                     <div className="flex items-end gap-3 mb-4">
                         <span className="text-2xl font-bold text-gray-900">₹{price.toFixed(2)}</span>
                         {mrp > 0 && mrp !== price && (
@@ -241,7 +247,6 @@ const ProductPage = () => {
                         )}
                     </div>
 
-                    {/* Pack / Unit info */}
                     <div className="flex gap-2 flex-wrap">
                         {product.PACK && (
                             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg">
@@ -250,9 +255,7 @@ const ProductPage = () => {
                             </div>
                         )}
                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg">
-                            <span className="text-xs text-gray-600 font-medium">
-                                1 {product.UNIT_2} = {conversion} {product.UNIT_1}
-                            </span>
+                            <span className="text-xs text-gray-600 font-medium">1 {product.UNIT_2} = {conversion} {product.UNIT_1}</span>
                         </div>
                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg">
                             <span className="text-xs text-gray-600 font-medium">Unit: {product.UNIT_1}</span>
@@ -270,9 +273,7 @@ const ProductPage = () => {
                         <div className="space-y-2">
                             {product.schemes.map((sch, i) => (
                                 <div key={i} className="flex items-center justify-between px-3 py-2 bg-amber-50 rounded-xl">
-                                    <span className="text-xs text-gray-600">
-                                        Buy {sch.slab1}{sch.slab2 ? `–${sch.slab2}` : '+'} {product.UNIT_1}
-                                    </span>
+                                    <span className="text-xs text-gray-600">Buy {sch.slab1}{sch.slab2 ? `–${sch.slab2}` : '+'} {product.UNIT_1}</span>
                                     <span className="text-xs font-bold text-amber-600">{sch.discount}% OFF</span>
                                 </div>
                             ))}
@@ -280,67 +281,95 @@ const ProductPage = () => {
                     </div>
                 )}
 
-                {/* Browse more */}
                 <div className="mx-4 mt-3 p-4 bg-white rounded-2xl">
-                    <p className="text-xs text-gray-500 mb-1">Looking for more?</p>
-                    <Link to="/" className="text-emerald-600 text-sm font-medium hover:underline">
-                        Browse all products →
-                    </Link>
+                    <Link to="/" className="text-emerald-600 text-sm font-medium">Browse all products →</Link>
                 </div>
             </div>
 
             {/* ── Fixed Bottom Actions ── */}
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3 space-y-2">
+
                 {user ? (
+                    /* Logged in: qty stepper + Add to Cart */
                     <div className="flex gap-3">
-                        {/* Qty stepper */}
                         <div className="flex items-center bg-gray-100 rounded-xl px-2">
-                            <button
-                                onClick={() => setQty(q => Math.max(1, q - 1))}
-                                className="w-8 h-8 flex items-center justify-center text-gray-600 font-bold text-lg"
-                            >−</button>
+                            <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-8 flex items-center justify-center text-gray-600 font-bold text-lg">−</button>
                             <span className="w-8 text-center text-sm font-semibold text-gray-800">{qty}</span>
-                            <button
-                                onClick={() => setQty(q => q + 1)}
-                                className="w-8 h-8 flex items-center justify-center text-gray-600 font-bold text-lg"
-                            >+</button>
+                            <button onClick={() => setQty(q => q + 1)} className="w-8 h-8 flex items-center justify-center text-gray-600 font-bold text-lg">+</button>
                         </div>
-                        {/* Add to Cart */}
                         <button
                             onClick={handleAddToCart}
                             disabled={!inStock}
                             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all ${
-                                addedToCart
-                                    ? 'bg-emerald-500 text-white scale-95'
-                                    : cartItem
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                    : inStock
-                                    ? 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95'
-                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                addedToCart ? 'bg-emerald-500 text-white scale-95'
+                                : cartItem ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : inStock ? 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95'
+                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                             }`}
                         >
-                            {addedToCart
-                                ? <><CheckCircle size={16} /> Added!</>
-                                : cartItem
-                                ? <><ShoppingCart size={16} /> Update Cart</>
-                                : <><ShoppingCart size={16} /> Add to Cart</>
-                            }
+                            {addedToCart ? <><CheckCircle size={16} /> Added!</>
+                                : cartItem ? <><ShoppingCart size={16} /> Update Cart</>
+                                : <><ShoppingCart size={16} /> Add to Cart</>}
                         </button>
                     </div>
+                ) : showPhoneInput ? (
+                    /* Phone entry flow */
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                                <Phone size={14} className="text-emerald-500" /> Enter your WhatsApp number
+                            </span>
+                            <button onClick={() => { setShowPhoneInput(false); setPhoneError(''); setPhoneInput(''); }} className="ml-auto text-gray-400 hover:text-gray-600">
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="flex gap-2">
+                            <div className="flex items-center px-3 bg-gray-100 rounded-xl border border-gray-200 text-sm font-medium text-gray-500">
+                                +91
+                            </div>
+                            <input
+                                type="tel"
+                                inputMode="numeric"
+                                maxLength={10}
+                                value={phoneInput}
+                                onChange={e => { setPhoneInput(e.target.value.replace(/\D/g, '')); setPhoneError(''); }}
+                                onKeyDown={e => e.key === 'Enter' && handlePhoneSubmit()}
+                                placeholder="10-digit number"
+                                autoFocus
+                                className="flex-1 px-3 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 border border-gray-200"
+                            />
+                            <button
+                                onClick={handlePhoneSubmit}
+                                disabled={phoneLoading || phoneInput.length < 10}
+                                className="px-4 py-2.5 bg-emerald-500 text-white rounded-xl font-semibold text-sm disabled:opacity-50 active:scale-95 transition-all"
+                            >
+                                {phoneLoading ? <Loader2 size={16} className="animate-spin" /> : 'Go'}
+                            </button>
+                        </div>
+                        {phoneError && <p className="text-xs text-red-500">{phoneError}</p>}
+                        <p className="text-[11px] text-gray-400 text-center">Your registered WhatsApp number — no OTP needed</p>
+                    </div>
                 ) : (
+                    /* Not logged in: primary CTA + WhatsApp fallback */
                     <>
                         <button
-                            onClick={() => navigate('/login')}
+                            onClick={() => setShowPhoneInput(true)}
                             className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 text-white rounded-xl font-semibold text-sm hover:bg-emerald-600 active:scale-95 transition-all"
                         >
-                            <ShoppingCart size={16} /> Login to Order
+                            <Phone size={16} /> Order with WhatsApp Number
                         </button>
                         <button
                             onClick={handleWhatsApp}
                             className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#25D366] text-white rounded-xl font-semibold text-sm hover:opacity-90 active:scale-95 transition-all"
                         >
-                            <MessageCircle size={16} /> Order on WhatsApp
+                            <MessageCircle size={16} /> Chat on WhatsApp
                         </button>
+                        <p className="text-center text-[11px] text-gray-400">
+                            Or{' '}
+                            <button onClick={() => navigate('/login')} className="text-emerald-600 font-medium underline">
+                                sign in with password
+                            </button>
+                        </p>
                     </>
                 )}
             </div>
