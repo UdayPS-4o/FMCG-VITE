@@ -598,7 +598,7 @@ const REPORTS_URL =
 
 const ORIGIN = new URL(REPORTS_URL).origin;
 const CSRF_URL  = process.env.AOC_WA_CSRF_URL  || `${ORIGIN}/getcsrf`;
-const LOGIN_URL = process.env.AOC_PORTAL_LOGIN_URL || `${ORIGIN}/auth/login`;
+const LOGIN_URL = process.env.AOC_PORTAL_LOGIN_URL || `${ORIGIN}/api/v1/user/login`;
 
 const USERNAME = process.env.AOC_PORTAL_USERNAME || '';
 const PASSWORD = process.env.AOC_PORTAL_PASSWORD || '';
@@ -651,6 +651,8 @@ function cookieHeader() {
   return parts.join('; ');
 }
 
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
 // ── CSRF ──────────────────────────────────────────────────────────────────────
 let csrf = { token: null, expiresAtMs: 0 };
 
@@ -660,7 +662,11 @@ async function getCsrfToken(force = false) {
 
   try {
     const res = await axios.get(CSRF_URL, {
-      headers: { Accept: 'application/json', ...(cookieHeader() ? { Cookie: cookieHeader() } : {}) },
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': USER_AGENT,
+        ...(cookieHeader() ? { Cookie: cookieHeader() } : {})
+      },
       timeout: 10000, validateStatus: () => true,
     });
     absorbCookies(res);
@@ -683,7 +689,7 @@ async function getCsrfToken(force = false) {
 }
 
 function baseHeaders(token) {
-  const h = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  const h = { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT };
   const auth = session.token || MANUAL_TOKEN;
   if (auth) h.Authorization = /^bearer\s/i.test(auth) ? auth : `Bearer ${auth}`;
   const cookie = cookieHeader();
@@ -735,7 +741,7 @@ async function login(force = false) {
   try {
     const res = await axios.post(
       LOGIN_URL,
-      { username: USERNAME, password: PASSWORD },
+      { username: USERNAME, password: PASSWORD, domain: 'omni.azmarq.com' },
       { headers: baseHeaders(token), timeout: 15000, validateStatus: () => true }
     );
     absorbCookies(res);
