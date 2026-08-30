@@ -280,15 +280,48 @@ router.post('/request-otp', async (req, res) => {
 
         otpCache.set(loginId, { otp, expiresAt, partyCode: party.C_CODE });
 
-        // Send OTP via the new API endpoint — failure is non-fatal
+        // Send OTP via the AOC WhatsApp API — failure is non-fatal
         try {
-            await axios.post('http://localhost:4292/sendText', {
-                phoneNumber: mobileStr,
-                textMessage: `Your login OTP for Ekta Enterprises mobile app is ${otp}. It is valid for 5 minutes.`
-            });
+            const recipientNumber = mobileStr.startsWith('91') ? `+${mobileStr}` : `+91${mobileStr}`;
+            const aocPayload = {
+              from: process.env.AOC_WA_FROM || '+15554884507',
+              campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
+              to: recipientNumber,
+              type: 'template',
+              templateName: 'app',
+              language: { code: 'en' },
+              otp: otp,
+              components: {
+                body: {
+                  params: [
+                    otp
+                  ],
+                },
+                button: {
+                  params: [
+                    otp
+                  ]
+                }
+              },
+            };
+            
+            await axios.post(
+              process.env.AOC_WA_API_URL || 'https://api.aoc-portal.com/v1/whatsapp',
+              aocPayload,
+              {
+                headers: {
+                  'apikey': process.env.AOC_WA_API_KEY || '',
+                  'Content-Type': 'application/json',
+                },
+                timeout: 30000,
+              }
+            );
         } catch (smsErr) {
-            // WhatsApp/SMS API is down — log OTP to server console for manual lookup
+            // WhatsApp API is down — log OTP to server console for manual lookup
             console.warn('[app/request-otp] WhatsApp API failed — OTP for', loginId, ':', otp, '| Error:', smsErr.message);
+            if (smsErr.response) {
+                console.warn('[app/request-otp] API Response:', JSON.stringify(smsErr.response.data));
+            }
         }
 
         res.json({ success: true, message: `OTP sent to mobile ending in ******${mobileStr.slice(-4)}` });
