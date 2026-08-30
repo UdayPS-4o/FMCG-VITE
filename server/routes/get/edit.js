@@ -71,7 +71,8 @@ app.get("/edit/:page/:id", async (req, res) => {
   console.log(`Fetching ${page} with id ${id}`);
   
   try {
-    let data = await fs.readFile(`./db/${page}.json`, "utf8");
+    const filePath = path.join(__dirname, '..', '..', 'db', `${page}.json`);
+    let data = await fs.readFile(filePath, "utf8");
     data = JSON.parse(data);
 
     // find the entry with the specified identifier
@@ -127,7 +128,7 @@ app.get("/delete/:page/:id", verifyToken, async (req, res) => {
   
   try {
     // Use the same path resolution as the working edit route
-    const filePath = `./db/${page}.json`;
+    const filePath = path.join(__dirname, '..', '..', 'db', `${page}.json`);
     console.log(`Reading from file: ${filePath}`);
     
     // Read the file
@@ -234,7 +235,7 @@ app.get("/delete/approved/:page/:id", verifyToken, async (req, res) => {
   
   try {
     // Use path to the approved file
-    const filePath = `./db/approved/${page}.json`;
+    const filePath = path.join(__dirname, '..', '..', 'db', 'approved', `${page}.json`);
     console.log(`Reading from approved file: ${filePath}`);
     
     // Read the file
@@ -322,7 +323,8 @@ app.get("/edit/approved/:page/:id", async (req, res) => {
   console.log(`Fetching approved ${page} with id ${id}`);
   
   try {
-    let data = await fs.readFile(`./db/approved/${page}.json`, "utf8");
+    const filePath = path.join(__dirname, '..', '..', 'db', 'approved', `${page}.json`);
+    let data = await fs.readFile(filePath, "utf8");
     data = JSON.parse(data);
 
     // find the entry with the specified identifier
