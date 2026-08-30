@@ -495,7 +495,33 @@ router.post('/wa-cart', async (req, res) => {
  * Headers: Authorization: Bearer <token>
  * Body: { currentPassword, newPassword }
  */
+/**
+ * GET /api/app/wa-cart
+ * Auth required. Called by the client on startup to sync any pending
+ * WhatsApp Commerce order items into the app cart. One-shot: deleted after read.
+ */
+router.get('/wa-cart', requireAppAuth, async (req, res) => {
+    try {
+        const party = req.appParty;
+        if (!party) return res.json({ waCart: null });
+        const normalize = (str) => {
+            if (!str) return '';
+            const digits = String(str).replace(/\D/g, '');
+            return digits.length >= 10 ? digits.slice(-10) : digits;
+        };
+        const phone = normalize(party.C_MOBILE || party.C_PHONE || party.WA_MOB);
+        if (!phone) return res.json({ waCart: null });
+        const items = await appDb.getAndDeleteWaCart(phone);
+        if (items) console.log(`[app/wa-cart] Returning ${items.length} pending items for ${req.appPartyCode}`);
+        res.json({ waCart: items });
+    } catch (err) {
+        console.error('[app/wa-cart] GET error:', err);
+        res.status(500).json({ error: 'Failed to fetch cart' });
+    }
+});
+
 router.patch('/change-password', requireAppAuth, async (req, res) => {
+
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
         return res.status(400).json({ error: 'currentPassword and newPassword are required' });
