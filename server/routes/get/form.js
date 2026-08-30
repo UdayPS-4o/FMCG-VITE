@@ -49,7 +49,8 @@ app.get('/db/:file', async (req, res) => {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
   try {
-    let data = (await fs.readFile(`./db/${file}.json`, 'utf8')) || '[]';
+    const filePath = path.join(__dirname, '..', '..', 'db', `${file}.json`);
+    let data = (await fs.readFile(filePath, 'utf8')) || '[]';
     data = JSON.parse(data);
     res.render(`pages/db/${file}`, { data, file, name });
   } catch (error) {
