@@ -282,7 +282,7 @@ router.post('/request-otp', async (req, res) => {
 
         // Send OTP via the AOC WhatsApp API — failure is non-fatal
         try {
-            const recipientNumber = mobileStr.startsWith('91') ? `+${mobileStr}` : `+91${mobileStr}`;
+            const recipientNumber = `+91${mobileStr}`;
             const aocPayload = {
               from: process.env.AOC_WA_FROM || '+15554884507',
               campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
