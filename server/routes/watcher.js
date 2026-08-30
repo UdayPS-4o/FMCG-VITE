@@ -53,6 +53,8 @@ process.on("uncaughtException", (err) => {
     return results;
   };
   
+  const balanceJsonPath = path.join(__dirname, "..", "db", "balance.json");
+
   async function watchFile() {
     const dbfFilePath = path.join(process.env.DBF_FOLDER_PATH, "data", "CASH.dbf");
     let lastModifiedTime = null;
@@ -64,7 +66,7 @@ process.on("uncaughtException", (err) => {
         try {
           if (fs.access(dbfFilePath)) {
             lastModifiedTime = await fs
-              .readFile("./db/balance.json", "utf8")
+              .readFile(balanceJsonPath, "utf8")
               .then((data) => {
                 return JSON.parse(data).lastModifiedTime;
               });
@@ -79,11 +81,14 @@ process.on("uncaughtException", (err) => {
           lastModifiedTime = currentModifiedTime;
           console.log("File updated - processing...");
   
+          // Ensure the db directory exists before writing
+          await fs.mkdir(path.dirname(balanceJsonPath), { recursive: true });
+
           const dbData = await getDbfData(dbfFilePath);
           let results = await processData(dbData);
           results.lastModifiedTime = currentModifiedTime;
           await fs.writeFile(
-            "./db/balance.json",
+            balanceJsonPath,
             JSON.stringify(results, null, 2)
           );
   
