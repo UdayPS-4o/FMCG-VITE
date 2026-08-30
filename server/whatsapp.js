@@ -821,6 +821,35 @@ async function fetchOrderPage(opts) {
   return records;
 }
 
+let cachedPmpl = null;
+let pmplLoadTime = 0;
+
+function getProductName(code) {
+  if (!code) return null;
+  const now = Date.now();
+  // Reload PMPL every 5 minutes if it exists
+  if (!cachedPmpl || now - pmplLoadTime > 300000) {
+    try {
+      const dbfFolder = process.env.DBF_FOLDER_PATH || require('path').join(__dirname, '../d01-2324');
+      const pmplPath = require('path').join(dbfFolder, 'data/json/PMPL.json');
+      if (require('fs').existsSync(pmplPath)) {
+        cachedPmpl = JSON.parse(require('fs').readFileSync(pmplPath, 'utf8'));
+        pmplLoadTime = now;
+      }
+    } catch (e) {
+      console.error('[AOC ORDERS] Error loading PMPL.json:', e.message);
+    }
+  }
+
+  if (cachedPmpl) {
+    const item = cachedPmpl.find(p => String(p.CODE).trim().toUpperCase() === String(code).trim().toUpperCase());
+    if (item && item.PRODUCT) {
+      return item.PRODUCT;
+    }
+  }
+  return null;
+}
+
 /** Normalise a portal record into a flat, item-wise shape. */
 function normaliseRecord(rec) {
   const d = rec.order_detail || {};
@@ -830,11 +859,25 @@ function normaliseRecord(rec) {
   const items = rawItems.map((it) => {
     const rate = money(it.amount);
     const qty = Number(it.quantity) || 1;
+    const amount = Number((rate * qty).toFixed(2));
+    const code = it.retailer_id || it.product_retailer_id || null;
+    const resolvedName = getProductName(code);
+    const name = resolvedName || it.name || code || 'Unknown item';
+    
     return {
-      code: it.retailer_id || it.product_retailer_id || null,
-      name: it.name || it.retailer_id || 'Unknown item',
-      qty, rate,
-      amount: Number((rate * qty).toFixed(2)),
+      productCode: code,
+      productName: name,
+      qtyPcs: qty,
+      qtyBoxes: 0,
+      rate: rate,
+      mrp: rate,
+      sch: 0,
+      netAmount: amount,
+      
+      code,
+      name,
+      qty, 
+      amount,
       currency,
     };
   });
