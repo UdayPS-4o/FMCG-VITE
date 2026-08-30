@@ -6,14 +6,18 @@ import constants from '../../constants';
 import useAuth from '../../hooks/useAuth';
 
 interface OrderItem {
-    productCode: string;
-    productName: string;
-    qtyPcs: number;
-    qtyBoxes: number;
-    rate: string | number;
-    mrp: string | number;
+    productCode?: string;
+    productName?: string;
+    code?: string;
+    name?: string;
+    qtyPcs?: number;
+    qtyBoxes?: number;
+    qty?: number;
+    rate?: string | number;
+    mrp?: string | number;
     sch?: number;
-    netAmount: number;
+    netAmount?: number;
+    amount?: number;
 }
 
 interface AppOrder {
@@ -239,16 +243,24 @@ const AppOrders: React.FC = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {order.items.map((item, i) => (
-                                                        <tr key={i} className="border-t border-gray-100 dark:border-gray-700">
-                                                            <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{item.productName}</td>
-                                                            <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">₹{item.mrp || '—'}</td>
-                                                            <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{item.sch ? `${item.sch}%` : '—'}</td>
-                                                            <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{item.qtyBoxes || '—'}</td>
-                                                            <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{item.qtyPcs || '—'}</td>
-                                                            <td className="px-3 py-2 text-right font-medium text-gray-800 dark:text-gray-200">₹{item.netAmount.toFixed(2)}</td>
-                                                        </tr>
-                                                    ))}
+                                                    {order.items.map((item, i) => {
+                                                        const pName = item.productName || item.name || 'Unknown';
+                                                        const pMrp = item.mrp || item.rate || 0;
+                                                        const pSch = item.sch || null;
+                                                        const pBoxes = item.qtyBoxes || 0;
+                                                        const pPcs = item.qtyPcs || item.qty || 0;
+                                                        const pAmount = item.netAmount ?? item.amount ?? 0;
+                                                        return (
+                                                            <tr key={i} className="border-t border-gray-100 dark:border-gray-700">
+                                                                <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{pName}</td>
+                                                                <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">₹{pMrp || '—'}</td>
+                                                                <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{pSch ? `${pSch}%` : '—'}</td>
+                                                                <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{pBoxes || '—'}</td>
+                                                                <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-400">{pPcs || '—'}</td>
+                                                                <td className="px-3 py-2 text-right font-medium text-gray-800 dark:text-gray-200">₹{Number(pAmount).toFixed(2)}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                                 <tfoot className="bg-gray-50 dark:bg-gray-700">
                                                     <tr>
