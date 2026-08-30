@@ -434,12 +434,22 @@ router.get('/identify-by-phone', async (req, res) => {
             .split('.')[0];
         await appDb.createSession(partyCode, token, expiresAt);
 
+        // Check for a pending WhatsApp Commerce cart (one-shot: read + delete)
+        let waCart = null;
+        try {
+            waCart = await appDb.getAndDeleteWaCart(phone);
+            if (waCart) console.log(`[app/identify-by-phone] Found ${waCart.length} pending WA cart items for ${partyCode}`);
+        } catch (cartErr) {
+            console.error('[app/identify-by-phone] waCart fetch error:', cartErr);
+        }
+
         console.log(`[app/identify-by-phone] Auto-login for ${partyCode} via WhatsApp link`);
 
         return res.json({
             success: true,
             token,
             mustChangePassword: false, // skip change-password screen for WA logins
+            waCart,                    // [{code, qty, price}] or null
             user: {
                 partyCode,
                 name: party.C_NAME,
@@ -453,6 +463,32 @@ router.get('/identify-by-phone', async (req, res) => {
         res.status(500).json({ error: 'Identification failed' });
     }
 });
+
+/**
+ * POST /api/app/wa-cart
+ * Internal endpoint — called by api-server.js when a WhatsApp Commerce order
+ * is received (type:"order" webhook). Saves the ordered items so they appear
+ * in the customer's cart when they next open the app.
+ * Body: { phone, items: [{code, qty, price}], secret }
+ */
+router.post('/wa-cart', async (req, res) => {
+    const { phone, items, secret } = req.body || {};
+    const WA_SECRET = process.env.WA_CART_SECRET || 'wa-internal-ekta-2026';
+    if (secret !== WA_SECRET) return res.status(403).json({ error: 'Forbidden' });
+    if (!phone || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'phone and items are required' });
+    }
+    const normalized = String(phone).replace(/\D/g, '').slice(-10);
+    try {
+        await appDb.saveWaCart(normalized, items);
+        console.log(`[app/wa-cart] Saved ${items.length} WA commerce items for ${normalized}`);
+        res.json({ success: true, count: items.length });
+    } catch (err) {
+        console.error('[app/wa-cart] save error:', err);
+        res.status(500).json({ error: 'Failed to save cart' });
+    }
+});
+
 
 /**
  * PATCH /api/app/change-password

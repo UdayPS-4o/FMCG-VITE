@@ -23,6 +23,7 @@ const ProductPage = () => {
     // WhatsApp auto-login via ?phone= URL param
     const [waIdentifying, setWaIdentifying] = useState(false);
     const [waWelcome, setWaWelcome] = useState('');
+    const [waCartLoaded, setWaCartLoaded] = useState(0); // number of WA cart items loaded
     const waAttempted = useRef(false);
 
     // Manual phone entry flow (for catalogue links without ?phone=)
@@ -46,6 +47,10 @@ const ProductPage = () => {
                     localStorage.setItem('app_user', JSON.stringify(data.user));
                     login(data.user, data.token);
                     setWaWelcome(data.user.name || 'Customer');
+                    // Pre-populate cart from pending WA Commerce order
+                    if (data.waCart && data.waCart.length > 0) {
+                        await populateWaCart(data.waCart);
+                    }
                 }
             } catch {
                 // Silent fail — show manual input instead
@@ -55,6 +60,27 @@ const ProductPage = () => {
         };
         tryIdentify();
     }, [searchParams, user, login]);
+
+    // ── Populate cart from WA Commerce order items ───────────────────────────
+    const populateWaCart = async (waItems: Array<{ code: string; qty: number; price?: number }>) => {
+        let added = 0;
+        for (const item of waItems) {
+            try {
+                const res = await fetchProducts(1, 1, '', '', '', item.code.toUpperCase());
+                if (res.data && res.data.length > 0) {
+                    addToCart(res.data[0], item.qty, 0);
+                    added++;
+                }
+            } catch {
+                // ignore individual product fetch errors
+            }
+        }
+        if (added > 0) {
+            setWaWelcome(prev => prev); // keep welcome banner
+            // Show cart pre-load notice
+            setWaCartLoaded(added);
+        }
+    };
 
     // ── Manual phone entry ───────────────────────────────────────────────────
     const handlePhoneSubmit = async () => {
@@ -73,6 +99,10 @@ const ProductPage = () => {
                 login(data.user, data.token);
                 setWaWelcome(data.user.name || 'Customer');
                 setShowPhoneInput(false);
+                // Pre-populate cart from pending WA Commerce order
+                if (data.waCart && data.waCart.length > 0) {
+                    await populateWaCart(data.waCart);
+                }
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : '';
@@ -169,6 +199,9 @@ const ProductPage = () => {
                     <Sparkles size={16} className="shrink-0" />
                     <p className="text-sm font-medium flex-1">
                         Welcome, <span className="font-bold">{waWelcome}</span>! Signed in automatically.
+                        {waCartLoaded > 0 && (
+                            <span className="ml-1 font-normal"> · {waCartLoaded} item{waCartLoaded > 1 ? 's' : ''} added to cart 🛒</span>
+                        )}
                     </p>
                     <button onClick={() => setWaWelcome('')} className="text-white/70 hover:text-white text-xl leading-none">×</button>
                 </div>
