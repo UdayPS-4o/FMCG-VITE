@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { fetchProducts } from '../lib/api';
 
 // Types
 export interface User {
@@ -73,13 +74,49 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return (stored === 'en' || stored === 'hi') ? stored : 'en';
     });
 
-    // Hydrate user from localStorage on mount
+    // Hydrate user from localStorage on mount + check for pending WA Commerce cart
     useEffect(() => {
         const storedUser = localStorage.getItem('app_user');
+        const storedToken = localStorage.getItem('app_token');
         if (storedUser) {
             try { setUser(JSON.parse(storedUser)); } catch { localStorage.removeItem('app_user'); }
         }
         setIsLoading(false);
+
+        // Non-blocking: check if a WA Commerce order is waiting to be synced
+        if (storedToken) {
+            const API_URL = (import.meta as unknown as { env: { VITE_API_URL?: string } }).env.VITE_API_URL
+                || 'http://localhost:5000/api/app';
+            fetch(`${API_URL}/wa-cart`, {
+                headers: { 'Authorization': `Bearer ${storedToken}` }
+            })
+            .then(r => r.ok ? r.json() : null)
+            .then(async (data) => {
+                if (!data?.waCart || data.waCart.length === 0) return;
+                for (const item of data.waCart as Array<{ code: string; qty: number; price?: number }>) {
+                    try {
+                        const res = await fetchProducts(1, 1, '', '', '', item.code.toUpperCase());
+                        if (res.data && res.data.length > 0) {
+                            const product = res.data[0];
+                            const rate = parseFloat(product.RATE1) || 0;
+                            const qty = item.qty || 1;
+                            setCart(prev => {
+                                if (prev.find(ci => ci.product.CODE === product.CODE)) return prev;
+                                return [...prev, {
+                                    product,
+                                    qtyPcs: qty,
+                                    qtyBoxes: 0,
+                                    totalQty: qty,
+                                    netAmount: qty * rate,
+                                    sch: 0,
+                                }];
+                            });
+                        }
+                    } catch { /* silent */ }
+                }
+            })
+            .catch(() => {}); // silent — don't block app startup
+        }
     }, []);
 
     // Persist cart changes
