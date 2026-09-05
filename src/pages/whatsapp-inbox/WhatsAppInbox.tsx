@@ -27,7 +27,9 @@ interface Message {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API_BASE = '/api/whatsapp-ui';
+// VITE_API_URL is set to 'https://server.ekta-enterprises.com' in .env
+// so the Vercel (test) deployment calls the real backend. On server.ekta-enterprises.com it is ''.
+const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/whatsapp-ui';
 
 function getInitials(name: string): string {
   return name
