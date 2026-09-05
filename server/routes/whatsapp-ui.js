@@ -397,12 +397,28 @@ router.post('/send', async (req, res) => {
     const body = req.body || {};
     const to = body.to;
     const msgBody = body.body;
-    if (!to || !msgBody) return res.status(400).json({ ok: false, error: 'Missing to or body' });
-    const payload = {
-      to: String(to).startsWith('+') ? to : ('+' + to),
-      type: 'text',
-      text: { body: String(msgBody) }
+    const { mediaUrl, mediaType, filename } = body;
+
+    if (!to || (!msgBody && !mediaUrl)) return res.status(400).json({ ok: false, error: 'Missing to or content' });
+
+    let payload = {
+      to: String(to).length === 10 ? '+91' + to : (String(to).startsWith('+') ? to : ('+' + to)),
     };
+
+    if (mediaUrl) {
+      payload.type = mediaType || 'document';
+      payload[payload.type] = {
+        url: mediaUrl,
+        caption: msgBody || undefined
+      };
+      if (payload.type === 'document') {
+        payload.document.filename = filename || 'Attachment';
+      }
+    } else {
+      payload.type = 'text';
+      payload.text = { body: String(msgBody) };
+    }
+
     const result = await axios.post(
       'http://127.0.0.1:' + WHATSAPP_PORT + '/send',
       payload,
@@ -410,6 +426,31 @@ router.post('/send', async (req, res) => {
     );
     invalidateCache();
     res.status(result.status).json(Object.assign({ ok: result.status >= 200 && result.status < 300 }, result.data));
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/upload', async (req, res) => {
+  try {
+    const { filename, base64 } = req.body;
+    if (!filename || !base64) return res.status(400).json({ ok: false, error: 'Missing filename or base64' });
+
+    const outDir = path.join(__dirname, '..', 'whatsapp-files');
+    if (!fs.existsSync(outDir)) {
+      fs.mkdirSync(outDir, { recursive: true });
+    }
+
+    const ext = path.extname(filename);
+    const uniqueName = Date.now() + '_' + Math.random().toString(36).substring(7) + ext;
+    const outPath = path.join(outDir, uniqueName);
+
+    const base64Data = base64.replace(/^data:([A-Za-z-+\/]+);base64,/, '');
+    fs.writeFileSync(outPath, base64Data, 'base64');
+
+    const publicUrl = `https://server.ekta-enterprises.com/whatsapp/files/${uniqueName}`;
+
+    res.json({ ok: true, url: publicUrl, filename: uniqueName });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

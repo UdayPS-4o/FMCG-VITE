@@ -399,6 +399,8 @@ export default function WhatsAppInbox() {
   const sseRef = useRef<EventSource | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // ── 24-hour service window check ─────────────────────────────────────────────
   // WhatsApp Business: can only send free-form messages within 24h of last customer message
@@ -534,6 +536,80 @@ export default function WhatsAppInbox() {
         ...prev, messages: prev.messages.map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
       } : prev);
     } finally { setSending(false); }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!activePhone || !isServiceWindowOpen) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      setSending(true);
+
+      const tempId = 'temp_' + Date.now();
+      const isImage = file.type.startsWith('image/');
+      const tempMsg: Message = {
+        id: tempId, direction: 'outbound', type: isImage ? 'image' : 'document',
+        body: file.name, timestamp: Date.now(), status: 'sending',
+      };
+      if (isImage) tempMsg.imageUrl = base64;
+      else tempMsg.documentUrl = '#'; // placeholder
+
+      setActiveThread(prev => prev ? { ...prev, messages: [...prev.messages, tempMsg] } : prev);
+
+      try {
+        const uploadRes = await fetch(`${API_BASE}/upload`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, base64 })
+        });
+        const uploadData = await uploadRes.json();
+
+        if (!uploadData.ok) throw new Error('Upload failed');
+
+        const sendRes = await fetch(`${API_BASE}/send`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: activePhone,
+            body: inputText.trim() || undefined,
+            mediaUrl: uploadData.url,
+            mediaType: isImage ? 'image' : 'document',
+            filename: file.name
+          })
+        });
+        const sendData = await sendRes.json();
+        if (!sendData.ok) throw new Error('Send failed');
+
+        setInputText('');
+        setTimeout(() => { fetchConversations(); if (activePhone) fetchMessages(activePhone); }, 3000);
+      } catch (e) {
+        console.error(e);
+        setActiveThread(prev => prev ? {
+          ...prev, messages: prev.messages.map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
+        } : prev);
+      } finally {
+        setSending(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (isServiceWindowOpen) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (!isServiceWindowOpen) return;
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFileUpload(file);
   };
 
   // ── Context menu handlers ─────────────────────────────────────────────────────
@@ -701,7 +777,17 @@ export default function WhatsAppInbox() {
             </div>
 
             {/* Messages area */}
-            <div className="wa-messages-area" onClick={() => { setShowEmojiPicker(false); setContextMenu(null); }}>
+            <div className={`wa-messages-area ${isDragging ? 'wa-dragging' : ''}`} onClick={() => { setShowEmojiPicker(false); setContextMenu(null); }}
+              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+            >
+              {isDragging && (
+                <div className="wa-drag-overlay">
+                  <div className="wa-drag-box">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="#fff"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
+                    <span>Drop file to send</span>
+                  </div>
+                </div>
+              )}
               <div className="wa-messages-bg">
                 {msgLoading ? (
                   <div className="wa-msg-loading"><div className="wa-spinner"></div></div>
@@ -780,6 +866,24 @@ export default function WhatsAppInbox() {
                     />
                   )}
                 </div>
+
+                <button
+                  className="wa-input-action"
+                  title="Attach"
+                  disabled={!isServiceWindowOpen}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M12 5v14M5 12h14" stroke="#8696A0" strokeWidth="2.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleFileUpload(file);
+                    e.target.value = '';
+                  }
+                }} />
 
                 <div className="wa-input-box">
                   <input
