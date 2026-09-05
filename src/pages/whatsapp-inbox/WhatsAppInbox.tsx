@@ -27,11 +27,7 @@ interface Message {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-// Use env var if set, otherwise auto-detect: if on Vercel/test domain use the real backend
-const _apiHost = typeof window !== 'undefined' && window.location.hostname === 'test.ekta-enterprises.com'
-  ? 'https://server.ekta-enterprises.com'
-  : '';
-const API_BASE = _apiHost + '/api/whatsapp-ui';
+const API_BASE = '/api/whatsapp-ui';
 
 function getInitials(name: string): string {
   return name
@@ -44,8 +40,8 @@ function getInitials(name: string): string {
 
 function avatarColor(name: string): string {
   const colors = [
-    '#D06060','#60A0D0','#60B87A','#D0A060',
-    '#9060D0','#D06090','#60D0C0','#8090A0',
+    '#D06060', '#60A0D0', '#60B87A', '#D0A060',
+    '#9060D0', '#D06090', '#60D0C0', '#8090A0',
   ];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % colors.length;
@@ -83,17 +79,17 @@ function StatusTick({ status }: { status?: string }) {
   if (status === 'failed') return <span className="wa-tick wa-tick-failed" title="Failed">⚠</span>;
   if (status === 'sent') return (
     <span className="wa-tick" title="Sent">
-      <svg width="14" height="10" viewBox="0 0 16 11"><path d="M11.071.653a.75.75 0 0 1 .53 1.28L6.32 7.22a.75.75 0 0 1-1.06 0L2.4 4.36a.75.75 0 1 1 1.061-1.06l2.33 2.33L10.54.654a.75.75 0 0 1 .531-.001z" fill="#8696A0"/></svg>
+      <svg width="14" height="10" viewBox="0 0 16 11"><path d="M11.071.653a.75.75 0 0 1 .53 1.28L6.32 7.22a.75.75 0 0 1-1.06 0L2.4 4.36a.75.75 0 1 1 1.061-1.06l2.33 2.33L10.54.654a.75.75 0 0 1 .531-.001z" fill="#8696A0" /></svg>
     </span>
   );
   if (status === 'delivered') return (
     <span className="wa-tick" title="Delivered">
-      <svg width="18" height="10" viewBox="0 0 18 11"><path d="M15.01.654a.75.75 0 0 1 .53 1.28l-7 7a.75.75 0 0 1-1.06 0l-.5-.5a.75.75 0 0 1 1.06-1.06l-.03.03L14.48.654a.75.75 0 0 1 .53 0zM8.54.654a.75.75 0 0 1 .53 1.28L3.79 7.22a.75.75 0 0 1-1.06 0L.4 4.36a.75.75 0 1 1 1.06-1.06l1.8 1.8L8.01.654a.75.75 0 0 1 .53 0z" fill="#8696A0"/></svg>
+      <svg width="18" height="10" viewBox="0 0 18 11"><path d="M15.01.654a.75.75 0 0 1 .53 1.28l-7 7a.75.75 0 0 1-1.06 0l-.5-.5a.75.75 0 0 1 1.06-1.06l-.03.03L14.48.654a.75.75 0 0 1 .53 0zM8.54.654a.75.75 0 0 1 .53 1.28L3.79 7.22a.75.75 0 0 1-1.06 0L.4 4.36a.75.75 0 1 1 1.06-1.06l1.8 1.8L8.01.654a.75.75 0 0 1 .53 0z" fill="#8696A0" /></svg>
     </span>
   );
   if (status === 'read') return (
     <span className="wa-tick wa-tick-read" title="Read">
-      <svg width="18" height="10" viewBox="0 0 18 11"><path d="M15.01.654a.75.75 0 0 1 .53 1.28l-7 7a.75.75 0 0 1-1.06 0l-.5-.5a.75.75 0 0 1 1.06-1.06l-.03.03L14.48.654a.75.75 0 0 1 .53 0zM8.54.654a.75.75 0 0 1 .53 1.28L3.79 7.22a.75.75 0 0 1-1.06 0L.4 4.36a.75.75 0 1 1 1.06-1.06l1.8 1.8L8.01.654a.75.75 0 0 1 .53 0z" fill="#53BDEB"/></svg>
+      <svg width="18" height="10" viewBox="0 0 18 11"><path d="M15.01.654a.75.75 0 0 1 .53 1.28l-7 7a.75.75 0 0 1-1.06 0l-.5-.5a.75.75 0 0 1 1.06-1.06l-.03.03L14.48.654a.75.75 0 0 1 .53 0zM8.54.654a.75.75 0 0 1 .53 1.28L3.79 7.22a.75.75 0 0 1-1.06 0L.4 4.36a.75.75 0 1 1 1.06-1.06l1.8 1.8L8.01.654a.75.75 0 0 1 .53 0z" fill="#53BDEB" /></svg>
     </span>
   );
   return null;
@@ -179,11 +175,11 @@ function EmptyChat() {
     <div className="wa-empty-chat">
       <div className="wa-empty-icon">
         <svg viewBox="0 0 303 172" width="260" fill="none">
-          <circle cx="151" cy="86" r="86" fill="#202C33" opacity="0.2"/>
-          <path d="M150.5 30C115.5 30 87 55 87 86c0 16 7.5 30.5 19.5 40.5L100 140l14.5-7.5C120 135 135 137 150.5 137c35 0 63.5-23 63.5-51S185.5 30 150.5 30z" fill="#2A3942" stroke="#3B4A54" strokeWidth="1.5"/>
-          <ellipse cx="120" cy="86" rx="5" ry="5" fill="#8696A0"/>
-          <ellipse cx="150" cy="86" rx="5" ry="5" fill="#8696A0"/>
-          <ellipse cx="180" cy="86" rx="5" ry="5" fill="#8696A0"/>
+          <circle cx="151" cy="86" r="86" fill="#202C33" opacity="0.2" />
+          <path d="M150.5 30C115.5 30 87 55 87 86c0 16 7.5 30.5 19.5 40.5L100 140l14.5-7.5C120 135 135 137 150.5 137c35 0 63.5-23 63.5-51S185.5 30 150.5 30z" fill="#2A3942" stroke="#3B4A54" strokeWidth="1.5" />
+          <ellipse cx="120" cy="86" rx="5" ry="5" fill="#8696A0" />
+          <ellipse cx="150" cy="86" rx="5" ry="5" fill="#8696A0" />
+          <ellipse cx="180" cy="86" rx="5" ry="5" fill="#8696A0" />
         </svg>
       </div>
       <h2>WhatsApp Business Inbox</h2>
@@ -282,7 +278,7 @@ export default function WhatsAppInbox() {
               if (activePhone) fetchMessages(activePhone);
             }, 1500);
           }
-        } catch {}
+        } catch { }
       };
       es.onerror = () => {
         setSseStatus('disconnected');
@@ -401,7 +397,7 @@ export default function WhatsAppInbox() {
         <div className="wa-sidebar-header">
           <div className="wa-sidebar-avatar" style={{ background: '#2A5F74' }}>
             <svg viewBox="0 0 40 40" width="40" height="40">
-              <circle cx="20" cy="20" r="20" fill="#2A5F74"/>
+              <circle cx="20" cy="20" r="20" fill="#2A5F74" />
               <text x="20" y="26" textAnchor="middle" fontSize="16" fill="#fff" fontWeight="bold">EE</text>
             </svg>
           </div>
@@ -415,7 +411,7 @@ export default function WhatsAppInbox() {
         <div className="wa-search-wrap">
           <div className="wa-search-box">
             <svg className="wa-search-icon" viewBox="0 0 24 24" width="16" height="16">
-              <path d="M10 2a8 8 0 1 0 4.906 14.32l4.387 4.387a1 1 0 0 0 1.414-1.414l-4.387-4.387A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12A6 6 0 0 1 10 4z" fill="#8696A0"/>
+              <path d="M10 2a8 8 0 1 0 4.906 14.32l4.387 4.387a1 1 0 0 0 1.414-1.414l-4.387-4.387A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12A6 6 0 0 1 10 4z" fill="#8696A0" />
             </svg>
             <input
               id="wa-search-input"
@@ -451,7 +447,7 @@ export default function WhatsAppInbox() {
         <div className="wa-conv-list">
           {loading ? (
             <div className="wa-loading-list">
-              {[1,2,3,4,5].map(i => (
+              {[1, 2, 3, 4, 5].map(i => (
                 <div key={i} className="wa-skeleton">
                   <div className="wa-skeleton-avatar"></div>
                   <div className="wa-skeleton-lines">
@@ -465,8 +461,8 @@ export default function WhatsAppInbox() {
             <div className="wa-no-conversations">
               {fetchError ? (
                 <>
-                  <p style={{color:'#e74c3c'}}>⚠ {fetchError}</p>
-                  <p style={{fontSize:'11px',marginTop:'4px'}}>Check browser console for details</p>
+                  <p style={{ color: '#e74c3c' }}>⚠ {fetchError}</p>
+                  <p style={{ fontSize: '11px', marginTop: '4px' }}>Check browser console for details</p>
                 </>
               ) : (
                 <p>No conversations found</p>
@@ -517,7 +513,7 @@ export default function WhatsAppInbox() {
                 title="Refresh"
               >
                 <svg viewBox="0 0 24 24" width="20" height="20">
-                  <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="#8696A0"/>
+                  <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="#8696A0" />
                 </svg>
               </button>
             </div>
@@ -551,7 +547,7 @@ export default function WhatsAppInbox() {
             <div className="wa-input-area">
               <button className="wa-input-action" title="Emoji" disabled>
                 <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 14.72a7 7 0 0 1-8.48 0A.745.745 0 1 1 8.8 15.6a5.5 5.5 0 0 0 6.4 0 .745.745 0 0 1 1.03 1.12zM8.5 11c-.83 0-1.5-.67-1.5-1.5S7.67 8 8.5 8 10 8.67 10 9.5 9.33 11 8.5 11zm7 0c-.83 0-1.5-.67-1.5-1.5S14.67 8 15.5 8 17 8.67 17 9.5 16.33 11 15.5 11z" fill="#8696A0"/>
+                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 14.72a7 7 0 0 1-8.48 0A.745.745 0 1 1 8.8 15.6a5.5 5.5 0 0 0 6.4 0 .745.745 0 0 1 1.03 1.12zM8.5 11c-.83 0-1.5-.67-1.5-1.5S7.67 8 8.5 8 10 8.67 10 9.5 9.33 11 8.5 11zm7 0c-.83 0-1.5-.67-1.5-1.5S14.67 8 15.5 8 17 8.67 17 9.5 16.33 11 15.5 11z" fill="#8696A0" />
                 </svg>
               </button>
               <div className="wa-input-box">
@@ -582,7 +578,7 @@ export default function WhatsAppInbox() {
                   <div className="wa-send-spinner"></div>
                 ) : (
                   <svg viewBox="0 0 24 24" width="24" height="24">
-                    <path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z" fill="currentColor"/>
+                    <path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z" fill="currentColor" />
                   </svg>
                 )}
               </button>
