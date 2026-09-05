@@ -21,6 +21,8 @@ interface Message {
   body: string;
   imageUrl?: string;
   interactiveTitle?: string;
+  documentUrl?: string;
+  documentFilename?: string;
   templateName?: string;
   timestamp: number;
   status: string;
@@ -137,7 +139,7 @@ function ConversationItem({
 }
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick: (url: string) => void }) {
   const isOut = msg.direction === 'outbound';
   const time = new Date(msg.timestamp).toLocaleTimeString('en-IN', {
     hour: '2-digit', minute: '2-digit', hour12: true
@@ -147,10 +149,15 @@ function MessageBubble({ msg }: { msg: Message }) {
     <div className={`wa-bubble-row ${isOut ? 'wa-bubble-row--out' : 'wa-bubble-row--in'}`}>
       <div className={`wa-bubble ${isOut ? 'wa-bubble--out' : 'wa-bubble--in'} ${msg.type === 'image' ? 'wa-bubble--image' : ''}`}>
         {msg.type === 'image' && msg.imageUrl ? (
-          <a href={msg.imageUrl} target="_blank" rel="noopener noreferrer" className="wa-img-link">
-            <img src={msg.imageUrl} alt="Photo" className="wa-img" loading="lazy"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-            <div className="wa-img-caption">📷 Photo</div>
+          <div onClick={() => onImageClick(msg.imageUrl!)} className="wa-img-link" style={{ cursor: 'pointer' }}>
+            <img src={msg.imageUrl} alt="Photo" className="wa-img" />
+          </div>
+        ) : msg.type === 'document' && msg.documentUrl ? (
+          <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer" className="wa-doc-link">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z" />
+            </svg>
+            <span>{msg.documentFilename || 'Document'}</span>
           </a>
         ) : msg.type === 'interactive' ? (
           <div className="wa-interactive">
@@ -209,6 +216,7 @@ export default function WhatsAppInbox() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sseRef = useRef<EventSource | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // ── Fetch conversation list ──────────────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
@@ -225,7 +233,6 @@ export default function WhatsAppInbox() {
         return;
       }
       const data = await res.json();
-      console.log('[WA-UI] conversations:', data.count);
       if (data.ok) {
         setConversations(data.conversations || []);
         setFetchError(null);
@@ -242,6 +249,15 @@ export default function WhatsAppInbox() {
 
   // ── Fetch messages for active thread ────────────────────────────────────────
   const fetchMessages = useCallback(async (phone: string) => {
+    // Set read on backend
+    fetch(`${API_BASE}/read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone })
+    }).catch(() => { });
+    // Update local state proactively
+    setConversations(prev => prev.map(c => String(c.phone) === String(phone) ? { ...c, unreadCount: 0 } : c));
+
     setMsgLoading(true);
     try {
       const res = await fetch(`${API_BASE}/messages?phone=${phone}`, {
@@ -273,7 +289,6 @@ export default function WhatsAppInbox() {
         try {
           const data = JSON.parse(e.data);
           if (data.type === 'update') {
-            // Debounce refresh
             if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
             refreshTimerRef.current = setTimeout(() => {
               fetchConversations();
@@ -295,7 +310,6 @@ export default function WhatsAppInbox() {
     };
   }, [activePhone, fetchConversations, fetchMessages]);
 
-  // ── Initial load + polling fallback ─────────────────────────────────────────
   useEffect(() => {
     fetchConversations();
     const interval = setInterval(fetchConversations, 30000);
@@ -308,19 +322,16 @@ export default function WhatsAppInbox() {
     }
   }, [activePhone, fetchMessages]);
 
-  // ── Auto-scroll to bottom ────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeThread?.messages]);
 
-  // ── Send message ─────────────────────────────────────────────────────────────
   const sendMessage = async () => {
     if (!inputText.trim() || !activePhone || sending) return;
     const text = inputText.trim();
     setInputText('');
     setSending(true);
 
-    // Optimistic UI: add a pending bubble
     const tempId = 'temp_' + Date.now();
     const tempMsg: Message = {
       id: tempId,
@@ -342,7 +353,6 @@ export default function WhatsAppInbox() {
       });
       const data = await res.json();
       if (!data.ok) {
-        // Mark failed
         setActiveThread((prev) => {
           if (!prev) return prev;
           return {
@@ -353,7 +363,6 @@ export default function WhatsAppInbox() {
           };
         });
       }
-      // Refresh after a short delay to pick up webhook status
       setTimeout(() => {
         fetchConversations();
         if (activePhone) fetchMessages(activePhone);
@@ -373,7 +382,6 @@ export default function WhatsAppInbox() {
     }
   };
 
-  // ── Group messages by date ───────────────────────────────────────────────────
   const groupedMessages = (() => {
     if (!activeThread?.messages.length) return [];
     const groups: { dateKey: string; dateLabel: string; msgs: Message[] }[] = [];
@@ -393,10 +401,19 @@ export default function WhatsAppInbox() {
 
   return (
     <div className="wa-root">
-      {/* ── Left sidebar ── */}
+      {previewImage && (
+        <div className="wa-image-modal" onClick={() => setPreviewImage(null)}>
+          <button className="wa-modal-close" onClick={() => setPreviewImage(null)}>✕</button>
+          <img src={previewImage} alt="Preview" className="wa-modal-img" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
       <div className="wa-sidebar">
-        {/* Header */}
         <div className="wa-sidebar-header">
+          <a href="/dashboard" className="wa-hamburger" title="Back to Dashboard">
+            <svg viewBox="0 0 24 24" width="24" height="24">
+              <path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2z" fill="#8696A0" />
+            </svg>
+          </a>
           <div className="wa-sidebar-avatar" style={{ background: '#2A5F74' }}>
             <svg viewBox="0 0 40 40" width="40" height="40">
               <circle cx="20" cy="20" r="20" fill="#2A5F74" />
@@ -536,7 +553,7 @@ export default function WhatsAppInbox() {
                         <span className="wa-date-label">{group.dateLabel}</span>
                       </div>
                       {group.msgs.map((msg) => (
-                        <MessageBubble key={msg.id} msg={msg} />
+                        <MessageBubble key={msg.id} msg={msg} onImageClick={setPreviewImage} />
                       ))}
                     </div>
                   ))

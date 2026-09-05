@@ -41,6 +41,20 @@ function broadcastSSE(data) {
 }
 function invalidateCache() { _cache = null; _cacheTs = 0; }
 
+// ── Read Receipts ──────────────────────────────────────────────────────────────
+const READ_RECEIPTS_FILE = path.join(LOG_DIR, 'read-receipts.json');
+function getReadReceipts() {
+  if (!fs.existsSync(READ_RECEIPTS_FILE)) return {};
+  try { return JSON.parse(fs.readFileSync(READ_RECEIPTS_FILE, 'utf8')); } catch { return {}; }
+}
+function markAsRead(phone) {
+  const receipts = getReadReceipts();
+  receipts[phone] = Date.now();
+  if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+  fs.writeFileSync(READ_RECEIPTS_FILE, JSON.stringify(receipts, null, 2));
+  invalidateCache();
+}
+
 if (fs.existsSync(LOG_DIR)) {
   fs.watch(LOG_DIR, (event, filename) => {
     if (filename && filename.endsWith('.jsonl')) {
@@ -78,39 +92,23 @@ function parsePm2OutgoingMessages() {
   if (!fs.existsSync(PM2_LOG)) return outgoing;
   try {
     const lines = fs.readFileSync(PM2_LOG, 'utf8').split('\n');
-    const PREFIX = /^\d+\|whatsapp\s*\|\s*/;
-    const strip = (l) => l.replace(PREFIX, '').trim();
-    let inBlock = false;
-    let cur = {};
-    let blockLen = 0;
     for (const raw of lines) {
-      if (!PREFIX.test(raw)) { inBlock = false; continue; }
-      const line = strip(raw);
-      if (line.startsWith('from:') && line.includes('+15554884507')) {
-        inBlock = true; cur = {}; blockLen = 1; continue;
-      }
-      if (!inBlock) continue;
-      blockLen++;
-      const toM = line.match(/^to:\s*'?([+\d]+)'?/);
-      if (toM) cur.to = toM[1].replace(/\D/g, '').slice(-12);
-      const typeM = line.match(/^type:\s*'(\w+)'/);
-      if (typeM) cur.type = typeM[1];
-      const midM = line.match(/^messageId:\s*'([^']+)'/);
-      if (midM) cur.messageId = midM[1];
-      const tplM = line.match(/^templateName:\s*'([^']+)'/);
-      if (tplM) cur.templateName = tplM[1];
-      const bodyM = line.match(/body:\s*'(.*?)'/);
-      if (bodyM) cur.body = bodyM[1];
-      if (line === '}' && blockLen > 2) {
-        if (cur.to) {
-          const key = cur.messageId || (cur.to + '_' + Date.now());
-          outgoing.set(key, {
-            to: cur.to, type: cur.type || 'text',
-            body: cur.body || cur.templateName || 'Sent',
-            templateName: cur.templateName, messageId: cur.messageId
-          });
-        }
-        inBlock = false; cur = {}; blockLen = 0;
+      if (raw.includes('[WA_OUTGOING]')) {
+        try {
+          const jsonStr = raw.substring(raw.indexOf('[WA_OUTGOING]') + 13).trim();
+          const data = JSON.parse(jsonStr);
+          if (data && data.to) {
+            const key = data.to + '_' + data.timestamp;
+            outgoing.set(key, {
+              to: data.to.replace(/\D/g, '').slice(-12),
+              type: data.type,
+              body: data.body,
+              timestamp: data.timestamp
+            });
+          }
+        } catch (e) { }
+      } else if (raw.includes('[WA_OUTGOING_SUCCESS]')) {
+        // Optionally link messageId to the outgoing message, but timestamp is good enough
       }
     }
   } catch (e) { console.error('[WA-UI] PM2 parse error:', e.message); }
@@ -127,6 +125,7 @@ function formatPhone(raw) {
 function buildConversations() {
   const entries = readAllLogs({ daysBack: 60 });
   const outgoingMap = parsePm2OutgoingMessages();
+  const readReceipts = getReadReceipts();
   const threads = new Map();
 
   function getOrCreate(phone) {
@@ -157,32 +156,44 @@ function buildConversations() {
       let body = '';
       let imageUrl = null;
       let interactiveTitle = null;
+      let documentUrl = null;
+      let documentFilename = null;
       if (msgType === 'text') {
         body = (p.messages && p.messages.text && p.messages.text.body) || '';
       } else if (msgType === 'image') {
         imageUrl = (p.messages && p.messages.image && p.messages.image.url) || null;
         body = 'Photo';
+      } else if (msgType === 'document') {
+        documentUrl = (p.messages && p.messages.document && p.messages.document.url) || null;
+        documentFilename = (p.messages && p.messages.document && p.messages.document.filename) || 'Document';
+        body = documentFilename;
       } else if (msgType === 'interactive') {
         const intv = p.messages && p.messages.interactive;
         const btnR = intv && ((intv.text && intv.text.button_reply) || intv.button_reply);
         const listR = intv && intv.list_reply;
         interactiveTitle = (btnR && btnR.title) || (listR && listR.title) || 'Reply';
         body = interactiveTitle;
-      } else if (msgType === 'order') { body = 'Catalogue Order';
-      } else if (msgType === 'audio') { body = 'Voice message';
-      } else if (msgType === 'video') { body = 'Video';
-      } else if (msgType === 'document') { body = 'Document';
+      } else if (msgType === 'order') {
+        body = 'Catalogue Order';
+      } else if (msgType === 'audio') {
+        body = 'Voice message';
+      } else if (msgType === 'video') {
+        body = 'Video';
       } else { body = msgType; }
       const msgTs = (p.messages && p.messages.timestamp)
         ? (p.messages.timestamp > 1e12 ? p.messages.timestamp : p.messages.timestamp * 1000)
         : ts;
       thread.messages.push({
         id: msgId, direction: 'inbound', type: msgType,
-        body, imageUrl, interactiveTitle, timestamp: msgTs, status: 'received'
+        body, imageUrl, interactiveTitle, documentUrl, documentFilename,
+        timestamp: msgTs, status: 'received'
       });
       if (msgTs > thread.lastMessageAt) thread.lastMessageAt = msgTs;
-      thread.unreadCount++;
 
+      const lastReadTs = readReceipts[thread.phone] || 0;
+      if (msgTs > lastReadTs) {
+        thread.unreadCount++;
+      }
     } else if (p.event === 'message_status') {
       const msgId = p.messageId;
       const status = p.statuses && p.statuses.status;
@@ -230,7 +241,16 @@ function getCachedConversations() {
   return _cache;
 }
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── API Endpoints ────────────────────────────────────────────────────────────────
+
+router.post('/read', (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone) return res.status(400).json({ error: 'Missing phone' });
+  const p10 = String(phone).replace(/\D/g, '').slice(-10);
+  markAsRead(p10);
+  res.json({ success: true });
+});
+
 router.get('/conversations', (req, res) => {
   try {
     const threads = getCachedConversations();
