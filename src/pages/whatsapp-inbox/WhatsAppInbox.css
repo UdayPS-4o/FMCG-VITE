@@ -934,3 +934,71 @@
   box-shadow: 0 4px 15px rgba(0,0,0,0.2);
   pointer-events: none;
 }
+
+/* -- MOBILE RESPONSIVENESS -------------------------------------------------- */
+.wa-mobile-back-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  margin-right: 4px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+}
+.wa-mobile-back-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+  .wa-sidebar {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    flex: 1 1 100%;
+  }
+  
+  .wa-main {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    flex: 1 1 100%;
+  }
+
+  /* If chat is active, hide sidebar */
+  .wa-root.wa-chat-active .wa-sidebar {
+    display: none !important;
+  }
+  
+  /* If chat is NOT active, hide main panel */
+  .wa-root:not(.wa-chat-active) .wa-main {
+    display: none !important;
+  }
+
+  .wa-mobile-back-btn {
+    display: flex;
+  }
+  
+  .wa-chat-header {
+    padding: 8px 12px;
+  }
+  
+  .wa-bubble {
+    max-width: 85%;
+  }
+}
+
+/* ── Outgoing-only threads (invoice / receipt / reminder recipients) ────────── */
+.wa-template-doc {
+  margin-top: 2px;
+  font-size: 13px;
+}
+.wa-no-reply {
+  color: #8696a0;
+  margin-left: 5px;
+  font-weight: 700;
+}
+#wa-filter-sent.wa-filter-tab--active {
+  background: #2A5F74;
+}
