@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import FilerobotImageEditor, { TABS, TOOLS } from 'react-filerobot-image-editor';
 import './WhatsAppInbox.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -12,6 +13,17 @@ interface Conversation {
   lastMessageStatus?: string;
   unreadCount: number;
   messageCount: number;
+  inboundCount?: number;
+  outboundCount?: number;
+  /** true when we have messaged them but they have never written to us */
+  neverReplied?: boolean;
+}
+
+interface InboxStats {
+  totalContacts: number;
+  totalUnread: number;
+  /** parties reached only through the paid API — invoices, receipts, reminders */
+  outgoingOnlyContacts: number;
 }
 
 interface Message {
@@ -242,7 +254,10 @@ function ConversationItem({
       </div>
       <div className="wa-conv-info">
         <div className="wa-conv-top">
-          <span className="wa-conv-name">{conv.name}</span>
+          <span className="wa-conv-name">
+            {conv.name}
+            {conv.neverReplied && <span className="wa-no-reply" title="Never replied">·</span>}
+          </span>
           <span className="wa-conv-time">{formatTime(conv.lastMessageAt)}</span>
         </div>
         <div className="wa-conv-bottom">
@@ -323,7 +338,16 @@ function MessageBubble({
             {(msg.interactiveHeader || msg.templateName) && (
               <div className="wa-template-header">{msg.interactiveHeader || msg.templateName}</div>
             )}
-            <div className="wa-body">{msg.interactiveBody || msg.body}</div>
+            <div className="wa-body">{msg.body || msg.interactiveBody}</div>
+            {msg.documentUrl && (
+              <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer"
+                 className="wa-doc-link wa-template-doc">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z" />
+                </svg>
+                <span>{msg.documentFilename || 'Attachment'}</span>
+              </a>
+            )}
             <div className="wa-template-tag">📋 Template</div>
           </div>
         ) : msg.type === 'order' ? (
@@ -380,7 +404,8 @@ export default function WhatsAppInbox() {
     name: string; displayPhone: string; messages: Message[]; total: number
   } | null>(null);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [filter, setFilter] = useState<'all' | 'unread' | 'sent'>('all');
+  const [stats, setStats] = useState<InboxStats | null>(null);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -434,6 +459,17 @@ export default function WhatsAppInbox() {
     } finally { setLoading(false); }
   }, [filter, search]);
 
+  // ── Fetch counts for the filter tabs ────────────────────────────────────────
+  // Taken from /stats rather than from the conversation list, because that list
+  // is already filtered by the tab you are looking at.
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/stats`, { credentials: 'include' });
+      const data = await res.json();
+      if (data.ok) setStats(data);
+    } catch { /* counts are cosmetic — never block the inbox on them */ }
+  }, []);
+
   // ── Fetch messages for active thread ────────────────────────────────────────
   const fetchMessages = useCallback(async (phone: string) => {
     fetch(`${API_BASE}/read`, {
@@ -483,9 +519,10 @@ export default function WhatsAppInbox() {
 
   useEffect(() => {
     fetchConversations();
-    const interval = setInterval(fetchConversations, 30000);
+    fetchStats();
+    const interval = setInterval(() => { fetchConversations(); fetchStats(); }, 30000);
     return () => clearInterval(interval);
-  }, [fetchConversations]);
+  }, [fetchConversations, fetchStats]);
 
   useEffect(() => {
     if (activePhone) { fetchMessages(activePhone); setReplyTo(null); setReactions({}); }
@@ -593,6 +630,18 @@ export default function WhatsAppInbox() {
     reader.readAsDataURL(file);
   };
 
+  const handleSaveImageEdit = (editedImageObject: any) => {
+    const { imageBase64, fullName, mimeType } = editedImageObject;
+    fetch(imageBase64)
+      .then(res => res.blob())
+      .then(blob => {
+        const file = new File([blob], fullName || 'edited-image.jpg', { type: mimeType || 'image/jpeg' });
+        handleFileUpload(file);
+        setPreviewImage(null);
+      });
+  };
+
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     if (isServiceWindowOpen) setIsDragging(true);
@@ -648,12 +697,33 @@ export default function WhatsAppInbox() {
     : null;
 
   return (
-    <div className="wa-root" onClick={() => { setShowEmojiPicker(false); }}>
+    <div className={`wa-root ${activePhone ? 'wa-chat-active' : ''}`} onClick={() => { setShowEmojiPicker(false); }}>
       {/* Image preview modal */}
       {previewImage && (
         <div className="wa-image-modal" onClick={() => setPreviewImage(null)}>
-          <button className="wa-modal-close" onClick={() => setPreviewImage(null)}>✕</button>
-          <img src={previewImage} alt="Preview" className="wa-modal-img" onClick={e => e.stopPropagation()} />
+          {window.innerWidth > 768 ? (
+            <div onClick={e => e.stopPropagation()} style={{ width: '90vw', height: '90vh', background: '#fff', borderRadius: '8px', overflow: 'hidden' }}>
+              <FilerobotImageEditor
+                source={previewImage}
+                onSave={(editedImageObject, designState) => handleSaveImageEdit(editedImageObject)}
+                onClose={() => setPreviewImage(null)}
+                annotationsCommon={{
+                  fill: '#ff0000',
+                }}
+                Text={{ text: 'Annotation...' }}
+                tabsIds={[TABS.ADJUST, TABS.ANNOTATE, TABS.WATERMARK, TABS.FILTERS, TABS.FINETUNE]}
+                defaultTabId={TABS.ANNOTATE}
+                defaultToolId={TOOLS.ARROW}
+                savingPixelRatio={4}
+                previewPixelRatio={window.devicePixelRatio}
+              />
+            </div>
+          ) : (
+            <>
+              <button className="wa-modal-close" onClick={() => setPreviewImage(null)}>✕</button>
+              <img src={previewImage} alt="Preview" className="wa-modal-img" onClick={e => e.stopPropagation()} />
+            </>
+          )}
         </div>
       )}
 
@@ -709,8 +779,17 @@ export default function WhatsAppInbox() {
           <button id="wa-filter-unread"
             className={`wa-filter-tab ${filter === 'unread' ? 'wa-filter-tab--active' : ''}`}
             onClick={() => setFilter('unread')}>
-            Unread {conversations.filter(c => c.unreadCount > 0).length > 0 &&
-              <span className="wa-tab-count">{conversations.filter(c => c.unreadCount > 0).length}</span>}
+            Unread {(stats ? stats.totalUnread : conversations.filter(c => c.unreadCount > 0).length) > 0 &&
+              <span className="wa-tab-count">
+                {stats ? stats.totalUnread : conversations.filter(c => c.unreadCount > 0).length}
+              </span>}
+          </button>
+          <button id="wa-filter-sent"
+            className={`wa-filter-tab ${filter === 'sent' ? 'wa-filter-tab--active' : ''}`}
+            onClick={() => setFilter('sent')}
+            title="Parties we messaged through the API who have never replied — invoices, cash receipts, balance reminders, ledgers">
+            Sent {!!stats?.outgoingOnlyContacts &&
+              <span className="wa-tab-count">{stats.outgoingOnlyContacts}</span>}
           </button>
         </div>
 
@@ -754,6 +833,11 @@ export default function WhatsAppInbox() {
           <>
             {/* Chat header */}
             <div className="wa-chat-header">
+              <button className="wa-mobile-back-btn" onClick={() => setActivePhone(null)} title="Back">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="#8696A0" />
+                </svg>
+              </button>
               <div className="wa-avatar wa-avatar--md"
                 style={{ background: activeConv ? avatarColor(activeConv.name) : '#607D8B' }}>
                 {activeConv ? getInitials(activeConv.name) : '?'}
