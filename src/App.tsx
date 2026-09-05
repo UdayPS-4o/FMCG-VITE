@@ -64,6 +64,7 @@ import AppOrders from './pages/app-orders/AppOrders';
 import AppSchemes from './pages/app-schemes/AppSchemes';
 import AppListings from './pages/app-listings/AppListings';
 import ProductPage from './pages/product/ProductPage';
+import WhatsAppInbox from './pages/whatsapp-inbox/WhatsAppInbox';
 // import AnimatedLogo from '../components/AnimatedLogo';
 
 // Root redirect component
@@ -419,6 +420,13 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } />
       </Route>
+
+      {/* WhatsApp Inbox — full-screen, no app sidebar/header */}
+      <Route path="/whatsapp-inbox" element={
+        <ProtectedRoute>
+          <WhatsAppInbox />
+        </ProtectedRoute>
+      } />
 
       {/* Print Layout - No sidebar/header needed */}
       <Route path="/printInvoicing" element={<PrintInvoicing />} />

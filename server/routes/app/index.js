@@ -505,21 +505,9 @@ router.get('/identify-by-phone', async (req, res) => {
  * Body: { phone, items: [{code, qty, price}], secret }
  */
 router.post('/wa-cart', async (req, res) => {
-    const { phone, items, secret } = req.body || {};
-    const WA_SECRET = process.env.WA_CART_SECRET || 'wa-internal-ekta-2026';
-    if (secret !== WA_SECRET) return res.status(403).json({ error: 'Forbidden' });
-    if (!phone || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'phone and items are required' });
-    }
-    const normalized = String(phone).replace(/\D/g, '').slice(-10);
-    try {
-        await appDb.saveWaCart(normalized, items);
-        console.log(`[app/wa-cart] Saved ${items.length} WA commerce items for ${normalized}`);
-        res.json({ success: true, count: items.length });
-    } catch (err) {
-        console.error('[app/wa-cart] save error:', err);
-        res.status(500).json({ error: 'Failed to save cart' });
-    }
+    // DISABLED: WhatsApp orders are now directly persisted to orders.json 
+    // and should no longer be appended to the user's app cart.
+    return res.json({ success: true, count: 0, message: 'Cart sync disabled' });
 });
 
 
@@ -604,7 +592,7 @@ router.get('/me', requireAppAuth, async (req, res) => {
     // Balance
     let currentBalance = '';
     try {
-        const balancePath = require('path').resolve(process.cwd(), 'db', 'balance.json');
+        const balancePath = require('path').resolve(__dirname, '../../db', 'balance.json');
         const balanceData = require('fs').readFileSync(balancePath, 'utf8');
         const parsed = JSON.parse(balanceData);
         if (parsed.data && Array.isArray(parsed.data)) {
@@ -789,6 +777,47 @@ async function getEnrichedProducts() {
     await _snapshotMtimes();
     console.log(`[app/products] Cache ready: ${jsonData.length} in-stock products`);
     return { jsonData, productBrandMap };
+}
+
+/**
+ * getProductsWithImages()
+ *
+ * Returns the full enriched product list WITH image_url and brand_name already
+ * attached — the same enrichment the /products route applies per-request.
+ * Used by both the /products handler and the Facebook feed builder so they
+ * always agree on which products have images.
+ */
+async function getProductsWithImages() {
+    const { jsonData, productBrandMap } = await getEnrichedProducts();
+
+    const [productImages, productMeta] = await Promise.all([
+        appDb.getAllProductImages().catch(() => []),
+        appDb.getAllProductMeta().catch(() => []),
+    ]);
+
+    const metaMap = {};
+    productMeta.forEach(m => { metaMap[m.product_code] = m; });
+
+    const findImage = (productName, code, basepack) => {
+        if (!productName) return null;
+        const name = productName.toUpperCase().trim();
+        for (const img of productImages) {
+            if (basepack && img.basepack_code && String(img.basepack_code).trim() === String(basepack).trim()) return img.image_url;
+            if (img.basepack_code && code && String(img.basepack_code).trim() === String(code).trim()) return img.image_url;
+            if (!img.itemvarient_desc) continue;
+            const desc = img.itemvarient_desc.toUpperCase().trim();
+            const matchLen = Math.min(12, name.length, desc.length);
+            if (matchLen >= 8 && name.substring(0, matchLen) === desc.substring(0, matchLen)) return img.image_url;
+        }
+        return null;
+    };
+
+    return jsonData.map(p => {
+        const meta = metaMap[p.CODE] || {};
+        const img = meta.image_url || findImage(p.PRODUCT, p.CODE, p.IT_DESC2);
+        const brand_code = meta.brand_code || productBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || '';
+        return { ...p, image_url: img, brand_code };
+    });
 }
 
 // ── Products Route ────────────────────────────────────────────────────────────
@@ -1166,8 +1195,15 @@ router.get('/products', async (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const startIndex = (page - 1) * limit;
 
-        const productImages = await appDb.getAllProductImages().catch(() => []);
-        
+        // Image + meta enrichment via shared helper (same logic as getProductsWithImages)
+        const [productImages, productMeta] = await Promise.all([
+            appDb.getAllProductImages().catch(() => []),
+            appDb.getAllProductMeta().catch(() => []),
+        ]);
+
+        const metaMap = {};
+        productMeta.forEach(m => { metaMap[m.product_code] = m; });
+
         const findImage = (productName, code, basepack) => {
             if (!productName) return null;
             const name = productName.toUpperCase().trim();
@@ -1187,10 +1223,6 @@ router.get('/products', async (req, res) => {
             }
             return null;
         };
-
-        const productMeta = await appDb.getAllProductMeta().catch(() => []);
-        const metaMap = {};
-        productMeta.forEach(m => metaMap[m.product_code] = m);
 
         const results = jsonData.slice(startIndex, startIndex + limit).map(p => {
             let productSchemes = [];
@@ -2228,7 +2260,9 @@ async function buildFeedItems() {
         return _feedCache;
     }
 
-    const { jsonData: products } = await getEnrichedProducts();
+    // Use getProductsWithImages() so image_url is already attached —
+    // getEnrichedProducts() returns raw PMPL rows without images.
+    const products = await getProductsWithImages();
 
     const items = [];
     const skipped = [];
@@ -2297,6 +2331,19 @@ async function buildFeedItems() {
     }
 
     const result = { items, skipped, builtAt: new Date().toISOString(), total: products.length };
+
+    // Safety guard: if images are suddenly missing from all products, refuse to
+    // cache and serve a zero-item feed. A 503 is safer than wiping Meta's catalogue.
+    if (products.length > 0 && items.length === 0) {
+        const err = new Error(
+            `[facebook-feed] Refusing to cache: 0 of ${products.length} products published (all skipped). ` +
+            `Skip reasons: ${JSON.stringify(result.skipped.reduce((a, s) => { a[s.reason] = (a[s.reason]||0)+1; return a; }, {}))}`
+        );
+        console.error(err.message);
+        // Don't update cache — let next request retry
+        throw err;
+    }
+
     _feedCache = result;
     _feedCacheTime = now;
     console.log(`[facebook-feed] Built: ${items.length} items published, ${skipped.length} skipped`);
@@ -2311,6 +2358,10 @@ async function buildFeedItems() {
 router.get('/facebook-feed.csv', async (req, res) => {
     try {
         const { items } = await buildFeedItems();
+
+        if (!items.length) {
+            return res.status(503).json({ error: 'Feed has 0 items — refusing to serve. Check /facebook-feed/status for skip reasons.' });
+        }
 
         const COLS = ['id','title','description','availability','condition','price','sale_price','link','image_link','brand','quantity_to_sell_on_facebook'];
 
@@ -2327,7 +2378,7 @@ router.get('/facebook-feed.csv', async (req, res) => {
         res.send(rows.join('\r\n'));
     } catch (err) {
         console.error('[facebook-feed.csv]', err);
-        res.status(500).json({ error: 'Feed generation failed', detail: err.message });
+        res.status(503).json({ error: 'Feed generation failed', detail: err.message });
     }
 });
 
@@ -2339,6 +2390,10 @@ router.get('/facebook-feed.csv', async (req, res) => {
 router.get('/facebook-feed.xml', async (req, res) => {
     try {
         const { items } = await buildFeedItems();
+
+        if (!items.length) {
+            return res.status(503).json({ error: 'Feed has 0 items — refusing to serve. Check /facebook-feed/status for skip reasons.' });
+        }
 
         const itemsXml = items.map(item => {
             const salePriceLine = item.sale_price
@@ -2373,9 +2428,10 @@ ${itemsXml}
         res.send(xml);
     } catch (err) {
         console.error('[facebook-feed.xml]', err);
-        res.status(500).json({ error: 'Feed generation failed', detail: err.message });
+        res.status(503).json({ error: 'Feed generation failed', detail: err.message });
     }
 });
+
 
 /**
  * GET /api/app/facebook-feed/status

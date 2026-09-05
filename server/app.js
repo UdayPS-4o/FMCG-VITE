@@ -131,6 +131,10 @@ app.use('/api/messages', messagesRoutes);
 const whatsappWebhook = require('./routes/webhook/index');
 app.use('/api/webhook', whatsappWebhook);
 
+// WhatsApp Web UI — conversation viewer
+const whatsappUiRoutes = require('./routes/whatsapp-ui');
+app.use('/api/whatsapp-ui', whatsappUiRoutes);
+
 
 // ── /whatsapp reverse-proxy ───────────────────────────────────────────────────
 // Contract: this server terminates TLS for server.ekta-enterprises.com.
