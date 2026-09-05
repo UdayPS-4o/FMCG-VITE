@@ -74,8 +74,8 @@ async function handleWhatsAppCatalogueOrder(recipientPhone, contactName, msgMeta
       const normalize = (s) => String(s || '').replace(/\D/g, '').slice(-10);
       party = parties.find(p =>
         normalize(p.C_MOBILE) === phone10 ||
-        normalize(p.C_PHONE)  === phone10 ||
-        normalize(p.WA_MOB)   === phone10
+        normalize(p.C_PHONE) === phone10 ||
+        normalize(p.WA_MOB) === phone10
       ) || null;
     } catch (e) {
       console.warn('[WA ORDER] Could not read CMPL.json:', e.message);
@@ -86,7 +86,7 @@ async function handleWhatsAppCatalogueOrder(recipientPhone, contactName, msgMeta
 
     // ── Compute next T-series bill number ──────────────────────────────────
     let orders = [];
-    try { orders = JSON.parse(fs.readFileSync(ORDERS_PATH, 'utf8')); } catch (e) {}
+    try { orders = JSON.parse(fs.readFileSync(ORDERS_PATH, 'utf8')); } catch (e) { }
 
     let maxTBill = 0;
     orders.forEach(o => {
@@ -109,7 +109,7 @@ async function handleWhatsAppCatalogueOrder(recipientPhone, contactName, msgMeta
             if (!isNaN(n) && n > maxTBill) maxTBill = n;
           }
         });
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const nextBillNo = maxTBill + 1;
@@ -131,10 +131,10 @@ async function handleWhatsAppCatalogueOrder(recipientPhone, contactName, msgMeta
 
     const notes = items.length
       ? `WhatsApp Catalogue Order — phone: ${phone10}${contactName ? ` (${contactName})` : ''}. ` +
-        `${items.length} item(s): ` +
-        items.map(i => `${i.name} x${i.qty} @ ${i.rate}`).join(', ') + '.'
+      `${items.length} item(s): ` +
+      items.map(i => `${i.name} x${i.qty} @ ${i.rate}`).join(', ') + '.'
       : `WhatsApp Catalogue Order — phone: ${phone10}${contactName ? ` (${contactName})` : ''}. ` +
-        `Item details could not be fetched from the CXBot portal — please confirm items with customer.`;
+      `Item details could not be fetched from the CXBot portal — please confirm items with customer.`;
 
     const newOrder = {
       id: `T${nextBillNo}`,
@@ -246,6 +246,15 @@ async function sendWhatsAppMessage(to, rest) {
     to: String(to).startsWith('+') ? to : `+${to}`,
     ...rest,
   };
+
+  // Log outgoing message for UI parser
+  console.log('[WA_OUTGOING]', JSON.stringify({
+    to: body.to,
+    type: body.type || 'text',
+    body: body.text && body.text.body ? body.text.body : (body.template ? body.template.name : (body.interactive ? 'Interactive' : 'Media')),
+    timestamp: Date.now()
+  }));
+
   const res = await axios.post(AOC_WA_API_URL, body, {
     headers: {
       apikey: AOC_WA_API_KEY,
@@ -253,6 +262,16 @@ async function sendWhatsAppMessage(to, rest) {
     },
     validateStatus: () => true,
   });
+
+  // Log response ID if possible
+  if (res.data && res.data.messageId) {
+    console.log('[WA_OUTGOING_SUCCESS]', JSON.stringify({
+      to: body.to,
+      messageId: res.data.messageId,
+      timestamp: Date.now()
+    }));
+  }
+
   return { status: res.status, data: res.data };
 }
 
@@ -322,9 +341,9 @@ function isCatalogueOrder(payload) {
  * already been ACKed by the time this does its work.
  */
 async function processCatalogueOrder(payload) {
-  const recipient    = payload?.contacts?.recipient || '';
-  const contactName  = payload?.contacts?.profileName || '';
-  const timestampMs  = payload?.messages?.timestamp;
+  const recipient = payload?.contacts?.recipient || '';
+  const contactName = payload?.contacts?.profileName || '';
+  const timestampMs = payload?.messages?.timestamp;
 
   console.log(`[WA WEBHOOK] 📦 Catalogue order from ${recipient} (${contactName}) — fetching item details`);
 
@@ -347,22 +366,22 @@ async function processCatalogueOrder(payload) {
       messages: payload?.messages || null,
       order: detail
         ? {
-            orderId: detail.orderId,
-            catalog_id: detail.catalogId,
-            status: detail.status,
-            currency: detail.currency,
-            itemCount: detail.itemCount,
-            items: detail.items,
-            product_items: detail.product_items,
-            subtotal: detail.subtotal,
-            tax: detail.tax,
-            discount: detail.discount,
-            shipping: detail.shipping,
-            totalAmount: detail.totalAmount,
-            portalCreatedAt: detail.createdAt,
-            matchDeltaMs: detail.matchDeltaMs,
-            matchAttempt: detail.matchAttempt,
-          }
+          orderId: detail.orderId,
+          catalog_id: detail.catalogId,
+          status: detail.status,
+          currency: detail.currency,
+          itemCount: detail.itemCount,
+          items: detail.items,
+          product_items: detail.product_items,
+          subtotal: detail.subtotal,
+          tax: detail.tax,
+          discount: detail.discount,
+          shipping: detail.shipping,
+          totalAmount: detail.totalAmount,
+          portalCreatedAt: detail.createdAt,
+          matchDeltaMs: detail.matchDeltaMs,
+          matchAttempt: detail.matchAttempt,
+        }
         : null,
       error: detail ? null : 'No matching order record found in CXBot waOrderReports',
     },
@@ -488,7 +507,7 @@ app.get('/webhook/logs', (req, res) => {
  *   /webhook/orders?limit=10
  */
 app.get('/webhook/orders', async (req, res) => {
-  
+
   const length = Math.min(parseInt(req.query.limit, 10) || 10, 100);
   const records = await fetchOrderPage({ start: 0, length });
   res.json({
@@ -597,14 +616,14 @@ const REPORTS_URL =
   'https://aggregate.aoc-portal.com/api/v1/whatsapp/waOrderReports';
 
 const ORIGIN = new URL(REPORTS_URL).origin;
-const CSRF_URL  = process.env.AOC_WA_CSRF_URL  || `${ORIGIN}/getcsrf`;
+const CSRF_URL = process.env.AOC_WA_CSRF_URL || `${ORIGIN}/getcsrf`;
 const LOGIN_URL = process.env.AOC_PORTAL_LOGIN_URL || `${ORIGIN}/api/v1/user/login`;
 
 const USERNAME = process.env.AOC_PORTAL_USERNAME || '';
 const PASSWORD = process.env.AOC_PORTAL_PASSWORD || '';
 
 // Optional escape hatches — only needed if auto-login ever stops working.
-const MANUAL_TOKEN  = process.env.AOC_WA_REPORTS_TOKEN || '';
+const MANUAL_TOKEN = process.env.AOC_WA_REPORTS_TOKEN || '';
 const MANUAL_COOKIE = process.env.AOC_PORTAL_COOKIE || '';
 
 const RETRY_DELAYS_MS = (process.env.AOC_WA_ORDER_RETRIES || '1500,4000,9000,20000')
@@ -863,7 +882,7 @@ function normaliseRecord(rec) {
     const code = it.retailer_id || it.product_retailer_id || null;
     const resolvedName = getProductName(code);
     const name = resolvedName || it.name || code || 'Unknown item';
-    
+
     return {
       productCode: code,
       productName: name,
@@ -873,10 +892,10 @@ function normaliseRecord(rec) {
       mrp: rate,
       sch: 0,
       netAmount: amount,
-      
+
       code,
       name,
-      qty, 
+      qty,
       amount,
       currency,
     };
@@ -1067,7 +1086,7 @@ async function runBackfill(DRY, dayFilter) {
   console.log(`Got ${records.length} portal order record(s).\n`);
 
   let orders = [];
-  try { orders = JSON.parse(fs.readFileSync(ORDERS_PATH, 'utf8')); } catch (e) {}
+  try { orders = JSON.parse(fs.readFileSync(ORDERS_PATH, 'utf8')); } catch (e) { }
   let ordersDirty = false;
 
   let seen = 0, matched = 0, missed = 0, skipped = 0;
@@ -1202,10 +1221,10 @@ async function runBackfill(DRY, dayFilter) {
 const argv = process.argv.slice(2);
 
 if (argv.includes('--check') || argv.includes('--list')) {
-// ── CLI ───────────────────────────────────────────────────────────────────────
+  // ── CLI ───────────────────────────────────────────────────────────────────────
 
-  
-  
+
+
 
   if (argv.includes('--check')) {
     checkAuth().then(ok => process.exit(ok ? 0 : 1));
