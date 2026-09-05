@@ -201,6 +201,7 @@ export default function WhatsAppInbox() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msgLoading, setMsgLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [sseStatus, setSseStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -212,11 +213,26 @@ export default function WhatsAppInbox() {
     try {
       const params = new URLSearchParams({ filter });
       if (search) params.set('search', search);
-      const res = await fetch(`${API_BASE}/conversations?${params}`);
+      const res = await fetch(`${API_BASE}/conversations?${params}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[WA-UI] HTTP', res.status, text.slice(0, 200));
+        setFetchError(`Server returned ${res.status}`);
+        return;
+      }
       const data = await res.json();
-      if (data.ok) setConversations(data.conversations || []);
+      console.log('[WA-UI] conversations:', data.count);
+      if (data.ok) {
+        setConversations(data.conversations || []);
+        setFetchError(null);
+      } else {
+        setFetchError(data.error || 'Unknown error');
+      }
     } catch (e) {
-      console.error('Failed to fetch conversations', e);
+      console.error('[WA-UI] fetch error:', e);
+      setFetchError(String(e));
     } finally {
       setLoading(false);
     }
@@ -226,7 +242,9 @@ export default function WhatsAppInbox() {
   const fetchMessages = useCallback(async (phone: string) => {
     setMsgLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/messages?phone=${phone}`);
+      const res = await fetch(`${API_BASE}/messages?phone=${phone}`, {
+        credentials: 'include',
+      });
       const data = await res.json();
       if (data.ok) {
         setActiveThread({
@@ -441,7 +459,14 @@ export default function WhatsAppInbox() {
             </div>
           ) : conversations.length === 0 ? (
             <div className="wa-no-conversations">
-              <p>No conversations found</p>
+              {fetchError ? (
+                <>
+                  <p style={{color:'#e74c3c'}}>⚠ {fetchError}</p>
+                  <p style={{fontSize:'11px',marginTop:'4px'}}>Check browser console for details</p>
+                </>
+              ) : (
+                <p>No conversations found</p>
+              )}
             </div>
           ) : (
             conversations.map((conv) => (
