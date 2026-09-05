@@ -12,6 +12,25 @@ const PM2_LOG = path.join(
 );
 const WHATSAPP_PORT = process.env.WHATSAPP_PORT || 4292;
 
+// ── CORS — allow test domain and localhost ─────────────────────────────────────
+const ALLOWED_ORIGINS = [
+  'https://test.ekta-enterprises.com',
+  'https://server.ekta-enterprises.com',
+  'http://localhost:3000',
+  'http://localhost:5173',
+];
+router.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // ── SSE ────────────────────────────────────────────────────────────────────────
 const sseClients = new Set();
 function broadcastSSE(data) {

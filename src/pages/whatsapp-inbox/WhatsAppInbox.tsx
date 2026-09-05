@@ -27,7 +27,11 @@ interface Message {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API_BASE = '/api/whatsapp-ui';
+// Use env var if set, otherwise auto-detect: if on Vercel/test domain use the real backend
+const _apiHost = typeof window !== 'undefined' && window.location.hostname === 'test.ekta-enterprises.com'
+  ? 'https://server.ekta-enterprises.com'
+  : '';
+const API_BASE = _apiHost + '/api/whatsapp-ui';
 
 function getInitials(name: string): string {
   return name
