@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import './WhatsAppInbox.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -21,32 +21,38 @@ interface Message {
   body: string;
   imageUrl?: string;
   interactiveTitle?: string;
+  interactiveBody?: string;
+  interactiveHeader?: string;
   documentUrl?: string;
   documentFilename?: string;
   templateName?: string;
   timestamp: number;
   status: string;
+  replyTo?: { body: string; direction: 'inbound' | 'outbound' };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-// VITE_API_URL is set to 'https://server.ekta-enterprises.com' in .env
-// so the Vercel (test) deployment calls the real backend. On server.ekta-enterprises.com it is ''.
 const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/whatsapp-ui';
 
+// Common emojis grouped by category
+const EMOJI_GROUPS = [
+  { label: '😀 Smileys', emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😌', '😍', '🥰', '😘', '😋', '😛', '😝', '😜', '🤩', '😎', '🥳', '😏', '😒', '😞', '😔', '😟', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '😳', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '💀', '👻', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'] },
+  { label: '👋 People', emojis: ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤞', '✌️', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '👍', '👎', '✊', '👊', '👏', '🙌', '🤝', '🙏', '💪', '👀', '👁️', '👅', '👄', '💋'] },
+  { label: '❤️ Hearts', emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '💯', '✅', '☑️', '🔥', '💥', '⭐', '🌟', '✨', '💫', '🎉', '🎊', '🎈', '🎁', '🎀', '🏆', '🥇', '🥈', '🥉'] },
+  { label: '🐶 Animals', emojis: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜', '🦟', '🦗', '🕷️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🐘', '🦏', '🦛', '🐪', '🐫', '🦒', '🦘', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐈', '🐓', '🦃', '🦚', '🦜', '🦢', '🦩', '🕊️', '🐇', '🦝', '🦨', '🦡', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔'] },
+  { label: '🍎 Food', emojis: ['🍎', '🍊', '🍋', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌽', '🌶️', '🫑', '🧄', '🧅', '🥔', '🍠', '🥐', '🥖', '🍞', '🥨', '🧀', '🥚', '🍳', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🌭', '🍔', '🍟', '🍕', '🫓', '🥪', '🥙', '🧆', '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🍜', '🍝', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥮', '🍢', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🧃', '🥤', '🧋', '☕', '🫖', '🍵', '🧉', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧊', '🥄', '🍴', '🍽️'] },
+  { label: '🚗 Travel', emojis: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🚲', '🛴', '🛹', '🛼', '🚏', '🛣️', '🛤️', '⛽', '🚦', '🚥', '🚧', '⚓', '🛟', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '✈️', '🛩️', '🛫', '🛬', '🪂', '💺', '🚁', '🚟', '🚠', '🚡', '🚀', '🛸', '🌍', '🌎', '🌏', '🗺️', '🧭', '🏔️', '⛰️', '🌋', '🗻', '🏕️', '🏖️', '🏜️', '🏝️', '🏛️', '🏗️', '🏘️', '🏚️', '🏠', '🏡', '🏢', '🏣', '🏤', '🏥', '🏦', '🏨', '🏩', '🏪', '🏫', '🏬', '🏭', '🏯', '🏰', '💒', '🗼', '🗽', '⛪', '🕌', '🛕', '🕍', '⛩️', '🕋'] },
+];
+
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map((w) => w[0] || '')
-    .join('')
-    .toUpperCase();
+  return name.split(' ').slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
 }
 
 function avatarColor(name: string): string {
-  const colors = [
-    '#D06060', '#60A0D0', '#60B87A', '#D0A060',
-    '#9060D0', '#D06090', '#60D0C0', '#8090A0',
-  ];
+  const colors = ['#D06060', '#60A0D0', '#60B87A', '#D0A060', '#9060D0', '#D06090', '#60D0C0', '#8090A0'];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % colors.length;
   return colors[Math.abs(h) % colors.length];
@@ -99,22 +105,140 @@ function StatusTick({ status }: { status?: string }) {
   return null;
 }
 
+// ─── Emoji Picker ─────────────────────────────────────────────────────────────
+function EmojiPicker({ onSelect, onClose }: { onSelect: (e: string) => void; onClose: () => void }) {
+  const [tab, setTab] = useState(0);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  const filtered = search
+    ? EMOJI_GROUPS.flatMap(g => g.emojis).filter(e => e.includes(search))
+    : EMOJI_GROUPS[tab].emojis;
+
+  return (
+    <div className="wa-emoji-picker" ref={ref}>
+      <div className="wa-emoji-search-row">
+        <input
+          className="wa-emoji-search"
+          placeholder="Search emoji…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          autoFocus
+        />
+      </div>
+      {!search && (
+        <div className="wa-emoji-tabs">
+          {EMOJI_GROUPS.map((g, i) => (
+            <button
+              key={i}
+              className={`wa-emoji-tab-btn ${tab === i ? 'active' : ''}`}
+              onClick={() => setTab(i)}
+              title={g.label}
+            >
+              {g.emojis[0]}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="wa-emoji-grid">
+        {filtered.map((em, i) => (
+          <button key={i} className="wa-emoji-btn" onClick={() => onSelect(em)} title={em}>
+            {em}
+          </button>
+        ))}
+        {filtered.length === 0 && <p className="wa-emoji-empty">No results</p>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Message Context Menu ─────────────────────────────────────────────────────
+function MessageContextMenu({
+  msg, x, y, onClose, onReply, onCopy, onForward, onReact
+}: {
+  msg: Message; x: number; y: number;
+  onClose: () => void;
+  onReply: () => void;
+  onCopy: () => void;
+  onForward: () => void;
+  onReact: (emoji: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [showReactions, setShowReactions] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  // Clamp to viewport
+  const style: React.CSSProperties = {
+    position: 'fixed',
+    top: Math.min(y, window.innerHeight - 260),
+    left: Math.min(x, window.innerWidth - 200),
+    zIndex: 9000,
+  };
+
+  return (
+    <div className="wa-ctx-menu" style={style} ref={ref}>
+      {/* Quick reactions */}
+      <div className="wa-ctx-reactions">
+        {QUICK_REACTIONS.map(em => (
+          <button key={em} className="wa-ctx-reaction-btn" onClick={() => { onReact(em); onClose(); }} title={em}>
+            {em}
+          </button>
+        ))}
+        <button className="wa-ctx-reaction-btn wa-ctx-reaction-more" onClick={() => setShowReactions(v => !v)} title="More">
+          +
+        </button>
+      </div>
+      <div className="wa-ctx-divider" />
+      <button className="wa-ctx-item" onClick={() => { onReply(); onClose(); }}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" /></svg>
+        Reply
+      </button>
+      <button className="wa-ctx-item" onClick={() => { onCopy(); onClose(); }}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg>
+        Copy
+      </button>
+      <button className="wa-ctx-item" onClick={() => { onForward(); onClose(); }}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11z" /></svg>
+        Forward
+      </button>
+      {showReactions && (
+        <div className="wa-ctx-more-reactions">
+          {EMOJI_GROUPS[0].emojis.slice(0, 30).map(em => (
+            <button key={em} className="wa-emoji-btn" onClick={() => { onReact(em); onClose(); }}>{em}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Conversation Item ────────────────────────────────────────────────────────
 function ConversationItem({
   conv, isActive, onClick
 }: { conv: Conversation; isActive: boolean; onClick: () => void }) {
-  const initials = getInitials(conv.name);
-  const color = avatarColor(conv.name);
   return (
     <div
       className={`wa-conv-item ${isActive ? 'wa-conv-item--active' : ''}`}
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
+      onClick={onClick} role="button" tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onClick()}
     >
-      <div className="wa-avatar" style={{ background: color }}>
-        {initials}
+      <div className="wa-avatar" style={{ background: avatarColor(conv.name) }}>
+        {getInitials(conv.name)}
       </div>
       <div className="wa-conv-info">
         <div className="wa-conv-top">
@@ -123,9 +247,7 @@ function ConversationItem({
         </div>
         <div className="wa-conv-bottom">
           <span className="wa-conv-preview">
-            {conv.lastMessageDirection === 'outbound' && (
-              <StatusTick status={conv.lastMessageStatus} />
-            )}
+            {conv.lastMessageDirection === 'outbound' && <StatusTick status={conv.lastMessageStatus} />}
             {conv.lastMessageDirection === 'outbound' && <span className="wa-you">You: </span>}
             {conv.lastMessage}
           </span>
@@ -139,15 +261,47 @@ function ConversationItem({
 }
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick: (url: string) => void }) {
+function MessageBubble({
+  msg, onImageClick, onContextMenu
+}: {
+  msg: Message;
+  onImageClick: (url: string) => void;
+  onContextMenu: (msg: Message, x: number, y: number) => void;
+}) {
   const isOut = msg.direction === 'outbound';
+  const [hover, setHover] = useState(false);
   const time = new Date(msg.timestamp).toLocaleTimeString('en-IN', {
     hour: '2-digit', minute: '2-digit', hour12: true
   });
 
+  const handleDropdownClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onContextMenu(msg, e.clientX, e.clientY);
+  };
+
   return (
-    <div className={`wa-bubble-row ${isOut ? 'wa-bubble-row--out' : 'wa-bubble-row--in'}`}>
+    <div
+      className={`wa-bubble-row ${isOut ? 'wa-bubble-row--out' : 'wa-bubble-row--in'}`}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {/* Dropdown arrow — left side for outbound, right side for inbound */}
+      {isOut && hover && (
+        <button className="wa-bubble-action wa-bubble-action--left" onClick={handleDropdownClick} title="Options">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="#8696a0"><path d="M7 10l5 5 5-5H7z" /></svg>
+        </button>
+      )}
+
       <div className={`wa-bubble ${isOut ? 'wa-bubble--out' : 'wa-bubble--in'} ${msg.type === 'image' ? 'wa-bubble--image' : ''}`}>
+        {/* Reply-to preview */}
+        {msg.replyTo && (
+          <div className={`wa-reply-preview ${msg.replyTo.direction === 'outbound' ? 'wa-reply-preview--out' : ''}`}>
+            <span className="wa-reply-preview-label">{msg.replyTo.direction === 'outbound' ? 'You' : 'Customer'}</span>
+            <span className="wa-reply-preview-body">{msg.replyTo.body}</span>
+          </div>
+        )}
+
+        {/* Message content */}
         {msg.type === 'image' && msg.imageUrl ? (
           <div onClick={() => onImageClick(msg.imageUrl!)} className="wa-img-link" style={{ cursor: 'pointer' }}>
             <img src={msg.imageUrl} alt="Photo" className="wa-img" />
@@ -159,21 +313,42 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick: (url
             </svg>
             <span>{msg.documentFilename || 'Document'}</span>
           </a>
-        ) : msg.type === 'interactive' ? (
+        ) : msg.type === 'interactive' && !isOut ? (
           <div className="wa-interactive">
             <span className="wa-interactive-icon">🔘</span>
             <span>{msg.interactiveTitle || msg.body}</span>
+          </div>
+        ) : (msg.type === 'interactive' || msg.type === 'template') && isOut ? (
+          <div className="wa-outbound-template">
+            {(msg.interactiveHeader || msg.templateName) && (
+              <div className="wa-template-header">{msg.interactiveHeader || msg.templateName}</div>
+            )}
+            <div className="wa-body">{msg.interactiveBody || msg.body}</div>
+            <div className="wa-template-tag">📋 Template</div>
           </div>
         ) : msg.type === 'order' ? (
           <div className="wa-order">🛒 {msg.body}</div>
         ) : (
           <div className="wa-body">{msg.body}</div>
         )}
+
+        {/* Reaction badge */}
+        {(msg as any).reaction && (
+          <div className="wa-reaction-badge">{(msg as any).reaction}</div>
+        )}
+
         <div className="wa-meta">
           <span className="wa-msg-time">{time}</span>
           {isOut && <StatusTick status={msg.status} />}
         </div>
       </div>
+
+      {/* Dropdown arrow — right side for inbound */}
+      {!isOut && hover && (
+        <button className="wa-bubble-action wa-bubble-action--right" onClick={handleDropdownClick} title="Options">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="#8696a0"><path d="M7 10l5 5 5-5H7z" /></svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -212,20 +387,36 @@ export default function WhatsAppInbox() {
   const [msgLoading, setMsgLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [sseStatus, setSseStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // New feature state
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [reactions, setReactions] = useState<Record<string, string>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sseRef = useRef<EventSource | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // ── 24-hour service window check ─────────────────────────────────────────────
+  // WhatsApp Business: can only send free-form messages within 24h of last customer message
+  const { isServiceWindowOpen, windowClosedAt } = useMemo(() => {
+    if (!activeThread?.messages) return { isServiceWindowOpen: false, windowClosedAt: null };
+    const lastInbound = [...activeThread.messages].reverse().find(m => m.direction === 'inbound');
+    if (!lastInbound) return { isServiceWindowOpen: false, windowClosedAt: null };
+    const elapsed = Date.now() - lastInbound.timestamp;
+    const open = elapsed < 24 * 60 * 60 * 1000;
+    return { isServiceWindowOpen: open, windowClosedAt: open ? null : lastInbound.timestamp };
+  }, [activeThread?.messages]);
 
   // ── Fetch conversation list ──────────────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
     try {
       const params = new URLSearchParams({ filter });
       if (search) params.set('search', search);
-      const res = await fetch(`${API_BASE}/conversations?${params}`, {
-        credentials: 'include',
-      });
+      const res = await fetch(`${API_BASE}/conversations?${params}`, { credentials: 'include' });
       if (!res.ok) {
         const text = await res.text();
         console.error('[WA-UI] HTTP', res.status, text.slice(0, 200));
@@ -233,36 +424,24 @@ export default function WhatsAppInbox() {
         return;
       }
       const data = await res.json();
-      if (data.ok) {
-        setConversations(data.conversations || []);
-        setFetchError(null);
-      } else {
-        setFetchError(data.error || 'Unknown error');
-      }
+      if (data.ok) { setConversations(data.conversations || []); setFetchError(null); }
+      else setFetchError(data.error || 'Unknown error');
     } catch (e) {
       console.error('[WA-UI] fetch error:', e);
       setFetchError(String(e));
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [filter, search]);
 
   // ── Fetch messages for active thread ────────────────────────────────────────
   const fetchMessages = useCallback(async (phone: string) => {
-    // Set read on backend
     fetch(`${API_BASE}/read`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone })
     }).catch(() => { });
-    // Update local state proactively
     setConversations(prev => prev.map(c => String(c.phone) === String(phone) ? { ...c, unreadCount: 0 } : c));
-
     setMsgLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/messages?phone=${phone}`, {
-        credentials: 'include',
-      });
+      const res = await fetch(`${API_BASE}/messages?phone=${phone}`, { credentials: 'include' });
       const data = await res.json();
       if (data.ok) {
         setActiveThread({
@@ -272,11 +451,8 @@ export default function WhatsAppInbox() {
           total: data.total || 0,
         });
       }
-    } catch (e) {
-      console.error('Failed to fetch messages', e);
-    } finally {
-      setMsgLoading(false);
-    }
+    } catch (e) { console.error('Failed to fetch messages', e); }
+    finally { setMsgLoading(false); }
   }, []);
 
   // ── SSE live updates ─────────────────────────────────────────────────────────
@@ -297,17 +473,10 @@ export default function WhatsAppInbox() {
           }
         } catch { }
       };
-      es.onerror = () => {
-        setSseStatus('disconnected');
-        es.close();
-        setTimeout(connect, 5000);
-      };
+      es.onerror = () => { setSseStatus('disconnected'); es.close(); setTimeout(connect, 5000); };
     };
     connect();
-    return () => {
-      sseRef.current?.close();
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    };
+    return () => { sseRef.current?.close(); if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); };
   }, [activePhone, fetchConversations, fetchMessages]);
 
   useEffect(() => {
@@ -317,96 +486,116 @@ export default function WhatsAppInbox() {
   }, [fetchConversations]);
 
   useEffect(() => {
-    if (activePhone) {
-      fetchMessages(activePhone);
-    }
+    if (activePhone) { fetchMessages(activePhone); setReplyTo(null); setReactions({}); }
   }, [activePhone, fetchMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeThread?.messages]);
 
+  // Close emoji picker and context menu on click-outside
+  useEffect(() => {
+    const handler = () => setContextMenu(null);
+    if (contextMenu) document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [contextMenu]);
+
+  // ── Send message ─────────────────────────────────────────────────────────────
   const sendMessage = async () => {
-    if (!inputText.trim() || !activePhone || sending) return;
+    if (!inputText.trim() || !activePhone || sending || !isServiceWindowOpen) return;
     const text = inputText.trim();
     setInputText('');
     setSending(true);
+    const currentReplyTo = replyTo;
+    setReplyTo(null);
 
     const tempId = 'temp_' + Date.now();
     const tempMsg: Message = {
-      id: tempId,
-      direction: 'outbound',
-      type: 'text',
-      body: text,
-      timestamp: Date.now(),
-      status: 'sending',
+      id: tempId, direction: 'outbound', type: 'text',
+      body: text, timestamp: Date.now(), status: 'sending',
+      replyTo: currentReplyTo ? { body: currentReplyTo.body, direction: currentReplyTo.direction } : undefined,
     };
-    setActiveThread((prev) =>
-      prev ? { ...prev, messages: [...prev.messages, tempMsg] } : prev
-    );
+    setActiveThread(prev => prev ? { ...prev, messages: [...prev.messages, tempMsg] } : prev);
 
     try {
       const res = await fetch(`${API_BASE}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: activePhone, body: text }),
       });
       const data = await res.json();
       if (!data.ok) {
-        setActiveThread((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            messages: prev.messages.map((m) =>
-              m.id === tempId ? { ...m, status: 'failed' } : m
-            ),
-          };
-        });
+        setActiveThread(prev => prev ? {
+          ...prev, messages: prev.messages.map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
+        } : prev);
       }
-      setTimeout(() => {
-        fetchConversations();
-        if (activePhone) fetchMessages(activePhone);
-      }, 3000);
-    } catch (e) {
-      setActiveThread((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          messages: prev.messages.map((m) =>
-            m.id === tempId ? { ...m, status: 'failed' } : m
-          ),
-        };
-      });
-    } finally {
-      setSending(false);
-    }
+      setTimeout(() => { fetchConversations(); if (activePhone) fetchMessages(activePhone); }, 3000);
+    } catch {
+      setActiveThread(prev => prev ? {
+        ...prev, messages: prev.messages.map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
+      } : prev);
+    } finally { setSending(false); }
   };
 
-  const groupedMessages = (() => {
+  // ── Context menu handlers ─────────────────────────────────────────────────────
+  const handleCopy = useCallback((msg: Message) => {
+    navigator.clipboard.writeText(msg.body).catch(() => { });
+  }, []);
+
+  const handleForward = useCallback((msg: Message) => {
+    const text = `[Forwarded]\n${msg.body}`;
+    navigator.clipboard.writeText(text).catch(() => { });
+  }, []);
+
+  const handleReact = useCallback((msg: Message, emoji: string) => {
+    setReactions(prev => ({ ...prev, [msg.id]: emoji }));
+  }, []);
+
+  // ── Grouped messages ─────────────────────────────────────────────────────────
+  const groupedMessages = useMemo(() => {
     if (!activeThread?.messages.length) return [];
     const groups: { dateKey: string; dateLabel: string; msgs: Message[] }[] = [];
     for (const msg of activeThread.messages) {
+      const msgWithReaction = reactions[msg.id] ? { ...msg, reaction: reactions[msg.id] } : msg;
       const dk = getDateKey(msg.timestamp);
       const last = groups[groups.length - 1];
-      if (last && last.dateKey === dk) {
-        last.msgs.push(msg);
-      } else {
-        groups.push({ dateKey: dk, dateLabel: formatDateLabel(msg.timestamp), msgs: [msg] });
-      }
+      if (last && last.dateKey === dk) { last.msgs.push(msgWithReaction as Message); }
+      else { groups.push({ dateKey: dk, dateLabel: formatDateLabel(msg.timestamp), msgs: [msgWithReaction as Message] }); }
     }
     return groups;
-  })();
+  }, [activeThread?.messages, reactions]);
 
   const activeConv = conversations.find((c) => c.phone === activePhone);
 
+  // Window closed message
+  const windowClosedMsg = windowClosedAt
+    ? `Last message was ${Math.floor((Date.now() - windowClosedAt) / 3600000)}h ago. Service window closed.`
+    : null;
+
   return (
-    <div className="wa-root">
+    <div className="wa-root" onClick={() => { setShowEmojiPicker(false); }}>
+      {/* Image preview modal */}
       {previewImage && (
         <div className="wa-image-modal" onClick={() => setPreviewImage(null)}>
           <button className="wa-modal-close" onClick={() => setPreviewImage(null)}>✕</button>
           <img src={previewImage} alt="Preview" className="wa-modal-img" onClick={e => e.stopPropagation()} />
         </div>
       )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <MessageContextMenu
+          msg={contextMenu.msg}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onReply={() => { setReplyTo(contextMenu.msg); inputRef.current?.focus(); }}
+          onCopy={() => handleCopy(contextMenu.msg)}
+          onForward={() => handleForward(contextMenu.msg)}
+          onReact={(em) => handleReact(contextMenu.msg, em)}
+        />
+      )}
+
+      {/* ── Sidebar ── */}
       <div className="wa-sidebar">
         <div className="wa-sidebar-header">
           <a href="/dashboard" className="wa-hamburger" title="Back to Dashboard">
@@ -426,43 +615,29 @@ export default function WhatsAppInbox() {
           </div>
         </div>
 
-        {/* Search */}
         <div className="wa-search-wrap">
           <div className="wa-search-box">
             <svg className="wa-search-icon" viewBox="0 0 24 24" width="16" height="16">
               <path d="M10 2a8 8 0 1 0 4.906 14.32l4.387 4.387a1 1 0 0 0 1.414-1.414l-4.387-4.387A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12A6 6 0 0 1 10 4z" fill="#8696A0" />
             </svg>
-            <input
-              id="wa-search-input"
-              className="wa-search-input"
-              type="text"
-              placeholder="Search or start new chat"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <input id="wa-search-input" className="wa-search-input" type="text"
+              placeholder="Search or start new chat" value={search}
+              onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
 
-        {/* Filter tabs */}
         <div className="wa-filter-tabs">
-          <button
-            id="wa-filter-all"
+          <button id="wa-filter-all"
             className={`wa-filter-tab ${filter === 'all' ? 'wa-filter-tab--active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
-            All
-          </button>
-          <button
-            id="wa-filter-unread"
+            onClick={() => setFilter('all')}>All</button>
+          <button id="wa-filter-unread"
             className={`wa-filter-tab ${filter === 'unread' ? 'wa-filter-tab--active' : ''}`}
-            onClick={() => setFilter('unread')}
-          >
+            onClick={() => setFilter('unread')}>
             Unread {conversations.filter(c => c.unreadCount > 0).length > 0 &&
               <span className="wa-tab-count">{conversations.filter(c => c.unreadCount > 0).length}</span>}
           </button>
         </div>
 
-        {/* Conversation list */}
         <div className="wa-conv-list">
           {loading ? (
             <div className="wa-loading-list">
@@ -483,18 +658,13 @@ export default function WhatsAppInbox() {
                   <p style={{ color: '#e74c3c' }}>⚠ {fetchError}</p>
                   <p style={{ fontSize: '11px', marginTop: '4px' }}>Check browser console for details</p>
                 </>
-              ) : (
-                <p>No conversations found</p>
-              )}
+              ) : <p>No conversations found</p>}
             </div>
           ) : (
             conversations.map((conv) => (
-              <ConversationItem
-                key={conv.phone}
-                conv={conv}
+              <ConversationItem key={conv.phone} conv={conv}
                 isActive={conv.phone === activePhone}
-                onClick={() => setActivePhone(conv.phone)}
-              />
+                onClick={() => setActivePhone(conv.phone)} />
             ))
           )}
         </div>
@@ -508,10 +678,8 @@ export default function WhatsAppInbox() {
           <>
             {/* Chat header */}
             <div className="wa-chat-header">
-              <div
-                className="wa-avatar wa-avatar--md"
-                style={{ background: activeConv ? avatarColor(activeConv.name) : '#607D8B' }}
-              >
+              <div className="wa-avatar wa-avatar--md"
+                style={{ background: activeConv ? avatarColor(activeConv.name) : '#607D8B' }}>
                 {activeConv ? getInitials(activeConv.name) : '?'}
               </div>
               <div className="wa-chat-header-info">
@@ -520,17 +688,12 @@ export default function WhatsAppInbox() {
                 </div>
                 <div className="wa-chat-header-phone">
                   {activeThread?.displayPhone || activePhone}
-                  {activeConv && (
-                    <span className="wa-msg-count"> · {activeConv.messageCount} messages</span>
-                  )}
+                  {activeConv && <span className="wa-msg-count"> · {activeConv.messageCount} messages</span>}
                 </div>
               </div>
-              <button
-                id="wa-refresh-btn"
-                className="wa-header-action"
+              <button id="wa-refresh-btn" className="wa-header-action"
                 onClick={() => { fetchConversations(); if (activePhone) fetchMessages(activePhone); }}
-                title="Refresh"
-              >
+                title="Refresh">
                 <svg viewBox="0 0 24 24" width="20" height="20">
                   <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="#8696A0" />
                 </svg>
@@ -538,12 +701,10 @@ export default function WhatsAppInbox() {
             </div>
 
             {/* Messages area */}
-            <div className="wa-messages-area">
+            <div className="wa-messages-area" onClick={() => { setShowEmojiPicker(false); setContextMenu(null); }}>
               <div className="wa-messages-bg">
                 {msgLoading ? (
-                  <div className="wa-msg-loading">
-                    <div className="wa-spinner"></div>
-                  </div>
+                  <div className="wa-msg-loading"><div className="wa-spinner"></div></div>
                 ) : groupedMessages.length === 0 ? (
                   <div className="wa-no-messages">No messages yet</div>
                 ) : (
@@ -553,7 +714,14 @@ export default function WhatsAppInbox() {
                         <span className="wa-date-label">{group.dateLabel}</span>
                       </div>
                       {group.msgs.map((msg) => (
-                        <MessageBubble key={msg.id} msg={msg} onImageClick={setPreviewImage} />
+                        <MessageBubble
+                          key={msg.id} msg={msg}
+                          onImageClick={setPreviewImage}
+                          onContextMenu={(m, x, y) => {
+                            setContextMenu({ msg: m, x, y });
+                            setShowEmojiPicker(false);
+                          }}
+                        />
                       ))}
                     </div>
                   ))
@@ -562,45 +730,89 @@ export default function WhatsAppInbox() {
               </div>
             </div>
 
-            {/* Input area */}
-            <div className="wa-input-area">
-              <button className="wa-input-action" title="Emoji" disabled>
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 14.72a7 7 0 0 1-8.48 0A.745.745 0 1 1 8.8 15.6a5.5 5.5 0 0 0 6.4 0 .745.745 0 0 1 1.03 1.12zM8.5 11c-.83 0-1.5-.67-1.5-1.5S7.67 8 8.5 8 10 8.67 10 9.5 9.33 11 8.5 11zm7 0c-.83 0-1.5-.67-1.5-1.5S14.67 8 15.5 8 17 8.67 17 9.5 16.33 11 15.5 11z" fill="#8696A0" />
-                </svg>
-              </button>
-              <div className="wa-input-box">
-                <input
-                  id="wa-message-input"
-                  className="wa-message-input"
-                  type="text"
-                  placeholder="Type a message"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage();
-                    }
-                  }}
-                  disabled={sending}
-                />
-              </div>
-              <button
-                id="wa-send-btn"
-                className={`wa-send-btn ${inputText.trim() ? 'wa-send-btn--active' : ''}`}
-                onClick={sendMessage}
-                disabled={!inputText.trim() || sending}
-                title="Send message"
-              >
-                {sending ? (
-                  <div className="wa-send-spinner"></div>
-                ) : (
-                  <svg viewBox="0 0 24 24" width="24" height="24">
-                    <path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z" fill="currentColor" />
+            {/* ── Input area ── */}
+            <div className="wa-input-wrapper">
+              {/* Reply-to banner */}
+              {replyTo && (
+                <div className="wa-reply-banner">
+                  <div className="wa-reply-banner-bar" />
+                  <div className="wa-reply-banner-content">
+                    <span className="wa-reply-banner-label">
+                      {replyTo.direction === 'outbound' ? 'You' : activeThread?.name || 'Customer'}
+                    </span>
+                    <span className="wa-reply-banner-body">{replyTo.body}</span>
+                  </div>
+                  <button className="wa-reply-banner-close" onClick={() => setReplyTo(null)}>✕</button>
+                </div>
+              )}
+
+              {/* 24h window locked notice */}
+              {!isServiceWindowOpen && windowClosedMsg && (
+                <div className="wa-window-locked">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="#f0ad4e">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
                   </svg>
-                )}
-              </button>
+                  <span>{windowClosedMsg} Use a WhatsApp template to re-engage.</span>
+                </div>
+              )}
+
+              <div className={`wa-input-area ${!isServiceWindowOpen ? 'wa-input-area--locked' : ''}`}>
+                {/* Emoji button */}
+                <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                  <button
+                    className={`wa-input-action ${showEmojiPicker ? 'wa-input-action--active' : ''}`}
+                    title="Emoji"
+                    disabled={!isServiceWindowOpen}
+                    onClick={() => setShowEmojiPicker(v => !v)}
+                  >
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                      <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 14.72a7 7 0 0 1-8.48 0A.745.745 0 1 1 8.8 15.6a5.5 5.5 0 0 0 6.4 0 .745.745 0 0 1 1.03 1.12zM8.5 11c-.83 0-1.5-.67-1.5-1.5S7.67 8 8.5 8 10 8.67 10 9.5 9.33 11 8.5 11zm7 0c-.83 0-1.5-.67-1.5-1.5S14.67 8 15.5 8 17 8.67 17 9.5 16.33 11 15.5 11z"
+                        fill={showEmojiPicker ? '#00a884' : '#8696A0'} />
+                    </svg>
+                  </button>
+                  {showEmojiPicker && (
+                    <EmojiPicker
+                      onSelect={(em) => {
+                        setInputText(prev => prev + em);
+                        inputRef.current?.focus();
+                      }}
+                      onClose={() => setShowEmojiPicker(false)}
+                    />
+                  )}
+                </div>
+
+                <div className="wa-input-box">
+                  <input
+                    id="wa-message-input"
+                    ref={inputRef}
+                    className="wa-message-input"
+                    type="text"
+                    placeholder={isServiceWindowOpen ? 'Type a message' : 'Messaging disabled — 24h window closed'}
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+                    }}
+                    disabled={sending || !isServiceWindowOpen}
+                  />
+                </div>
+
+                <button
+                  id="wa-send-btn"
+                  className={`wa-send-btn ${inputText.trim() && isServiceWindowOpen ? 'wa-send-btn--active' : ''}`}
+                  onClick={sendMessage}
+                  disabled={!inputText.trim() || sending || !isServiceWindowOpen}
+                  title={isServiceWindowOpen ? 'Send message' : '24h window closed'}
+                >
+                  {sending ? (
+                    <div className="wa-send-spinner"></div>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                      <path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z" fill="currentColor" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
           </>
         )}

@@ -3,13 +3,12 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const axios = require('axios');
 
 const LOG_DIR = path.join(__dirname, '..', 'webhook-logs');
-const PM2_LOG = path.join(
-  process.env.PM2_HOME || path.join(require('os').homedir(), '.pm2'),
-  'logs', 'whatsapp-out.log'
-);
+const PM2_LOG = path.join(os.homedir(), '.pm2/logs/whatsapp-out.log');
+const PM2_LOG2 = path.join(os.homedir(), '.pm2/logs/fmcg-api-out.log');
 const WHATSAPP_PORT = process.env.WHATSAPP_PORT || 4292;
 
 // ── CORS — allow test domain and localhost ─────────────────────────────────────
@@ -87,32 +86,82 @@ function readAllLogs({ daysBack = 60 } = {}) {
 }
 
 // ── PM2 outgoing message parser ────────────────────────────────────────────────
+// Returns a Map keyed by messageId (from [WA_OUTGOING_SUCCESS]) so that
+// message_status webhook events can resolve the outgoing message details.
+// Also keeps a secondary timestamp-keyed map as fallback for messages whose
+// success response hasn't arrived yet.
 function parsePm2OutgoingMessages() {
-  const outgoing = new Map();
-  if (!fs.existsSync(PM2_LOG)) return outgoing;
-  try {
-    const lines = fs.readFileSync(PM2_LOG, 'utf8').split('\n');
-    for (const raw of lines) {
-      if (raw.includes('[WA_OUTGOING]')) {
-        try {
-          const jsonStr = raw.substring(raw.indexOf('[WA_OUTGOING]') + 13).trim();
-          const data = JSON.parse(jsonStr);
-          if (data && data.to) {
-            const key = data.to + '_' + data.timestamp;
-            outgoing.set(key, {
-              to: data.to.replace(/\D/g, '').slice(-12),
-              type: data.type,
-              body: data.body,
-              timestamp: data.timestamp
-            });
-          }
-        } catch (e) { }
-      } else if (raw.includes('[WA_OUTGOING_SUCCESS]')) {
-        // Optionally link messageId to the outgoing message, but timestamp is good enough
+  // ts-keyed pending outgoing: "to_timestamp" -> { to, type, body, timestamp }
+  const pendingByTs = new Map();
+  // messageId-keyed confirmed outgoing: messageId -> { to, type, body, timestamp }
+  const byMsgId = new Map();
+  const logs = [PM2_LOG, PM2_LOG2];
+
+  for (const logFile of logs) {
+    if (!fs.existsSync(logFile)) continue;
+    try {
+      const lines = fs.readFileSync(logFile, 'utf8').split('\n');
+      for (const raw of lines) {
+        if (raw.includes('[WA_OUTGOING]')) {
+          try {
+            const jsonStr = raw.substring(raw.indexOf('[WA_OUTGOING]') + 13).trim();
+            const data = JSON.parse(jsonStr);
+            if (data && data.to) {
+              const tsKey = data.to + '_' + data.timestamp;
+              const info = {
+                to: data.to.replace(/\D/g, '').slice(-10),
+                type: data.type,
+                body: data.body,
+                templateName: data.templateName || null,
+                interactiveBody: data.interactiveBody || null,
+                interactiveHeader: data.interactiveHeader || null,
+                timestamp: data.timestamp
+              };
+              pendingByTs.set(tsKey, info);
+            }
+          } catch (e) { }
+        } else if (raw.includes('[WA_OUTGOING_SUCCESS]')) {
+          // [WA_OUTGOING_SUCCESS] {"to":"+91...","messageId":"wamid.xxx","timestamp":...}
+          try {
+            const jsonStr = raw.substring(raw.indexOf('[WA_OUTGOING_SUCCESS]') + 21).trim();
+            const data = JSON.parse(jsonStr);
+            if (data && data.messageId && data.to) {
+              // Find matching pending outgoing (nearest timestamp within 30s)
+              const toNorm = data.to.replace(/\D/g, '').slice(-10);
+              let best = null;
+              let bestDiff = Infinity;
+              for (const [tsKey, info] of pendingByTs) {
+                if (info.to === toNorm) {
+                  const diff = Math.abs((data.timestamp || Date.now()) - info.timestamp);
+                  if (diff < bestDiff && diff < 30000) {
+                    bestDiff = diff;
+                    best = info;
+                  }
+                }
+              }
+              byMsgId.set(data.messageId, best || {
+                to: toNorm,
+                type: 'text',
+                body: 'Sent',
+                timestamp: data.timestamp || Date.now()
+              });
+            }
+          } catch (e) { }
+        }
       }
-    }
-  } catch (e) { console.error('[WA-UI] PM2 parse error:', e.message); }
-  return outgoing;
+    } catch (e) { console.error(`[WA-UI] PM2 parse error in ${logFile}:`, e.message); }
+  }
+
+  // Merge: for any pending that didn't get a success log, expose them by tsKey so
+  // the caller can still discover them (used as a combined map).
+  for (const [tsKey, info] of pendingByTs) {
+    // Only add if not already linked by messageId (avoid duplicates)
+    pendingByTs.set(tsKey, info);
+  }
+
+  // Return a combined accessor: supports get(messageId) primarily
+  byMsgId._pendingByTs = pendingByTs;
+  return byMsgId;
 }
 
 // ── Conversation builder ───────────────────────────────────────────────────────
@@ -200,6 +249,7 @@ function buildConversations() {
       const statusTs = p.statuses && p.statuses.timestamp
         ? Number(p.statuses.timestamp) * 1000 : ts;
       if (!msgId || !status) continue;
+      // outgoingMap is now keyed by messageId (from [WA_OUTGOING_SUCCESS])
       const outInfo = outgoingMap.get(msgId);
       if (!outInfo || !outInfo.to) continue;
       const thread = getOrCreate(outInfo.to);
@@ -210,16 +260,49 @@ function buildConversations() {
           existing.status = status;
         }
       } else {
+        const msgTs = outInfo.timestamp || statusTs;
         thread.messages.push({
           id: msgId, direction: 'outbound',
-          type: (outInfo && outInfo.type) || 'text',
-          body: (outInfo && outInfo.body) || (outInfo && outInfo.templateName ? outInfo.templateName : 'Sent'),
-          templateName: outInfo && outInfo.templateName,
-          timestamp: statusTs, status
+          type: outInfo.type || 'text',
+          body: outInfo.body || 'Sent',
+          templateName: outInfo.templateName || null,
+          interactiveBody: outInfo.interactiveBody || null,
+          interactiveHeader: outInfo.interactiveHeader || null,
+          timestamp: msgTs, status
         });
-        if (statusTs > thread.lastMessageAt) thread.lastMessageAt = statusTs;
+        thread._seen.add(msgId);
+        if (msgTs > thread.lastMessageAt) thread.lastMessageAt = msgTs;
       }
     }
+  }
+
+  // ── Inject outgoing messages from PM2 logs directly ───────────────────────────
+  // Many outgoing messages never trigger a delivery status webhook. We inject them
+  // from the PM2 [WA_OUTGOING] log lines so they always appear in the chat.
+  const pendingByTs = outgoingMap._pendingByTs || new Map();
+  for (const [tsKey, info] of pendingByTs) {
+    if (!info || !info.to) continue;
+    const thread = threads.get(info.to);
+    if (!thread) continue; // only add to threads that already exist (have inbound msgs)
+    // Check if this outgoing msg is already present (added via message_status)
+    const already = thread.messages.some(
+      (m) => m.direction === 'outbound' &&
+        Math.abs(m.timestamp - info.timestamp) < 5000 &&
+        m.body === info.body
+    );
+    if (already) continue;
+    thread.messages.push({
+      id: 'out_' + tsKey,
+      direction: 'outbound',
+      type: info.type || 'text',
+      body: info.body || 'Sent',
+      templateName: info.templateName || null,
+      interactiveBody: info.interactiveBody || null,
+      interactiveHeader: info.interactiveHeader || null,
+      timestamp: info.timestamp,
+      status: 'sent'
+    });
+    if (info.timestamp > thread.lastMessageAt) thread.lastMessageAt = info.timestamp;
   }
 
   for (const thread of threads.values()) {
