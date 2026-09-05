@@ -47,6 +47,15 @@ const fs = require('fs');
 const http = require('http');
 const axios = require('axios');
 
+// Push notifications — reuse the same helper as invoice / attendance
+let _sendNotificationToAdmins;
+try {
+  _sendNotificationToAdmins = require('./routes/push').sendNotificationToAdmins;
+} catch (e) {
+  console.warn('[WA] Could not load push notification helper:', e.message);
+  _sendNotificationToAdmins = () => { };
+}
+
 
 
 // ── WhatsApp Catalogue Order → orders.json ────────────────────────────────────
@@ -247,12 +256,38 @@ async function sendWhatsAppMessage(to, rest) {
     ...rest,
   };
 
-  // Log outgoing message for UI parser
+  // Log outgoing message for UI parser — include full details so the inbox
+  // can render the real content (template name, interactive body, etc.)
+  const _outTs = Date.now();
+  let _outBody = 'Sent';
+  let _outTemplateName = null;
+  let _outInteractiveBody = null;
+  let _outInteractiveHeader = null;
+
+  if (body.text && body.text.body) {
+    _outBody = body.text.body;
+  } else if (body.template && body.template.name) {
+    _outTemplateName = body.template.name;
+    // Try to extract text from template components
+    const comps = (body.template.components || body.components || []);
+    const bodyComp = comps.find(c => (c.type || '').toLowerCase() === 'body');
+    _outBody = (bodyComp && bodyComp.text) || body.template.name;
+    _outInteractiveBody = _outBody;
+  } else if (body.interactive) {
+    const iv = body.interactive;
+    _outInteractiveHeader = (iv.header && (iv.header.text || iv.header.type)) || null;
+    _outInteractiveBody = (iv.body && iv.body.text) || null;
+    _outBody = _outInteractiveBody || _outInteractiveHeader || 'Interactive';
+  }
+
   console.log('[WA_OUTGOING]', JSON.stringify({
     to: body.to,
     type: body.type || 'text',
-    body: body.text && body.text.body ? body.text.body : (body.template ? body.template.name : (body.interactive ? 'Interactive' : 'Media')),
-    timestamp: Date.now()
+    body: _outBody,
+    templateName: _outTemplateName,
+    interactiveBody: _outInteractiveBody,
+    interactiveHeader: _outInteractiveHeader,
+    timestamp: _outTs
   }));
 
   const res = await axios.post(AOC_WA_API_URL, body, {
@@ -428,6 +463,59 @@ app.post('/webhook', (req, res) => {
 
   console.log('\n[WA WEBHOOK] Event received @', entry.receivedAt);
   console.dir(payload, { depth: null });
+
+  // ── Push notification for every inbound message ──────────────────────────
+  // Fire-and-forget: don't await, never block the webhook ACK.
+  try {
+    const isInbound = payload?.event === 'message_received';
+    const isStatusUpdate = !!(payload?.status || payload?.messageStatus);
+    if (isInbound && !isStatusUpdate) {
+      const senderName = payload?.contacts?.profileName
+        || payload?.from
+        || 'A customer';
+      const senderPhone = payload?.contacts?.recipient
+        || payload?.from
+        || '';
+      const msgType = payload?.messages?.type || 'message';
+
+      // Build a meaningful preview of the message content
+      let preview = '';
+      if (msgType === 'text' && payload?.messages?.text?.body) {
+        preview = payload.messages.text.body;
+      } else if (msgType === 'interactive') {
+        const iv = payload?.messages?.interactive;
+        preview = iv?.button_reply?.title
+          || iv?.list_reply?.title
+          || 'Interactive reply';
+      } else if (msgType === 'image') {
+        preview = '📷 Image';
+      } else if (msgType === 'document') {
+        preview = '📄 Document';
+      } else if (msgType === 'audio') {
+        preview = '🎤 Voice message';
+      } else if (msgType === 'order') {
+        preview = '🛒 Catalogue order';
+      } else {
+        preview = msgType.charAt(0).toUpperCase() + msgType.slice(1);
+      }
+
+      const phoneDisplay = senderPhone
+        ? ` (+${String(senderPhone).replace(/\D/g, '')})`
+        : '';
+
+      _sendNotificationToAdmins({
+        title: `💬 WhatsApp: ${senderName}${phoneDisplay}`,
+        message: preview || 'New message received',
+        data: {
+          url: '/whatsapp-inbox',
+          endpoint: 'whatsapp-inbox',
+          phone: senderPhone,
+        }
+      });
+    }
+  } catch (pushErr) {
+    console.warn('[WA WEBHOOK] Push notification failed (non-fatal):', pushErr.message);
+  }
 
   // ── Detect WhatsApp Catalogue Orders ──────────────────────────────────────
   // CXBot fires event:"message_received" with messages.type:"order" when a
