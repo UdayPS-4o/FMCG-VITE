@@ -415,10 +415,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         return false;
       }
 
-      // Special case for "App Listings" and "App Schemes" - only show for Admin
-      if (item.name === "App Listings" || item.name === "App Schemes") {
-        return false;
-      }
+      // Removed the hardcoded admin blocks for App Listings and App Schemes
 
       // Filter main menu items with direct paths
       if (item.path) {
@@ -439,6 +436,9 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         if (item.name === "Cash Receipt" && !user.routeAccess.includes('Cash Receipts')) return false;
         if (item.name === "Cash Payment" && !user.routeAccess.includes('Cash Payments')) return false;
         if (item.name === "WhatsApp Inbox" && !user.routeAccess.includes('WhatsApp Inbox')) return false;
+        if (item.name === "App Orders" && !user.routeAccess.includes('App Orders')) return false;
+        if (item.name === "App Schemes" && !user.routeAccess.includes('App Schemes')) return false;
+        if (item.name === "App Listings" && !user.routeAccess.includes('App Listings')) return false;
         return true;
       }
 
