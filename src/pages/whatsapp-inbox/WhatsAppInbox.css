@@ -603,21 +603,7 @@
   text-align: center;
 }
 
-/* ── Responsive ──────────────────────────────────────────────────────────────── */
-@media (max-width: 768px) {
-  .wa-sidebar {
-    width: 100%;
-    max-width: 100%;
-    display: none;
-  }
-  .wa-sidebar.wa-sidebar--visible {
-    display: flex;
-    position: absolute;
-    z-index: 10;
-    height: 100%;
-  }
-  .wa-main { width: 100%; }
-}
+/* ── Responsive: handled by the wa-chat-active block below ──────────────────── */
 
 /* Image Modal */
 .wa-image-modal {
