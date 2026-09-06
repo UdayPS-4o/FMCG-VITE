@@ -386,19 +386,19 @@ const AppRoutes = () => {
         } />
 
         <Route path="/app-orders" element={
-          <ProtectedRoute requiredAccess="Admin">
+          <ProtectedRoute requiredAccess="App Orders">
             <AppOrders />
           </ProtectedRoute>
         } />
 
         <Route path="/app-schemes" element={
-          <ProtectedRoute requiredAccess="Admin">
+          <ProtectedRoute requiredAccess="App Schemes">
             <AppSchemes />
           </ProtectedRoute>
         } />
 
         <Route path="/app-listings" element={
-          <ProtectedRoute requiredAccess="Admin">
+          <ProtectedRoute requiredAccess="App Listings">
             <AppListings />
           </ProtectedRoute>
         } />

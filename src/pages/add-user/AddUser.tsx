@@ -62,6 +62,9 @@ const AddUser: React.FC = () => {
     'Cash Payments',
     'Reports',
     'WhatsApp Inbox',
+    'App Orders',
+    'App Schemes',
+    'App Listings',
   ]);
 
   const availableReports = [
