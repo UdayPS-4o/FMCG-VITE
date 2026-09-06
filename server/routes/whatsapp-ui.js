@@ -635,5 +635,65 @@ router.get('/events', (req, res) => {
   req.on('close', () => { sseClients.delete(res); clearInterval(hb); });
 });
 
+// ── Delete / unsend a message ─────────────────────────────────────────────────
+// Calls the whatsapp.js /delete endpoint (which proxies to AOC), then patches
+// the JSONL entry so the bubble renders as "This message was deleted".
+router.post('/delete-message', async (req, res) => {
+  try {
+    const { messageId, phone } = req.body || {};
+    if (!messageId) return res.status(400).json({ ok: false, error: 'messageId required' });
+
+    // Proxy to whatsapp.js delete endpoint
+    const WA_PORT = process.env.WHATSAPP_PORT || 4292;
+    let aocOk = false;
+    let aocError = null;
+    try {
+      const axios = require('axios');
+      const r = await axios.post(`http://127.0.0.1:${WA_PORT}/delete`, { messageId }, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+      aocOk = r.data && r.data.ok;
+      if (!aocOk) aocError = r.data && r.data.error;
+    } catch (e) {
+      aocError = e.message;
+    }
+
+    // Patch the JSONL regardless of AOC result (AOC sometimes returns error even
+    // when delete succeeds, and we always want the UI to reflect the deletion).
+    try {
+      const files = fs.readdirSync(LOG_DIR).filter(f => f.endsWith('.jsonl')).sort().reverse();
+      for (const file of files) {
+        const filePath = path.join(LOG_DIR, file);
+        const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+        let patched = false;
+        const newLines = lines.map(line => {
+          if (!line.trim()) return line;
+          try {
+            const entry = JSON.parse(line);
+            if (entry.messageId === messageId || entry.messageId === messageId + ':1') {
+              patched = true;
+              return JSON.stringify({ ...entry, type: 'deleted', body: 'This message was deleted', deletedAt: Date.now() });
+            }
+          } catch { /* not JSON */ }
+          return line;
+        });
+        if (patched) {
+          fs.writeFileSync(filePath, newLines.join('\n'));
+          invalidateCache();
+          broadcastUpdate();
+          break;
+        }
+      }
+    } catch (patchErr) {
+      console.error('[WA-UI] delete-message patch error:', patchErr.message);
+    }
+
+    res.json({ ok: true, aocOk, aocError });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.invalidateCache = invalidateCache;
 module.exports = router;
