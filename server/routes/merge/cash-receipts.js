@@ -628,7 +628,10 @@ router.post('/sync', async (req, res) => {
             // ── Format recipient number ─────────────────────────────────────
             // AOC API expects E.164 format with country code (e.g. +919377888899)
             const rawMobile = mobileNumber.replace(/\D/g, ''); // strip non-digits
-            const recipientNumber = rawMobile.startsWith('91') ? `+${rawMobile}` : `+91${rawMobile}`;
+            // Guard: only treat as already-prefixed if it is exactly 12 digits (91 + 10).
+            // A 10-digit number that happens to start with "91" (e.g. 9179174888) would
+            // otherwise be forwarded as +919179174888 → AOC "No Valid Numbers Found".
+            const recipientNumber = (rawMobile.startsWith('91') && rawMobile.length === 12) ? `+${rawMobile}` : `+91${rawMobile}`;
 
             // ── Format date for display ─────────────────────────────────────
             let formattedDate = receiptDate;
@@ -656,24 +659,30 @@ router.post('/sync', async (req, res) => {
               },
             };
 
-            console.log(`[Cash Receipts Sync] Calling AOC WhatsApp API for Receipt: ${receiptNo}. Recipient: ${recipientNumber}`);
+            console.log(`[Cash Receipts Sync] Calling WhatsApp for Receipt: ${receiptNo}. Recipient: ${recipientNumber}`);
+
+            // Route through whatsapp.js /send (port 4292) — the same path the
+            // inbox UI uses.  whatsapp.js writes the message_outgoing JSONL entry
+            // and calls outbound-ingest.registerAlreadyLogged, so a new inbox
+            // thread is created immediately without any pm2 log tailing.
+            const WA_SEND_URL = `http://127.0.0.1:${process.env.WHATSAPP_PORT || 4292}/send`;
 
             const sendMessageResponse = await axios.post(
-              process.env.AOC_WA_API_URL || 'https://api.aoc-portal.com/v1/whatsapp',
-              aocPayload,
+              WA_SEND_URL,
               {
-                headers: {
-                  'apikey': process.env.AOC_WA_API_KEY || '',
-                  'Content-Type': 'application/json',
-                },
-                timeout: 30000, // 30 s
-              }
+                to: recipientNumber,
+                type: 'template',
+                templateName: 'bankrec',
+                language: { code: 'en' },
+                components: aocPayload.components,
+              },
+              { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
             );
 
             if (sendMessageResponse.status === 200 || sendMessageResponse.status === 201) {
-              console.log(`[Cash Receipts Sync] WhatsApp sent successfully for Receipt: ${receiptNo}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+              console.log(`[Cash Receipts Sync] WhatsApp sent successfully for Receipt: ${receiptNo}. MessageId: ${sendMessageResponse.data?.data?.[0]?.messageId || sendMessageResponse.data?.id || ''}`);
             } else {
-              console.warn(`[Cash Receipts Sync] AOC API for Receipt: ${receiptNo} returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+              console.warn(`[Cash Receipts Sync] WhatsApp send for Receipt: ${receiptNo} returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
             }
 
             // Send SMS using TextLocal API

@@ -1,4 +1,3 @@
-
 // ============================================================================
 // whatsapp.js (MERGED with auto-login aoc-orders.js and backfill-wa-orders.js)
 // ============================================================================
@@ -213,6 +212,14 @@ if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
+// ── Outbound message ingestion ───────────────────────────────────────────────
+// The inline SENDWHAT_*.TXT watcher that used to live here has moved into
+// ./outbound-ingest.js, which also covers the two outbound paths this file
+// never saw: the webserver's cash-receipt / invoice sync and the fmcg-api bot
+// replies. It is started at the bottom of this file, once logWebhookEvent and
+// the HTTP server exist.
+const outboundIngest = require('./outbound-ingest');
+
 function logWebhookEvent(payload, meta = {}) {
   const entry = {
     receivedAt: new Date().toISOString(),
@@ -243,6 +250,34 @@ if (!fs.existsSync(FILES_DIR)) {
 }
 app.use('/files', express.static(FILES_DIR));
 
+// ── Template body renderer ────────────────────────────────────────────────────
+// Returns the actual message text a customer receives, with {{1}}/{{2}}/{{3}}
+// substituted from params[]. Template strings are taken from the CXBot WA
+// Utility Manager portal (app.cxbot.co).
+function renderTemplateBody(templateName, params) {
+  const p = params || [];
+  switch (String(templateName || '').toLowerCase()) {
+    case 'bankrec':
+      // "We Thankfully acknowledge of receipt Rs: {{1}} {{2}} on Date {{3}}
+      //  Regards. EKTA ENTERPRISES"
+      return `We Thankfully acknowledge of receipt Rs: ${p[0] || ''} ${p[1] || ''} on Date ${p[2] || ''}\nRegards. EKTA ENTERPRISES`;
+    case 'balrem':
+      // "Dear *{{1}}* Your balance as on *{{2}}* is *Rs.{{3}}*
+      //  kindly clear balance Regards EKTA ENTERPRISES"
+      return `Dear ${p[0] || ''}\nYour balance as on ${p[1] || ''} is Rs.${p[2] || ''}\nKindly clear balance\nRegards EKTA ENTERPRISES`;
+    case 'invoice_genrated':
+    case 'bill':
+      // "Dear {{1}}. Thank you for Purchasing Bill No. {{2}}
+      //  For Amount : {{3}} Regards Ekta Enterprises"
+      return `Dear ${p[0] || ''}.\nThank you for Purchasing Bill No. ${p[1] || ''}\nFor Amount : ${p[2] || ''}\nRegards Ekta Enterprises`;
+    case 'ledger':
+      // "Dear {{1}}. Please find your attached Ledger Statement"
+      return `Dear ${p[0] || ''}.\nPlease find your attached Ledger Statement`;
+    default:
+      return p.length ? `${templateName}:\n${p.join('\n')}` : (templateName || 'Template');
+  }
+}
+
 // ── Outbound send helper (AOC / CXBot API) ────────────────────────────────────
 /**
  * Send a WhatsApp message via api.aoc-portal.com.
@@ -264,15 +299,34 @@ async function sendWhatsAppMessage(to, rest) {
   let _outInteractiveBody = null;
   let _outInteractiveHeader = null;
 
+  // ── body text / document extraction ──────────────────────────────────────
+  let _outDocumentUrl = null;
+  let _outDocumentFilename = null;
+
   if (body.text && body.text.body) {
     _outBody = body.text.body;
   } else if (body.template && body.template.name) {
+    // Wrapped format: { template: { name, components: [...] } }
     _outTemplateName = body.template.name;
-    // Try to extract text from template components
     const comps = (body.template.components || body.components || []);
     const bodyComp = comps.find(c => (c.type || '').toLowerCase() === 'body');
     _outBody = (bodyComp && bodyComp.text) || body.template.name;
     _outInteractiveBody = _outBody;
+  } else if (body.templateName) {
+    // Flat format used by cash-receipts and invoicing routes:
+    // { templateName: 'bankrec', components: { body: { params: [...] }, header: { document: {...} } } }
+    _outTemplateName = body.templateName;
+    const comps = body.components || {};
+    const bp = (comps.body && Array.isArray(comps.body.params) ? comps.body.params : []).map(String);
+    // Render the actual template text with params substituted
+    _outBody = renderTemplateBody(body.templateName, bp);
+    _outInteractiveBody = _outBody;
+    // Document / PDF attachment (invoice template)
+    const hdrDoc = comps.header && comps.header.document;
+    if (hdrDoc) {
+      _outDocumentUrl = hdrDoc.link || null;
+      _outDocumentFilename = hdrDoc.filename || null;
+    }
   } else if (body.interactive) {
     const iv = body.interactive;
     _outInteractiveHeader = (iv.header && (iv.header.text || iv.header.type)) || null;
@@ -298,14 +352,52 @@ async function sendWhatsAppMessage(to, rest) {
     validateStatus: () => true,
   });
 
-  // Log response ID if possible
-  if (res.data && res.data.messageId) {
+  // The AOC API answers with { id, data:[{ recipient, messageId }], … }.
+  // The old code read res.data.messageId, which is never present, so every
+  // message this server sent was recorded WITHOUT an id — and the delivery
+  // status callbacks that arrive minutes later had nothing to attach to.
+  const _outMessageId =
+    (res.data && res.data.data && res.data.data[0] && res.data.data[0].messageId) ||
+    (res.data && res.data.messageId) ||
+    (res.data && res.data.id) ||
+    null;
+  const _outOk = res.status >= 200 && res.status < 300 && !(res.data && res.data.error);
+
+  if (_outMessageId) {
     console.log('[WA_OUTGOING_SUCCESS]', JSON.stringify({
       to: body.to,
-      messageId: res.data.messageId,
+      messageId: _outMessageId,
       timestamp: Date.now()
     }));
   }
+
+  // ── Write to JSONL webhook log so whatsapp-ui.js can build threads for
+  //    outgoing-only contacts (invoice/receipt recipients who never replied)
+  //    and display the real body text instead of "Interactive".
+  logWebhookEvent({
+    channel: 'whatsapp',
+    messageId: _outMessageId,
+    event: 'message_outgoing',
+    source: 'whatsapp.js/send',
+    to: body.to,
+    type: body.type || 'text',
+    body: _outBody,
+    templateName: _outTemplateName,
+    interactiveBody: _outInteractiveBody,
+    interactiveHeader: _outInteractiveHeader,
+    documentUrl: _outDocumentUrl,
+    documentFilename: _outDocumentFilename,
+    status: _outOk ? 'sent' : 'failed',
+    timestamp: _outTs,
+  });
+
+  // Tell the ingest module this one is already on file, so it does not emit a
+  // second copy when it tails this process's own [WA_OUTGOING] console line.
+  try {
+    outboundIngest.registerAlreadyLogged({
+      to: body.to, timestamp: _outTs, body: _outBody, messageId: _outMessageId,
+    });
+  } catch (e) { /* ingest not started (CLI mode) — nothing to register */ }
 
   return { status: res.status, data: res.data };
 }
@@ -602,6 +694,39 @@ app.get('/webhook/orders', async (req, res) => {
     count: records.length,
     orders: records.map(normaliseRecord).map(({ raw, ...rest }) => rest),
   });
+});
+
+/**
+ * GET /ingest/status
+ * What the outbound ingester can see and what it has recorded: the SENDWHAT
+ * folder it resolved, every log file found, the last record parsed out of each,
+ * the pm2 logs being tailed and their byte offsets, and the emit/skip counters.
+ * This is the first place to look if a sent message is missing from the inbox.
+ */
+app.get('/ingest/status', (_req, res) => {
+  try { res.json(outboundIngest.status()); }
+  catch (e) { res.status(500).json({ error: true, message: e.message }); }
+});
+
+/**
+ * GET /ingest/dry-run
+ * Parse the SENDWHAT_*.TXT files right now and show exactly what would be
+ * recorded, without writing anything. Use it to confirm the folder path.
+ */
+app.get('/ingest/dry-run', (_req, res) => {
+  try { res.json(outboundIngest.dryRun()); }
+  catch (e) { res.status(500).json({ error: true, message: e.message }); }
+});
+
+/**
+ * POST /ingest/rescan
+ * Re-read every pm2 *-out.log from byte 0 to back-fill history. Lines that do
+ * not carry their own timestamp are counted and skipped rather than given an
+ * invented one — see `pm2 restart <app> --time`.
+ */
+app.post('/ingest/rescan', (_req, res) => {
+  try { res.json(outboundIngest.rescanPm2()); }
+  catch (e) { res.status(500).json({ error: true, message: e.message }); }
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
@@ -1308,7 +1433,53 @@ async function runBackfill(DRY, dayFilter) {
 // ============================================================================
 const argv = process.argv.slice(2);
 
-if (argv.includes('--check') || argv.includes('--list')) {
+// `node whatsapp.js --ingest-check`  — show what the outbound ingester sees
+// `node whatsapp.js --ingest-rescan` — back-fill history out of the pm2 logs
+if (argv.includes('--ingest-check') || argv.includes('--ingest-rescan')) {
+  const emitted = [];
+  outboundIngest.init({
+    logWebhookEvent: argv.includes('--ingest-rescan')
+      ? logWebhookEvent
+      : (payload) => { emitted.push(payload); },   // --ingest-check writes nothing
+    logDir: LOG_DIR,
+    baseDir: __dirname,
+  });
+
+  if (argv.includes('--ingest-rescan')) {
+    const st = outboundIngest.rescanPm2();
+    console.log(JSON.stringify(st, null, 2));
+    console.log('');
+    console.log(`Recorded ${st.emitted} outbound message(s).`);
+    if (st.skippedNoTimestamp) {
+      console.log(`Skipped ${st.skippedNoTimestamp} log line(s) that carried no timestamp of`);
+      console.log('their own — pm2 was not started with --time, so their real send time is');
+      console.log('unknown and inventing one would put fake times in the inbox. Run');
+      console.log('`pm2 restart all --time` so future lines are stamped.');
+    }
+    setTimeout(() => process.exit(0), 500);
+  } else {
+    const dry = outboundIngest.dryRun();
+    console.log('SENDWHAT folder : ' + dry.sendwhatDir);
+    for (const f of dry.files) {
+      console.log('');
+      console.log(`  ${f.file} — ${f.records} record(s)${f.error ? ' ERROR: ' + f.error : ''}`);
+      for (const e of f.events || []) {
+        console.log(`    ${new Date(e.timestamp).toLocaleString()}  ${e.to}  ${e.name || '(name not in CMPL)'}`);
+        console.log(`      ${e.templateName || 'template'} · ${e.messageId || 'NO MESSAGE ID'} · ${e.status}`);
+        console.log(`      ${e.body}`);
+      }
+    }
+    if (!dry.files.length) {
+      console.log('');
+      console.log('No SENDWHAT_*.TXT files found in that folder.');
+      console.log('Set FMCG_MUX_LOG_DIR in .env to the folder the accounting software writes to,');
+      console.log('e.g.  FMCG_MUX_LOG_DIR=C:\\Users\\shubham\\Desktop\\fmcg');
+    }
+    console.log('');
+    console.log(JSON.stringify(outboundIngest.status(), null, 2));
+    setTimeout(() => process.exit(0), 300);
+  }
+} else if (argv.includes('--check') || argv.includes('--list')) {
   // ── CLI ───────────────────────────────────────────────────────────────────────
 
 
@@ -1341,6 +1512,9 @@ if (argv.includes('--check') || argv.includes('--list')) {
     process.exit(1);
   });
 } else {
+  // Start capturing outbound messages from every process on this box.
+  outboundIngest.init({ logWebhookEvent, logDir: LOG_DIR, baseDir: __dirname });
+
   const server = http.createServer(app);
   server.listen(PORT, '127.0.0.1', () => {
     console.log('[WA] WhatsApp service running on http://127.0.0.1:' + PORT);
@@ -1349,8 +1523,10 @@ if (argv.includes('--check') || argv.includes('--list')) {
     console.log('[WA] Webhook logs     : /webhook/logs');
     console.log('[WA] Catalogue orders : /webhook/orders');
     console.log('[WA] Media files      : /files/<filename>');
+    console.log('[WA] Ingest status    : /ingest/status');
     console.log('[WA] To check login   : node whatsapp.js --check');
     console.log('[WA] To backfill      : node whatsapp.js --backfill [--dry-run]');
+    console.log('[WA] To check ingest  : node whatsapp.js --ingest-check');
   });
 
   server.on('error', (err) => {
