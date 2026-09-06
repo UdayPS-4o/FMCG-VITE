@@ -429,13 +429,13 @@ export default function WhatsAppInbox() {
 
   // ── 24-hour service window check ─────────────────────────────────────────────
   // WhatsApp Business: can only send free-form messages within 24h of last customer message
-  const { isServiceWindowOpen, windowClosedAt } = useMemo(() => {
-    if (!activeThread?.messages) return { isServiceWindowOpen: false, windowClosedAt: null };
+  const { isServiceWindowOpen, windowClosedAt, neverMessaged } = useMemo(() => {
+    if (!activeThread?.messages) return { isServiceWindowOpen: false, windowClosedAt: null, neverMessaged: false };
     const lastInbound = [...activeThread.messages].reverse().find(m => m.direction === 'inbound');
-    if (!lastInbound) return { isServiceWindowOpen: false, windowClosedAt: null };
+    if (!lastInbound) return { isServiceWindowOpen: false, windowClosedAt: null, neverMessaged: true };
     const elapsed = Date.now() - lastInbound.timestamp;
     const open = elapsed < 24 * 60 * 60 * 1000;
-    return { isServiceWindowOpen: open, windowClosedAt: open ? null : lastInbound.timestamp };
+    return { isServiceWindowOpen: open, windowClosedAt: open ? null : lastInbound.timestamp, neverMessaged: false };
   }, [activeThread?.messages]);
 
   // ── Fetch conversation list ──────────────────────────────────────────────────
@@ -691,10 +691,12 @@ export default function WhatsAppInbox() {
 
   const activeConv = conversations.find((c) => c.phone === activePhone);
 
-  // Window closed message
-  const windowClosedMsg = windowClosedAt
-    ? `Last message was ${Math.floor((Date.now() - windowClosedAt) / 3600000)}h ago. Service window closed.`
-    : null;
+  // Window closed / never-messaged notice
+  const windowClosedMsg = neverMessaged
+    ? 'No conversation initiated by them in the last 24 hours.'
+    : windowClosedAt
+      ? `Last message was ${Math.floor((Date.now() - windowClosedAt) / 3600000)}h ago. Service window closed.`
+      : null;
 
   return (
     <div className={`wa-root ${activePhone ? 'wa-chat-active' : ''}`} onClick={() => { setShowEmojiPicker(false); }}>
@@ -975,7 +977,7 @@ export default function WhatsAppInbox() {
                     ref={inputRef}
                     className="wa-message-input"
                     type="text"
-                    placeholder={isServiceWindowOpen ? 'Type a message' : 'Messaging disabled — 24h window closed'}
+                    placeholder={isServiceWindowOpen ? 'Type a message' : neverMessaged ? 'No conversation initiated by them in the last 24 hours' : 'Messaging disabled — 24h window closed'}
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     onKeyDown={(e) => {
@@ -990,7 +992,7 @@ export default function WhatsAppInbox() {
                   className={`wa-send-btn ${inputText.trim() && isServiceWindowOpen ? 'wa-send-btn--active' : ''}`}
                   onClick={sendMessage}
                   disabled={!inputText.trim() || sending || !isServiceWindowOpen}
-                  title={isServiceWindowOpen ? 'Send message' : '24h window closed'}
+                  title={isServiceWindowOpen ? 'Send message' : neverMessaged ? 'No conversation from them in last 24h' : '24h window closed'}
                 >
                   {sending ? (
                     <div className="wa-send-spinner"></div>
