@@ -340,6 +340,7 @@ function buildConversations() {
         templateName: p.templateName || null,
         interactiveBody: p.interactiveBody || null,
         interactiveHeader: p.interactiveHeader || null,
+        imageUrl: p.imageUrl || null,
         documentUrl: p.documentUrl || null,
         documentFilename: p.documentFilename || null,
         source: p.source || null,
@@ -551,9 +552,8 @@ router.post('/send', async (req, res) => {
 
     if (!to || (!msgBody && !mediaUrl)) return res.status(400).json({ ok: false, error: 'Missing to or content' });
 
-    const payload = {
-      to: String(to).length === 10 ? '+91' + to : (String(to).startsWith('+') ? to : ('+' + to)),
-    };
+    const toNorm = String(to).length === 10 ? '+91' + to : (String(to).startsWith('+') ? to : ('+' + to));
+    const payload = { to: toNorm };
 
     if (mediaUrl) {
       payload.type = mediaType || 'document';
@@ -569,8 +569,44 @@ router.post('/send', async (req, res) => {
       payload,
       { headers: { 'Content-Type': 'application/json' }, timeout: 10000, validateStatus: () => true }
     );
+
+    const ok = result.status >= 200 && result.status < 300;
+
+    // ── Persist outbound media to JSONL so thumbnails survive a page refresh ──
+    if (ok && mediaUrl) {
+      try {
+        const msgId = (result.data && result.data.data && result.data.data[0] && result.data.data[0].messageId)
+          || ('out_ui_' + Date.now());
+        const isImage = (mediaType || 'document') === 'image';
+        const entry = {
+          receivedAt: new Date().toISOString(),
+          source: 'whatsapp-ui-send',
+          payload: {
+            event: 'message_outgoing',
+            to: toNorm,
+            messageId: msgId,
+            type: isImage ? 'image' : 'document',
+            body: isImage ? 'Photo' : (filename || 'Document'),
+            imageUrl: isImage ? mediaUrl : null,
+            documentUrl: isImage ? null : mediaUrl,
+            documentFilename: isImage ? null : (filename || 'Attachment'),
+            timestamp: Date.now(),
+            status: 'sent',
+            source: 'ui',
+          },
+        };
+        const day = entry.receivedAt.slice(0, 10);
+        const line = JSON.stringify(entry) + '\n';
+        fs.appendFileSync(path.join(LOG_DIR, `${day}.jsonl`), line);
+        fs.appendFileSync(path.join(LOG_DIR, 'all.jsonl'), line);
+        invalidateCache();
+      } catch (e) {
+        console.error('[WA-UI] /send JSONL persist error:', e.message);
+      }
+    }
+
     invalidateCache();
-    res.status(result.status).json(Object.assign({ ok: result.status >= 200 && result.status < 300 }, result.data));
+    res.status(result.status).json(Object.assign({ ok }, result.data));
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
