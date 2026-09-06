@@ -438,6 +438,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         if (item.name === "Godown Transfer" && !user.routeAccess.includes('Godown Transfer')) return false;
         if (item.name === "Cash Receipt" && !user.routeAccess.includes('Cash Receipts')) return false;
         if (item.name === "Cash Payment" && !user.routeAccess.includes('Cash Payments')) return false;
+        if (item.name === "WhatsApp Inbox" && !user.routeAccess.includes('WhatsApp Inbox')) return false;
         return true;
       }
 

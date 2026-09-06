@@ -423,7 +423,7 @@ const AppRoutes = () => {
 
       {/* WhatsApp Inbox — full-screen, no app sidebar/header */}
       <Route path="/whatsapp-inbox" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredAccess="WhatsApp Inbox">
           <WhatsAppInbox />
         </ProtectedRoute>
       } />
