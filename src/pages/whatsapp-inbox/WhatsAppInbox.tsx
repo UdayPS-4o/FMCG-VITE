@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import FilerobotImageEditor, { TABS, TOOLS } from 'react-filerobot-image-editor';
 import './WhatsAppInbox.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -338,10 +337,11 @@ function MessageBubble({
           </div>
         ) : msg.type === 'document' && msg.documentUrl ? (
           <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer" className="wa-doc-link">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z" />
-            </svg>
-            <span>{msg.documentFilename || 'Document'}</span>
+            <DocIcon filename={msg.documentFilename || ''} />
+            <div className="wa-doc-info">
+              <span className="wa-doc-name">{msg.documentFilename || 'Document'}</span>
+              <span className="wa-doc-type">{getDocType(msg.documentFilename || '')}</span>
+            </div>
           </a>
         ) : msg.type === 'interactive' && !isOut ? (
           <div className="wa-interactive">
@@ -357,10 +357,11 @@ function MessageBubble({
             {msg.documentUrl && (
               <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer"
                 className="wa-doc-link wa-template-doc">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z" />
-                </svg>
-                <span>{msg.documentFilename || 'Attachment'}</span>
+                <DocIcon filename={msg.documentFilename || ''} />
+                <div className="wa-doc-info">
+                  <span className="wa-doc-name">{msg.documentFilename || 'Attachment'}</span>
+                  <span className="wa-doc-type">{getDocType(msg.documentFilename || '')}</span>
+                </div>
               </a>
             )}
             <div className="wa-template-tag">📋 Template</div>
@@ -388,6 +389,50 @@ function MessageBubble({
           <svg viewBox="0 0 24 24" width="14" height="14" fill="#8696a0"><path d="M7 10l5 5 5-5H7z" /></svg>
         </button>
       )}
+    </div>
+  );
+}
+
+// ─── Document helpers ────────────────────────────────────────────────────────
+function getDocType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const map: Record<string, string> = {
+    pdf: 'PDF', xls: 'Excel', xlsx: 'Excel', xlsm: 'Excel',
+    doc: 'Word', docx: 'Word', ppt: 'PowerPoint', pptx: 'PowerPoint',
+    csv: 'CSV', txt: 'Text', zip: 'ZIP', rar: 'Archive',
+  };
+  return map[ext] || ext.toUpperCase() || 'Document';
+}
+
+function DocIcon({ filename }: { filename: string }) {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const colors: Record<string, string> = {
+    pdf: '#e53935', xls: '#2e7d32', xlsx: '#2e7d32', xlsm: '#2e7d32',
+    doc: '#1565c0', docx: '#1565c0', ppt: '#e65100', pptx: '#e65100',
+    csv: '#2e7d32', zip: '#6d4c41', rar: '#6d4c41',
+  };
+  const color = colors[ext] || '#607d8b';
+  const label = ext.toUpperCase().slice(0, 4) || 'FILE';
+  return (
+    <div className="wa-doc-icon" style={{ background: color }}>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+// ─── Image lightbox ───────────────────────────────────────────────────────────
+function ImageLightbox({ src, onClose, onSend }: { src: string; onClose: () => void; onSend?: () => void }) {
+  return (
+    <div className="wa-lightbox" onClick={onClose}>
+      <div className="wa-lightbox-bar" onClick={e => e.stopPropagation()}>
+        <button className="wa-lightbox-btn" onClick={onClose} title="Close">✕</button>
+        <span className="wa-lightbox-title">Photo Preview</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <a href={src} download className="wa-lightbox-btn" title="Download">⬇</a>
+          {onSend && <button className="wa-lightbox-btn wa-lightbox-btn--send" onClick={(e) => { e.stopPropagation(); onSend(); }} title="Send">Send ➤</button>}
+        </div>
+      </div>
+      <img src={src} alt="Preview" className="wa-lightbox-img" onClick={e => e.stopPropagation()} />
     </div>
   );
 }
@@ -737,33 +782,21 @@ export default function WhatsAppInbox() {
 
   return (
     <div className={`wa-root ${activePhone ? 'wa-chat-active' : ''}`} onClick={() => { setShowEmojiPicker(false); }}>
-      {/* Image preview modal */}
+      {/* Image lightbox modal */}
       {previewImage && (
-        <div className="wa-image-modal" onClick={() => setPreviewImage(null)}>
-          {window.innerWidth > 768 ? (
-            <div onClick={e => e.stopPropagation()} style={{ width: '90vw', height: '90vh', background: '#fff', borderRadius: '8px', overflow: 'hidden' }}>
-              <FilerobotImageEditor
-                source={previewImage}
-                onSave={(editedImageObject, designState) => handleSaveImageEdit(editedImageObject)}
-                onClose={() => setPreviewImage(null)}
-                annotationsCommon={{
-                  fill: '#ff0000',
-                }}
-                Text={{ text: 'Annotation...' }}
-                tabsIds={[TABS.ADJUST, TABS.ANNOTATE, TABS.WATERMARK, TABS.FILTERS, TABS.FINETUNE]}
-                defaultTabId={TABS.ANNOTATE}
-                defaultToolId={TOOLS.ARROW}
-                savingPixelRatio={4}
-                previewPixelRatio={window.devicePixelRatio}
-              />
-            </div>
-          ) : (
-            <>
-              <button className="wa-modal-close" onClick={() => setPreviewImage(null)}>✕</button>
-              <img src={previewImage} alt="Preview" className="wa-modal-img" onClick={e => e.stopPropagation()} />
-            </>
-          )}
-        </div>
+        <ImageLightbox
+          src={previewImage}
+          onClose={() => setPreviewImage(null)}
+          onSend={isServiceWindowOpen ? () => {
+            fetch(previewImage)
+              .then(r => r.blob())
+              .then(blob => {
+                const file = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
+                handleFileUpload(file);
+                setPreviewImage(null);
+              });
+          } : undefined}
+        />
       )}
 
       {/* Context menu */}
@@ -1020,6 +1053,20 @@ export default function WhatsAppInbox() {
                     onChange={(e) => setInputText(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+                    }}
+                    onPaste={(e) => {
+                      if (!isServiceWindowOpen) return;
+                      const items = Array.from(e.clipboardData?.items || []);
+                      const imgItem = items.find(i => i.type.startsWith('image/'));
+                      if (imgItem) {
+                        e.preventDefault();
+                        const file = imgItem.getAsFile();
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => setPreviewImage(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }
                     }}
                     disabled={sending || !isServiceWindowOpen}
                   />

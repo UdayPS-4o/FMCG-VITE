@@ -420,6 +420,37 @@ app.post('/send', async (req, res) => {
   }
 });
 
+// ── Delete message (for everyone) ─────────────────────────────────────────────
+/**
+ * POST /delete
+ * Body: { messageId }
+ * Calls the AOC API to delete the message for everyone on WhatsApp.
+ */
+app.post('/delete', async (req, res) => {
+  try {
+    const { messageId } = req.body || {};
+    if (!messageId) return res.status(400).json({ ok: false, error: 'messageId required' });
+
+    // AOC delete endpoint: DELETE https://api.aoc-portal.com/v1/whatsapp/messages/{messageId}
+    const deleteUrl = `${AOC_WA_API_URL}/messages/${encodeURIComponent(messageId)}`;
+    const r = await axios.delete(deleteUrl, {
+      headers: { apikey: AOC_WA_API_KEY, 'Content-Type': 'application/json' },
+      validateStatus: () => true,
+    });
+
+    console.log(`[WA] /delete messageId=${messageId} status=${r.status}`, r.data);
+
+    if (r.status >= 200 && r.status < 300) {
+      res.json({ ok: true, data: r.data });
+    } else {
+      res.status(r.status).json({ ok: false, error: r.data });
+    }
+  } catch (err) {
+    console.error('[WA] /delete error:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── Inbound webhook (CXBot — Generic provider) ────────────────────────────────
 /**
  * GET /webhook
