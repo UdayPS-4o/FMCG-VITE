@@ -174,7 +174,7 @@ function EmojiPicker({ onSelect, onClose }: { onSelect: (e: string) => void; onC
 
 // ─── Message Context Menu ─────────────────────────────────────────────────────
 function MessageContextMenu({
-  msg, x, y, onClose, onReply, onCopy, onForward, onReact
+  msg, x, y, onClose, onReply, onCopy, onForward, onReact, onDelete
 }: {
   msg: Message; x: number; y: number;
   onClose: () => void;
@@ -182,6 +182,7 @@ function MessageContextMenu({
   onCopy: () => void;
   onForward: () => void;
   onReact: (emoji: string) => void;
+  onDelete?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [showReactions, setShowReactions] = useState(false);
@@ -228,6 +229,15 @@ function MessageContextMenu({
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11z" /></svg>
         Forward
       </button>
+      {onDelete && msg.direction === 'outbound' && msg.type !== 'deleted' && msg.id && !msg.id.startsWith('temp_') && (
+        <>
+          <div className="wa-ctx-divider" />
+          <button className="wa-ctx-item wa-ctx-item--danger" onClick={() => { onDelete(); onClose(); }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
+            Delete for Everyone
+          </button>
+        </>
+      )}
       {showReactions && (
         <div className="wa-ctx-more-reactions">
           {EMOJI_GROUPS[0].emojis.slice(0, 30).map(em => (
@@ -317,7 +327,12 @@ function MessageBubble({
         )}
 
         {/* Message content */}
-        {msg.type === 'image' && msg.imageUrl ? (
+        {msg.type === 'deleted' ? (
+          <div className="wa-body wa-body--deleted">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style={{ marginRight: 4, opacity: 0.6 }}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" /></svg>
+            This message was deleted
+          </div>
+        ) : msg.type === 'image' && msg.imageUrl ? (
           <div onClick={() => onImageClick(msg.imageUrl!)} className="wa-img-link" style={{ cursor: 'pointer' }}>
             <img src={msg.imageUrl} alt="Photo" className="wa-img" />
           </div>
@@ -341,7 +356,7 @@ function MessageBubble({
             <div className="wa-body">{msg.body || msg.interactiveBody}</div>
             {msg.documentUrl && (
               <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer"
-                 className="wa-doc-link wa-template-doc">
+                className="wa-doc-link wa-template-doc">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z" />
                 </svg>
@@ -675,6 +690,28 @@ export default function WhatsAppInbox() {
     setReactions(prev => ({ ...prev, [msg.id]: emoji }));
   }, []);
 
+  const handleDelete = useCallback(async (msg: Message) => {
+    if (!msg.id || msg.id.startsWith('temp_')) return;
+    // Optimistically mark deleted in UI immediately
+    setActiveThread(prev => prev ? {
+      ...prev,
+      messages: prev.messages.map(m =>
+        m.id === msg.id ? { ...m, type: 'deleted', body: 'This message was deleted' } : m
+      )
+    } : prev);
+    try {
+      await fetch(`${API_BASE}/delete-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: msg.id, phone: activePhone }),
+      });
+    } catch (e) {
+      console.error('[WA-UI] delete-message error:', e);
+    }
+    // Re-fetch after short delay so JSONL patch is reflected
+    setTimeout(() => { if (activePhone) fetchMessages(activePhone); }, 2000);
+  }, [activePhone, fetchMessages]);
+
   // ── Grouped messages ─────────────────────────────────────────────────────────
   const groupedMessages = useMemo(() => {
     if (!activeThread?.messages.length) return [];
@@ -740,6 +777,7 @@ export default function WhatsAppInbox() {
           onCopy={() => handleCopy(contextMenu.msg)}
           onForward={() => handleForward(contextMenu.msg)}
           onReact={(em) => handleReact(contextMenu.msg, em)}
+          onDelete={() => handleDelete(contextMenu.msg)}
         />
       )}
 

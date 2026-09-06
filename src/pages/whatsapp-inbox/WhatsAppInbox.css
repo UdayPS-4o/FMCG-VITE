@@ -769,6 +769,20 @@
 }
 .wa-ctx-item:hover { background: #2a3942; }
 .wa-ctx-item:last-child { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+.wa-ctx-item--danger { color: #f15c6d; }
+.wa-ctx-item--danger:hover { background: rgba(241,92,109,0.12); }
+.wa-ctx-item--danger svg { fill: #f15c6d; }
+
+/* Deleted message bubble */
+.wa-body--deleted {
+  display: flex;
+  align-items: center;
+  color: rgba(209,215,219,0.5);
+  font-style: italic;
+  font-size: 13.5px;
+  gap: 4px;
+}
+
 .wa-ctx-more-reactions {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
