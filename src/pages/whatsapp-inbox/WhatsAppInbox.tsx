@@ -308,6 +308,21 @@ function MessageBubble({
     onContextMenu(msg, e.clientX, e.clientY);
   };
 
+  // Reaction events render as a centered notification pill, not a bubble
+  if (msg.type === 'reaction_event') {
+    return (
+      <div className="wa-bubble-row wa-bubble-row--center">
+        <div className="wa-reaction-event-pill">
+          {(msg as any).reactionEmoji
+            ? <><span>{(msg as any).reactionEmoji}</span> {msg.body}</>
+            : <><span>👍</span> {msg.body}</>
+          }
+          <span className="wa-reaction-event-time">{time}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`wa-bubble-row ${isOut ? 'wa-bubble-row--out' : 'wa-bubble-row--in'}`}
@@ -387,6 +402,13 @@ function MessageBubble({
           </div>
         ) : msg.type === 'order' ? (
           <div className="wa-order">🛒 {msg.body}</div>
+        ) : msg.type === 'reaction_event' ? (
+          <div className="wa-reaction-event">
+            {(msg as any).reactionEmoji
+              ? <><span className="wa-reaction-event-emoji">{(msg as any).reactionEmoji}</span> {msg.body}</>
+              : <><span className="wa-reaction-event-icon">👍</span> {msg.body}</>
+            }
+          </div>
         ) : (
           <div className="wa-body">{msg.body}</div>
         )}

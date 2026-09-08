@@ -1063,3 +1063,38 @@
 #wa-filter-sent.wa-filter-tab--active {
   background: #2A5F74;
 }
+
+/* ── Reaction event pill ────────────────────────────────────────────────────── */
+.wa-bubble-row--center {
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.wa-reaction-event-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(32, 44, 51, 0.85);
+  border: 1px solid #2a3942;
+  color: #8696a0;
+  font-size: 11.5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  max-width: 80%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(4px);
+}
+
+.wa-reaction-event-pill span:first-child {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.wa-reaction-event-time {
+  margin-left: 4px;
+  font-size: 10px;
+  color: #64717a;
+  flex-shrink: 0;
+}

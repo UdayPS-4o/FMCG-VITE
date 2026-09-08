@@ -282,14 +282,42 @@ function buildConversations() {
         ? (p.messages.timestamp > 1e12 ? p.messages.timestamp : p.messages.timestamp * 1000)
         : ts;
 
-      // A reaction isn't its own bubble — it's applied to the message it
-      // targets in the reaction pass below, once every message is indexed.
+      // CXBot strips the emoji and target messageId from reaction webhooks —
+      // only { type:'reaction', timestamp } arrives. We can't match to a
+      // specific message, so we add a lightweight event bubble so the reaction
+      // is at least visible in the chat timeline.
       if (msgType === 'reaction') {
         const react = (p.messages && p.messages.reaction) || {};
-        const targetId = react.message_id || (p.messages && p.messages.context && p.messages.context.id) || null;
-        reactionEvents.push({ targetId, emoji: react.emoji || '', ts: msgTs });
+        const emoji = react.emoji || '';           // empty when CXBot strips it
+        const targetId = react.message_id
+          || (p.messages && p.messages.context && p.messages.context.id)
+          || null;
+
+        if (targetId) {
+          // Full payload — queue for Pass 3 matching
+          reactionEvents.push({ targetId, emoji, ts: msgTs });
+        } else {
+          // CXBot stripped the detail — show as a timeline event bubble
+          const senderName = (p.contacts && p.contacts.profileName) || 'Customer';
+          const reactionMsgId = p.messageId || ('reaction_' + msgTs);
+          if (!thread._seen.has(reactionMsgId)) {
+            thread._seen.add(reactionMsgId);
+            const reactionMsg = {
+              id: reactionMsgId,
+              direction: 'inbound',
+              type: 'reaction_event',
+              body: emoji ? `${senderName} reacted ${emoji}` : `${senderName} reacted to a message`,
+              reactionEmoji: emoji || null,
+              timestamp: msgTs,
+              status: 'received',
+            };
+            thread.messages.push(reactionMsg);
+            if (msgTs > thread.lastMessageAt) thread.lastMessageAt = msgTs;
+          }
+        }
         continue;
       }
+
 
       let body = '', imageUrl = null, interactiveTitle = null, audioUrl = null;
       let documentUrl = null, documentFilename = null;

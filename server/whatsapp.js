@@ -592,17 +592,18 @@ app.post('/webhook', (req, res) => {
   try {
     const isInbound = payload?.event === 'message_received';
     const isStatusUpdate = !!(payload?.status || payload?.messageStatus);
-    if (isInbound && !isStatusUpdate) {
+    const msgType = payload?.messages?.type || 'message';
+    if (isInbound && !isStatusUpdate && msgType !== 'reaction') {
       const senderName = payload?.contacts?.profileName
         || payload?.from
         || 'A customer';
       const senderPhone = payload?.contacts?.recipient
         || payload?.from
         || '';
-      const msgType = payload?.messages?.type || 'message';
 
       // Build a meaningful preview of the message content
       let preview = '';
+
       if (msgType === 'text' && payload?.messages?.text?.body) {
         preview = payload.messages.text.body;
       } else if (msgType === 'interactive') {
