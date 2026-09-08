@@ -134,6 +134,9 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [nextPurBill, setNextPurBill] = useState<number | null>(null);
   const [purDbfRecords, setPurDbfRecords] = useState<any[]>([]);
+  // CODE -> product name, used to resolve godown-transfer items (which only
+  // store {code, qty, unit}, no name) for the Items tooltip.
+  const [productNameByCode, setProductNameByCode] = useState<Record<string, string>>({});
 
   // Add event handler for clicking outside
   useEffect(() => {
@@ -250,7 +253,28 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
           setNextPurBill(null);
         }
       }
-      
+
+      // Godown transfer items only store {code, qty, unit} — resolve names
+      // from the product master for the Items tooltip.
+      if (point === 'godown-transfer' || point === 'godown') {
+        try {
+          const token = localStorage.getItem('token');
+          const resp = await fetch(`${constants.baseURL}/api/dbf/pmpl.json`, {
+            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+          });
+          if (resp.ok) {
+            const arr = await resp.json();
+            const map: Record<string, string> = {};
+            (Array.isArray(arr) ? arr : []).forEach((p: any) => {
+              if (p.CODE) map[p.CODE] = p.PRODUCT || p.CODE;
+            });
+            setProductNameByCode(map);
+          }
+        } catch (e) {
+          console.warn('Failed to load product master for godown-transfer item names');
+        }
+      }
+
       // Filter data based on user role and smCode
       let filteredData = data;
       if (!isAdmin && user.smCode && data.length > 0 && data[0]) { // Ensure data and data[0] exist
@@ -838,14 +862,16 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   // Add tooltip handlers with debounce
 const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  const handleItemsHover = (event: React.MouseEvent<HTMLTableCellElement>, items: any) => {
+  const handleItemsHover = (event: React.MouseEvent<HTMLTableCellElement>, items: any, row?: any) => {
     if (!items) return;
-    
+
     // Clear any existing timeout
     if (tooltipTimeoutRef.current) {
       clearTimeout(tooltipTimeoutRef.current);
     }
-    
+
+    const isGodownTransfer = endpoint === 'godown-transfer' || endpoint === 'godown';
+
     // Add a small delay to prevent rapid flickering
     tooltipTimeoutRef.current = setTimeout(() => {
       let content;
@@ -864,28 +890,44 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                     <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[120px]">Item Name</th>
                     <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[60px]">Qty</th>
                     <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[60px]">Unit</th>
-                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Rate</th>
-                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Amount</th>
-                    <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Godown</th>
+                    {isGodownTransfer ? (
+                      <>
+                        <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">From Godown</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">To Godown</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Rate</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Amount</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[80px]">Godown</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item: any, idx: number) => {
-                    const itemName = item.particular || item.name || item.description || item.item || 'Unknown Item';
+                    const itemName = item.particular || item.name || item.description || item.item
+                      || (item.code && productNameByCode[item.code]) || item.code || 'Unknown Item';
                     const quantity = item.qty || item.quantity || 'N/A';
                     const unit = item.unit || 'N/A';
-                    const rate = item.rate || 'N/A';
-                    const amount = item.amount || item.netAmount || 'N/A';
-                    const godown = item.godown || 'N/A';
-                    
+
                     return (
                       <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-600">
                         <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 break-words">{itemName}</td>
                         <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 text-center">{quantity}</td>
                         <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 text-center">{unit}</td>
-                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 text-right">₹{rate}</td>
-                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 font-medium text-right">₹{amount}</td>
-                        <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 break-words">{godown}</td>
+                        {isGodownTransfer ? (
+                          <>
+                            <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 break-words">{row?.fromGodown || 'N/A'}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 break-words">{row?.toGodown || 'N/A'}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 text-right">₹{item.rate || 'N/A'}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 font-medium text-right">₹{item.amount || item.netAmount || 'N/A'}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-1 sm:px-2 py-1 text-gray-900 dark:text-gray-100 break-words">{item.godown || 'N/A'}</td>
+                          </>
+                        )}
                       </tr>
                     );
                   })}
@@ -1419,7 +1461,7 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                                   className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"
                                 >
                                   <div 
-                                    onMouseEnter={(e) => handleItemsHover(e as React.MouseEvent<HTMLTableCellElement>, row[header])}
+                                    onMouseEnter={(e) => handleItemsHover(e as React.MouseEvent<HTMLTableCellElement>, row[header], row)}
                                     onMouseLeave={handleItemsLeave}
                                   >
                                     {formatItemsDisplay(row[header])}

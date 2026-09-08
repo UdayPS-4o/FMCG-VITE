@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const billsDeliveryStatePath = path.join(__dirname, '..', 'db', 'BillsDeliveryRegister.json');
 const vanLoadingHistoryPath = path.join(__dirname, '..', 'db', 'VanLoadingHistory.json');
+const vanLoadingSavesPath = path.join(__dirname, '..', 'db', 'VanLoadingSaves.json');
 const dbPath = path.join(__dirname, '..', 'db');
 
 function formatDateToDDMMYYYY(date) {
@@ -443,6 +444,69 @@ router.get('/van-loading-history/:billNumber', async (req, res) => {
     } catch (error) {
         console.error('Error fetching van loading history:', error);
         res.status(500).json({ message: 'Failed to fetch van loading history' });
+    }
+});
+
+// Snapshot saved every time "Save PDF" is clicked on the Van Loading Report,
+// so it can be re-opened later from "View Past Loadings".
+router.post('/van-loading-saves', async (req, res) => {
+    const { billNumbers, unitFilter, companyCodes, totalBoxes, totalPcs, totalSkus, pdfUrl } = req.body;
+
+    if (!billNumbers) {
+        return res.status(400).json({ message: 'Bill numbers are required' });
+    }
+
+    try {
+        let saves = [];
+        try {
+            const data = await fs.readFile(vanLoadingSavesPath, 'utf8');
+            const content = JSON.parse(data);
+            if (Array.isArray(content)) saves = content;
+        } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+        }
+
+        const entry = {
+            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+            date: formatDateToDDMMYYYY(new Date()),
+            timestamp: new Date().toISOString(),
+            billNumbers: String(billNumbers),
+            unitFilter: unitFilter || 'Box',
+            companyCodes: Array.isArray(companyCodes) ? companyCodes : [],
+            totalBoxes: Number(totalBoxes) || 0,
+            totalPcs: Number(totalPcs) || 0,
+            totalSkus: Number(totalSkus) || 0,
+            pdfUrl: pdfUrl || null,
+        };
+
+        saves.unshift(entry);
+        if (saves.length > 500) saves = saves.slice(0, 500);
+
+        await fs.writeFile(vanLoadingSavesPath, JSON.stringify(saves, null, 2));
+        res.json({ message: 'Van loading snapshot saved', entry });
+    } catch (error) {
+        console.error('Error saving van loading snapshot:', error);
+        res.status(500).json({ message: 'Failed to save van loading snapshot' });
+    }
+});
+
+// List saved loadings, newest first
+router.get('/van-loading-saves', async (req, res) => {
+    try {
+        let saves = [];
+        try {
+            const data = await fs.readFile(vanLoadingSavesPath, 'utf8');
+            const content = JSON.parse(data);
+            if (Array.isArray(content)) saves = content;
+        } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+        }
+
+        saves.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        res.json(saves);
+    } catch (error) {
+        console.error('Error fetching van loading snapshots:', error);
+        res.status(500).json({ message: 'Failed to fetch van loading snapshots' });
     }
 });
 

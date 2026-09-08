@@ -47,6 +47,20 @@ interface User {
 // Options type for MultiSelect
 interface Option { value: string; text: string }
 
+// A snapshot saved every time "Save PDF" is clicked
+interface VanLoadingSave {
+  id: string;
+  date: string;
+  timestamp: string;
+  billNumbers: string;
+  unitFilter: 'All' | 'Box' | 'Pcs';
+  companyCodes: string[];
+  totalBoxes: number;
+  totalPcs: number;
+  totalSkus: number;
+  pdfUrl: string | null;
+}
+
 // Content component that uses the context
 const VanLoadingContent: React.FC = () => {
   const [billNumbers, setBillNumbers] = useState<string>('');
@@ -68,6 +82,12 @@ const VanLoadingContent: React.FC = () => {
   // Bill details dialog state
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [billDetails, setBillDetails] = useState<any[]>([]);
+
+  // Past loadings (saved via "Save PDF") dialog state
+  const [showPastLoadings, setShowPastLoadings] = useState(false);
+  const [pastLoadings, setPastLoadings] = useState<VanLoadingSave[]>([]);
+  const [loadingPastLoadings, setLoadingPastLoadings] = useState(false);
+  const [viewingPastLoading, setViewingPastLoading] = useState<VanLoadingSave | null>(null);
 
   const billTextRef = useRef<HTMLTextAreaElement>(null);
 
@@ -206,6 +226,7 @@ const VanLoadingContent: React.FC = () => {
   // Handle bill number input with auto-complete/comma and status messages
   const handleBillNumberChange = (value: string) => {
     setBillNumbers(value);
+    setViewingPastLoading(null);
 
     if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     debounceTimeoutRef.current = setTimeout(async () => {
@@ -320,6 +341,35 @@ const VanLoadingContent: React.FC = () => {
       }
     }
     return value;
+  };
+
+  // Fetch the list of saved loadings ("Save PDF" snapshots) for the dialog
+  const openPastLoadings = async () => {
+    setShowPastLoadings(true);
+    setLoadingPastLoadings(true);
+    try {
+      const resp = await fetch(`${constants.baseURL}/api/van-loading-saves`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (resp.ok) {
+        setPastLoadings(await resp.json());
+      }
+    } catch (e) {
+      console.error('Failed to load past loadings:', e);
+    } finally {
+      setLoadingPastLoadings(false);
+    }
+  };
+
+  // Re-open a saved loading: pre-fill the filters and let the existing
+  // debounced auto-fetch effect (below) load the report, same as a normal load.
+  const openPastLoading = (entry: VanLoadingSave) => {
+    setShowPastLoadings(false);
+    const bills = entry.billNumbers.trim().endsWith(',') ? entry.billNumbers : `${entry.billNumbers}, `;
+    setViewingPastLoading(entry);
+    setUnitFilter(entry.unitFilter || 'Box');
+    setSelectedCompanyCodes(entry.companyCodes || []);
+    setBillNumbers(bills);
   };
 
   const handleFetchReport = async (overrideBillNumbers?: string) => {
@@ -1033,6 +1083,31 @@ const VanLoadingContent: React.FC = () => {
       // Open the PDF in a new tab
       window.open(`${constants.baseURL}${result.pdfPath}`, '_blank');
 
+      // Save a snapshot of this loading (filters + totals) so it shows up
+      // under "View Past Loadings".
+      try {
+        const totalBoxes = reportData.reduce((sum, item) => sum + (item.totalQtyBoxes || 0), 0);
+        const totalPcs = reportData.reduce((sum, item) => sum + (item.totalQtyPcs || 0), 0);
+        await fetch(`${constants.baseURL}/api/van-loading-saves`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+          body: JSON.stringify({
+            billNumbers: billNumbers.replace(/,\s*$/, ''),
+            unitFilter,
+            companyCodes: selectedCompanyCodes,
+            totalBoxes,
+            totalPcs,
+            totalSkus: reportData.length,
+            pdfUrl: `${constants.baseURL}${result.pdfPath}`,
+          }),
+        });
+      } catch (saveErr) {
+        console.warn('Failed to save van loading snapshot:', saveErr);
+      }
+
       setStatusMsg('PDF saved successfully!');
       setStatusType('success');
 
@@ -1100,6 +1175,23 @@ const VanLoadingContent: React.FC = () => {
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Print Van Loading Report</h1>
 
+      {/* Old-loading banner */}
+      {viewingPastLoading && (
+        <div className="mb-6 p-3 bg-amber-100 dark:bg-amber-900/40 border border-amber-400 dark:border-amber-700 rounded-lg flex items-center justify-between gap-3">
+          <div className="text-sm text-amber-800 dark:text-amber-200">
+            📜 <strong>Viewing past loading</strong> saved on {viewingPastLoading.date} &middot;{' '}
+            {viewingPastLoading.totalBoxes} Box{viewingPastLoading.totalBoxes === 1 ? '' : 'es'}, {viewingPastLoading.totalPcs} Pcs
+          </div>
+          <button
+            type="button"
+            onClick={() => setViewingPastLoading(null)}
+            className="text-xs font-medium text-amber-800 dark:text-amber-200 hover:underline shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Input Controls */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
         <div>
@@ -1165,6 +1257,13 @@ const VanLoadingContent: React.FC = () => {
 
         {/* Company Filter */}
         <div>
+          <button
+            type="button"
+            onClick={openPastLoadings}
+            className="mb-1 flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline"
+          >
+            📋 View Past Loadings
+          </button>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Company Filter</label>
             <button
@@ -1484,6 +1583,67 @@ const VanLoadingContent: React.FC = () => {
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   No bill details found.
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Past Loadings Dialog */}
+      {showPastLoadings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-600">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Past Loadings</h2>
+              <button
+                onClick={() => setShowPastLoadings(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 overflow-auto max-h-[calc(80vh-80px)]">
+              {loadingPastLoadings ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">Loading...</div>
+              ) : pastLoadings.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  No saved loadings yet. Use "Save PDF" to save one.
+                </div>
+              ) : (
+                <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
+                  <thead>
+                    <tr className="bg-gray-100 dark:bg-gray-700">
+                      <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-gray-800 dark:text-white">Date</th>
+                      <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-gray-800 dark:text-white">Bill Numbers</th>
+                      <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-800 dark:text-white">Total Boxes</th>
+                      <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-800 dark:text-white">Total Pcs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pastLoadings.map((entry) => (
+                      <tr
+                        key={entry.id}
+                        onClick={() => openPastLoading(entry)}
+                        className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-white">
+                          {entry.date}
+                        </td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-800 dark:text-white truncate max-w-[280px]" title={entry.billNumbers}>
+                          {entry.billNumbers}
+                        </td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-800 dark:text-white">
+                          {entry.totalBoxes}
+                        </td>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right text-gray-800 dark:text-white">
+                          {entry.totalPcs}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
