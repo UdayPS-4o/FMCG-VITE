@@ -31,15 +31,20 @@ interface Message {
   type: string;
   body: string;
   imageUrl?: string;
+  audioUrl?: string;
   interactiveTitle?: string;
   interactiveBody?: string;
   interactiveHeader?: string;
   documentUrl?: string;
   documentFilename?: string;
   templateName?: string;
+  interactiveType?: 'button' | 'list' | 'cta_url';
+  interactiveButtons?: string[];
+  ctaUrl?: string;
   timestamp: number;
   status: string;
   replyTo?: { body: string; direction: 'inbound' | 'outbound' };
+  reaction?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -335,14 +340,24 @@ function MessageBubble({
           <div onClick={() => onImageClick(msg.imageUrl!)} className="wa-img-link" style={{ cursor: 'pointer' }}>
             <img src={msg.imageUrl} alt="Photo" className="wa-img" />
           </div>
-        ) : msg.type === 'document' && msg.documentUrl ? (
-          <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer" className="wa-doc-link">
-            <DocIcon filename={msg.documentFilename || ''} />
-            <div className="wa-doc-info">
-              <span className="wa-doc-name">{msg.documentFilename || 'Document'}</span>
-              <span className="wa-doc-type">{getDocType(msg.documentFilename || '')}</span>
-            </div>
-          </a>
+        ) : msg.type === 'audio' && msg.audioUrl ? (
+          <audio controls src={msg.audioUrl} className="wa-audio-player" />
+        ) : msg.documentUrl ? (
+          <>
+            {msg.type !== 'document' && (msg.interactiveHeader || msg.templateName) && (
+              <div className="wa-template-header">{msg.interactiveHeader || msg.templateName}</div>
+            )}
+            {msg.type !== 'document' && (msg.body || msg.interactiveBody) && (
+              <div className="wa-body">{msg.body || msg.interactiveBody}</div>
+            )}
+            <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer" className="wa-doc-link">
+              <DocIcon filename={msg.documentFilename || ''} />
+              <div className="wa-doc-info">
+                <span className="wa-doc-name">{msg.documentFilename || 'Document'}</span>
+                <span className="wa-doc-type">{getDocType(msg.documentFilename || '')}</span>
+              </div>
+            </a>
+          </>
         ) : msg.type === 'interactive' && !isOut ? (
           <div className="wa-interactive">
             <span className="wa-interactive-icon">🔘</span>
@@ -354,17 +369,21 @@ function MessageBubble({
               <div className="wa-template-header">{msg.interactiveHeader || msg.templateName}</div>
             )}
             <div className="wa-body">{msg.body || msg.interactiveBody}</div>
-            {msg.documentUrl && (
-              <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer"
-                className="wa-doc-link wa-template-doc">
-                <DocIcon filename={msg.documentFilename || ''} />
-                <div className="wa-doc-info">
-                  <span className="wa-doc-name">{msg.documentFilename || 'Attachment'}</span>
-                  <span className="wa-doc-type">{getDocType(msg.documentFilename || '')}</span>
-                </div>
-              </a>
+            {msg.interactiveButtons && msg.interactiveButtons.length > 0 ? (
+              <div className="wa-outbound-buttons">
+                {msg.interactiveButtons.map((label, i) => (
+                  msg.interactiveType === 'cta_url' && msg.ctaUrl ? (
+                    <a key={i} href={msg.ctaUrl} target="_blank" rel="noopener noreferrer" className="wa-outbound-btn wa-outbound-btn--link">
+                      🔗 {label}
+                    </a>
+                  ) : (
+                    <div key={i} className="wa-outbound-btn">{label}</div>
+                  )
+                ))}
+              </div>
+            ) : (
+              <div className="wa-template-tag">📋 Template</div>
             )}
-            <div className="wa-template-tag">📋 Template</div>
           </div>
         ) : msg.type === 'order' ? (
           <div className="wa-order">🛒 {msg.body}</div>
@@ -373,8 +392,8 @@ function MessageBubble({
         )}
 
         {/* Reaction badge */}
-        {(msg as any).reaction && (
-          <div className="wa-reaction-badge">{(msg as any).reaction}</div>
+        {msg.reaction && (
+          <div className="wa-reaction-badge">{msg.reaction}</div>
         )}
 
         <div className="wa-meta">

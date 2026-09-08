@@ -247,6 +247,7 @@ function buildConversations() {
   // no matter which order the two events were written in.
   const msgIdIndex = new Map();
   const statusEvents = [];
+  const reactionEvents = [];
   let unmatchedStatuses = 0;
 
   function getOrCreate(phone) {
@@ -277,7 +278,20 @@ function buildConversations() {
       thread._seen.add(msgId);
 
       const msgType = (p.messages && p.messages.type) || 'text';
-      let body = '', imageUrl = null, interactiveTitle = null;
+      const msgTs = (p.messages && p.messages.timestamp)
+        ? (p.messages.timestamp > 1e12 ? p.messages.timestamp : p.messages.timestamp * 1000)
+        : ts;
+
+      // A reaction isn't its own bubble — it's applied to the message it
+      // targets in the reaction pass below, once every message is indexed.
+      if (msgType === 'reaction') {
+        const react = (p.messages && p.messages.reaction) || {};
+        const targetId = react.message_id || (p.messages && p.messages.context && p.messages.context.id) || null;
+        reactionEvents.push({ targetId, emoji: react.emoji || '', ts: msgTs });
+        continue;
+      }
+
+      let body = '', imageUrl = null, interactiveTitle = null, audioUrl = null;
       let documentUrl = null, documentFilename = null;
 
       if (msgType === 'text') {
@@ -298,20 +312,19 @@ function buildConversations() {
       } else if (msgType === 'order') {
         body = 'Catalogue Order';
       } else if (msgType === 'audio') {
+        audioUrl = (p.messages && p.messages.audio && p.messages.audio.url) || null;
         body = 'Voice message';
       } else if (msgType === 'video') {
         body = 'Video';
       } else { body = msgType; }
 
-      const msgTs = (p.messages && p.messages.timestamp)
-        ? (p.messages.timestamp > 1e12 ? p.messages.timestamp : p.messages.timestamp * 1000)
-        : ts;
-
-      thread.messages.push({
+      const inMsgObj = {
         id: msgId, direction: 'inbound', type: msgType,
-        body, imageUrl, interactiveTitle, documentUrl, documentFilename,
+        body, imageUrl, interactiveTitle, audioUrl, documentUrl, documentFilename,
         timestamp: msgTs, status: 'received',
-      });
+      };
+      thread.messages.push(inMsgObj);
+      msgIdIndex.set(msgId, inMsgObj);
       thread.inboundCount++;
       if (msgTs > thread.lastMessageAt) thread.lastMessageAt = msgTs;
       if (msgTs > (readReceipts[thread.phone] || 0)) thread.unreadCount++;
@@ -343,6 +356,9 @@ function buildConversations() {
         imageUrl: p.imageUrl || null,
         documentUrl: p.documentUrl || null,
         documentFilename: p.documentFilename || null,
+        interactiveType: p.interactiveType || null,
+        interactiveButtons: p.interactiveButtons || null,
+        ctaUrl: p.ctaUrl || null,
         source: p.source || null,
         timestamp: msgTs,
         status: p.status || 'sent',
@@ -397,6 +413,17 @@ function buildConversations() {
     }
   }
 
+  // ── PASS 3 — reactions ──────────────────────────────────────────────────────
+  // Applied last, same reasoning as delivery status: the reaction can be
+  // logged before or after the message it targets.
+  let unmatchedReactions = 0;
+  for (const r of reactionEvents) {
+    const target = r.targetId && msgIdIndex.get(r.targetId);
+    if (!target) { unmatchedReactions++; continue; }
+    if (r.emoji) target.reaction = r.emoji;
+    else delete target.reaction; // empty emoji = reaction removed
+  }
+
   // ── Legacy pm2 injection (only when the fallback is switched on) ───────────
   for (const info of (outgoingMap._pendingByTs || new Map()).values()) {
     if (!info || !info.to) continue;
@@ -425,6 +452,7 @@ function buildConversations() {
     delete thread._seen;
   }
   threads._unmatchedStatuses = unmatchedStatuses;
+  threads._unmatchedReactions = unmatchedReactions;
   return threads;
 }
 
