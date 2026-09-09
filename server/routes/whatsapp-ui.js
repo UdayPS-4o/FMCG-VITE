@@ -536,10 +536,20 @@ router.get('/conversations', (req, res) => {
     if (search) {
       list = list.filter((t) => {
         const dispName = buildDisplayName(t.phone, t.name) || t.displayPhone;
-        return dispName.toLowerCase().includes(search) ||
-          (t.name || '').toLowerCase().includes(search) ||
-          t.phone.includes(search) ||
-          t.displayPhone.includes(search);
+        // Search party name and phone
+        if (dispName.toLowerCase().includes(search)) return true;
+        if ((t.name || '').toLowerCase().includes(search)) return true;
+        if (t.phone.includes(search)) return true;
+        if (t.displayPhone.includes(search)) return true;
+        // Search message body text and document filenames
+        return t.messages.some((m) => {
+          if (m.body && m.body.toLowerCase().includes(search)) return true;
+          if (m.documentFilename && m.documentFilename.toLowerCase().includes(search)) return true;
+          if (m.interactiveBody && m.interactiveBody.toLowerCase().includes(search)) return true;
+          if (m.interactiveHeader && m.interactiveHeader.toLowerCase().includes(search)) return true;
+          if (m.templateName && m.templateName.toLowerCase().includes(search)) return true;
+          return false;
+        });
       });
     }
 

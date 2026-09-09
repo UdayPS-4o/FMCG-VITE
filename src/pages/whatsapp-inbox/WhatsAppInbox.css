@@ -98,6 +98,29 @@
 }
 .wa-search-input::placeholder { color: #8696a0; }
 
+.wa-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+  color: #8696a0;
+  transition: background 0.15s, color 0.15s;
+  line-height: 0;
+}
+.wa-search-clear:hover {
+  background: #374248;
+  color: #d1d7db;
+}
+.wa-search-clear svg {
+  display: block;
+}
+
+
 /* Filter tabs */
 .wa-filter-tabs {
   display: flex;
