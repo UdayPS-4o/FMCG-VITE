@@ -1774,19 +1774,34 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
               const safeCdValue = isNaN(cdValue) ? 0 : cdValue;
               const netTotal = grandTotal - safeCdValue;
 
-              const totalBoxes = Math.round(items.reduce((sum, r) => {
+              // Calculate total boxes — BOX rows count directly, PCS rows are converted using MULT_F
+              let totalPcsConverted = 0; // pcs rows that were converted to boxes
+              let totalPcsDirect = 0;    // raw pcs qty across PCS rows (for display)
+
+              const totalBoxes = items.reduce((sum, r) => {
                 const unit = (r.unit || 'BOX').toUpperCase();
-                if (unit !== 'BOX') return sum;
                 const qty = parseFloat(r.qty) || 0;
-                // Look up MULT_F (pcs-per-box) from PMPL so OCR-extracted PCS qty
-                // is correctly converted to box count.
                 const pmpl = r.itemCode
                   ? pmplData.find(it => String(it.CODE) === String(r.itemCode))
                   : null;
-                const multF = parseFloat(String(pmpl?.MULT_F || '1')) || 1;
-                return sum + (multF > 1 ? qty / multF : qty);
-              }, 0));
-              const unloadingCharge = parseFloat((totalBoxes * 1.5).toFixed(2));
+                const multF = parseFloat(String(pmpl?.MULT_F || pmpl?.PCBX || '1')) || 1;
+
+                if (unit === 'BOX') {
+                  return sum + qty;
+                } else if (unit === 'PCS') {
+                  // Convert PCS → boxes using pcs-per-box (MULT_F)
+                  const boxesFromPcs = multF > 1 ? qty / multF : qty;
+                  totalPcsConverted += boxesFromPcs;
+                  totalPcsDirect += qty;
+                  return sum + boxesFromPcs;
+                }
+                return sum;
+              }, 0);
+
+              const totalBoxesRounded = Math.round(totalBoxes * 100) / 100; // keep 2 decimal places
+              const unloadingCharge = parseFloat((totalBoxesRounded * 1.5).toFixed(2));
+              const hasBoxRows = items.some(r => (r.unit || 'BOX').toUpperCase() === 'BOX' && (parseFloat(r.qty) || 0) > 0);
+              const hasPcsRows = totalPcsDirect > 0;
 
               return (
                 <>
@@ -1852,11 +1867,24 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
                     </table>
 
                     {/* Unloading Charges Info */}
-                    {totalBoxes > 0 && (
+                    {totalBoxesRounded > 0 && (
                       <div className="mt-3 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600">
                         <div className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-1">Unloading Charges (auto-posted)</div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-700 dark:text-gray-300">Total Boxes — <span className="font-bold">{totalBoxes}</span></span>
+                          <span className="text-gray-700 dark:text-gray-300">
+                            Total Boxes —{' '}
+                            <span className="font-bold">{totalBoxesRounded}</span>
+                            {hasPcsRows && !hasBoxRows && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                                ({totalPcsDirect} pcs ÷ PCBX = {totalPcsConverted.toFixed(2)} boxes)
+                              </span>
+                            )}
+                            {hasPcsRows && hasBoxRows && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                                (incl. {totalPcsDirect} pcs → {totalPcsConverted.toFixed(2)} boxes)
+                              </span>
+                            )}
+                          </span>
                           <span className="font-semibold text-amber-800 dark:text-amber-300">{formatINR.format(unloadingCharge)} <span className="text-xs font-normal">(@ ₹1.50/box → EE093 Dr)</span></span>
                         </div>
                       </div>
