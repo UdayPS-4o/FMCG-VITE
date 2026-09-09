@@ -14,7 +14,6 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -35,7 +34,6 @@ server/db/*.json
 
 server/db
 
-.env
 server/.env
 server/db
 
@@ -47,3 +45,4 @@ server/whatsapp-files/
 
 # Claude AI project files
 .claude/
+config.bat
