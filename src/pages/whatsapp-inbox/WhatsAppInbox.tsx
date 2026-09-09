@@ -881,8 +881,20 @@ export default function WhatsAppInbox() {
               <path d="M10 2a8 8 0 1 0 4.906 14.32l4.387 4.387a1 1 0 0 0 1.414-1.414l-4.387-4.387A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12A6 6 0 0 1 10 4z" fill="#8696A0" />
             </svg>
             <input id="wa-search-input" className="wa-search-input" type="text"
-              placeholder="Search or start new chat" value={search}
+              placeholder="Search name, message, invoice…" value={search}
               onChange={(e) => setSearch(e.target.value)} />
+            {search && (
+              <button
+                className="wa-search-clear"
+                onClick={() => setSearch('')}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="#8696A0">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 
