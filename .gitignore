@@ -35,7 +35,6 @@ server/db/*.json
 
 server/db
 
-.env
 server/.env
 server/db
 
@@ -47,3 +46,5 @@ server/whatsapp-files/
 
 # Claude AI project files
 .claude/
+.env
+.env.*
