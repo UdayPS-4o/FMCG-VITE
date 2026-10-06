@@ -894,6 +894,16 @@ app.post('/api/aoc', async (req, res) => {
         }
 
 
+        // ── Ignore non-actionable message types ────────────────────────────
+        // Reactions (👍 etc.) and other meta-messages (e.g. "unsupported") do
+        // not carry a customer request; replying to them would cause duplicate
+        // welcome-menu sends, so we drop them silently here.
+        const NON_ACTIONABLE_TYPES = ['reaction', 'unsupported', 'ephemeral'];
+        if (msgObj.type && NON_ACTIONABLE_TYPES.includes(msgObj.type)) {
+            console.log('[WEBHOOK] Ignoring non-actionable message type:', msgObj.type, '| Phone:', phoneNumber);
+            return;
+        }
+
         // ── Detect intent ────────────────────────────────────────────────────
         let intent = null;
 
