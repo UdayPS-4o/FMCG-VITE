@@ -468,6 +468,7 @@ const middleware = require('./routes/middleware');
 app.use(middleware);
 
 const dashboardRoutes = require('./routes/dashboard');
+app.use('/api/dashboard/kpis', require('./routes/dashboard-kpis'));
 app.use('/api/dashboard', dashboardRoutes);
 
 // Register push notification routes

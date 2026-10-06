@@ -492,14 +492,21 @@ router.post('/sync', async (req, res) => {
       }
 
       // 6. Unloading Charges (₹1.50 per BOX)
+      // BOX units count directly; PCS units are converted to boxes via MULT_F (pcs-per-box)
       const totalBoxes = Math.round((purchase.items || []).reduce((sum, it) => {
           const unit = String(it.unit || 'BOX').toUpperCase();
-          if (unit !== 'BOX') return sum;
           const qty = toFloat(it.qty, 3);
-          const code = it.itemCode || it.CODE || '';
-          const product = productMap[code] || {};
-          const multF = toFloat(product.MULT_F || 1, 0) || 1;
-          return sum + (multF > 1 ? qty / multF : qty);
+          if (unit === 'BOX') {
+              // BOX quantity is already in boxes — count directly
+              return sum + qty;
+          } else if (unit === 'PCS') {
+              const code = it.itemCode || it.CODE || '';
+              const product = productMap[code] || {};
+              const multF = toFloat(product.MULT_F || product.PCBX || 1, 0) || 1;
+              // Convert PCS → boxes
+              return sum + (multF > 1 ? qty / multF : qty);
+          }
+          return sum;
       }, 0));
       const unloadingAmt = toFloat(totalBoxes * 1.5, 2);
       if (unloadingAmt > 0) {

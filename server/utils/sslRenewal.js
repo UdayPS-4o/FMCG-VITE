@@ -120,11 +120,15 @@ async function renewCertificate(httpsServer) {
   // Hot-reload TLS context on live HTTPS server (Zero Downtime)
   if (httpsServer && typeof httpsServer.setSecureContext === 'function') {
     try {
-      const newSecureContext = tls.createSecureContext({
+      const newContextOptions = {
         key: fs.readFileSync(KEY_PATH),
         cert: fs.readFileSync(CERT_PATH),
-      });
-      httpsServer.setSecureContext(newSecureContext);
+      };
+      // Validate first: throws here (keeping the old context live) if the key/cert pair is bad
+      tls.createSecureContext(newContextOptions);
+      // setSecureContext() takes the *options* object. Passing a SecureContext instance
+      // installs an empty context with no certificate, which fails every TLS handshake.
+      httpsServer.setSecureContext(newContextOptions);
       console.log('[SSL-AUTO] 🚀 Live HTTPS server TLS context updated dynamically!');
     } catch (err) {
       console.error('[SSL-AUTO] Failed to hot-reload TLS context:', err.message);

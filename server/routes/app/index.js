@@ -161,20 +161,20 @@ router.post('/login', async (req, res) => {
         // Step 1: Verify party exists in DBF
         const parties = await getCmplParties();
         let party = findPartyByLoginId(parties, loginId);
-        
+
         // Admin bypass
         if (!party && loginId.toUpperCase() === 'ADMIN') {
-             party = {
-                 C_CODE: 'ADMIN',
-                 C_NAME: 'Administrator',
-                 C_MOBILE: '9999999999',
-                 C_PHONE: '',
-                 C_ADD1: 'Admin System',
-                 C_ADD2: '',
-                 C_PLACE: '',
-                 C_GST: '',
-                 GSTNO: ''
-             };
+            party = {
+                C_CODE: 'ADMIN',
+                C_NAME: 'Administrator',
+                C_MOBILE: '9999999999',
+                C_PHONE: '',
+                C_ADD1: 'Admin System',
+                C_ADD2: '',
+                C_PLACE: '',
+                C_GST: '',
+                GSTNO: ''
+            };
         }
 
         if (!party) {
@@ -237,20 +237,20 @@ router.post('/request-otp', async (req, res) => {
     try {
         const parties = await getCmplParties();
         let party = findPartyByLoginId(parties, loginId);
-        
+
         // Admin bypass
         if (!party && loginId.toUpperCase() === 'ADMIN') {
-             party = {
-                 C_CODE: 'ADMIN',
-                 C_NAME: 'Administrator',
-                 C_MOBILE: '9999999999',
-                 C_PHONE: '',
-                 C_ADD1: 'Admin System',
-                 C_ADD2: '',
-                 C_PLACE: '',
-                 C_GST: '',
-                 GSTNO: ''
-             };
+            party = {
+                C_CODE: 'ADMIN',
+                C_NAME: 'Administrator',
+                C_MOBILE: '9999999999',
+                C_PHONE: '',
+                C_ADD1: 'Admin System',
+                C_ADD2: '',
+                C_PLACE: '',
+                C_GST: '',
+                GSTNO: ''
+            };
         }
 
         if (!party) {
@@ -267,11 +267,11 @@ router.post('/request-otp', async (req, res) => {
         // Get mobile number
         let mobileStr = party.C_MOBILE || party.C_PHONE || party.WA_MOB || '';
         mobileStr = mobileStr.replace(/\D/g, ''); // Extract digits only
-        
+
         if (mobileStr.length < 10) {
             return res.status(400).json({ error: 'Valid mobile number not found for this party' });
         }
-        
+
         // Take last 10 digits
         if (mobileStr.length > 10) mobileStr = mobileStr.slice(-10);
 
@@ -284,37 +284,37 @@ router.post('/request-otp', async (req, res) => {
         try {
             const recipientNumber = `+91${mobileStr}`;
             const aocPayload = {
-              from: process.env.AOC_WA_FROM || '+15554884507',
-              campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
-              to: recipientNumber,
-              type: 'template',
-              templateName: 'app',
-              language: { code: 'en' },
-              otp: otp,
-              components: {
-                body: {
-                  params: [
-                    otp
-                  ],
+                from: process.env.AOC_WA_FROM || '+15554884507',
+                campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
+                to: recipientNumber,
+                type: 'template',
+                templateName: 'app',
+                language: { code: 'en' },
+                otp: otp,
+                components: {
+                    body: {
+                        params: [
+                            otp
+                        ],
+                    },
+                    button: {
+                        params: [
+                            otp
+                        ]
+                    }
                 },
-                button: {
-                  params: [
-                    otp
-                  ]
-                }
-              },
             };
-            
+
             await axios.post(
-              process.env.AOC_WA_API_URL || 'https://api.aoc-portal.com/v1/whatsapp',
-              aocPayload,
-              {
-                headers: {
-                  'apikey': process.env.AOC_WA_API_KEY || '',
-                  'Content-Type': 'application/json',
-                },
-                timeout: 30000,
-              }
+                process.env.AOC_WA_API_URL || 'https://api.aoc-portal.com/v1/whatsapp',
+                aocPayload,
+                {
+                    headers: {
+                        'apikey': process.env.AOC_WA_API_KEY || '',
+                        'Content-Type': 'application/json',
+                    },
+                    timeout: 30000,
+                }
             );
         } catch (smsErr) {
             // WhatsApp API is down — log OTP to server console for manual lookup
@@ -359,17 +359,17 @@ router.post('/verify-otp', async (req, res) => {
 
         // Admin bypass
         if (!party && partyCode.toUpperCase() === 'ADMIN') {
-             party = {
-                 C_CODE: 'ADMIN',
-                 C_NAME: 'Administrator',
-                 C_MOBILE: '9999999999',
-                 C_PHONE: '',
-                 C_ADD1: 'Admin System',
-                 C_ADD2: '',
-                 C_PLACE: '',
-                 C_GST: '',
-                 GSTNO: ''
-             };
+            party = {
+                C_CODE: 'ADMIN',
+                C_NAME: 'Administrator',
+                C_MOBILE: '9999999999',
+                C_PHONE: '',
+                C_ADD1: 'Admin System',
+                C_ADD2: '',
+                C_PLACE: '',
+                C_GST: '',
+                GSTNO: ''
+            };
         }
 
         if (!party) return res.status(404).json({ error: 'Party not found' });
@@ -588,7 +588,7 @@ router.post('/logout', async (req, res) => {
 router.get('/me', requireAppAuth, async (req, res) => {
     const dbUser = await appDb.getUserByPartyCode(req.appPartyCode);
     const party = req.appParty;
-    
+
     // Balance
     let currentBalance = '';
     try {
@@ -639,10 +639,10 @@ router.get('/me', requireAppAuth, async (req, res) => {
 router.get('/ledger', requireAppAuth, async (req, res) => {
     try {
         const partyCode = req.appPartyCode;
-        
+
         const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
         const cashPath = require('path').join(DBF_FOLDER_PATH, 'data', 'json', 'CASH.json');
-        
+
         let cashData = [];
         try {
             const cashFileContents = await require('fs').promises.readFile(cashPath, 'utf-8');
@@ -666,7 +666,7 @@ router.get('/ledger', requireAppAuth, async (req, res) => {
             const day = String(itemDate.getDate()).padStart(2, '0');
             const month = String(itemDate.getMonth() + 1).padStart(2, '0');
             const year = itemDate.getFullYear();
-            
+
             return {
                 date: `${day}-${month}-${year}`,
                 originalDate: item.DATE,
@@ -790,13 +790,21 @@ async function getEnrichedProducts() {
 async function getProductsWithImages() {
     const { jsonData, productBrandMap } = await getEnrichedProducts();
 
-    const [productImages, productMeta] = await Promise.all([
+    const [productImages, productMeta, baseBrands, customBrands] = await Promise.all([
         appDb.getAllProductImages().catch(() => []),
         appDb.getAllProductMeta().catch(() => []),
+        appDb.getAllBrands().catch(() => []),
+        appDb.getAllCustomBrands().catch(() => []),
     ]);
 
     const metaMap = {};
     productMeta.forEach(m => { metaMap[m.product_code] = m; });
+
+    // brand_code -> brand_desc, same merge rule as GET /api/app/brands
+    // (brands_custom overrides the base brands table by brand_code).
+    const brandNameMap = {};
+    baseBrands.forEach(b => { if (b.brand_code) brandNameMap[b.brand_code] = b.brand_desc; });
+    customBrands.forEach(b => { if (b.brand_code) brandNameMap[b.brand_code] = b.brand_name; });
 
     const findImage = (productName, code, basepack) => {
         if (!productName) return null;
@@ -816,7 +824,10 @@ async function getProductsWithImages() {
         const meta = metaMap[p.CODE] || {};
         const img = meta.image_url || findImage(p.PRODUCT, p.CODE, p.IT_DESC2);
         const brand_code = meta.brand_code || productBrandMap[p.IT_DESC2 ? String(p.IT_DESC2).trim() : ''] || '';
-        return { ...p, image_url: img, brand_code };
+        // This is the field buildFeedItems() (Facebook feed) actually reads —
+        // previously never set, so every product fell back to 'Ekta Enterprises'.
+        const brand_name = brand_code ? (brandNameMap[brand_code] || '') : '';
+        return { ...p, image_url: img, brand_code, brand_name };
     });
 }
 
@@ -911,7 +922,7 @@ router.get('/products', async (req, res) => {
         let isFuzzyResult = false;
         if (query) {
             let queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-            
+
             // Smart translation dictionary for FMCG
             const hindiDict = {
                 'साबुन': ['soap', 'bar', 'bathing'],
@@ -954,28 +965,28 @@ router.get('/products', async (req, res) => {
                     if (trans.startsWith('mh')) trans = trans.replace('mh', 'mah');
                     if (trans.startsWith('lh')) trans = trans.replace('lh', 'lah');
                     expandedWords.push(trans);
-                    
+
                     // Add the original word just in case
                     expandedWords.push(word);
                 }
             }
-            
+
             const scoredData = jsonData.map(p => {
                 let score = 0;
                 const prodLower = (p.PRODUCT || '').toLowerCase();
                 const codeLower = (p.CODE || '').toLowerCase();
-                
+
                 // Exact matches get a huge boost
                 const fullQuery = query.toLowerCase();
                 if (prodLower === fullQuery || codeLower === fullQuery) score += 1000;
                 else if (prodLower.includes(fullQuery) || codeLower.includes(fullQuery)) score += 100;
-                
+
                 // Check individual words
                 for (const word of expandedWords) {
                     if (word.length === 0) continue;
                     if (new RegExp(`\\b${word}\\b`).test(prodLower)) score += 10;
                     else if (prodLower.includes(word)) score += 1;
-                    
+
                     if (codeLower.includes(word)) score += 10;
                 }
 
@@ -992,7 +1003,7 @@ router.get('/products', async (req, res) => {
 
                 return { ...p, _searchScore: score };
             });
-            
+
             // ── Primary filter: exact/substring/transliteration matches ─────────
             const exactMatches = scoredData
                 .filter(p => p._searchScore > 0)
@@ -1058,7 +1069,7 @@ router.get('/products', async (req, res) => {
         // Evaluate schemes before sorting and pagination
         const schemeRouter = require('../shikhar_scheme');
         const schemesMap = typeof schemeRouter.getActiveSchemesFromDBF === 'function' ? await schemeRouter.getActiveSchemesFromDBF().catch(() => ({})) : {};
-        
+
         const d = new Date();
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -1282,7 +1293,7 @@ const readOrders = async () => {
 const writeOrders = async (orders) => {
     const ordersJson = JSON.stringify(orders, null, 2);
     const promises = [fs.writeFile(ordersPath, ordersJson)];
-    
+
     if (process.env.DBF_FOLDER_PATH) {
         const mirrorPath = path.join(process.env.DBF_FOLDER_PATH, 'orders', 'orders.json');
         try {
@@ -1292,7 +1303,7 @@ const writeOrders = async (orders) => {
             console.error('Failed to write mirrored orders.json:', e);
         }
     }
-    
+
     return Promise.all(promises);
 };
 
@@ -1392,7 +1403,7 @@ router.get('/past-invoices', requireAppAuth, async (req, res) => {
         if (!DBF_FOLDER_PATH) {
             return res.status(500).json({ error: 'DBF_FOLDER_PATH not configured on server' });
         }
-        
+
         // Load bill.json (invoice headers)
         const billPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'bill.json');
         let bills = [];
@@ -1445,7 +1456,7 @@ router.post('/orders', requireAppAuth, async (req, res) => {
             const schemes = await appDb.getAllSchemes();
             const activeSchemes = schemes.filter(s => s.is_active === 1);
             const now = new Date();
-            
+
             for (const scheme of activeSchemes) {
                 if (scheme.start_date && new Date(scheme.start_date) > now) continue;
                 if (scheme.end_date && new Date(scheme.end_date) < now) continue;
@@ -1473,7 +1484,7 @@ router.post('/orders', requireAppAuth, async (req, res) => {
 
         // Calculate the next T series bill number to assign a unique ID
         let maxTBill = 0;
-        
+
         const checkMax = (data, getSeries, getBillNo) => {
             if (!Array.isArray(data)) return;
             data.forEach(entry => {
@@ -1488,17 +1499,17 @@ router.post('/orders', requireAppAuth, async (req, res) => {
         try {
             const invData = await fs.readFile(path.join(__dirname, '../../db/invoicing.json'), 'utf8').then(JSON.parse);
             checkMax(invData, e => e.series, e => e.billNo);
-        } catch (e) {}
-        
+        } catch (e) { }
+
         try {
             const appInvData = await fs.readFile(path.join(__dirname, '../../db/approved/invoicing.json'), 'utf8').then(JSON.parse);
             checkMax(appInvData, e => e.series, e => e.billNo);
-        } catch (e) {}
-        
+        } catch (e) { }
+
         try {
             const billdtlData = await fs.readFile(path.join(process.env.DBF_FOLDER_PATH, 'data/json/billdtl.json'), 'utf8').then(JSON.parse);
             checkMax(billdtlData, e => e.SERIES, e => e.BILL);
-        } catch (e) {}
+        } catch (e) { }
 
         checkMax(orders, e => e.series, e => e.billNo);
 
@@ -1702,7 +1713,7 @@ router.get('/admin/stats', async (req, res) => {
 router.post('/admin/product-image', requireAdminJwtAuth, async (req, res) => {
     const { productCode, imageUrl } = req.body;
     if (!productCode || !imageUrl) return res.status(400).json({ error: 'productCode and imageUrl required' });
-    
+
     let finalUrl = imageUrl;
     if (imageUrl.startsWith('data:image')) {
         const matches = imageUrl.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
@@ -1720,7 +1731,7 @@ router.post('/admin/product-image', requireAdminJwtAuth, async (req, res) => {
     try {
         await appDb.updateProductMetaImage(productCode, finalUrl);
         res.json({ success: true, imageUrl: finalUrl });
-    } catch(err) {
+    } catch (err) {
         console.error('[app/admin/product-image POST]', err);
         res.status(500).json({ error: 'Failed to update image' });
     }
@@ -1753,7 +1764,7 @@ router.get('/admin/amazon-search', requireAdminJwtAuth, async (req, res) => {
                 images.push(highRes);
             }
         });
-        
+
         const uniqueImages = [...new Set(images)].slice(0, 10);
         res.json({ images: uniqueImages });
     } catch (err) {
@@ -1773,10 +1784,10 @@ router.patch('/admin/users/:partyCode/reset-password', async (req, res) => {
         if (!dbUser) {
             return res.status(404).json({ error: 'User has not registered in the app yet' });
         }
-        
+
         const tempHash = await bcrypt.hash(TEMP_PASSWORD, BCRYPT_ROUNDS);
         await appDb.resetPassword(partyCode, tempHash);
-        
+
         res.json({ success: true, message: `Password for ${partyCode} reset to 1234` });
     } catch (err) {
         console.error('[app/admin/users/reset-password]', err);
@@ -1897,10 +1908,10 @@ router.get('/admin/brands', async (req, res) => {
             if (!p.CODE) return;
             const meta = metaMap[p.CODE];
             const basepack = p.IT_DESC2 ? String(p.IT_DESC2).trim() : null;
-            
+
             // Custom brand code from meta overrides base brand code
             const brandCode = (meta && meta.brand_code) || (basepack ? baseMap[basepack] : null);
-            
+
             if (brandCode) {
                 brandProductCount[brandCode] = (brandProductCount[brandCode] || 0) + 1;
             }
@@ -2067,7 +2078,7 @@ router.get('/admin/products', async (req, res) => {
         });
 
         const productImages = await appDb.getAllProductImages().catch(() => []);
-        
+
         const findImage = (productName, code, basepack) => {
             if (!productName) return null;
             const name = productName.toUpperCase().trim();
@@ -2273,7 +2284,7 @@ async function buildFeedItems() {
 
         // Price guard
         const rate = parseFloat(p.RATE1 || '0') || 0;
-        const mrp  = parseFloat(p.MRP1  || '0') || 0;
+        const mrp = parseFloat(p.MRP1 || '0') || 0;
         if (rate <= 0 && mrp <= 0) {
             skipped.push({ code, reason: 'price is zero' });
             continue;
@@ -2287,7 +2298,7 @@ async function buildFeedItems() {
         }
 
         // Determine price / sale_price
-        const effectiveMrp  = mrp  > 0 ? mrp  : rate;
+        const effectiveMrp = mrp > 0 ? mrp : rate;
         const effectiveRate = rate > 0 ? rate : mrp;
 
         let price, salePrice;
@@ -2296,12 +2307,16 @@ async function buildFeedItems() {
             salePrice = null;
         } else {
             // "rate" mode: show MRP as price (struck-through), RATE1 as sale_price
-            price     = effectiveMrp > effectiveRate ? effectiveMrp : effectiveRate;
+            price = effectiveMrp > effectiveRate ? effectiveMrp : effectiveRate;
             salePrice = effectiveMrp > effectiveRate ? effectiveRate : null;
         }
 
-        // Brand lookup (already enriched onto product as brand_name)
-        const brand = p.brand_name || p.BRAND || 'Ekta Enterprises';
+        // Brand lookup: brand_name comes from the maintained brand_code -> brand_desc
+        // system (same data as GET /api/app/brands). Deliberately NOT falling back to
+        // the raw PMPL "BRAND" field — that's a stale legacy field (values like
+        // KKHO/DETS/CPD/BEVS/HFD/PP/ODL/OND) unrelated to the real brand system and
+        // was silently overriding brand_name for every unmapped product.
+        const brand = p.brand_name || 'Ekta Enterprises';
 
         // Build description
         const packInfo = [p.PACK, p.UNIT_1, p.UNIT_2].filter(Boolean).join(' | ');
@@ -2316,16 +2331,16 @@ async function buildFeedItems() {
         const availability = stock > 0 ? 'in stock' : 'out of stock';
 
         items.push({
-            id:           code.substring(0, 100),
-            title:        toTitleCase(p.PRODUCT || code).substring(0, 200),
-            description:  desc.substring(0, 9999),
+            id: code.substring(0, 100),
+            title: toTitleCase(p.PRODUCT || code).substring(0, 200),
+            description: desc.substring(0, 9999),
             availability,
-            condition:    'new',
-            price:        `${price.toFixed(2)} INR`,
-            sale_price:   salePrice != null ? `${salePrice.toFixed(2)} INR` : null,
-            link:         `${FEED_SITE_BASE}/product/${encodeURIComponent(code)}`,
-            image_link:   imageUrl,
-            brand:        brand.substring(0, 100),
+            condition: 'new',
+            price: `${price.toFixed(2)} INR`,
+            sale_price: salePrice != null ? `${salePrice.toFixed(2)} INR` : null,
+            link: `${FEED_SITE_BASE}/product/${encodeURIComponent(code)}`,
+            image_link: imageUrl,
+            brand: brand.substring(0, 100),
             quantity_to_sell_on_facebook: Math.max(0, Math.floor(stock)),
         });
     }
@@ -2337,7 +2352,7 @@ async function buildFeedItems() {
     if (products.length > 0 && items.length === 0) {
         const err = new Error(
             `[facebook-feed] Refusing to cache: 0 of ${products.length} products published (all skipped). ` +
-            `Skip reasons: ${JSON.stringify(result.skipped.reduce((a, s) => { a[s.reason] = (a[s.reason]||0)+1; return a; }, {}))}`
+            `Skip reasons: ${JSON.stringify(result.skipped.reduce((a, s) => { a[s.reason] = (a[s.reason] || 0) + 1; return a; }, {}))}`
         );
         console.error(err.message);
         // Don't update cache — let next request retry
@@ -2363,7 +2378,7 @@ router.get('/facebook-feed.csv', async (req, res) => {
             return res.status(503).json({ error: 'Feed has 0 items — refusing to serve. Check /facebook-feed/status for skip reasons.' });
         }
 
-        const COLS = ['id','title','description','availability','condition','price','sale_price','link','image_link','brand','quantity_to_sell_on_facebook'];
+        const COLS = ['id', 'title', 'description', 'availability', 'condition', 'price', 'sale_price', 'link', 'image_link', 'brand', 'quantity_to_sell_on_facebook'];
 
         const rows = [
             COLS.join(','),
@@ -2471,4 +2486,3 @@ router.get('/facebook-feed/status', async (req, res) => {
 });
 
 module.exports = router;
-
