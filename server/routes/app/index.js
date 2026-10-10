@@ -1059,10 +1059,15 @@ router.get('/products', async (req, res) => {
         // Brand filter
         const brand = req.query.brand;
         if (brand) {
+            // Custom brand assignments live in product_meta.brand_code and override
+            // the basepack mapping (same rule as /brands product_count).
+            const metaList = await appDb.getAllProductMeta().catch(() => []);
+            const metaBrandMap = {};
+            metaList.forEach(m => { if (m.brand_code) metaBrandMap[m.product_code] = m.brand_code; });
             jsonData = jsonData.filter(p => {
-                const basepack = p.IT_DESC2 ? String(p.IT_DESC2).trim() : null;
-                if (!basepack) return false;
-                return productBrandMap[basepack] === brand;
+                const basepack = p.IT_DESC2 ? String(p.IT_DESC2).trim() : '';
+                const brandCode = metaBrandMap[p.CODE] || productBrandMap[basepack] || '';
+                return brandCode === brand;
             });
         }
 
