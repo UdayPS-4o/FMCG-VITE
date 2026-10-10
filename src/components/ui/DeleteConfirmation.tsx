@@ -6,6 +6,10 @@ interface DeleteConfirmationProps {
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
+  confirmLabel?: string;
+  // Optional extra action shown next to the main Delete button
+  secondaryConfirmLabel?: string;
+  onSecondaryConfirm?: () => void;
 }
 
 const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
@@ -14,6 +18,9 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
   message,
   onConfirm,
   onCancel,
+  confirmLabel = 'Delete',
+  secondaryConfirmLabel,
+  onSecondaryConfirm,
 }) => {
   // Handle ESC key press to close the modal
   useEffect(() => {
@@ -71,12 +78,21 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
           >
             Cancel
           </button>
+          {secondaryConfirmLabel && onSecondaryConfirm && (
+            <button
+              type="button"
+              className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors"
+              onClick={onSecondaryConfirm}
+            >
+              {secondaryConfirmLabel}
+            </button>
+          )}
           <button
             type="button"
             className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
             onClick={onConfirm}
           >
-            Delete
+            {confirmLabel}
           </button>
         </div>
       </div>
