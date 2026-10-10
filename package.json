@@ -4,13 +4,13 @@
   "version": "2.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 3000 --host",
-    "start": "vite --port 3000 --host",
+    "dev": "node api.js && vite --port 3000 --host",
+    "start": "node api.js && vite --port 3000 --host",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview --port 5173 --host",
     "bstart": "npm run build && npm run preview",
-    "dev:all": "npx concurrently -c \"bgBlue.bold,bgMagenta.bold,bgGreen.bold\" -n \"DASHBOARD,APP,SERVER\" --prefix \"[{name}]\" \"npm run dev\" \"cd app && npm run dev\" \"cd server && npm start\""
+    "dev:all": "node api.js && npx concurrently -c \"bgBlue.bold,bgMagenta.bold,bgGreen.bold\" -n \"DASHBOARD,APP,SERVER\" --prefix \"[{name}]\" \"npm run dev\" \"cd app && npm run dev\" \"cd server && npm start\""
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
