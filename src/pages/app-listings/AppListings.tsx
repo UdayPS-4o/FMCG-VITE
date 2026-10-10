@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import constants from '../../constants';
 
+const resolveImageUrl = (url: string) =>
+  url.startsWith('http') || url.startsWith('data:') ? url : `${constants.baseURL}${url}`;
+
 interface Product {
   CODE: string;
   PRODUCT: string;
@@ -489,7 +492,7 @@ const AppListings: React.FC = () => {
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         {p.image_url ? (
-                          <img src={p.image_url.startsWith('http') ? p.image_url : `${constants.baseURL}${p.image_url}`} alt={p.PRODUCT} className="h-12 w-12 object-contain rounded bg-gray-100 p-1" />
+                          <img src={resolveImageUrl(p.image_url)} alt={p.PRODUCT} className="h-12 w-12 object-contain rounded bg-gray-100 p-1" />
                         ) : (
                           <div className="h-12 w-12 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center text-xs text-gray-400 font-medium border border-dashed border-gray-300">No Img</div>
                         )}
@@ -587,7 +590,7 @@ const AppListings: React.FC = () => {
                     <div className="flex flex-col items-center justify-center p-2 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-xl w-24 h-24 bg-gray-50 dark:bg-gray-700">
                       {(productForm.image_url || productForm.newImageFile) ? (
                         <img 
-                          src={productForm.newImageFile || (productForm.image_url.startsWith('http') ? productForm.image_url : `${constants.baseURL}${productForm.image_url}`)} 
+                          src={productForm.newImageFile || resolveImageUrl(productForm.image_url)} 
                           alt="preview" className="w-full h-full object-contain" 
                         />
                       ) : (
@@ -700,7 +703,7 @@ const AppListings: React.FC = () => {
                   <div className="flex items-center gap-4">
                     {b.image_url ? (
                       <div className="w-12 h-12 rounded-lg border border-gray-200 bg-white p-1 flex items-center justify-center shrink-0 shadow-sm">
-                        <img src={b.image_url.startsWith('http') ? b.image_url : `${constants.baseURL}${b.image_url}`} alt={b.brand_name} className="max-w-full max-h-full object-contain" />
+                        <img src={resolveImageUrl(b.image_url)} alt={b.brand_name} className="max-w-full max-h-full object-contain" />
                       </div>
                     ) : (
                       <div className="w-12 h-12 rounded-lg border border-dashed border-gray-300 bg-gray-50 dark:bg-gray-700 flex items-center justify-center shrink-0">

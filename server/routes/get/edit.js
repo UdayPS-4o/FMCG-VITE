@@ -66,6 +66,93 @@ const verifyToken = async (req, res, next) => {
 
 const uniqueIdentifiers = ["bill", "createdAt", "subgroup", "receiptNo", "voucherNo", "id", "achead"];
 
+const readJsonArray = async (filePath) => {
+  try {
+    const parsed = JSON.parse(await fs.readFile(filePath, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+// After deleting a pending invoice, shift the later pending bills of the same
+// series down to fill the gap. Numbers already used by approved bills or bills
+// in the DBF (billdtl) are skipped, so a renumbered bill never collides with them.
+// Mutates `pendingInvoices` in place; returns [{ id, from, to }].
+const renumberInvoicesAfterDelete = async (pendingInvoices, deletedRecord) => {
+  const series = String(deletedRecord?.series || '').toUpperCase();
+  const startNo = parseInt(deletedRecord?.billNo, 10);
+  if (!series || isNaN(startNo)) return [];
+
+  const sameSeries = (s) => String(s || '').toUpperCase() === series;
+  const used = new Set();
+
+  const approved = await readJsonArray(path.join(__dirname, '..', '..', 'db', 'approved', 'invoicing.json'));
+  approved.forEach(r => { if (sameSeries(r.series)) used.add(parseInt(r.billNo, 10)); });
+
+  if (process.env.DBF_FOLDER_PATH) {
+    const billdtl = await readJsonArray(path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'billdtl.json'));
+    billdtl.forEach(r => { if (sameSeries(r.SERIES)) used.add(parseInt(r.BILL, 10)); });
+  }
+
+  const later = [];
+  pendingInvoices.forEach(r => {
+    if (!sameSeries(r.series)) return;
+    const n = parseInt(r.billNo, 10);
+    if (isNaN(n)) return;
+    if (n > startNo) later.push(r);
+    else used.add(n);
+  });
+  later.sort((a, b) => parseInt(a.billNo, 10) - parseInt(b.billNo, 10));
+
+  const renumbered = [];
+  let next = startNo;
+  for (const record of later) {
+    const current = parseInt(record.billNo, 10);
+    while (next < current && used.has(next)) next++;
+    if (next < current) {
+      renumbered.push({ id: record.id, from: current, to: next });
+      record.billNo = String(next);
+      record.updatedAt = new Date().toISOString();
+      used.add(next);
+      next++;
+    } else {
+      used.add(current);
+      next = current + 1;
+    }
+  }
+  return renumbered;
+};
+
+// Keep app orders that were converted into a renumbered invoice pointing at the new bill number
+const updateAppOrderInvoiceRefs = async (series, renumbered) => {
+  const ordersPath = path.join(__dirname, '..', '..', 'db', 'app', 'orders.json');
+  const orders = await readJsonArray(ordersPath);
+  if (orders.length === 0) return;
+
+  const newNoByOld = new Map(renumbered.map(r => [String(r.from), String(r.to)]));
+  let changed = false;
+  orders.forEach(order => {
+    if (String(order.invoiceSeries || '').toUpperCase() !== String(series).toUpperCase()) return;
+    const newNo = newNoByOld.get(String(order.invoiceBillNo));
+    if (newNo === undefined) return;
+    order.invoiceBillNo = newNo;
+    order.invoiceRef = `${order.invoiceSeries}-${newNo}`;
+    changed = true;
+  });
+  if (!changed) return;
+
+  const ordersJson = JSON.stringify(orders, null, 2);
+  await fs.writeFile(ordersPath, ordersJson, "utf8");
+  if (process.env.DBF_FOLDER_PATH) {
+    try {
+      await fs.writeFile(path.join(process.env.DBF_FOLDER_PATH, 'orders', 'orders.json'), ordersJson, "utf8");
+    } catch (e) {
+      console.error('Failed to update mirrored orders.json after renumbering:', e);
+    }
+  }
+};
+
 app.get("/edit/:page/:id", async (req, res) => {
   const { page, id } = req.params;
   console.log(`Fetching ${page} with id ${id}`);
@@ -188,13 +275,26 @@ app.get("/delete/:page/:id", verifyToken, async (req, res) => {
     }
     
     // Remove the record
-    jsonData.splice(recordIndex, 1);
-    
+    const [deletedRecord] = jsonData.splice(recordIndex, 1);
+
+    // Optionally shift later pending bills of the same series down to fill the gap
+    let renumbered = [];
+    if (page === 'invoicing' && req.query.renumber === 'true') {
+      renumbered = await renumberInvoicesAfterDelete(jsonData, deletedRecord);
+    }
+
     // Save the updated data
     await fs.writeFile(filePath, JSON.stringify(jsonData, null, 2), "utf8");
-    
+
+    if (renumbered.length > 0) {
+      await updateAppOrderInvoiceRefs(deletedRecord.series, renumbered);
+    }
+
     console.log(`Successfully deleted ${page} record with ID = ${id}`);
-    res.status(200).json({ message: "Record deleted successfully" });
+    const message = renumbered.length > 0
+      ? `Record deleted. Renumbered ${renumbered.length} bill(s): ${renumbered.map(r => `${deletedRecord.series}-${r.from} → ${deletedRecord.series}-${r.to}`).join(', ')}`
+      : "Record deleted successfully";
+    res.status(200).json({ message, renumbered });
   } catch (error) {
     console.error(`Error deleting ${page} record:`, error);
     res.status(500).json({ error: `Error deleting record: ${error.message}` });

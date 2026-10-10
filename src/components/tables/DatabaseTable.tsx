@@ -4,6 +4,7 @@ import constants from "../../constants";
 import { toast } from 'react-toastify';
 import './scrollbar.css'; // Import the scrollbar styles
 import DeleteConfirmation from '../ui/DeleteConfirmation';
+import DateFilterCalendar, { toDateKey } from './DateFilterCalendar';
 import { useNavigate } from 'react-router-dom';
 import { TableSkeletonLoader } from '../ui/skeleton/SkeletonLoader';
 import useAuth from '../../hooks/useAuth';
@@ -90,6 +91,8 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   const [search, setSearch] = useState<string>('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [smFilter, setSmFilter] = useState<string>('');
+  const [dateFilter, setDateFilter] = useState<string[]>([]); // YYYY-MM-DD keys
+  const [dateCalendarAnchor, setDateCalendarAnchor] = useState<HTMLElement | null>(null);
   // Add tooltip state
   const [tooltipContent, setTooltipContent] = useState<{ content: any; position: { x: number; y: number } } | null>(null);
   // Add party mapping state
@@ -254,9 +257,9 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
         }
       }
 
-      // Godown transfer items only store {code, qty, unit} — resolve names
-      // from the product master for the Items tooltip.
-      if (point === 'godown-transfer' || point === 'godown') {
+      // Godown transfer and invoice items only store the item code — resolve
+      // names from the product master for the Items tooltip.
+      if (point === 'godown-transfer' || point === 'godown' || point === 'invoicing') {
         try {
           const token = localStorage.getItem('token');
           const resp = await fetch(`${constants.baseURL}/api/dbf/pmpl.json`, {
@@ -497,6 +500,27 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     setHiddenColumns([]);
   };
 
+  // Date column used by the header calendar filter
+  const dateHeader = headers.find(h => h.toLowerCase() === 'date');
+
+  const availableDateKeys = React.useMemo(() => {
+    const keys = new Set<string>();
+    if (dateHeader) {
+      rows.forEach(row => {
+        const key = toDateKey(row[dateHeader]);
+        if (key) keys.add(key);
+      });
+    }
+    return keys;
+  }, [rows, dateHeader]);
+
+  const handleDateFilterChange = (dates: string[]) => {
+    setDateFilter(dates);
+    setPage(0);
+  };
+
+  const closeDateCalendar = React.useCallback(() => setDateCalendarAnchor(null), []);
+
   const filteredRows = rows.filter((row) => {
     // First apply search filter
     if (search) {
@@ -518,6 +542,12 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
         return false;
       }
     }
+
+    // Then apply the date filter from the Date header calendar
+    if (dateFilter.length > 0 && dateHeader) {
+      const key = toDateKey(row[dateHeader]);
+      if (!key || !dateFilter.includes(key)) return false;
+    }
     
     return true;
   });
@@ -534,12 +564,31 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   }, [filteredRows, endpoint]);
 
   const sortedRows = [...filteredRows].sort((a, b) => {
-    if (!a[orderBy] || !b[orderBy]) return 0;
-    
-    if (order === 'asc') {
-      return a[orderBy] < b[orderBy] ? -1 : 1;
+    const aVal = a[orderBy];
+    const bVal = b[orderBy];
+    const aEmpty = aVal === null || aVal === undefined || aVal === '';
+    const bEmpty = bVal === null || bVal === undefined || bVal === '';
+    if (aEmpty && bEmpty) return 0;
+    if (aEmpty) return 1; // empty values always go last
+    if (bEmpty) return -1;
+
+    let result: number;
+    const aStr = String(aVal).trim();
+    const bStr = String(bVal).trim();
+    const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})$/;
+    const aDate = aStr.match(ddmmyyyy);
+    const bDate = bStr.match(ddmmyyyy);
+    if (aDate && bDate) {
+      // Compare DD-MM-YYYY dates chronologically
+      result = `${aDate[3]}${aDate[2]}${aDate[1]}`.localeCompare(`${bDate[3]}${bDate[2]}${bDate[1]}`);
+    } else if (aStr !== '' && bStr !== '' && !isNaN(Number(aStr)) && !isNaN(Number(bStr))) {
+      // Compare numeric values (ids, amounts) numerically instead of as strings
+      result = Number(aStr) - Number(bStr);
+    } else {
+      result = aStr.localeCompare(bStr, undefined, { numeric: true, sensitivity: 'base' });
     }
-    return a[orderBy] > b[orderBy] ? -1 : 1;
+
+    return order === 'asc' ? result : -result;
   });
 
   // Get visible headers (excluding hidden columns and blacklisted fields)
@@ -668,7 +717,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     }
   };
 
-  const confirmDelete = async (directId?: string) => {
+  const confirmDelete = async (directId?: string, renumber: boolean = false) => {
     if (!endpoint) {
       toast.error('Endpoint is required');
       return;
@@ -681,7 +730,9 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     try {
       // Determine if we're dealing with approved records based on tableId
       const isApproved = tableId?.includes('approved');
-      const deleteEndpoint = isApproved ? `/delete/approved/${endpoint}/${idToDelete}` : `/delete/${endpoint}/${idToDelete}`;
+      const deleteEndpoint = isApproved
+        ? `/delete/approved/${endpoint}/${idToDelete}`
+        : `/delete/${endpoint}/${idToDelete}${renumber ? '?renumber=true' : ''}`;
       
       console.log(`Attempting to delete ${isApproved ? 'approved' : ''} ${endpoint} record with ID: ${idToDelete}`);
       console.log(`Using endpoint: ${deleteEndpoint}`);
@@ -906,8 +957,12 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                 </thead>
                 <tbody>
                   {items.map((item: any, idx: number) => {
-                    const itemName = item.particular || item.name || item.description || item.item
-                      || (item.code && productNameByCode[item.code]) || item.code || 'Unknown Item';
+                    const itemCode = item.code || item.itemCode || item.item || '';
+                    const resolvedName = item.itemName || item.particular || item.name || item.description
+                      || (itemCode && productNameByCode[itemCode]) || '';
+                    const itemName = itemCode && resolvedName && resolvedName !== itemCode
+                      ? `(${itemCode}) ${resolvedName}`
+                      : resolvedName || itemCode || 'Unknown Item';
                     const quantity = item.qty || item.quantity || 'N/A';
                     const unit = item.unit || 'N/A';
 
@@ -1221,14 +1276,39 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
   // Main render
   return (
     <>
-      <DeleteConfirmation 
-        isOpen={deleteConfirmOpen}
-        title="Confirm Delete"
-        message="Are you sure you want to delete this item? This action cannot be undone."
-        onConfirm={() => confirmDelete()}
-        onCancel={cancelDelete}
-      />
+      {(() => {
+        // Pending invoices can have the later bill numbers of the same series rearranged to fill the gap
+        const canRenumber = endpoint === 'invoicing' && !tableId?.includes('approved');
+        const billToDelete = canRenumber && deleteItemId
+          ? rows.find(row => getRowId(row) === deleteItemId)
+          : null;
+        const billLabel = billToDelete ? `${billToDelete.series}-${billToDelete.billNo}` : 'this bill';
+        return (
+          <DeleteConfirmation
+            isOpen={deleteConfirmOpen}
+            title="Confirm Delete"
+            message={canRenumber
+              ? `Are you sure you want to delete ${billLabel}? This action cannot be undone. Do you also want to rearrange the later bill numbers of this series to fill the gap, or leave them as they are?`
+              : "Are you sure you want to delete this item? This action cannot be undone."}
+            confirmLabel={canRenumber ? 'Delete Only' : 'Delete'}
+            onConfirm={() => confirmDelete()}
+            secondaryConfirmLabel={canRenumber ? 'Delete & Rearrange' : undefined}
+            onSecondaryConfirm={canRenumber ? () => confirmDelete(undefined, true) : undefined}
+            onCancel={cancelDelete}
+          />
+        );
+      })()}
       
+      {dateCalendarAnchor && (
+        <DateFilterCalendar
+          anchorEl={dateCalendarAnchor}
+          availableDates={availableDateKeys}
+          selectedDates={dateFilter}
+          onChange={handleDateFilterChange}
+          onClose={closeDateCalendar}
+        />
+      )}
+
       {isTableLoading ? (
         <TableSkeletonLoader />
       ) : (
@@ -1367,17 +1447,51 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                         className="px-4 py-3 font-medium text-sm text-gray-900 dark:text-gray-100 cursor-pointer"
                       >
                         <div className="flex flex-col">
-                          <div 
-                            className="flex items-center gap-1"
-                            onClick={() => handleRequestSort(header)}
-                          >
-                            {header.charAt(0).toUpperCase() + header.slice(1).replace(/_/g, ' ')}
-                            {orderBy === header && (
-                              <span className="text-gray-500 dark:text-gray-400">
-                                {order === 'asc' ? '↑' : '↓'}
+                          {header === dateHeader ? (
+                            // Clicking the Date label opens the date filter calendar; the arrow sorts
+                            <div className="flex items-center gap-1">
+                              <span
+                                className={`flex items-center gap-1 rounded px-1 -mx-1 hover:bg-gray-100 dark:hover:bg-gray-700 ${dateFilter.length > 0 ? 'text-green-700 dark:text-green-400' : ''}`}
+                                title="Filter by date"
+                                onClick={(e) => {
+                                  const anchor = e.currentTarget;
+                                  setDateCalendarAnchor(prev => (prev ? null : anchor));
+                                }}
+                              >
+                                {header.charAt(0).toUpperCase() + header.slice(1).replace(/_/g, ' ')}
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                                {dateFilter.length > 0 && (
+                                  <span className="rounded-full bg-green-600 px-1.5 text-[10px] leading-4 text-white">
+                                    {dateFilter.length}
+                                  </span>
+                                )}
                               </span>
-                            )}
-                          </div>
+                              <span
+                                className="text-gray-500 dark:text-gray-400"
+                                title="Sort by date"
+                                onClick={() => handleRequestSort(header)}
+                              >
+                                {orderBy === header ? (order === 'asc' ? '↑' : '↓') : '↕'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div 
+                              className="flex items-center gap-1"
+                              onClick={() => handleRequestSort(header)}
+                            >
+                              {header.charAt(0).toUpperCase() + header.slice(1).replace(/_/g, ' ')}
+                              {orderBy === header && (
+                                <span className="text-gray-500 dark:text-gray-400">
+                                  {order === 'asc' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
+                          )}
                           
                           {/* SM Filter in header */}
                           {header.toLowerCase() === 'sm' && smOptions.length > 1 && (
