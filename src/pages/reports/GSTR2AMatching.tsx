@@ -115,6 +115,34 @@ interface ComparisonResult {
   purchaseRecord?: PurchaseRecord;
 }
 
+// Build an exact, readable message from a GST API / backend error response
+const formatGstError = (data: any, fallback: string): string => {
+  if (!data) return fallback;
+  const parts: string[] = [];
+  const add = (v: any) => {
+    if (v === undefined || v === null || v === '') return;
+    parts.push(typeof v === 'string' ? v : JSON.stringify(v));
+  };
+  const describe = (e: any) => {
+    if (e && typeof e === 'object') {
+      const code = e.error_cd || e.errorCode || e.code;
+      const msg = e.message || e.error_msg || e.msg;
+      if (msg || code) return `${code ? `[${code}] ` : ''}${msg || ''}`.trim();
+      return JSON.stringify(e);
+    }
+    return typeof e === 'string' ? e : '';
+  };
+  const top = describe(data.error);
+  if (top) parts.push(top);
+  if (data.details !== undefined) {
+    const d = data.details;
+    const detailText = typeof d === 'object' && d !== null ? (describe(d.error) || describe(d) || JSON.stringify(d)) : String(d);
+    if (detailText && detailText !== top) parts.push(detailText);
+  }
+  if (data.message && typeof data.message === 'string') add(data.message);
+  return parts.length ? parts.join(' - ') : fallback;
+};
+
 const GSTR2AMatching: React.FC = () => {
   const goBack = useGoBack();
   const { user } = useAuth();
@@ -250,10 +278,10 @@ const GSTR2AMatching: React.FC = () => {
         setCurrentStep('otp');
         alert('OTP has been sent to your registered mobile number.');
       } else {
-        setError(data.error || 'Failed to request OTP. Please try again.');
+        setError(formatGstError(data, `Failed to request OTP (HTTP ${response.status}).`));
       }
-    } catch (err) {
-      setError('Error requesting OTP. Please check your connection and try again.');
+    } catch (err: any) {
+      setError(`Error requesting OTP: ${err?.message || 'network error'}`);
       console.error('OTP request error:', err);
     } finally {
       setLoading(false);
@@ -298,10 +326,10 @@ const GSTR2AMatching: React.FC = () => {
         setAuthToken(data.auth_token);
         setCurrentStep('download');
       } else {
-        setError(data.error?.message || 'Failed to authenticate. Please check your OTP and try again.');
+        setError(formatGstError(data, `Failed to authenticate (HTTP ${response.status}).`));
       }
-    } catch (err) {
-      setError('Error during authentication. Please try again.');
+    } catch (err: any) {
+      setError(`Error during authentication: ${err?.message || 'network error'}`);
       console.error('Auth token error:', err);
     } finally {
       setLoading(false);
@@ -410,7 +438,7 @@ const GSTR2AMatching: React.FC = () => {
           }
           b2bSuccessCount++;
         } else {
-          errorMessages.push(`B2B data download failed: ${b2bResult.error?.message || (typeof b2bResult.error === 'string' ? b2bResult.error : null) || 'Unknown error'}`);
+          errorMessages.push(`B2B data download failed: ${formatGstError(b2bResult, 'Unknown error')}`);
         }
         b2bIndex++;
       }
@@ -451,7 +479,7 @@ const GSTR2AMatching: React.FC = () => {
           }
           cdnSuccessCount++;
         } else {
-          errorMessages.push(`CDN data download failed: ${cdnResult.error?.message || (typeof cdnResult.error === 'string' ? cdnResult.error : null) || 'Unknown error'}`);
+          errorMessages.push(`CDN data download failed: ${formatGstError(cdnResult, 'Unknown error')}`);
         }
       }
 
@@ -469,8 +497,8 @@ const GSTR2AMatching: React.FC = () => {
       }
 
       setCurrentStep('display');
-    } catch (err) {
-      setError('Error downloading GSTR2A data. Please try again.');
+    } catch (err: any) {
+      setError(`Error downloading GSTR2A data: ${err?.message || 'network error'}`);
       console.error('Download error:', err);
     } finally {
       setLoading(false);

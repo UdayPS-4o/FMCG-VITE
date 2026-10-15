@@ -562,7 +562,12 @@ router.get('/conversations', (req, res) => {
 
     const result = list.map((t) => {
       const lastMsg = t.messages[t.messages.length - 1];
+      let lastInboundAt = 0;
+      for (let i = t.messages.length - 1; i >= 0; i--) {
+        if (t.messages[i].direction === 'inbound') { lastInboundAt = t.messages[i].timestamp; break; }
+      }
       return {
+        lastInboundAt,
         phone: t.phone,
         displayPhone: t.displayPhone,
         name: buildDisplayName(t.phone, t.name) || t.name || t.displayPhone,

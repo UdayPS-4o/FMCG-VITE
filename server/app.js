@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').join(__dirname, '.env'), override: true });
+﻿require('dotenv').config({ path: require('path').join(__dirname, '.env'), override: true });
 const express = require('express');
 const bodyParser = require('body-parser');
 var cookieParser = require('cookie-parser');
@@ -9,6 +9,25 @@ const morgan = require('morgan');
 const http = require('http');
 const https = require('https');
 const app = express();
+
+// ── Darkside API reverse proxy ──────────────────────────────────────────────
+// Forward all requests for api.adcancel.online to the darkside backend on :3456
+const httpProxy = require('http-proxy');
+const darksideProxy = httpProxy.createProxyServer({ target: 'http://localhost:3456', changeOrigin: false, ws: true });
+darksideProxy.on('error', (err, req, res) => {
+  console.error('[DarksideProxy] Error:', err.message);
+  if (!res.headersSent) res.status(502).json({ error: 'Bad Gateway', message: 'Darkside backend unreachable' });
+});
+app.use((req, res, next) => {
+  const host = (req.headers.host || '').replace(/:\d+$/, '');
+  if (host === 'api.adcancel.online') {
+    console.log('[DarksideProxy] → ' + req.method + ' ' + req.url);
+    return darksideProxy.web(req, res);
+  }
+  next();
+});
+// ────────────────────────────────────────────────────────────────────────────
+
 const PORT = process.env.PORT || 8000;
 
 // Ensure DBF folder path is set before loading any modules that depend on it
@@ -77,9 +96,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Serve PDFs statically from the db/pdfs directory (internal legacy path)
 app.use('/db/pdfs', express.static(path.join(__dirname, 'db', 'pdfs')));
 
-// ── Public PDF hosting for WhatsApp API attachments ───────────────────────────
+// â”€â”€ Public PDF hosting for WhatsApp API attachments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // The AOC WhatsApp API requires a *publicly reachable* HTTPS URL for document
-// attachments.  We expose invoice PDFs here — no auth middleware is applied to
+// attachments.  We expose invoice PDFs here â€” no auth middleware is applied to
 // this path so the external API server can download the file.
 //
 // Public URL pattern:
@@ -87,7 +106,7 @@ app.use('/db/pdfs', express.static(path.join(__dirname, 'db', 'pdfs')));
 //
 // This route is intentionally registered BEFORE the auth middleware (app.use(middleware))
 // so that the AOC API (which has no session cookie) can GET the PDF.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.use('/api/invoice-pdfs', express.static(path.join(__dirname, 'db', 'pdfs'), {
   // Only serve .pdf files from this route for safety
   index: false,
@@ -118,7 +137,7 @@ app.use('/api/reports', reportRoutes);  // this is the main route for the report
 const appRoutes = require('./routes/app/index');
 app.use('/api/app', appRoutes);
 
-// Alexa skill webhook — registered BEFORE auth middleware so Amazon can POST to it
+// Alexa skill webhook â€” registered BEFORE auth middleware so Amazon can POST to it
 const alexaRoutes = require('./routes/alexa');
 app.use('/api/alexa', alexaRoutes);
 
@@ -131,29 +150,29 @@ app.use('/api/messages', messagesRoutes);
 const whatsappWebhook = require('./routes/webhook/index');
 app.use('/api/webhook', whatsappWebhook);
 
-// WhatsApp Web UI — conversation viewer
+// WhatsApp Web UI â€” conversation viewer
 const whatsappUiRoutes = require('./routes/whatsapp-ui');
 app.use('/api/whatsapp-ui', whatsappUiRoutes);
 
 
-// ── /whatsapp reverse-proxy ───────────────────────────────────────────────────
+// â”€â”€ /whatsapp reverse-proxy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Contract: this server terminates TLS for server.ekta-enterprises.com.
 // Any request arriving at /whatsapp/* has the prefix stripped and is
 // forwarded to the whatsapp microservice (whatsapp.js) on port 4292:
 //
-//   /whatsapp/webhook  →  http://127.0.0.1:4292/webhook
-//   /whatsapp/send     →  http://127.0.0.1:4292/send
-//   /whatsapp/files/<file> → http://127.0.0.1:4292/files/<file>
-//   /whatsapp/health   →  http://127.0.0.1:4292/health
+//   /whatsapp/webhook  â†’  http://127.0.0.1:4292/webhook
+//   /whatsapp/send     â†’  http://127.0.0.1:4292/send
+//   /whatsapp/files/<file> â†’ http://127.0.0.1:4292/files/<file>
+//   /whatsapp/health   â†’  http://127.0.0.1:4292/health
 //
 // whatsapp.js MUST be running before requests reach these paths.
-// Uses req.body (already parsed by bodyParser above) instead of req.pipe —
+// Uses req.body (already parsed by bodyParser above) instead of req.pipe â€”
 // the request stream is already drained by the global bodyParser middleware,
 // so piping it directly hangs on any POST (bodyParser consumed it already).
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.use('/whatsapp', (req, res) => {
   const WHATSAPP_PORT = process.env.WHATSAPP_PORT || 4292;
-  // Strip /whatsapp prefix — req.url already has it removed by Express
+  // Strip /whatsapp prefix â€” req.url already has it removed by Express
   const targetPath = req.url || '/';
 
   const hasBody = req.body && Object.keys(req.body).length > 0;
@@ -195,29 +214,29 @@ app.use('/whatsapp', (req, res) => {
   if (bodyString) proxyReq.write(bodyString);
   proxyReq.end();
 });
-// ── /api/whatsapp reverse-proxy → fmcg-api (port 3188) ──────────────────────
+// â”€â”€ /api/whatsapp reverse-proxy â†’ fmcg-api (port 3188) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Strips /api/whatsapp prefix and forwards to the standalone API server.
-// Example: POST /api/whatsapp/balance → POST http://127.0.0.1:3188/api/balance
+// Example: POST /api/whatsapp/balance â†’ POST http://127.0.0.1:3188/api/balance
 // Registered BEFORE middleware so it bypasses auth.
 // Uses req.body (already parsed by bodyParser) instead of req.pipe to avoid
 // double-reading the consumed request stream.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.use('/api/whatsapp', (req, res) => {
   const API_PORT = 3188;
   // req.url is stripped of /api/whatsapp by Express.
-  // For /api/whatsapp/balance → req.url="/balance" → target="/api/balance"
-  // For /api/whatsapp        → req.url="/"       → show info (not forwarded)
+  // For /api/whatsapp/balance â†’ req.url="/balance" â†’ target="/api/balance"
+  // For /api/whatsapp        â†’ req.url="/"       â†’ show info (not forwarded)
   const suffix = req.url || '';
 
-  // ── LOG FULL REQUEST so we can debug CX BOT live flow ─────────────────────
+  // â”€â”€ LOG FULL REQUEST so we can debug CX BOT live flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   console.log('[CXBOT /api/whatsapp] Method:', req.method, '| URL:', req.url);
   console.log('[CXBOT /api/whatsapp] Headers:', JSON.stringify(req.headers, null, 2));
   console.log('[CXBOT /api/whatsapp] Query:', JSON.stringify(req.query));
   console.log('[CXBOT /api/whatsapp] Body:', JSON.stringify(req.body));
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
-  // ── Normalize phoneNumber param ──────────────────────────────────────────
+  // â”€â”€ Normalize phoneNumber param â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // CX BOT sends {{contact.phone}} as "+919179174888" or "919179174888".
   // The FMCG API expects a 10-digit Indian mobile number ("9179174888").
   // Strip leading '+', then strip country code '91' if number is 12 digits,
@@ -229,8 +248,8 @@ app.use('/api/whatsapp', (req, res) => {
       (match, key, val) => {
         let num = decodeURIComponent(val).replace(/\s+/g, '');
         num = num.replace(/^\+/, '');          // remove leading +
-        if (num.length === 12 && num.startsWith('91')) num = num.slice(2); // +91xxxxxxxxxx → 10 digits
-        if (num.length === 11 && num.startsWith('0'))  num = num.slice(1); // 0xxxxxxxxxx  → 10 digits
+        if (num.length === 12 && num.startsWith('91')) num = num.slice(2); // +91xxxxxxxxxx â†’ 10 digits
+        if (num.length === 11 && num.startsWith('0'))  num = num.slice(1); // 0xxxxxxxxxx  â†’ 10 digits
         return key + encodeURIComponent(num);
       }
     );
@@ -294,13 +313,13 @@ app.use('/api/whatsapp', (req, res) => {
   }
   proxyReq.end();
 });
-// ─────────────────────────────────────────────────────────────────────────────
-// ── /api/files reverse-proxy → fmcg-api (port 3188) ──────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ /api/files reverse-proxy â†’ fmcg-api (port 3188) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Forwards static file requests (PDFs, XLS) from the public domain to the
 // API server's file server.
-// Example: GET /api/files/LEDGER/9876543210.pdf → GET http://127.0.0.1:3188/files/LEDGER/9876543210.pdf
+// Example: GET /api/files/LEDGER/9876543210.pdf â†’ GET http://127.0.0.1:3188/files/LEDGER/9876543210.pdf
 // Registered BEFORE middleware so it bypasses auth.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.use('/api/files', (req, res) => {
   const API_PORT = 3188;
   // Express strips /api/files from req.url, so we prepend /files for the upstream
@@ -338,13 +357,13 @@ app.use('/api/files', (req, res) => {
 
   proxyReq.end();
 });
-// ─────────────────────────────────────────────────────────────────────────────
-// ── /files reverse-proxy → fmcg-api (port 3188) ──────────────────────────────
-// Public file downloads — mirrors the /api/files proxy above so both
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ /files reverse-proxy â†’ fmcg-api (port 3188) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Public file downloads â€” mirrors the /api/files proxy above so both
 // /files/* and /api/files/* work (the shorter path is what the API returns).
-// Example: GET /files/LEDGER/9876543210.pdf → GET http://127.0.0.1:3188/files/LEDGER/9876543210.pdf
+// Example: GET /files/LEDGER/9876543210.pdf â†’ GET http://127.0.0.1:3188/files/LEDGER/9876543210.pdf
 // Registered BEFORE middleware so it bypasses auth.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.use('/files', (req, res) => {
   const API_PORT = 3188;
   // Express strips /files from req.url, prepend it back for upstream
@@ -382,9 +401,9 @@ app.use('/files', (req, res) => {
 
   proxyReq.end();
 });
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// ── /pay reverse-proxy → fmcg-api (port 3188) ─────────────────────────────────
+// â”€â”€ /pay reverse-proxy â†’ fmcg-api (port 3188) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // UPI app deep-link redirect pages (PhonePe/GPay/Paytm) served from fmcg-api.
 app.use('/pay', (req, res) => {
   const API_PORT = 3188;
@@ -422,9 +441,9 @@ app.use('/pay', (req, res) => {
 
   proxyReq.end();
 });
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// ── /api/backup reverse-proxy → fmcg-api (port 3188) ──────────────────────────
+// â”€â”€ /api/backup reverse-proxy â†’ fmcg-api (port 3188) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Backups: GET /api/backup/status, POST /api/backup/trigger
 // Registered BEFORE middleware so it bypasses auth.
 app.use('/api/backup', (req, res) => {
@@ -460,7 +479,7 @@ app.use('/api/backup', (req, res) => {
 
   proxyReq.end();
 });
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // set middleware to check if user is logged in
 // Apply this BEFORE routes that need authentication
@@ -618,7 +637,7 @@ app.get('/favicon.ico', (req, res) => {
 
 const { acmeChallengeMiddleware, initAutoSslRenewal } = require('./utils/sslRenewal');
 
-// Initialize server — supports both HTTP (:80) and HTTPS (:443)
+// Initialize server â€” supports both HTTP (:80) and HTTPS (:443)
 const initServer = () => {
   const SSL_KEY_PATH = process.env.SSL_KEY_PATH || path.join(__dirname, 'certs', 'privkey.pem');
   const SSL_CERT_PATH = process.env.SSL_CERT_PATH || path.join(__dirname, 'certs', 'fullchain.pem');
@@ -626,7 +645,7 @@ const initServer = () => {
   const certsExist = fsSync.existsSync(SSL_KEY_PATH) && fsSync.existsSync(SSL_CERT_PATH);
 
   if (certsExist) {
-    // ── HTTPS server on :443 ──────────────────────────────────────────────
+    // â”€â”€ HTTPS server on :443 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const sslOptions = {
       key: fsSync.readFileSync(SSL_KEY_PATH),
       cert: fsSync.readFileSync(SSL_CERT_PATH),
@@ -637,6 +656,10 @@ const initServer = () => {
       // Initialize automated background SSL renewal (checks every 12h, hot-reloads TLS context)
       initAutoSslRenewal(httpsServer);
     });
+    httpsServer.on('upgrade', (req, socket, head) => {
+      const host = (req.headers.host || '').replace(/:\d+$/, '');
+      if (host === 'api.adcancel.online') darksideProxy.ws(req, socket, head);
+    });
     httpsServer.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
         console.error('[ERROR] Port 443 already in use. Waiting for pm2 to retry...');
@@ -644,14 +667,23 @@ const initServer = () => {
       } else throw err;
     });
 
-    // ── HTTP server on :80 — redirect everything to HTTPS ─────────────────
+    // â”€â”€ HTTP server on :80 â€” redirect everything to HTTPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const redirectApp = express();
     redirectApp.use(acmeChallengeMiddleware);
     redirectApp.use((req, res) => {
-      const host = req.headers.host ? req.headers.host.replace(/:\d+$/, '') : 'server.ekta-enterprises.com';
-      res.redirect(301, `https://${host}${req.url}`);
+      const host = (req.headers.host || '').replace(/:\d+$/, '');
+      // Cloudflare Flexible SSL sends HTTP to port 80 - proxy api.adcancel.online instead of redirecting
+      if (host === 'api.adcancel.online') {
+        console.log('[DarksideProxy:80] -> ' + req.method + ' ' + req.url);
+        return darksideProxy.web(req, res);
+      }
+      res.redirect(301, `https://${host || 'server.ekta-enterprises.com'}${req.url}`);
     });
     const httpServer = http.createServer(redirectApp);
+    httpServer.on('upgrade', (req, socket, head) => {
+      const host = (req.headers.host || '').replace(/:\d+$/, '');
+      if (host === 'api.adcancel.online') darksideProxy.ws(req, socket, head);
+    });
     httpServer.listen(80, '0.0.0.0', () => {
       console.log('HTTP server running on port 80 (redirecting to HTTPS)');
     });
@@ -662,7 +694,7 @@ const initServer = () => {
       } else throw err;
     });
   } else {
-    // ── Fallback: HTTP-only on configured PORT (certs not found) ───────────
+    // â”€â”€ Fallback: HTTP-only on configured PORT (certs not found) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const PORT = process.env.PORT || 8000;
     console.warn(`[WARN] SSL certificates not found. Running HTTP-only on port ${PORT}.`);
     console.warn(`       Looked for key:  ${SSL_KEY_PATH}`);
@@ -686,3 +718,6 @@ const initServer = () => {
 initServer();
 
 require('./routes/watcher');
+
+
+

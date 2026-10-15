@@ -129,6 +129,24 @@ const useIsLarge = () => {
 
 const formatCountdown = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
+// Owns the per-second tick so only this text re-renders each second, not the whole board.
+// (Re-rendering the cards every second redraws the charts and dismisses open chart tooltips.)
+const AutoRefreshCountdown: React.FC<{ resetKey: number; onExpire: () => void }> = ({ resetKey, onExpire }) => {
+  const [seconds, setSeconds] = useState(AUTO_REFRESH_SECONDS);
+
+  useEffect(() => {
+    setSeconds(AUTO_REFRESH_SECONDS);
+    const t = setInterval(() => setSeconds((c) => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (seconds === 0) onExpire();
+  }, [seconds, onExpire]);
+
+  return <span className="font-mono font-semibold text-yellow-200">{formatCountdown(seconds)}</span>;
+};
+
 const KpiBoard: React.FC = () => {
   const { user } = useAuth();
   const storageKey = `${STORAGE_PREFIX}:${(user as { name?: string } | null)?.name ?? 'default'}`;
@@ -147,21 +165,11 @@ const KpiBoard: React.FC = () => {
   // ----- Refresh -----
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastRefreshed, setLastRefreshed] = useState(() => new Date());
-  const [countdown, setCountdown] = useState(AUTO_REFRESH_SECONDS);
 
   const refreshNow = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setLastRefreshed(new Date());
-    setCountdown(AUTO_REFRESH_SECONDS);
   }, []);
-
-  useEffect(() => {
-    const t = setInterval(() => setCountdown((c) => (c <= 1 ? 0 : c - 1)), 1000);
-    return () => clearInterval(t);
-  }, []);
-  useEffect(() => {
-    if (countdown === 0) refreshNow();
-  }, [countdown, refreshNow]);
 
   // ----- Visibility / width / order -----
   const hiddenSet = useMemo(() => new Set(layout.hidden), [layout.hidden]);
@@ -249,7 +257,7 @@ const KpiBoard: React.FC = () => {
               Refreshed <span className="font-semibold text-white">{lastRefreshed.toLocaleTimeString('en-IN')}</span>
             </div>
             <div>
-              Auto-refresh in <span className="font-mono font-semibold text-yellow-200">{formatCountdown(countdown)}</span>
+              Auto-refresh in <AutoRefreshCountdown resetKey={refreshKey} onExpire={refreshNow} />
             </div>
           </div>
           <button

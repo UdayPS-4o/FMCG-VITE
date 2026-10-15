@@ -4,7 +4,58 @@ const fs = require('fs').promises;
 const path = require('path');
 const csv = require('fast-csv');
 const { DbfSync } = require('../utils/dbf-sync');
+const { DbfORM } = require('../dbf-orm');
 require('dotenv').config();
+
+const LOADING_EXP_CODE = 'EE046';
+const LOADING_RATE_PER_BOX = 1;
+
+// Posts a cash-payment voucher (Dr EE046) for loading charges at ₹1 per box into CASH.DBF.
+// Returns the VR number, or null if nothing was posted.
+async function postLoadingExpense(totalBoxes, billNumbers) {
+    const boxes = Math.round(Number(totalBoxes) || 0);
+    const amount = boxes * LOADING_RATE_PER_BOX;
+    if (amount <= 0) return null;
+
+    const dbfFolder = process.env.DBF_FOLDER_PATH;
+    if (!dbfFolder) throw new Error('DBF_FOLDER_PATH environment variable not set.');
+
+    const cashDbf = new DbfORM(path.join(dbfFolder, 'data', 'CASH.DBF'), { autoCreate: true });
+    const cmplDbf = new DbfORM(path.join(dbfFolder, 'data', 'CMPL.DBF'));
+    try {
+        await Promise.all([cashDbf.open(), cmplDbf.open()]);
+
+        let maxCp = 0;
+        for (const rec of await cashDbf.findAll()) {
+            if (typeof rec.VR === 'string' && rec.VR.startsWith('CP-')) {
+                const num = parseInt(rec.VR.replace('CP-', ''), 10);
+                if (!isNaN(num) && num > maxCp) maxCp = num;
+            }
+        }
+        const expParty = (await cmplDbf.findAll()).find(r => r.C_CODE === LOADING_EXP_CODE);
+
+        const vrNo = `CP-${String(maxCp + 1).padStart(6, '0')}`;
+        const now = new Date();
+        const remark = `LOADING CHARGES ${boxes} BOX ${billNumbers}`.substring(0, 40).trim(); // REMARK is C(40)
+
+        await cashDbf.insertMany([{
+            DATE: new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())),
+            VR: vrNo,
+            C_CODE: LOADING_EXP_CODE,
+            CR: 0,
+            DR: amount,
+            REMARK: remark,
+            BOOK: 'CB',
+            E_TYPE: 'G',
+            AC_NAME: (expParty?.C_NAME || '').substring(0, 40),
+            CODE_ORG: LOADING_EXP_CODE,
+            PRINT: 'N'
+        }]);
+        return vrNo;
+    } finally {
+        await Promise.allSettled([cashDbf.close(), cmplDbf.close()]);
+    }
+}
 
 const billsDeliveryStatePath = path.join(__dirname, '..', 'db', 'BillsDeliveryRegister.json');
 const vanLoadingHistoryPath = path.join(__dirname, '..', 'db', 'VanLoadingHistory.json');
@@ -466,8 +517,24 @@ router.post('/van-loading-saves', async (req, res) => {
             if (error.code !== 'ENOENT') throw error;
         }
 
+        // Post loading expense once per distinct bill set (re-saving the same loading must not double-charge)
+        const normBills = String(billNumbers).replace(/\s+/g, '').replace(/,$/, '').toUpperCase();
+        const alreadyPosted = saves.some(s =>
+            s.cashVr && String(s.billNumbers).replace(/\s+/g, '').replace(/,$/, '').toUpperCase() === normBills);
+        let cashVr = null;
+        let cashError = null;
+        if (!alreadyPosted) {
+            try {
+                cashVr = await postLoadingExpense(totalBoxes, String(billNumbers).replace(/\s+/g, ''));
+            } catch (err) {
+                console.error('Failed to post loading expense to CASH.DBF:', err);
+                cashError = err.message;
+            }
+        }
+
         const entry = {
             id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+            cashVr,
             date: formatDateToDDMMYYYY(new Date()),
             timestamp: new Date().toISOString(),
             billNumbers: String(billNumbers),
@@ -483,7 +550,7 @@ router.post('/van-loading-saves', async (req, res) => {
         if (saves.length > 500) saves = saves.slice(0, 500);
 
         await fs.writeFile(vanLoadingSavesPath, JSON.stringify(saves, null, 2));
-        res.json({ message: 'Van loading snapshot saved', entry });
+        res.json({ message: 'Van loading snapshot saved', entry, cashError });
     } catch (error) {
         console.error('Error saving van loading snapshot:', error);
         res.status(500).json({ message: 'Failed to save van loading snapshot' });

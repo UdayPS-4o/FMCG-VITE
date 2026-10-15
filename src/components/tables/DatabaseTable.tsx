@@ -718,61 +718,60 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   };
 
   const confirmDelete = async (directId?: string, renumber: boolean = false) => {
+    // Use the direct ID if provided, otherwise use the state ID
+    const idToDelete = directId || deleteItemId;
+
+    // Close the dialog immediately — the delete and refresh run in the background
+    setDeleteConfirmOpen(false);
+    setDeleteItemId(null);
+
     if (!endpoint) {
       toast.error('Endpoint is required');
       return;
     }
-    
-    // Use the direct ID if provided, otherwise use the state ID
-    const idToDelete = directId || deleteItemId;
     if (!idToDelete) return;
 
-    try {
-      // Determine if we're dealing with approved records based on tableId
-      const isApproved = tableId?.includes('approved');
-      const deleteEndpoint = isApproved
-        ? `/delete/approved/${endpoint}/${idToDelete}`
-        : `/delete/${endpoint}/${idToDelete}${renumber ? '?renumber=true' : ''}`;
-      
-      console.log(`Attempting to delete ${isApproved ? 'approved' : ''} ${endpoint} record with ID: ${idToDelete}`);
-      console.log(`Using endpoint: ${deleteEndpoint}`);
-      
-      // Get token from localStorage
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Authentication required');
-        return;
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Authentication required');
+      return;
+    }
+
+    // Determine if we're dealing with approved records based on tableId
+    const isApproved = tableId?.includes('approved');
+    const deleteEndpoint = isApproved
+      ? `/delete/approved/${endpoint}/${idToDelete}`
+      : `/delete/${endpoint}/${idToDelete}${renumber ? '?renumber=true' : ''}`;
+
+    // Remove the row right away so the table updates without waiting for the server
+    const previousRows = rows;
+    setRows(prevRows => prevRows.filter(row => getRowId(row) !== idToDelete));
+    setSelectedItems(prev => prev.filter(itemId => itemId !== idToDelete));
+
+    const refreshRows = async () => {
+      try {
+        const updatedData = await fetchProducts(endpoint);
+        if (Array.isArray(updatedData)) setRows(updatedData);
+      } catch (fetchError) {
+        console.error('Error fetching updated data:', fetchError);
       }
-      
+    };
+
+    try {
       const response = await fetch(`${constants.baseURL}${deleteEndpoint}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
         toast.success(data.message || 'Item deleted successfully');
-        
-        // More robust state update with better error handling
-        try {
-          // Get fresh data instead of relying on local filtering
-          const updatedData = await fetchProducts(endpoint);
-          setRows(updatedData);
-        } catch (fetchError) {
-          console.error('Error fetching updated data:', fetchError);
-          // Fall back to local filtering if fetch fails
-          setRows(prevRows => prevRows.filter(row => {
-            try {
-              return getRowId(row) !== idToDelete;
-            } catch (rowError) {
-              console.error('Error filtering row:', rowError);
-              return true; // Keep the row if we can't determine its ID
-            }
-          }));
-        }
+        // Reload so renumbered bills show their new numbers
+        refreshRows();
       } else {
-        // Handle specific error cases
+        setRows(previousRows);
         if (response.status === 404) {
           toast.error(data.error || 'Record not found');
         } else if (response.status === 400) {
@@ -785,9 +784,9 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     } catch (error) {
       console.error('Error deleting item:', error);
       toast.error('An error occurred while deleting the item. Please try again.');
-    } finally {
-      setDeleteConfirmOpen(false);
-      setDeleteItemId(null);
+      // The delete may or may not have gone through — reload to show the real state
+      setRows(previousRows);
+      refreshRows();
     }
   };
 

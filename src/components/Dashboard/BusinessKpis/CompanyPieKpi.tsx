@@ -48,6 +48,8 @@ const CompanyPieKpi: React.FC<Props> = ({ id, title, color, icon }) => {
   const bucket = data?.[range];
   const rows = useMemo(() => (bucket?.rows ?? []).filter((r) => r.amount > 0), [bucket]);
   const total = bucket?.total ?? 0;
+  // Stable reference so the donut isn't redrawn (closing its tooltip) on unrelated re-renders
+  const series = useMemo(() => rows.map((r) => r.amount), [rows]);
 
   const options: ApexOptions = useMemo(
     () => ({
@@ -124,7 +126,7 @@ const CompanyPieKpi: React.FC<Props> = ({ id, title, color, icon }) => {
             <Chart
               key={range}
               options={options}
-              series={rows.map((r) => r.amount)}
+              series={series}
               type="donut"
               height={220}
             />
