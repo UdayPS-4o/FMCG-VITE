@@ -9,6 +9,8 @@ interface Conversation {
   lastMessage: string;
   lastMessageAt: number;
   lastMessageDirection: 'inbound' | 'outbound';
+  /** timestamp of the customer's last message; 0 if they never wrote */
+  lastInboundAt?: number;
   lastMessageStatus?: string;
   unreadCount: number;
   messageCount: number;
@@ -462,18 +464,318 @@ function DocIcon({ filename }: { filename: string }) {
 }
 
 // ─── Image lightbox ───────────────────────────────────────────────────────────
-function ImageLightbox({ src, onClose, onSend }: { src: string; onClose: () => void; onSend?: () => void }) {
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 5;
+
+function ImageLightbox({ src, gallery, senderName, onClose, onSend, onReply, onForward }: {
+  src: string;
+  gallery: Message[];
+  senderName: string;
+  onClose: () => void;
+  onSend?: () => void;
+  onReply?: (msg: Message) => void;
+  onForward?: (msg: Message) => void;
+}) {
+  // Compose-preview (data URL, not part of the thread) keeps the simple "Send" flow
+  const isCompose = !gallery.some(m => m.imageUrl === src);
+  const [index, setIndex] = useState(() => Math.max(0, gallery.findIndex(m => m.imageUrl === src)));
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [starred, setStarred] = useState<Set<string>>(new Set());
+  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const thumbsRef = useRef<HTMLDivElement>(null);
+
+  const current = isCompose ? null : gallery[index];
+  const currentSrc = isCompose ? src : current!.imageUrl!;
+
+  const resetView = () => { setZoom(1); setOffset({ x: 0, y: 0 }); };
+  const changeZoom = useCallback((delta: number) => {
+    setZoom(z => {
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(z + delta).toFixed(2)));
+      if (next === MIN_ZOOM) setOffset({ x: 0, y: 0 });
+      return next;
+    });
+  }, []);
+  const go = useCallback((dir: number) => {
+    if (isCompose) return;
+    setIndex(i => Math.min(gallery.length - 1, Math.max(0, i + dir)));
+    setZoom(1); setOffset({ x: 0, y: 0 });
+  }, [isCompose, gallery.length]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') go(-1);
+      else if (e.key === 'ArrowRight') go(1);
+      else if (e.key === '+' || e.key === '=') changeZoom(0.5);
+      else if (e.key === '-') changeZoom(-0.5);
+      else if (e.key === '0') resetView();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, go, changeZoom]);
+
+  useEffect(() => {
+    thumbsRef.current?.querySelector('.wa-lb-thumb--active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  }, [index]);
+
+  const onWheel = (e: React.WheelEvent) => changeZoom(e.deltaY < 0 ? 0.25 : -0.25);
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (zoom <= 1) return;
+    e.preventDefault();
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: offset.x, oy: offset.y };
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    const d = dragRef.current;
+    if (d) setOffset({ x: d.ox + e.clientX - d.sx, y: d.oy + e.clientY - d.sy });
+  };
+  const endDrag = () => { dragRef.current = null; };
+
+  const ts = current ? new Date(current.timestamp) : null;
+  const isToday = ts ? ts.toDateString() === new Date().toDateString() : false;
+  const timeLabel = ts
+    ? `${isToday ? 'Today' : ts.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} at ${ts.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}`
+    : '';
+  const isStarred = current ? starred.has(current.id) : false;
+
+  const Icon = ({ d }: { d: string }) => (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d={d} /></svg>
+  );
+
   return (
     <div className="wa-lightbox" onClick={onClose}>
       <div className="wa-lightbox-bar" onClick={e => e.stopPropagation()}>
-        <button className="wa-lightbox-btn" onClick={onClose} title="Close">✕</button>
-        <span className="wa-lightbox-title">Photo Preview</span>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <a href={src} download className="wa-lightbox-btn" title="Download">⬇</a>
-          {onSend && <button className="wa-lightbox-btn wa-lightbox-btn--send" onClick={(e) => { e.stopPropagation(); onSend(); }} title="Send">Send ➤</button>}
-        </div>
+        {isCompose ? (
+          <>
+            <button className="wa-lightbox-btn" onClick={onClose} title="Close">✕</button>
+            <span className="wa-lightbox-title">Photo Preview</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a href={src} download className="wa-lightbox-btn" title="Download">⬇</a>
+              {onSend && <button className="wa-lightbox-btn wa-lightbox-btn--send" onClick={(e) => { e.stopPropagation(); onSend(); }} title="Send">Send ➤</button>}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="wa-lb-sender">
+              <div className="wa-lb-avatar">{getInitials(senderName)}</div>
+              <div>
+                <div className="wa-lb-name">{current!.direction === 'outbound' ? 'You' : senderName}</div>
+                <div className="wa-lb-time">{timeLabel}</div>
+              </div>
+            </div>
+            <div className="wa-lb-actions">
+              <button className="wa-lightbox-btn" onClick={() => changeZoom(-0.5)} disabled={zoom <= MIN_ZOOM} title="Zoom out (-)">
+                <Icon d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z" />
+              </button>
+              <button className="wa-lightbox-btn" onClick={() => changeZoom(0.5)} disabled={zoom >= MAX_ZOOM} title="Zoom in (+)">
+                <Icon d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm2.5-4h-2v2H9v-2H7V9h2V7h1v2h2v1z" />
+              </button>
+              <button className="wa-lightbox-btn" onClick={() => { onReply?.(current!); onClose(); }} title="Reply">
+                <Icon d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
+              </button>
+              <button
+                className={`wa-lightbox-btn ${isStarred ? 'wa-lightbox-btn--on' : ''}`}
+                onClick={() => setStarred(prev => {
+                  const next = new Set(prev);
+                  if (next.has(current!.id)) next.delete(current!.id); else next.add(current!.id);
+                  return next;
+                })}
+                title={isStarred ? 'Unstar' : 'Star'}
+              >
+                <Icon d={isStarred
+                  ? 'M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z'
+                  : 'M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z'} />
+              </button>
+              <button className="wa-lightbox-btn" onClick={() => onForward?.(current!)} title="Forward">
+                <Icon d="M12 8V4l8 8-8 8v-4H4V8z" />
+              </button>
+              <a href={currentSrc} download className="wa-lightbox-btn" title="Download">
+                <Icon d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+              </a>
+              <button className="wa-lightbox-btn" onClick={onClose} title="Close (Esc)">
+                <Icon d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              </button>
+            </div>
+          </>
+        )}
       </div>
-      <img src={src} alt="Preview" className="wa-lightbox-img" onClick={e => e.stopPropagation()} />
+
+      <div
+        className="wa-lb-stage"
+        onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+        onWheel={onWheel}
+        onMouseMove={onMouseMove}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+      >
+        {!isCompose && index > 0 && (
+          <button className="wa-lb-nav wa-lb-nav--prev" onClick={e => { e.stopPropagation(); go(-1); }} title="Previous">‹</button>
+        )}
+        <img
+          src={currentSrc}
+          alt="Preview"
+          className="wa-lightbox-img"
+          draggable={false}
+          style={{
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+            cursor: zoom > 1 ? (dragRef.current ? 'grabbing' : 'grab') : 'zoom-in',
+            transition: dragRef.current ? 'none' : 'transform 0.15s ease',
+          }}
+          onClick={e => { e.stopPropagation(); if (zoom === 1) changeZoom(1); }}
+          onDoubleClick={e => { e.stopPropagation(); if (zoom > 1) resetView(); }}
+          onMouseDown={onMouseDown}
+        />
+        {!isCompose && index < gallery.length - 1 && (
+          <button className="wa-lb-nav wa-lb-nav--next" onClick={e => { e.stopPropagation(); go(1); }} title="Next">›</button>
+        )}
+      </div>
+
+      {!isCompose && gallery.length > 1 && (
+        <div className="wa-lb-thumbs" ref={thumbsRef} onClick={e => e.stopPropagation()}>
+          {gallery.map((m, i) => (
+            <img
+              key={m.id}
+              src={m.imageUrl}
+              alt=""
+              className={`wa-lb-thumb ${i === index ? 'wa-lb-thumb--active' : ''}`}
+              onClick={() => { setIndex(i); resetView(); }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Forward dialog ───────────────────────────────────────────────────────────
+const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function ForwardDialog({ msg, onClose, onForwarded }: {
+  msg: Message;
+  onClose: () => void;
+  onForwarded: (count: number) => void;
+}) {
+  const [contacts, setContacts] = useState<Conversation[] | null>(null);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [caption, setCaption] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // The sidebar list may be filtered/searched, so load the full list here
+  useEffect(() => {
+    fetch(`${API_BASE}/conversations?filter=all`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        const now = Date.now();
+        const open = ((d.conversations || []) as Conversation[])
+          .filter(c => c.lastInboundAt && now - c.lastInboundAt < SERVICE_WINDOW_MS);
+        setContacts(open);
+      })
+      .catch(() => setContacts([]));
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!contacts) return [];
+    if (!q) return contacts;
+    return contacts.filter(c => c.name.toLowerCase().includes(q) || c.displayPhone.toLowerCase().includes(q) || c.phone.includes(q));
+  }, [contacts, search]);
+
+  const toggle = (phone: string) =>
+    setSelected(prev => prev.includes(phone) ? prev.filter(p => p !== phone) : [...prev, phone]);
+
+  const isImage = msg.type === 'image' && !!msg.imageUrl;
+  const isDoc = !!msg.documentUrl && msg.documentUrl !== '#';
+
+  const doForward = async () => {
+    if (!selected.length || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      let mediaUrl: string | undefined;
+      const mediaType = isImage ? 'image' : isDoc ? 'document' : undefined;
+      if (mediaType) {
+        mediaUrl = (isImage ? msg.imageUrl : msg.documentUrl)!;
+        if (mediaUrl.startsWith('data:')) {
+          const up = await fetch(`${API_BASE}/upload`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: msg.documentFilename || 'image.jpg', base64: mediaUrl }),
+          }).then(r => r.json());
+          if (!up.ok) throw new Error('Upload failed');
+          mediaUrl = up.url;
+        }
+      }
+      const text = msg.body && msg.body !== 'Photo' && msg.type !== 'document' ? msg.body : msg.interactiveBody || '';
+      const results = await Promise.all(selected.map(async phone => {
+        const bodyText = mediaUrl ? caption.trim() || undefined : [text, caption.trim()].filter(Boolean).join('\n') || undefined;
+        const res = await fetch(`${API_BASE}/send`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: phone, body: bodyText, mediaUrl, mediaType, filename: msg.documentFilename }),
+        });
+        const data = await res.json().catch(() => ({ ok: false }));
+        return !!data.ok;
+      }));
+      const okCount = results.filter(Boolean).length;
+      if (okCount === 0) throw new Error('Could not forward the message');
+      onForwarded(okCount);
+    } catch (e: any) {
+      setError(e?.message || 'Forward failed');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="wa-fwd-overlay" onClick={onClose}>
+      <div className="wa-fwd-dialog" onClick={e => e.stopPropagation()}>
+        <div className="wa-fwd-header">
+          <button className="wa-fwd-close" onClick={onClose} title="Close">✕</button>
+          <span>Forward message to</span>
+        </div>
+        <div className="wa-fwd-search">
+          <input autoFocus placeholder="Search name or number" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div className="wa-fwd-section">Chats with open 24h window</div>
+        <div className="wa-fwd-list">
+          {contacts === null && <div className="wa-fwd-empty">Loading…</div>}
+          {contacts !== null && visible.length === 0 && (
+            <div className="wa-fwd-empty">{contacts.length === 0 ? 'No contacts have messaged in the last 24 hours.' : 'No matching contacts.'}</div>
+          )}
+          {visible.map(c => (
+            <label key={c.phone} className="wa-fwd-item">
+              <input type="checkbox" checked={selected.includes(c.phone)} onChange={() => toggle(c.phone)} />
+              <div className="wa-fwd-avatar">{getInitials(c.name)}</div>
+              <div className="wa-fwd-info">
+                <span className="wa-fwd-name">{c.name}</span>
+                <span className="wa-fwd-sub">{c.displayPhone}</span>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div className="wa-fwd-footer">
+          <div className="wa-fwd-preview">
+            {isImage ? <img src={msg.imageUrl} alt="" /> : <span>{isDoc ? `📄 ${msg.documentFilename || 'Document'}` : (msg.body || msg.interactiveBody || '').slice(0, 120)}</span>}
+          </div>
+          <input
+            className="wa-fwd-caption"
+            placeholder="Add a message…"
+            value={caption}
+            onChange={e => setCaption(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') doForward(); }}
+          />
+          <button className="wa-fwd-send" disabled={!selected.length || busy} onClick={doForward} title="Send">
+            {busy ? '…' : '➤'}
+          </button>
+        </div>
+        {selected.length > 0 && !error && <div className="wa-fwd-note">{selected.length} selected</div>}
+        {error && <div className="wa-fwd-note wa-fwd-note--err">{error}</div>}
+      </div>
     </div>
   );
 }
@@ -519,6 +821,7 @@ export default function WhatsAppInbox() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [forwardMsg, setForwardMsg] = useState<Message | null>(null);
   const [reactions, setReactions] = useState<Record<string, string>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -768,8 +1071,7 @@ export default function WhatsAppInbox() {
   }, []);
 
   const handleForward = useCallback((msg: Message) => {
-    const text = `[Forwarded]\n${msg.body}`;
-    navigator.clipboard.writeText(text).catch(() => { });
+    setForwardMsg(msg);
   }, []);
 
   const handleReact = useCallback((msg: Message, emoji: string) => {
@@ -827,7 +1129,11 @@ export default function WhatsAppInbox() {
       {previewImage && (
         <ImageLightbox
           src={previewImage}
+          gallery={(activeThread?.messages || []).filter(m => m.type === 'image' && m.imageUrl)}
+          senderName={activeThread?.name || 'Customer'}
           onClose={() => setPreviewImage(null)}
+          onReply={(m) => { setReplyTo(m); inputRef.current?.focus(); }}
+          onForward={handleForward}
           onSend={isServiceWindowOpen ? () => {
             fetch(previewImage)
               .then(r => r.blob())
@@ -837,6 +1143,18 @@ export default function WhatsAppInbox() {
                 setPreviewImage(null);
               });
           } : undefined}
+        />
+      )}
+
+      {forwardMsg && (
+        <ForwardDialog
+          msg={forwardMsg}
+          onClose={() => setForwardMsg(null)}
+          onForwarded={() => {
+            setForwardMsg(null);
+            setPreviewImage(null);
+            setTimeout(() => { fetchConversations(); if (activePhone) fetchMessages(activePhone); }, 2000);
+          }}
         />
       )}
 

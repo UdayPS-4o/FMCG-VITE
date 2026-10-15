@@ -513,21 +513,21 @@ router.post('/sync', async (req, res) => {
           maxCp += 1;
           const cpVrNo = `CP-${String(maxCp).padStart(6, '0')}`;
           const suppName = (purchase.supplierName || supplier?.C_NAME || '').toUpperCase().substring(0, 20).trim();
-          const unloadRemark = `UNLOAD CHARGES ${invoiceNo} ${suppName}`.substring(0, 50).trim();
+          const unloadRemark = `UNLOAD CHARGES ${invoiceNo} ${suppName}`.substring(0, 40).trim(); // REMARK is C(40)
+          // Standalone cash voucher: must NOT carry BILL/BILL2/PUR_CODE, otherwise the DOS software
+          // deletes it along with the purchase voucher when the bill is re-saved/renumbered there.
           cashToInsert.push({
               DATE: entryDate,
               VR: cpVrNo,
-              M_GROUP1: 'EE',
               C_CODE: 'EE093',
               CR: 0,
               DR: unloadingAmt,
               REMARK: unloadRemark,
-              BILL: invoiceNo,
-              DT_BILL: invoiceDate,
+              BOOK: 'CB',
               E_TYPE: 'G',
-              PUR_CODE: supplierCode,
-              BILL2: bill2,
-              QDR: 0
+              AC_NAME: (partyMap['EE093']?.C_NAME || '').substring(0, 40),
+              CODE_ORG: 'EE093',
+              PRINT: 'N'
           });
       }
 
