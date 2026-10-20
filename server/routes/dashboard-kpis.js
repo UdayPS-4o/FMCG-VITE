@@ -123,11 +123,12 @@ const getBills = (folder) =>
     }))
   );
 
-const getCash = () =>
+const getCashRaw = () =>
   loadProjected('cash', undefined, 'CASH.json', (rows) =>
     rows.map((r) => ({
       date: toIstDate(r.DATE),
       vr: str(r.VR).toUpperCase(),
+      code: str(r.C_CODE),
       party: str(r.AC_NAME),
       remark: str(r.REMARK),
       cr: num(r.CR),
@@ -135,6 +136,32 @@ const getCash = () =>
       group: str(r.M_GROUP1),
     }))
   );
+
+// Party master: C_CODE -> { name, group }
+const getParties = () =>
+  loadProjected('cmpl', undefined, 'CMPL.json', (rows) => {
+    const map = new Map();
+    rows.forEach((r) => {
+      if (r.C_CODE) map.set(str(r.C_CODE), { name: str(r.C_NAME), group: str(r.M_GROUP) });
+    });
+    return map;
+  });
+
+// CASH rows with party name / group filled in from the party master.
+// Since Sep 2026 the sale-bill postings (SB-*) in CASH.json carry only C_CODE, with blank
+// AC_NAME and M_GROUP1, so relying on those fields drops most sales from DT-group totals.
+let cashEnriched = { raw: null, parties: null, value: null };
+async function getCash() {
+  const [raw, parties] = await Promise.all([getCashRaw(), getParties()]);
+  if (cashEnriched.raw === raw && cashEnriched.parties === parties) return cashEnriched.value;
+  const value = raw.map((c) => {
+    if (c.party && c.group) return c;
+    const p = parties.get(c.code);
+    return p ? { ...c, party: c.party || p.name, group: c.group || p.group } : c;
+  });
+  cashEnriched = { raw, parties, value };
+  return value;
+}
 
 const projectDetail = (rows) =>
   rows.map((r) => ({
