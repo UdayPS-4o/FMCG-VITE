@@ -4,6 +4,7 @@ import { errMsg, gstApi } from './gstApi';
 interface Status {
   hasToken: boolean;
   savedDate?: string;
+  savedAt?: string;
   tokenPreview?: string;
 }
 
@@ -28,7 +29,10 @@ const GstAuthPanel: React.FC = () => {
   useEffect(() => {
     refresh();
     gstApi('/config').then(setCfg).catch((e) => setMsg({ ok: false, text: errMsg(e) }));
-    const onChange = () => refresh();
+    const onChange = () => {
+      setMsg(null);
+      refresh();
+    };
     window.addEventListener('gst-auth-changed', onChange);
     return () => window.removeEventListener('gst-auth-changed', onChange);
   }, [refresh]);
@@ -82,7 +86,11 @@ const GstAuthPanel: React.FC = () => {
         </div>
         {status?.hasToken ? (
           <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
-            Token saved on {status.savedDate || '—'} ({status.tokenPreview})
+            Token saved{' '}
+            {status.savedAt
+              ? new Date(status.savedAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : `on ${status.savedDate || '—'}`}{' '}
+            ({status.tokenPreview})
           </span>
         ) : (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200">

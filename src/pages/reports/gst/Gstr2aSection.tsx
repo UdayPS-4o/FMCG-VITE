@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Input from '../../../components/form/input/Input';
 import constants from '../../../constants';
 import useActivityTracker from '../../../hooks/useActivityTracker';
+import usePartyNames from './usePartyNames';
 
 // Define interfaces for GSTR2A data structures
 interface GSTR2AB2BRecord {
@@ -127,6 +128,7 @@ const formatGstError = (data: any, fallback: string): string => {
 // GSTR-2A download + purchase register matching (the original content of the GSTR2A Matching page)
 const Gstr2aSection: React.FC = () => {
   const { logActivity } = useActivityTracker();
+  const partyName = usePartyNames();
 
   // Custom back navigation for internal steps
   const handleBackNavigation = () => {
@@ -1067,7 +1069,7 @@ const Gstr2aSection: React.FC = () => {
                   {gstr2aB2BData.flatMap((record, recordIndex) =>
                     record.itms?.map((item, itemIndex) => (
                       <tr key={`${recordIndex}-${itemIndex}`}>
-                        {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>}
+                        {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100"><span title={partyName(record.ctin) || undefined} className={partyName(record.ctin) ? 'cursor-help border-b border-dotted border-gray-400' : undefined}>{record.ctin}</span></td>}
                         {!hiddenColumns.includes('Invoice Number') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.inum}</td>}
                         {!hiddenColumns.includes('Invoice Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.idt}</td>}
                         {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>}
@@ -1154,7 +1156,7 @@ const Gstr2aSection: React.FC = () => {
                   {gstr2aCDNData.flatMap((record, recordIndex) =>
                     record.itms?.map((item, itemIndex) => (
                       <tr key={`${recordIndex}-${itemIndex}`}>
-                        {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.ctin}</td>}
+                        {!hiddenColumns.includes('GSTIN') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100"><span title={partyName(record.ctin) || undefined} className={partyName(record.ctin) ? 'cursor-help border-b border-dotted border-gray-400' : undefined}>{record.ctin}</span></td>}
                         {!hiddenColumns.includes('Note Number') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.nt_num}</td>}
                         {!hiddenColumns.includes('Note Date') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.nt_dt}</td>}
                         {!hiddenColumns.includes('Value') && <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{record.val?.toFixed(2) || '0.00'}</td>}
@@ -1316,7 +1318,7 @@ const Gstr2aSection: React.FC = () => {
                     <tr key={index}>
                       {!hiddenColumns.includes('Invoice Number') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceNumber}</td>}
                       {!hiddenColumns.includes('Invoice Date') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceDate}</td>}
-                      {!hiddenColumns.includes('Party GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.partyGST}</td>}
+                      {!hiddenColumns.includes('Party GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100"><span title={partyName(result.partyGST) || undefined} className={partyName(result.partyGST) ? 'cursor-help border-b border-dotted border-gray-400' : undefined}>{result.partyGST}</span></td>}
                       {!hiddenColumns.includes('Invoice Value') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceValue.toFixed(2)}</td>}
                       {!hiddenColumns.includes('GSTR2A Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.gstr2aTaxableValue?.toFixed(2) || '-'}</td>}
                       {!hiddenColumns.includes('Purchase Taxable') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.purchaseTaxableValue?.toFixed(2) || '-'}</td>}

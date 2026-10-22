@@ -34,8 +34,9 @@ async function readGstCredentials() {
     aspid: record.ASPID || '',
     password: record.ASPPWD || '',
     gstin: record.PARTYGST || '',
-    // SV_CL_ID (SMS client id) is used as the GST portal username; strip wrapping quotes
-    username: (record.SV_CL_ID || '').replace(/^['"]|['"]$/g, ''),
+    // GST portal (API) username. sv.vcc has no field that reliably holds it, so GST_USERNAME in .env wins;
+    // otherwise fall back to SV_CL_ID (SMS client id) with wrapping quotes stripped.
+    username: process.env.GST_USERNAME || (record.SV_CL_ID || '').replace(/^['"]|['"]$/g, ''),
     gstpwd: record.GSTPWD || '',
   };
 }

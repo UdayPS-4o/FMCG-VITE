@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { downloadText, fmtNum } from './gstApi';
+import usePartyNames from './usePartyNames';
 
 export interface GridColumn {
   key: string;
@@ -109,6 +110,7 @@ const GstDataGrid: React.FC<Props> = ({ columns, rows, exportName, emptyText }) 
   const [filters, setFilters] = useState<Record<string, Set<string> | null>>({});
   const [openFilter, setOpenFilter] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const partyName = usePartyNames();
 
   useEffect(() => {
     setPage(0);
@@ -203,7 +205,7 @@ const GstDataGrid: React.FC<Props> = ({ columns, rows, exportName, emptyText }) 
               >
                 {columns.map((c) => (
                   <td key={c.key} className={`border-t border-gray-100 px-2 py-1 dark:border-gray-700 ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wide ? 'min-w-[16rem]' : 'whitespace-nowrap'}`}>
-                    {c.numeric ? fmtNum(r[c.key], c.key === 'QTY' ? 3 : 2) : cellText(r[c.key])}
+                    {c.numeric ? fmtNum(r[c.key], c.key === 'QTY' ? 3 : 2) : c.key === 'CTIN' ? <span title={partyName(cellText(r[c.key])) || undefined} className={partyName(cellText(r[c.key])) ? 'cursor-help border-b border-dotted border-gray-400' : undefined}>{cellText(r[c.key])}</span> : cellText(r[c.key])}
                   </td>
                 ))}
               </tr>

@@ -140,14 +140,20 @@ async function readText(file) {
   try { return await fs.readFile(file, 'utf8'); } catch { return null; }
 }
 
+// A saved file only counts as downloaded data when it is not an error envelope
+// (old runs saved GSP / GSTN errors to disk, e.g. GSP101 "missing auth-token").
+async function hasUsableFile(file) {
+  const text = await readText(file);
+  return text !== null && !errorOf(parseJson(text), text);
+}
 async function hasLocalGstr1(per) {
   for (const f of ['b2b.json', 'cdnr.json', 'b2cs.json']) {
-    if (await readText(path.join(gstr1Dir(per), f)) !== null) return true;
+    if (await hasUsableFile(path.join(gstr1Dir(per), f))) return true;
   }
   return false;
 }
 async function hasLocalGstr2b(per) {
-  return (await readText(path.join(gstr2bDir(per), 'gstr2b.json'))) !== null;
+  return hasUsableFile(path.join(gstr2bDir(per), 'gstr2b.json'));
 }
 
 // A saved file that holds an error envelope has no usable data (e.g. "No document found")
@@ -467,5 +473,5 @@ module.exports = {
   deepFind, num, str, r2, bad,
   parseGstr1B2B, parseGstr1B2CS, parseGstr1CDNR, parseGstr1DocIss, parseGstr1Hsn, parseGstr2bB2B, parseGstr2bCDNR,
   hasLocalGstr1, hasLocalGstr2b, loadGstr1Local, loadGstr2bLocal, gstr1Dir, gstr2bDir,
-  readCsv, convertDate, matchGstr1, matchGstr2b,
+  readCsv, convertDate, matchGstr1, matchGstr2b, findCashJson, toIst,
 };

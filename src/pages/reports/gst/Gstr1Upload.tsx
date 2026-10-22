@@ -98,15 +98,6 @@ const Gstr1Upload: React.FC = () => {
       setStatus('Proceed to File completed.');
     });
 
-  const submit = () => {
-    if (!window.confirm(`WARNING: This will SUBMIT your GSTR-1 return for period ${fp} on the GST Portal.\n\nThis action CANNOT be undone. Proceed?`)) return;
-    run('Submitting GSTR-1 Return (RETSUBMIT)', async () => {
-      const res = await gstApi('/gstr1/submit', { fp });
-      setResponse({ title: 'Submit Return (RETSUBMIT) Response', body: res.data });
-      setStatus('Submit Return completed.');
-    });
-  };
-
   const reset = () => {
     if (!window.confirm(`WARNING: This will reset your GSTR-1 return for the period ${fp} on the GST Portal.\nAll records will be deleted to 0 values.\n\nAre you sure you want to proceed?`)) return;
     run('Resetting GSTR-1 Return (RESET)', async () => {
@@ -163,6 +154,10 @@ const Gstr1Upload: React.FC = () => {
           </div>
         </div>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Filing order: Generate JSON & Save → Get Status (wait till processed) → Proceed to File → File Return (EVC). GSTN no longer has a
+          separate “Submit” step for GSTR-1 — Proceed to File replaces it.
+        </p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           Reads B2B.CSV, B2CS.CSV, CDNR.CSV, DOC.CSV, hsn(b2b).csv and hsn(b2c).csv from the server's GST CSV folder.
         </p>
 
@@ -176,7 +171,6 @@ const Gstr1Upload: React.FC = () => {
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           <Btn onClick={proceed} disabled={!!busy} tone="bg-green-700 hover:bg-green-800">Proceed to File</Btn>
-          <Btn onClick={submit} disabled={!!busy} tone="bg-indigo-700 hover:bg-indigo-800">Submit Return</Btn>
           <Btn onClick={reset} disabled={!!busy} tone="bg-red-600 hover:bg-red-700">Reset GSTR1</Btn>
         </div>
 

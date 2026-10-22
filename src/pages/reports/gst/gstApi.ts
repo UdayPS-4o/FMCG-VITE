@@ -63,3 +63,15 @@ export const downloadText = (name: string, text: string, type = 'text/csv;charse
   a.remove();
   URL.revokeObjectURL(url);
 };
+
+// GSTIN -> "PARTY NAME, PLACE", fetched once per page load and shared by all GST sections
+let partyNamesPromise: Promise<Record<string, string>> | null = null;
+export const loadPartyNames = () => {
+  if (!partyNamesPromise) {
+    partyNamesPromise = gstApi<Record<string, string>>('/party-names').catch(() => {
+      partyNamesPromise = null; // retry on next use
+      return {};
+    });
+  }
+  return partyNamesPromise;
+};

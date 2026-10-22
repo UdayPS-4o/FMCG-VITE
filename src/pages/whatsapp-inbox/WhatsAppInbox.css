@@ -745,6 +745,17 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
 }
 .wa-doc-type { font-size: 11px; color: #8696a0; }
+.wa-doc-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.wa-doc-link--thumb {
+  flex-direction: column; align-items: stretch; gap: 0; padding: 0;
+  overflow: hidden; width: 330px; max-width: 100%;
+}
+.wa-doc-link--thumb .wa-doc-row { padding: 10px 12px; }
+.wa-doc-link--thumb .wa-doc-name { max-width: 240px; }
+.wa-doc-thumb {
+  display: block; width: 100%; height: 150px;
+  object-fit: cover; object-position: top; background: #fff;
+}
 
 /* Hamburger */
 .wa-hamburger {

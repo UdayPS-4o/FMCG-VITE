@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import './WhatsAppInbox.css';
+import { DocPreview } from './DocPreview';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Conversation {
@@ -367,13 +368,7 @@ function MessageBubble({
             {msg.type !== 'document' && (msg.body || msg.interactiveBody) && (
               <div className="wa-body">{msg.body || msg.interactiveBody}</div>
             )}
-            <a href={msg.documentUrl} target="_blank" rel="noopener noreferrer" className="wa-doc-link">
-              <DocIcon filename={msg.documentFilename || ''} />
-              <div className="wa-doc-info">
-                <span className="wa-doc-name">{msg.documentFilename || 'Document'}</span>
-                <span className="wa-doc-type">{getDocType(msg.documentFilename || '')}</span>
-              </div>
-            </a>
+            <DocPreview url={msg.documentUrl} filename={msg.documentFilename} />
           </>
         ) : msg.type === 'interactive' && !isOut ? (
           <div className="wa-interactive">
@@ -432,33 +427,6 @@ function MessageBubble({
           <svg viewBox="0 0 24 24" width="14" height="14" fill="#8696a0"><path d="M7 10l5 5 5-5H7z" /></svg>
         </button>
       )}
-    </div>
-  );
-}
-
-// ─── Document helpers ────────────────────────────────────────────────────────
-function getDocType(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  const map: Record<string, string> = {
-    pdf: 'PDF', xls: 'Excel', xlsx: 'Excel', xlsm: 'Excel',
-    doc: 'Word', docx: 'Word', ppt: 'PowerPoint', pptx: 'PowerPoint',
-    csv: 'CSV', txt: 'Text', zip: 'ZIP', rar: 'Archive',
-  };
-  return map[ext] || ext.toUpperCase() || 'Document';
-}
-
-function DocIcon({ filename }: { filename: string }) {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  const colors: Record<string, string> = {
-    pdf: '#e53935', xls: '#2e7d32', xlsx: '#2e7d32', xlsm: '#2e7d32',
-    doc: '#1565c0', docx: '#1565c0', ppt: '#e65100', pptx: '#e65100',
-    csv: '#2e7d32', zip: '#6d4c41', rar: '#6d4c41',
-  };
-  const color = colors[ext] || '#607d8b';
-  const label = ext.toUpperCase().slice(0, 4) || 'FILE';
-  return (
-    <div className="wa-doc-icon" style={{ background: color }}>
-      <span>{label}</span>
     </div>
   );
 }
@@ -845,7 +813,9 @@ export default function WhatsAppInbox() {
   // ── Fetch conversation list ──────────────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ filter });
+      // Always fetch the full list; the tab filter is applied locally so
+      // switching tabs is instant instead of waiting on a round trip.
+      const params = new URLSearchParams({ filter: 'all' });
       if (search) params.set('search', search);
       const res = await fetch(`${API_BASE}/conversations?${params}`, { credentials: 'include' });
       if (!res.ok) {
@@ -861,7 +831,13 @@ export default function WhatsAppInbox() {
       console.error('[WA-UI] fetch error:', e);
       setFetchError(String(e));
     } finally { setLoading(false); }
-  }, [filter, search]);
+  }, [search]);
+
+  const visibleConversations = useMemo(() => {
+    if (filter === 'unread') return conversations.filter(c => c.unreadCount > 0);
+    if (filter === 'sent') return conversations.filter(c => c.inboundCount === 0 && (c.outboundCount || 0) > 0);
+    return conversations;
+  }, [conversations, filter]);
 
   // ── Fetch counts for the filter tabs ────────────────────────────────────────
   // Taken from /stats rather than from the conversation list, because that list
@@ -1250,7 +1226,7 @@ export default function WhatsAppInbox() {
                 </div>
               ))}
             </div>
-          ) : conversations.length === 0 ? (
+          ) : visibleConversations.length === 0 ? (
             <div className="wa-no-conversations">
               {fetchError ? (
                 <>
@@ -1260,7 +1236,7 @@ export default function WhatsAppInbox() {
               ) : <p>No conversations found</p>}
             </div>
           ) : (
-            conversations.map((conv) => (
+            visibleConversations.map((conv) => (
               <ConversationItem key={conv.phone} conv={conv}
                 isActive={conv.phone === activePhone}
                 onClick={() => setActivePhone(conv.phone)} />

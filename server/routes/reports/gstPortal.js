@@ -53,7 +53,7 @@ router.get('/gst/config', handle(async (req, res) => {
 
 router.get('/gst/auth/status', handle(async (req, res) => {
   const t = await gsp.readToken();
-  res.json(t ? { hasToken: true, savedDate: t.savedDate, tokenPreview: `${t.token.slice(0, 8)}…` } : { hasToken: false });
+  res.json(t ? { hasToken: true, savedDate: t.savedDate, savedAt: t.savedAt, tokenPreview: `${t.token.slice(0, 8)}…` } : { hasToken: false });
 }));
 
 router.post('/gst/auth/otp', handle(async (req, res) => {
@@ -80,6 +80,36 @@ router.post('/gst/auth/token', handle(async (req, res) => {
 router.delete('/gst/auth/token', handle(async (req, res) => {
   await gsp.clearToken();
   res.json({ ok: true });
+}));
+
+// GSTIN -> "PARTY NAME, PLACE" from the party master (CMPL.json) and purchase register (PUR.json).
+// Used for tooltips on GSTIN columns. Rebuilt only when either file changes.
+let partyCache = { key: '', names: {} };
+router.get('/gst/party-names', handle(async (req, res) => {
+  const dir = path.join(process.env.DBF_FOLDER_PATH || '', 'data', 'json');
+  const files = ['CMPL.json', 'PUR.json'].map((f) => path.join(dir, f));
+  const stats = await Promise.all(files.map((f) => fs.stat(f).catch(() => null)));
+  const key = stats.map((s) => (s ? s.mtimeMs : 0)).join('|');
+  if (key !== partyCache.key) {
+    const names = {};
+    const add = (gstin, name, place) => {
+      const g = String(gstin || '').trim().toUpperCase();
+      const n = String(name || '').trim();
+      if (!/^\d{2}[A-Z0-9]{13}$/.test(g) || !n || names[g]) return;
+      const p = String(place || '').trim();
+      names[g] = p ? `${n}, ${p}` : n;
+    };
+    const [cmpl, pur] = await Promise.all(files.map((f) => fs.readFile(f, 'utf8').then(JSON.parse).catch(() => [])));
+    for (const r of cmpl) {
+      if (r._deleted) continue;
+      add(r.GSTNO, r.C_NAME, r.C_PLACE);
+      add(r.C_GST, r.C_NAME, r.C_PLACE);
+      add(r.C_CST, r.C_NAME, r.C_PLACE);
+    }
+    for (const r of pur) if (!r._deleted) add(r.C_CST, r.C_NAME, r.C_PLACE);
+    partyCache = { key, names };
+  }
+  res.json(partyCache.names);
 }));
 
 // which of the given periods already have downloaded JSON on disk
@@ -236,12 +266,6 @@ router.post('/gst/gstr1/proceed', handle(async (req, res) => {
   sendPack(res, pack);
 }));
 
-router.post('/gst/gstr1/submit', handle(async (req, res) => {
-  const fp = fpOf(req.body);
-  const { pack } = await gstr1Call(fp, { method: 'POST', pathPart: 'v4.1/returns/gstr1', params: { action: 'RETSUBMIT', ...RET1 } });
-  sendPack(res, pack);
-}));
-
 router.post('/gst/gstr1/reset', handle(async (req, res) => {
   const fp = fpOf(req.body);
   const { pack } = await gstr1Call(fp, { method: 'POST', pathPart: 'v4.1/returns/gstr1', params: { action: 'RESET', ...RET1 } });
@@ -280,16 +304,17 @@ router.post('/gst/gstr1/file', handle(async (req, res) => {
 }));
 
 // ============================================================ GSTR-3B
+const g3b = require('../../utils/gstr3bForm');
 const gstr3bUrl = (ctx, fp, action) => `${gsp.GSP_BASE}/taxpayerapi/dec/v7.0/returns/gstr3b?${gsp.qs({
   action, aspid: ctx.aspid, password: ctx.password, gstin: ctx.gstin, username: ctx.username, ret_period: fp, authtoken: ctx.token,
 })}`;
 const GSTR3B_HEADERS = { api_version: '7.0', userrole: 'GSTR3B', rtn_typ: 'GSTR3B' };
+const gstr3bCacheFile = (gstin, fp, action) => path.join(gsp.dataDir(), 'gstr3b', `${action}_${gstin}_${fp}.json`);
 
 // GET with the local cache used by the VFP tool: gstr3b/<ACTION>_<GSTIN>_<MMYYYY>.json
 async function gstr3bCachedGet(fp, action, fresh) {
   const ctx0 = await gsp.getContext({ needToken: false });
-  const dir = path.join(gsp.dataDir(), 'gstr3b');
-  const file = path.join(dir, `${action}_${ctx0.gstin}_${fp}.json`);
+  const file = gstr3bCacheFile(ctx0.gstin, fp, action);
   if (!fresh) {
     const cached = await gsp.readJsonIfExists(file);
     if (cached && !gsp.errorOf(gsp.parseJson(cached), cached)) return { text: cached, fromCache: true };
@@ -297,14 +322,40 @@ async function gstr3bCachedGet(fp, action, fresh) {
   const ctx = await gsp.getContext();
   const text = await gsp.gspRequest({ url: gstr3bUrl(ctx, fp, action), headers: GSTR3B_HEADERS });
   const pack = await gsp.packResponse(text);
-  if (pack.ok) { gsp.ensureDir(dir); await fs.writeFile(file, text); }
+  if (pack.ok) { gsp.ensureDir(path.dirname(file)); await fs.writeFile(file, text); }
   return { text, pack, fromCache: false };
 }
+const dropCache = async (fp, action) => {
+  const ctx = await gsp.getContext({ needToken: false });
+  await fs.unlink(gstr3bCacheFile(ctx.gstin, fp, action)).catch(() => undefined);
+};
 
-router.post('/gst/gstr3b/parse-csv', handle(async (req, res) => {
-  const out = await build.parseGstr3Csv();
-  if (!out) throw Object.assign(new Error(`GSTR-3.csv not found in ${gsp.csvDir()}`), { status: 404 });
-  res.json(out);
+// filing status of returns for a period (RETTRACK): [{ rtntype, ret_prd, status, arn, dof, mof }]
+async function trackReturns(fp) {
+  const ctx = await gsp.getContext();
+  const url = `${gsp.GSP_BASE}/taxpayerapi/dec/v0.3/returns?${gsp.qs({
+    action: 'RETTRACK', aspid: ctx.aspid, password: ctx.password, username: ctx.username, gstin: ctx.gstin, authtoken: ctx.token, ret_period: fp,
+  })}`;
+  const pack = await gsp.packResponse(await gsp.gspRequest({ url }));
+  return { pack, list: pack.ok ? (data.deepFind(pack.data, 'EFiledlist') || []) : [] };
+}
+
+router.post('/gst/returns/track', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const { pack, list } = await trackReturns(fp);
+  if (!pack.ok) return sendPack(res, pack);
+  res.json({ ok: true, list });
+}));
+
+// figures from the books: 3.1(a) sales and 4A(5) ITC, from CASH (default) or the VFP GSTR-3.csv export
+router.post('/gst/gstr3b/system', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const sys = req.body.source === 'csv' ? await g3b.systemFromCsv() : await g3b.systemFromCash(fp);
+  if (!sys) {
+    const msg = req.body.source === 'csv' ? `GSTR-3.csv not found in ${gsp.csvDir()}` : `CASH.json for ${fp} not found`;
+    throw Object.assign(new Error(msg), { status: 404 });
+  }
+  res.json(sys);
 }));
 
 router.post('/gst/gstr3b/autofill', handle(async (req, res) => {
@@ -312,16 +363,94 @@ router.post('/gst/gstr3b/autofill', handle(async (req, res) => {
   const liab = await gstr3bCachedGet(fp, 'AUTOLIAB', !!req.body.fresh);
   if (liab.pack && !liab.pack.ok) return sendPack(res, liab.pack, { step: 'AUTOLIAB' });
   const intr = await gstr3bCachedGet(fp, 'RETINT', !!req.body.fresh);
-  if (intr.pack && !intr.pack.ok) return sendPack(res, intr.pack, { step: 'RETINT' });
-  const tables = build.parseAutoLiab(gsp.parseJson(liab.text));
-  res.json({ ok: true, ...tables, retint: gsp.parseJson(intr.text), fromCache: liab.fromCache && intr.fromCache });
+  const intrFailed = intr.pack && !intr.pack.ok;
+  const retint = intrFailed ? null : gsp.parseJson(intr.text);
+  const { form, meta } = g3b.formFromAutoLiab(gsp.parseJson(liab.text));
+  res.json({
+    ok: true, form, meta, interest: retint && retint.interest ? retint.interest : null, retint,
+    retintError: intrFailed ? intr.pack.message : '', fromCache: liab.fromCache,
+  });
 }));
 
 router.post('/gst/gstr3b/summary', handle(async (req, res) => {
   const fp = fpOf(req.body);
   const r = await gstr3bCachedGet(fp, 'RETSUM', !!req.body.fresh);
   if (r.pack && !r.pack.ok) return sendPack(res, r.pack);
-  res.json({ ok: true, data: gsp.parseJson(r.text), fromCache: r.fromCache });
+  const json = gsp.parseJson(r.text);
+  res.json({ ok: true, data: json, ...g3b.formFromRetsum(json), fromCache: r.fromCache });
+}));
+
+// Get Cash & ITC balance (ledgers v0.3, action BAL)
+router.post('/gst/gstr3b/ledger', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const ctx = await gsp.getContext();
+  const url = `${gsp.GSP_BASE}/taxpayerapi/dec/v0.3/ledgers?${gsp.qs({
+    action: 'BAL', gstin: ctx.gstin, ret_period: fp, aspid: ctx.aspid, password: ctx.password, username: ctx.username, authtoken: ctx.token,
+  })}`;
+  const pack = await gsp.packResponse(await gsp.gspRequest({ url }));
+  if (!pack.ok) return sendPack(res, pack);
+  res.json({ ok: true, ...g3b.parseLedgerBal(pack.data) });
+}));
+
+// closing balances of the Electronic Credit Reversal & Re-claimed Statement (CLOSINGBAL) and RCM liability/ITC
+// statement (RCMCLOSINGBAL) - used for the GSTN advisory 643 validations of 4D(1) and 4A(2)/(3)
+router.post('/gst/gstr3b/balances', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const ctx = await gsp.getContext();
+  const get = async (action) => gsp.packResponse(await gsp.gspRequest({ url: gstr3bUrl(ctx, fp, action), headers: GSTR3B_HEADERS }));
+  const [rev, rcm, ob] = await Promise.all([get('CLOSINGBAL'), get('RCMCLOSINGBAL'), get('OPENINGBAL')]);
+  if (rev.tokenExpired || rcm.tokenExpired) return expired(res);
+  const toTax = (p) => {
+    const b = (p.ok && p.data && p.data.clsbal) || null;
+    return b ? { iamt: Number(b.igst) || 0, camt: Number(b.cgst) || 0, samt: Number(b.sgst) || 0, csamt: Number(b.cess) || 0 } : null;
+  };
+  res.json({
+    ok: true, reclaim: toTax(rev), rcm: toTax(rcm), reclaimError: rev.ok ? '' : rev.message, rcmError: rcm.ok ? '' : rcm.message,
+    // opening balance declared for the reclaim statement (one-time declaration on the portal)
+    openingDeclared: ob.ok && ob.data ? (Array.isArray(ob.data.tr) ? ob.data.tr : []) : null,
+  });
+}));
+
+// GSTN check of the form against the auto-calculated (hard-locked) values - nothing is saved (action VALID)
+router.post('/gst/gstr3b/validate', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const ctx = await gsp.getContext();
+  const payload = g3b.buildPayload({ gstin: ctx.gstin, fp, form: req.body.form });
+  const text = await gsp.gspRequest({ method: 'POST', url: gstr3bUrl(ctx, fp, 'VALID'), headers: GSTR3B_HEADERS, body: payload });
+  sendPack(res, await gsp.packResponse(text));
+}));
+
+// ask GSTN to re-compute the system interest (action CMPINT); RETINT is re-read afterwards
+router.post('/gst/gstr3b/recompute-interest', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const ctx = await gsp.getContext();
+  const text = await gsp.gspRequest({ method: 'POST', url: gstr3bUrl(ctx, fp, 'CMPINT'), headers: GSTR3B_HEADERS, body: { gstin: ctx.gstin, ret_period: fp } });
+  const pack = await gsp.packResponse(text);
+  if (pack.ok) await dropCache(fp, 'RETINT');
+  sendPack(res, pack);
+}));
+
+// Table 6.1 tax liability breakup by tax period (RETBKP) - after offset, before filing; needed when part of
+// this month's liability belongs to earlier periods, so GSTN can compute interest correctly
+router.post('/gst/gstr3b/breakup', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const rows = (Array.isArray(req.body.breakup) ? req.body.breakup : []).map((b) => ({
+    ret_period: String(b.ret_period || ''),
+    liability: { iamt: Number(b.liability && b.liability.iamt) || 0, camt: Number(b.liability && b.liability.camt) || 0, samt: Number(b.liability && b.liability.samt) || 0, csamt: Number(b.liability && b.liability.csamt) || 0 },
+  }));
+  if (!rows.length || !rows.every((b) => gsp.validPeriod(b.ret_period))) throw badRequest('Each breakup row needs a valid return period (MMYYYY).');
+  if (new Set(rows.map((b) => b.ret_period)).size !== rows.length) throw badRequest('A return period appears twice in the breakup.');
+  await assertNotFiled(fp);
+  const ctx = await gsp.getContext();
+  const payload = { gstin: ctx.gstin, ret_period: fp, breakup: rows };
+  const text = await gsp.gspRequest({ method: 'PUT', url: gstr3bUrl(ctx, fp, 'RETBKP'), headers: GSTR3B_HEADERS, body: payload });
+  sendPack(res, await gsp.packResponse(text), { payload });
+}));
+
+router.post('/gst/gstr3b/payload', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const ctx = await gsp.getContext({ needToken: false });
+  res.json(g3b.buildPayload({ gstin: ctx.gstin, fp, form: req.body.form }));
 }));
 
 const putGstr3b = async (fp, action, payload) => {
@@ -329,25 +458,40 @@ const putGstr3b = async (fp, action, payload) => {
   const text = await gsp.gspRequest({ method: 'PUT', url: gstr3bUrl(ctx, fp, action), headers: GSTR3B_HEADERS, body: payload });
   return gsp.packResponse(text);
 };
+const assertNotFiled = async (fp) => {
+  const { list } = await trackReturns(fp);
+  const filed = list.find((x) => String(x.rtntype).toUpperCase() === 'GSTR3B' && /filed/i.test(String(x.status)));
+  if (filed) throw Object.assign(new Error(`GSTR-3B for ${fp} is already filed (ARN ${filed.arn}, ${filed.dof}).`), { status: 409 });
+};
 
-router.post('/gst/gstr3b/payload', handle(async (req, res) => {
-  const fp = fpOf(req.body);
-  const ctx = await gsp.getContext({ needToken: false });
-  res.json(build.buildGstr3bPayload({ gstin: ctx.gstin, fp, osup: req.body.osup || {}, itc: req.body.itc || {} }));
-}));
-
+// dryRun: returns the payload and what changes against the return currently saved on the portal
 router.post('/gst/gstr3b/save', handle(async (req, res) => {
   const fp = fpOf(req.body);
   const ctx = await gsp.getContext();
-  const payload = build.buildGstr3bPayload({ gstin: ctx.gstin, fp, osup: req.body.osup || {}, itc: req.body.itc || {} });
-  sendPack(res, await putGstr3b(fp, 'RETSAVE', payload), { payload });
+  const payload = g3b.buildPayload({ gstin: ctx.gstin, fp, form: req.body.form });
+  if (req.body.dryRun) {
+    const sum = await gstr3bCachedGet(fp, 'RETSUM', true);
+    if (sum.pack && !sum.pack.ok) return sendPack(res, sum.pack, { step: 'RETSUM' });
+    const saved = g3b.buildPayload({ gstin: ctx.gstin, fp, form: g3b.formFromRetsum(gsp.parseJson(sum.text)).form });
+    return res.json({ ok: true, payload, changes: g3b.diffPayload(saved, payload) });
+  }
+  await assertNotFiled(fp);
+  const pack = await putGstr3b(fp, 'RETSAVE', payload);
+  if (pack.ok) await dropCache(fp, 'RETSUM');
+  sendPack(res, pack, { payload });
 }));
 
 router.post('/gst/gstr3b/offset', handle(async (req, res) => {
   const fp = fpOf(req.body);
   const ctx = await gsp.getContext();
-  const payload = build.buildOffsetPayload({ gstin: ctx.gstin, fp, pditc: req.body.pditc, pdcash: req.body.pdcash });
-  sendPack(res, await putGstr3b(fp, 'RETOFFSET', payload), { payload });
+  const payload = g3b.buildOffsetPayload({ gstin: ctx.gstin, fp, pditc: req.body.pditc, pdcash: req.body.pdcash });
+  if (!payload.pditc.liab_ldg_id || payload.pdcash.some((c) => !c.liab_ldg_id)) {
+    throw badRequest('Liability ledger IDs are missing - save the return and click "Get Summary" so they can be read from the portal.');
+  }
+  await assertNotFiled(fp);
+  const pack = await putGstr3b(fp, 'RETOFFSET', payload);
+  if (pack.ok) await dropCache(fp, 'RETSUM');
+  sendPack(res, pack, { payload });
 }));
 
 router.post('/gst/gstr3b/file', handle(async (req, res) => {
@@ -355,6 +499,7 @@ router.post('/gst/gstr3b/file', handle(async (req, res) => {
   const pan = panOf(req.body);
   const otp = String(req.body.otp || '').trim().toUpperCase();
   if (!otp) throw badRequest('Enter the EVC OTP.');
+  await assertNotFiled(fp);
   const ctx = await gsp.getContext();
   const sumText = await gsp.gspRequest({ url: gstr3bUrl(ctx, fp, 'RETSUM'), headers: GSTR3B_HEADERS });
   const sumPack = await gsp.packResponse(sumText);
@@ -362,7 +507,9 @@ router.post('/gst/gstr3b/file', handle(async (req, res) => {
   const sign = gsp.evcSignature(pan, otp, gsp.stripWhitespaceChars(sumText));
   const url = `${gstr3bUrl(ctx, fp, 'RETFILE')}&st=EVC&sid=${encodeURIComponent(pan)}%7C${encodeURIComponent(otp)}&sign=${sign}`;
   const text = await gsp.gspRequest({ method: 'POST', url, headers: GSTR3B_HEADERS });
-  sendPack(res, await gsp.packResponse(text));
+  const pack = await gsp.packResponse(text);
+  if (pack.ok) await dropCache(fp, 'RETSUM');
+  sendPack(res, pack);
 }));
 
 module.exports = router;
