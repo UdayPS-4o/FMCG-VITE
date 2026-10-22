@@ -46,13 +46,13 @@ async function readToken() {
   try {
     const raw = await fs.readFile(path.join(dataDir(), TOKEN_FILE), 'utf8');
     const j = JSON.parse(raw);
-    return j && j.auth_token ? { token: j.auth_token, savedDate: j.saved_date || '', gstin: j.gstin || '', username: j.username || '' } : null;
+    return j && j.auth_token ? { token: j.auth_token, savedDate: j.saved_date || '', savedAt: j.saved_at || '', gstin: j.gstin || '', username: j.username || '' } : null;
   } catch {
     return null;
   }
 }
 async function saveToken(token, gstin, username) {
-  const body = { auth_token: token, saved_date: ddmmyyyy(), gstin, username };
+  const body = { auth_token: token, saved_date: ddmmyyyy(), saved_at: new Date().toISOString(), gstin, username };
   await fs.writeFile(path.join(dataDir(), TOKEN_FILE), JSON.stringify(body, null, 2));
 }
 async function clearToken() {
@@ -121,7 +121,11 @@ function errorOf(json, text) {
 // Same heuristic as the VFP tools: error + "token" in the response means the saved token has expired.
 function isTokenError(text) {
   const t = String(text || '').toLowerCase();
-  return ((t.includes('error') || t.includes('invalid')) && t.includes('token')) || t.includes('gsp101') || t.includes('auth-token');
+  // AUTH4037 = API access not enabled / API user validity shorter than the token: an account problem, not an expired token
+  if (t.includes('auth4037')) return false;
+  return ((t.includes('error') || t.includes('invalid')) && t.includes('token')) || t.includes('gsp101') || t.includes('auth-token')
+    // session expired / not valid for data APIs: AUTH158 "Invalid Auth token", RET2B1010 "API Authorization Failed"
+    || t.includes('auth158') || t.includes('ret2b1010') || t.includes('authorization failed');
 }
 
 // Wraps a portal response for the browser: { ok, message, tokenExpired, data, raw }
