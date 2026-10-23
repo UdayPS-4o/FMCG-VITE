@@ -170,9 +170,13 @@ function formFromRetsum(json) {
     sgst: x && x.sgst ? { tx: num(x.sgst.tx), intr: num(x.sgst.intr), fee: num(x.sgst.fee) } : { tx: 0, intr: 0, fee: 0 },
     cess: x && x.cess ? { tx: num(x.cess.tx), intr: num(x.cess.intr), fee: num(x.cess.fee) } : { tx: 0, intr: 0, fee: 0 },
   });
-  const ledgers = (Array.isArray(tp.tx_py) ? tp.tx_py : []).map((x) => ({
-    desc: x.tran_desc || '', liab_ldg_id: num(x.liab_ldg_id), trans_typ: num(x.trans_typ), payable: heads(x),
-  }));
+  // amount still to be paid per liability ledger: net_tax_pay (tx_py less negative-liability adjustment).
+  // liab_ldg_id is only present once GSTN has created the liability ledger - before the first offset it is 0.
+  const net = Array.isArray(tp.net_tax_pay) ? tp.net_tax_pay : [];
+  const ledgers = (Array.isArray(tp.tx_py) ? tp.tx_py : []).map((x) => {
+    const n = net.find((y) => num(y.trans_typ) === num(x.trans_typ));
+    return { desc: x.tran_desc || '', liab_ldg_id: num(x.liab_ldg_id), trans_typ: num(x.trans_typ), payable: heads(n || x) };
+  });
   return { form: f, ledgers, paid: { pditc: tp.pditc || null, pdcash: tp.pdcash || [] } };
 }
 
@@ -291,6 +295,34 @@ function buildOffsetPayload({ gstin, fp, pditc, pdcash }) {
   };
 }
 
+// compares an offset payload with the payable amounts of the saved return; returns readable differences
+function offsetProblems(payload, ledgers) {
+  const out = [];
+  const close = (a, b) => Math.abs(num(a) - num(b)) < 0.005; // GSTN wants an exact match
+  const N = ledgers.find((l) => l.trans_typ === 30002);
+  const R = ledgers.find((l) => l.trans_typ === 30003);
+  const p = payload.pditc || {};
+  const cashOf = (typ) => payload.pdcash.find((c) => num(c.trans_typ) === typ) || {};
+  const nc = cashOf(30002);
+  const rc = cashOf(30003);
+  if (N) {
+    const chk = (label, paid, due) => { if (!close(paid, due)) out.push(`${label}: offset ${r2(paid)} vs payable ${r2(due)}`); };
+    chk('IGST tax', num(p.i_pdi) + num(p.i_pdc) + num(p.i_pds) + num(nc.ipd), N.payable.igst.tx);
+    chk('CGST tax', num(p.c_pdi) + num(p.c_pdc) + num(nc.cpd), N.payable.cgst.tx);
+    chk('SGST tax', num(p.s_pdi) + num(p.s_pds) + num(nc.spd), N.payable.sgst.tx);
+    chk('Cess tax', num(p.cs_pdcs) + num(nc.cspd), N.payable.cess.tx);
+    chk('IGST interest', nc.i_intrpd, N.payable.igst.intr); chk('CGST interest', nc.c_intrpd, N.payable.cgst.intr);
+    chk('SGST interest', nc.s_intrpd, N.payable.sgst.intr); chk('Cess interest', nc.cs_intrpd, N.payable.cess.intr);
+    chk('CGST late fee', nc.c_lfeepd, N.payable.cgst.fee); chk('SGST late fee', nc.s_lfeepd, N.payable.sgst.fee);
+  }
+  if (R) {
+    const chk = (label, paid, due) => { if (!close(paid, due)) out.push(`RCM ${label}: cash ${r2(paid)} vs payable ${r2(due)}`); };
+    chk('IGST', rc.ipd, R.payable.igst.tx); chk('CGST', rc.cpd, R.payable.cgst.tx);
+    chk('SGST', rc.spd, R.payable.sgst.tx); chk('Cess', rc.cspd, R.payable.cess.tx);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- ledger balance (Get Cash & ITC Balance)
 function parseLedgerBal(json) {
   const cb = (json && json.cash_bal) || {};
@@ -305,5 +337,5 @@ function parseLedgerBal(json) {
 
 module.exports = {
   emptyForm, normalizeForm, buildPayload, formFromAutoLiab, formFromRetsum, systemFromCsv, systemFromCash,
-  diffPayload, buildOffsetPayload, parseLedgerBal, itcNet,
+  diffPayload, buildOffsetPayload, parseLedgerBal, itcNet, offsetProblems,
 };
