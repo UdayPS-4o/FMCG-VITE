@@ -705,22 +705,29 @@ const Gstr2aSection: React.FC = () => {
         byAmount = cands.length > 0;
       }
       if (!cands.length) continue;
-      const doc = cands.find((d) => d.period === month) || cands[0];
+      // a document belongs to this month when its bill date OR its entry date falls in it
+      // (bill dates are sometimes keyed differently from the supplier's invoice date)
+      const entryPeriod = (d: PurchaseDoc) => d.entryDate.slice(3, 5) + d.entryDate.slice(6, 10);
+      const inMonth = (d: PurchaseDoc) => d.period === month || entryPeriod(d) === month;
+      const doc = cands.find((d) => d.period === month) || cands.find(inMonth) || cands[0];
       used.add(doc.vr + doc.period);
       const details: string[] = [];
+      const gstrDate = r.invoiceDate.split('/').join('-');
+      if (doc.type !== 'JB' && doc.date && doc.date !== gstrDate) details.push(`Date mismatch: GSTR2A(${gstrDate}) vs Books bill date(${doc.date})`);
       if (Math.abs(doc.taxable - (r.gstr2aTaxableValue || 0)) > tol) details.push(`Taxable Value mismatch: GSTR2A(${(r.gstr2aTaxableValue || 0).toFixed(2)}) vs Books(${doc.taxable.toFixed(2)})`);
       if (Math.abs(doc.gst - (r.gstr2aGSTAmount || 0)) > tol) details.push(`GST Amount mismatch: GSTR2A(${(r.gstr2aGSTAmount || 0).toFixed(2)}) vs Books(${doc.gst.toFixed(2)})`);
       r.purchaseTaxableValue = doc.taxable;
       r.purchaseGSTAmount = doc.gst;
       r.source = 'Both';
       const where = `${kind(doc)} ${doc.vr} dated ${doc.entryDate}${byAmount ? ' (matched by supplier, date and amount)' : ''}`;
-      if (doc.period === month) {
+      if (inMonth(doc)) {
         r.status = details.length ? 'Mismatched' : 'Matched';
         r.mismatchDetails = [`Found in ${where}`, ...details];
       } else {
         r.status = 'Booked in other month';
-        r.bookedIn = label(doc.period);
-        r.mismatchDetails = [`Found on month ${label(doc.period)} — ${where}`, ...details];
+        const bookedPeriod = entryPeriod(doc);
+        r.bookedIn = label(bookedPeriod);
+        r.mismatchDetails = [`Found on month ${label(bookedPeriod)} — ${where}`, ...details];
       }
     }
     // GST expense journals of this month that GSTR-2A does not show
