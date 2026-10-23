@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { errMsg, gstApi } from './gstApi';
+import { errMsg, gstApi, notifyError, notifySuccess } from './gstApi';
 
 interface Status {
   hasToken: boolean;
@@ -16,7 +16,7 @@ const GstAuthPanel: React.FC = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const setMsg = (m: { ok: boolean; text: string } | null) => { if (m) (m.ok ? notifySuccess : notifyError)(m.text); };
 
   const refresh = useCallback(async () => {
     try {
@@ -127,7 +127,6 @@ const GstAuthPanel: React.FC = () => {
           )}
         </div>
       </div>
-      {msg && <div className={`mt-2 text-sm ${msg.ok ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{msg.text}</div>}
     </div>
   );
 };

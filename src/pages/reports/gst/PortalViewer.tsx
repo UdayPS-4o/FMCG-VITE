@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import GstDataGrid, { GridColumn } from './GstDataGrid';
 import PeriodPicker, { periodLabel } from './PeriodPicker';
-import { errMsg, gstApi, previousPeriod } from './gstApi';
+import { errMsg, gstApi, notifyError, notifyInfo, notifySuccess, previousPeriod } from './gstApi';
 
 type Rows = Record<string, Record<string, any>[]>;
 interface Warning { period: string; section: string; message: string }
@@ -74,11 +74,11 @@ const PortalViewer: React.FC<Props> = ({ kind, title, tabs, matchHelp }) => {
   const [visiblePeriods, setVisiblePeriods] = useState<Set<string>>(new Set());
   const [active, setActive] = useState(tabs[0].key);
   const [busy, setBusy] = useState<'' | 'fetch' | 'match'>('');
-  const [error, setError] = useState('');
+  const setError = (m: string) => notifyError(m);
   const [warnings, setWarnings] = useState<Warning[]>([]);
   const [notes, setNotes] = useState<string[]>([]);
-  const [info, setInfo] = useState('');
-  const [matched, setMatched] = useState(false);
+  const setInfo = (m: string) => notifyInfo(m);
+  const setMatched = (done: boolean) => { if (done) notifySuccess('Matching completed — red rows are mismatches, see the REASON column.'); };
 
   const showResult = (res: { rows: Rows; warnings?: Warning[]; notes?: string[] }, ps: string[]) => {
     setRows(res.rows);
@@ -153,8 +153,6 @@ const PortalViewer: React.FC<Props> = ({ kind, title, tabs, matchHelp }) => {
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{matchHelp}</p>
       </div>
 
-      {error && <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">{error}</div>}
-      {info && <div className="text-sm text-gray-600 dark:text-gray-300">{info}</div>}
       {(warnings.length > 0 || notes.length > 0) && (
         <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
           {warnings.map((w, i) => (
@@ -167,7 +165,6 @@ const PortalViewer: React.FC<Props> = ({ kind, title, tabs, matchHelp }) => {
           ))}
         </div>
       )}
-      {matched && <div className="text-sm font-medium text-green-700 dark:text-green-400">Matching completed — red rows are mismatches, see the REASON column.</div>}
 
       {visibleRows && (
         <div className="rounded-lg bg-white p-4 shadow dark:bg-gray-800">

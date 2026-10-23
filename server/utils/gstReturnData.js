@@ -399,12 +399,40 @@ const toIst = (iso) => {
 const dmy = (d) => (d ? `${String(d.getUTCDate()).padStart(2, '0')}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${d.getUTCFullYear()}` : '');
 const pOf = (d) => (d ? `${String(d.getUTCMonth() + 1).padStart(2, '0')}${d.getUTCFullYear()}` : '');
 
+// The DBF sync rewrites the big JSON exports (CASH.json ~150 MB) in place, so a read can catch a half-written file.
+// Read until the file is stable (same size / mtime before and after) and parses; retry a few times otherwise.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function readJsonStable(file, { retries = 5, waitMs = 2000 } = {}) {
+  let lastErr = null;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const before = await fs.stat(file);
+      const text = await fs.readFile(file, 'utf8');
+      const after = await fs.stat(file);
+      if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || text.length === 0) throw new Error('file changed while reading');
+      return { data: JSON.parse(text), mtime: after.mtimeMs };
+    } catch (e) {
+      lastErr = e;
+      if (i < retries) await sleep(waitMs);
+    }
+  }
+  const err = new Error(`${path.basename(file)} is being updated by the data sync right now - please try again in a minute. (${lastErr && lastErr.message})`);
+  err.status = 503;
+  throw err;
+}
+
 // Aggregates CASH by bill number: VR (max), CR sum, GG DR (taxable), VI DR (IGST), VG DR (CGST+SGST) and the bill date of the GG row.
 async function loadCashBills(file) {
   const stat = await fs.stat(file);
   const hit = cashCache.get(file);
   if (hit && hit.mtime === stat.mtimeMs) return hit.bills;
-  const rows = JSON.parse(await fs.readFile(file, 'utf8'));
+  let rows, mtime;
+  try {
+    ({ data: rows, mtime } = await readJsonStable(file));
+  } catch (e) {
+    if (hit) return hit.bills; // file mid-update: keep using the last good copy
+    throw e;
+  }
   const bills = new Map();
   for (const r of rows) {
     const bill = str(r.BILL).trim().toUpperCase();
@@ -419,8 +447,73 @@ async function loadCashBills(file) {
     else if (code === 'VI') b.iamt += num(r.DR);
     else if (code === 'VG') b.camt += num(r.DR);
   }
-  cashCache.set(file, { mtime: stat.mtimeMs, bills });
+  cashCache.set(file, { mtime, bills });
   return bills;
+}
+
+// ---------------------------------------------------------------- purchase documents from CASH (for GSTR-2A matching)
+// One entry per voucher that carries GST input:
+//   PB / PD purchase bills: invoice no in BILL, date in DT_BILL, supplier GSTIN in PUR_GST / AC_GST
+//   JB journal entries (expenses): invoice no only in the narration ("INV#…", "bill#…"), GSTIN on the creditor line (AC_GST)
+const docsCache = new Map(); // file -> { mtime, docs }
+const normInv = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^0+/, '');
+const INV_IN_REMARK = /(?:INV(?:OICE)?|BILL)\s*(?:NO\.?)?\s*[#:.]\s*([A-Z0-9][A-Z0-9\/-]*)/i;
+
+async function loadPurchaseDocs(file) {
+  const stat = await fs.stat(file);
+  const hit = docsCache.get(file);
+  if (hit && hit.mtime === stat.mtimeMs) return hit.docs;
+  let rows, mtime;
+  try {
+    ({ data: rows, mtime } = await readJsonStable(file));
+  } catch (e) {
+    if (hit) return hit.docs;
+    throw e;
+  }
+  const byVr = new Map();
+  for (const r of rows) {
+    if (r._deleted) continue;
+    const vr = str(r.VR);
+    if (!/^(PB|PD|JB)-/.test(vr)) continue;
+    if (!byVr.has(vr)) byVr.set(vr, []);
+    byVr.get(vr).push(r);
+  }
+  const docs = [];
+  byVr.forEach((lines, vr) => {
+    const type = vr.slice(0, 2);
+    let tax = 0, taxable = 0, value = 0, gstin = '', bill = '', billDate = null, party = '', partyCode = '', expenseCode = '', taxCode = '';
+    for (const r of lines) {
+      const code = str(r.C_CODE).slice(0, 2);
+      const dr = num(r.DR), cr = num(r.CR);
+      if (code === 'VI' || code === 'VG' || code === 'VC') { tax += dr - cr; if (!taxCode && dr > 0) taxCode = str(r.C_CODE).trim(); }
+      else if (code === 'GG' || code === 'EE') { taxable += dr - cr; if (!expenseCode && dr > 0) expenseCode = str(r.C_CODE).trim(); }
+      const g = str(r.PUR_GST || r.AC_GST).trim().toUpperCase();
+      if (!gstin && /^\d{2}[A-Z0-9]{13}$/.test(g)) gstin = g;
+      if (cr > 0 && str(r.AC_GST).trim()) { value = cr; party = str(r.AC_NAME || r.PUR_NAME); partyCode = str(r.C_CODE).trim(); }
+      if (!bill && str(r.BILL).trim()) bill = str(r.BILL).trim();
+      if (!billDate && r.DT_BILL) billDate = toIst(r.DT_BILL);
+      if (!bill) { const m = INV_IN_REMARK.exec(str(r.REMARK)); if (m) bill = m[1]; }
+    }
+    if (Math.abs(tax) < 0.01 || !gstin) return; // only vouchers with GST input from a registered supplier
+    const d = billDate || toIst(lines[0].DATE);
+    docs.push({
+      vr, type, bill, billNorm: normInv(bill), gstin, party: party.trim(),
+      date: dmy(d), period: pOf(d), entryDate: dmy(toIst(lines[0].DATE)),
+      taxable: r2(taxable), gst: r2(tax), value: r2(value), partyCode, expenseCode, taxCode,
+    });
+  });
+  docsCache.set(file, { mtime, docs });
+  return docs;
+}
+
+// purchase documents of the FY of the given period and the previous FY (quarterly filers report late)
+async function purchaseDocsAround(per) {
+  const prevYear = `${per.slice(0, 2)}${Number(per.slice(2)) - 1}`;
+  const files = new Set();
+  for (const p of [per, prevYear]) { const f = await findCashJson(p); if (f) files.add(f); }
+  const out = [];
+  for (const f of files) out.push(...(await loadPurchaseDocs(f)));
+  return out;
 }
 
 async function matchGstr2b(data, periods) {
@@ -473,5 +566,5 @@ module.exports = {
   deepFind, num, str, r2, bad,
   parseGstr1B2B, parseGstr1B2CS, parseGstr1CDNR, parseGstr1DocIss, parseGstr1Hsn, parseGstr2bB2B, parseGstr2bCDNR,
   hasLocalGstr1, hasLocalGstr2b, loadGstr1Local, loadGstr2bLocal, gstr1Dir, gstr2bDir,
-  readCsv, convertDate, matchGstr1, matchGstr2b, findCashJson, toIst,
+  readCsv, convertDate, matchGstr1, matchGstr2b, findCashJson, toIst, readJsonStable, purchaseDocsAround, normInv,
 };

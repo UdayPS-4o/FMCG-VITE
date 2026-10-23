@@ -1,4 +1,11 @@
+import { toast } from 'react-toastify';
 import constants from '../../../constants';
+
+// toasts (same as invoice saving / approving); errors stay a bit longer so portal messages can be read
+export const notifySuccess = (m?: string | null) => { if (m) toast.success(m); };
+export const notifyError = (m?: string | null) => { if (m) toast.error(m, { autoClose: 7000 }); };
+export const notifyInfo = (m?: string | null) => { if (m) toast.info(m); };
+export const notifyWarn = (m?: string | null) => { if (m) toast.warning(m, { autoClose: 6000 }); };
 
 export class GstApiError extends Error {
   needAuth: boolean;

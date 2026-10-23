@@ -2,7 +2,7 @@
 // Uses GSTN field names throughout (iamt / camt / samt / csamt) so it maps 1:1 onto the RETSAVE payload,
 // AUTOLIAB (auto-populated liability / ITC) and RETSUM (saved return summary).
 const fs = require('fs').promises;
-const { num, r2, readCsv, findCashJson, toIst } = require('./gstReturnData');
+const { num, r2, readCsv, findCashJson, toIst, readJsonStable } = require('./gstReturnData');
 
 const TAX = ['iamt', 'camt', 'samt', 'csamt'];
 const FULL = ['txval', ...TAX];
@@ -205,7 +205,13 @@ async function cashSummaries(file) {
   const stat = await fs.stat(file);
   const hit = cashMonthly.get(file);
   if (hit && hit.mtime === stat.mtimeMs) return hit.periods;
-  const rows = JSON.parse(await fs.readFile(file, 'utf8'));
+  let rows, mtime;
+  try {
+    ({ data: rows, mtime } = await readJsonStable(file));
+  } catch (e) {
+    if (hit) return hit.periods; // file mid-update: keep using the last good copy
+    throw e;
+  }
   const periods = new Map();
   const get = (p) => {
     if (!periods.has(p)) periods.set(p, { goods: { s: 0, sr: 0 }, vg: { s: 0, sr: 0, p: 0 }, vi: { s: 0, sr: 0, p: 0 }, vc: { s: 0, sr: 0, p: 0 } });
@@ -224,7 +230,7 @@ async function cashSummaries(file) {
     if (vt === 'SB') { p[k].s += cr; p[k].sr += dr; }
     else if (vt === 'PB' || vt === 'PD' || vt === 'JB') { if (k !== 'goods') p[k].p += dr - cr; }
   }
-  cashMonthly.set(file, { mtime: stat.mtimeMs, periods });
+  cashMonthly.set(file, { mtime, periods });
   return periods;
 }
 

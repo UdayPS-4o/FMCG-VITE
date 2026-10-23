@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Input from '../../../components/form/input/Input';
 import constants from '../../../constants';
 import useActivityTracker from '../../../hooks/useActivityTracker';
 import usePartyNames from './usePartyNames';
+import { gstApi, notifyError, notifySuccess, notifyWarn } from './gstApi';
+import { CreatePartyDialog, ExpenseJournalDialog, JournalDraftsPanel, MissingInvoice, useBooksMasters, useMissingSelection } from './BooksActions';
 
 // Define interfaces for GSTR2A data structures
 interface GSTR2AB2BRecord {
@@ -91,10 +94,27 @@ interface ComparisonResult {
   gstr2aGSTAmount?: number;
   purchaseGSTAmount?: number;
   source: 'GSTR2A' | 'Purchase' | 'Both';
-  status: 'Matched' | 'Mismatched' | 'Missing in GSTR2A' | 'Missing in Purchase';
+  status: 'Matched' | 'Mismatched' | 'Missing in GSTR2A' | 'Missing in Purchase' | 'Booked in other month';
+  bookedIn?: string; // e.g. "Aug-2026" when the invoice is entered in another month's books
   mismatchDetails?: string[];
   gstr2aRecord?: GSTR2AB2BRecord | GSTR2ACDNRecord;
   purchaseRecord?: PurchaseRecord;
+}
+
+// purchase bill / expense journal from the books (server: /api/reports/gst/purchase-docs)
+interface PurchaseDoc {
+  vr: string;
+  type: 'PB' | 'PD' | 'JB';
+  bill: string;
+  billNorm: string;
+  gstin: string;
+  party: string;
+  date: string; // invoice date dd-mm-yyyy
+  period: string; // MMYYYY of the invoice date
+  entryDate: string;
+  taxable: number;
+  gst: number;
+  value: number;
 }
 
 // Build an exact, readable message from a GST API / backend error response
@@ -144,8 +164,10 @@ const Gstr2aSection: React.FC = () => {
   // State for month input and API flow
   const [month, setMonth] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const setError = (m: string | null) => notifyError(m);
   const [currentStep, setCurrentStep] = useState<'input' | 'otp' | 'download' | 'display' | 'comparison'>('input');
+  const { masters: booksMasters, error: booksError, reload: reloadBooksMasters } = useBooksMasters(month, currentStep === 'comparison');
+  useEffect(() => { if (booksError) notifyError(`Accounts not loaded: ${booksError}`); }, [booksError]);
 
   // OTP and authentication states
   const [otp, setOtp] = useState('');
@@ -164,6 +186,14 @@ const Gstr2aSection: React.FC = () => {
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
   const [purchaseData, setPurchaseData] = useState<PurchaseRecord[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
+
+  // adding invoices that are missing in the books
+  const navigate = useNavigate();
+  const sel = useMissingSelection();
+  const [expenseFor, setExpenseFor] = useState<MissingInvoice[] | null>(null);
+  const [partyFor, setPartyFor] = useState<string | null>(null);
+  const [draftsKey, setDraftsKey] = useState(0);
+  const setBooksMsg = (m: string) => notifySuccess(m);
 
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
 
@@ -255,7 +285,7 @@ const Gstr2aSection: React.FC = () => {
       if (data.status_cd === '1') {
         setOtpRequested(true);
         setCurrentStep('otp');
-        alert('OTP has been sent to your registered mobile number.');
+        notifySuccess('OTP has been sent to your registered mobile number.');
       } else {
         setError(formatGstError(data, `Failed to request OTP (HTTP ${response.status}).`));
       }
@@ -303,6 +333,7 @@ const Gstr2aSection: React.FC = () => {
 
       if (data.status_cd === '1' && data.auth_token) {
         setAuthToken(data.auth_token);
+        notifySuccess('Authenticated with the GST portal.');
         setCurrentStep('download');
       } else {
         setError(formatGstError(data, `Failed to authenticate (HTTP ${response.status}).`));
@@ -597,7 +628,10 @@ const Gstr2aSection: React.FC = () => {
       console.log('GSTR2A CDN data length:', gstr2aCDNData?.length);
       console.log('Month:', month);
 
-      const results = performComparison(gstr2aB2BData, gstr2aCDNData, purchaseData, month);
+      const baseResults = performComparison(gstr2aB2BData, gstr2aCDNData, purchaseData, month);
+      // second pass: expense journals (JB) and invoices booked in other months
+      const docs = await gstApi<{ docs: PurchaseDoc[] }>('/purchase-docs', { fp: month }).then((x) => x.docs).catch(() => [] as PurchaseDoc[]);
+      const results = refineWithBooks(baseResults, docs, month);
       console.log('Comparison results:', results);
       setComparisonResults(results);
 
@@ -609,6 +643,7 @@ const Gstr2aSection: React.FC = () => {
       });
 
       setCurrentStep('comparison');
+      notifySuccess(`Matching completed — ${results.length} invoices compared.`);
     } catch (err) {
       setError('Error loading purchase data or performing comparison.');
       console.error('Match records error:', err);
@@ -646,6 +681,66 @@ const Gstr2aSection: React.FC = () => {
     console.log('Expected taxable value: 52573.59');
     console.log('Expected GST amount: 9463.23');
     console.log('Calculation working:', taxableValue === 52573.59 && gstAmount === 9463.23);
+  };
+
+  // Looks up invoices still "Missing in Purchase" in all purchase bills (PB/PD) and GST expense journals (JB) of
+  // this and the previous FY. Same month -> matched; other month -> "Booked in other month" (quarterly filers,
+  // late uploads). JB entries of this month that are not in GSTR-2A are listed as "Missing in GSTR2A".
+  const refineWithBooks = (results: ComparisonResult[], docs: PurchaseDoc[], month: string): ComparisonResult[] => {
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const label = (p: string) => `${MON[Number(p.slice(0, 2)) - 1] || p.slice(0, 2)}-${p.slice(2)}`;
+    const norm = (x: string) => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^0+/, '');
+    const kind = (d: PurchaseDoc) => (d.type === 'JB' ? 'journal entry' : 'purchase bill');
+    const used = new Set<string>();
+    const tol = 2;
+    for (const r of results) {
+      if (r.status !== 'Missing in Purchase') continue;
+      const inv = norm(r.invoiceNumber);
+      let cands = docs.filter((d) => d.gstin === r.partyGST && d.billNorm && d.billNorm === inv && !used.has(d.vr + d.period));
+      let byAmount = false;
+      if (!cands.length) {
+        // journal entries without an invoice number in the narration: same supplier, same invoice date, same amounts
+        cands = docs.filter((d) => d.gstin === r.partyGST && !d.billNorm && d.date === r.invoiceDate.split('/').join('-')
+          && Math.abs(d.taxable - (r.gstr2aTaxableValue || 0)) <= tol && Math.abs(d.gst - (r.gstr2aGSTAmount || 0)) <= tol && !used.has(d.vr + d.period));
+        byAmount = cands.length > 0;
+      }
+      if (!cands.length) continue;
+      const doc = cands.find((d) => d.period === month) || cands[0];
+      used.add(doc.vr + doc.period);
+      const details: string[] = [];
+      if (Math.abs(doc.taxable - (r.gstr2aTaxableValue || 0)) > tol) details.push(`Taxable Value mismatch: GSTR2A(${(r.gstr2aTaxableValue || 0).toFixed(2)}) vs Books(${doc.taxable.toFixed(2)})`);
+      if (Math.abs(doc.gst - (r.gstr2aGSTAmount || 0)) > tol) details.push(`GST Amount mismatch: GSTR2A(${(r.gstr2aGSTAmount || 0).toFixed(2)}) vs Books(${doc.gst.toFixed(2)})`);
+      r.purchaseTaxableValue = doc.taxable;
+      r.purchaseGSTAmount = doc.gst;
+      r.source = 'Both';
+      const where = `${kind(doc)} ${doc.vr} dated ${doc.entryDate}${byAmount ? ' (matched by supplier, date and amount)' : ''}`;
+      if (doc.period === month) {
+        r.status = details.length ? 'Mismatched' : 'Matched';
+        r.mismatchDetails = [`Found in ${where}`, ...details];
+      } else {
+        r.status = 'Booked in other month';
+        r.bookedIn = label(doc.period);
+        r.mismatchDetails = [`Found on month ${label(doc.period)} — ${where}`, ...details];
+      }
+    }
+    // GST expense journals of this month that GSTR-2A does not show
+    const inResults = new Set(results.map((r) => `${norm(r.invoiceNumber)}_${r.partyGST}`));
+    for (const d of docs) {
+      if (d.type !== 'JB' || d.period !== month || d.gst <= 0 || used.has(d.vr + d.period)) continue;
+      if (d.billNorm && inResults.has(`${d.billNorm}_${d.gstin}`)) continue;
+      results.push({
+        invoiceNumber: d.bill || d.vr,
+        invoiceDate: d.date,
+        partyGST: d.gstin,
+        invoiceValue: d.value,
+        purchaseTaxableValue: d.taxable,
+        purchaseGSTAmount: d.gst,
+        source: 'Purchase',
+        status: 'Missing in GSTR2A',
+        mismatchDetails: [`Journal entry ${d.vr} dated ${d.entryDate} — supplier has not reported it in GSTR-2A`],
+      });
+    }
+    return results.sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber));
   };
 
   const performComparison = (
@@ -812,10 +907,42 @@ const Gstr2aSection: React.FC = () => {
     return results.sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber));
   };
 
+  const rowKey = (r: ComparisonResult) => `${r.invoiceNumber}_${r.partyGST}`;
+  const toMissing = (r: ComparisonResult): MissingInvoice => ({
+    invoiceNumber: r.invoiceNumber,
+    invoiceDate: r.invoiceDate.split('/').join('-'),
+    partyGST: r.partyGST,
+    invoiceValue: r.invoiceValue,
+    items: (r.gstr2aRecord?.itms || []).map((it) => ({
+      rt: it.itm_det?.rt || 0, txval: it.itm_det?.txval || 0, iamt: it.itm_det?.iamt || 0,
+      camt: it.itm_det?.camt || 0, samt: it.itm_det?.samt || 0, csamt: it.itm_det?.csamt || 0,
+    })),
+  });
+  const isMissing = (r: ComparisonResult) => r.status === 'Missing in Purchase' && !!r.gstr2aRecord;
+  const knownParty = (gstin: string) => !!booksMasters?.parties[gstin];
+  const openPurchaseBill = (r: ComparisonResult) => {
+    const p = booksMasters?.parties[r.partyGST];
+    navigate('/purchases/new', {
+      state: {
+        purchase: {
+          supplierCode: p?.code || '',
+          supplierName: p?.name || booksMasters?.tradeNames[r.partyGST] || '',
+          gstin: r.partyGST,
+          state: r.partyGST.slice(0, 2),
+          invoice: { number: r.invoiceNumber, date: r.invoiceDate.split('/').join('-') },
+        },
+      },
+    });
+  };
+  const addSelectedAsExpenses = () => {
+    const rows = comparisonResults.filter((r) => isMissing(r) && sel.has(rowKey(r)));
+    if (rows.length) setExpenseFor(rows.map(toMissing));
+  };
+
   // Handle save comparison to CSV
   const handleSaveComparison = () => {
     if (comparisonResults.length === 0) {
-      alert('No comparison data to save');
+      notifyWarn('No comparison data to save');
       return;
     }
 
@@ -872,11 +999,6 @@ const Gstr2aSection: React.FC = () => {
         </button>
       )}
 
-      {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-        </div>
-      )}
 
       {/* Step 1: Month Input */}
       {currentStep === 'input' && (
@@ -1187,7 +1309,7 @@ const Gstr2aSection: React.FC = () => {
           <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Comparison Results</h2>
 
           {/* Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div 
               onClick={() => setStatusFilter(statusFilter === 'Matched' ? 'All' : 'Matched')}
               className={`bg-green-100 dark:bg-green-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Matched' ? 'ring-2 ring-green-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
@@ -1224,10 +1346,27 @@ const Gstr2aSection: React.FC = () => {
                 {comparisonResults.filter(r => r.status === 'Missing in Purchase').length}
               </div>
             </div>
+            <div
+              onClick={() => setStatusFilter(statusFilter === 'Booked in other month' ? 'All' : 'Booked in other month')}
+              className={`bg-purple-100 dark:bg-purple-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Booked in other month' ? 'ring-2 ring-purple-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+            >
+              <div className="text-purple-800 dark:text-purple-200 text-sm font-medium">Booked in other month</div>
+              <div className="text-purple-900 dark:text-purple-100 text-2xl font-bold">
+                {comparisonResults.filter(r => r.status === 'Booked in other month').length}
+              </div>
+            </div>
           </div>
 
           {/* Save Button */}
-          <div className="mb-4 flex justify-end space-x-2">
+          <div className="mb-4 flex flex-wrap justify-end gap-2">
+            <button
+              onClick={addSelectedAsExpenses}
+              disabled={!booksMasters || sel.selected.size === 0}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium disabled:opacity-50"
+              title="Tick Missing in Purchase rows first"
+            >
+              Add selected as expenses ({sel.selected.size})
+            </button>
             {hiddenColumns.length > 0 && (
               <button
                 onClick={handleResetColumns}
@@ -1252,6 +1391,14 @@ const Gstr2aSection: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                  <th className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      title="Select all missing invoices shown"
+                      checked={(() => { const m = comparisonResults.filter(r => (statusFilter === 'All' || r.status === statusFilter) && isMissing(r)); return m.length > 0 && m.every(r => sel.has(rowKey(r))); })()}
+                      onChange={(e) => sel.set(e.target.checked ? comparisonResults.filter(r => (statusFilter === 'All' || r.status === statusFilter) && isMissing(r)).map(rowKey) : [])}
+                    />
+                  </th>
                   {['Invoice Number', 'Invoice Date', 'Party GST', 'Invoice Value', 'GSTR2A Taxable', 'Purchase Taxable', 'GSTR2A GST', 'Purchase GST'].map(header => (
                     !hiddenColumns.includes(header) && (
                       <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -1291,6 +1438,7 @@ const Gstr2aSection: React.FC = () => {
                           <option value="Mismatched">Mismatched</option>
                           <option value="Missing in GSTR2A">Missing in GSTR2A</option>
                           <option value="Missing in Purchase">Missing in Purchase</option>
+                          <option value="Booked in other month">Booked in other month</option>
                         </select>
                       </div>
                     </th>
@@ -1309,6 +1457,7 @@ const Gstr2aSection: React.FC = () => {
                       </div>
                     </th>
                   )}
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Add to books</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
@@ -1316,6 +1465,9 @@ const Gstr2aSection: React.FC = () => {
                   .filter(result => statusFilter === 'All' || result.status === statusFilter)
                   .map((result, index) => (
                     <tr key={index}>
+                      <td className="px-3 py-4">
+                        {isMissing(result) && <input type="checkbox" checked={sel.has(rowKey(result))} onChange={() => sel.toggle(rowKey(result))} />}
+                      </td>
                       {!hiddenColumns.includes('Invoice Number') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceNumber}</td>}
                       {!hiddenColumns.includes('Invoice Date') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{result.invoiceDate}</td>}
                       {!hiddenColumns.includes('Party GST') && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100"><span title={partyName(result.partyGST) || undefined} className={partyName(result.partyGST) ? 'cursor-help border-b border-dotted border-gray-400' : undefined}>{result.partyGST}</span></td>}
@@ -1328,9 +1480,10 @@ const Gstr2aSection: React.FC = () => {
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${result.status === 'Matched' ? 'bg-green-100 text-green-800' :
                           result.status === 'Mismatched' ? 'bg-yellow-100 text-yellow-800' :
                             result.status === 'Missing in GSTR2A' ? 'bg-red-100 text-red-800' :
+                              result.status === 'Booked in other month' ? 'bg-purple-100 text-purple-800' :
                               'bg-blue-100 text-blue-800'
                           }`}>
-                          {result.status}
+                          {result.status}{result.bookedIn ? ` (${result.bookedIn})` : ''}
                         </span>
                       </td>}
                       {!hiddenColumns.includes('Details') && <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
@@ -1342,6 +1495,17 @@ const Gstr2aSection: React.FC = () => {
                           </ul>
                         )}
                       </td>}
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        {isMissing(result) && (
+                          <div className="flex flex-col gap-1">
+                            {booksMasters && !knownParty(result.partyGST) && (
+                              <button onClick={() => setPartyFor(result.partyGST)} className="rounded bg-amber-500 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-600">Create party</button>
+                            )}
+                            <button onClick={() => setExpenseFor([toMissing(result)])} disabled={!booksMasters} className="rounded bg-indigo-600 px-2 py-1 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">Add as expense</button>
+                            <button onClick={() => openPurchaseBill(result)} disabled={!booksMasters} className="rounded bg-teal-600 px-2 py-1 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50">Add purchase bill</button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 {/* Total Row for Comparison Results */}
@@ -1355,6 +1519,7 @@ const Gstr2aSection: React.FC = () => {
                   };
                   return (
                     <tr className="bg-green-50 dark:bg-green-900 font-semibold border-t-2 border-green-200 dark:border-green-700">
+                      <td />
                       {(() => {
                         const colSpan = ['Invoice Number', 'Invoice Date', 'Party GST'].filter(h => !hiddenColumns.includes(h)).length;
                         return colSpan > 0 ? (
@@ -1384,12 +1549,37 @@ const Gstr2aSection: React.FC = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-green-900 dark:text-green-100" colSpan={colSpan}></td>
                         ) : null;
                       })()}
+                      <td />
                     </tr>
                   );
                 })()}
               </tbody>
             </table>
           </div>
+
+          <JournalDraftsPanel
+            refreshKey={draftsKey}
+            masters={booksMasters}
+            onPosted={() => { setBooksMsg('Posted to books — re-matching…'); handleMatchRecords(); }}
+          />
+          {expenseFor && booksMasters && (
+            <ExpenseJournalDialog
+              invoices={expenseFor}
+              month={month}
+              masters={booksMasters}
+              onClose={() => setExpenseFor(null)}
+              onCreateParty={(g) => setPartyFor(g)}
+              onSaved={(n) => { setExpenseFor(null); sel.clear(); setDraftsKey((k) => k + 1); setBooksMsg(`${n} expense draft(s) saved — review and post them below.`); }}
+            />
+          )}
+          {partyFor && booksMasters && (
+            <CreatePartyDialog
+              gstin={partyFor}
+              masters={booksMasters}
+              onClose={() => setPartyFor(null)}
+              onCreated={async (p) => { setPartyFor(null); setBooksMsg(`Party ${p.code} ${p.name} created.`); await reloadBooksMasters(); }}
+            />
+          )}
 
           {/* Notes */}
           <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded">
