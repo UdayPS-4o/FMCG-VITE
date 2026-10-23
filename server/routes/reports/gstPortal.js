@@ -10,6 +10,7 @@ const authMiddleware = require('../middleware');
 const gsp = require('../../utils/gstPortalClient');
 const data = require('../../utils/gstReturnData');
 const build = require('../../utils/gstFilingBuilders');
+const books = require('../../utils/gstBooks');
 
 const router = express.Router();
 
@@ -99,7 +100,14 @@ router.get('/gst/party-names', handle(async (req, res) => {
       const p = String(place || '').trim();
       names[g] = p ? `${n}, ${p}` : n;
     };
-    const [cmpl, pur] = await Promise.all(files.map((f) => fs.readFile(f, 'utf8').then(JSON.parse).catch(() => [])));
+    let cmpl, pur;
+    try {
+      [cmpl, pur] = await Promise.all(files.map((f, i) => (stats[i] ? data.readJsonStable(f, { retries: 3, waitMs: 1000 }).then((r) => r.data) : Promise.resolve([]))));
+
+    } catch (e) {
+      if (partyCache.key) return res.json(partyCache.names); // mid-update: serve the previous list
+      throw e;
+    }
     for (const r of cmpl) {
       if (r._deleted) continue;
       add(r.GSTNO, r.C_NAME, r.C_PLACE);
@@ -110,6 +118,59 @@ router.get('/gst/party-names', handle(async (req, res) => {
     partyCache = { key, names };
   }
   res.json(partyCache.names);
+}));
+
+// purchase bills (PB/PD) and GST expense journals (JB) of this FY and the previous one, for GSTR-2A matching
+router.post('/gst/purchase-docs', handle(async (req, res) => {
+  const fp = fpOf(req.body);
+  const docs = await data.purchaseDocsAround(fp);
+  // journals posted from this page that CASH.json does not show yet
+  const seen = new Set(docs.map((d) => `${d.billNorm}_${d.gstin}`));
+  for (const p of await books.postedAsDocs()) if (!seen.has(`${p.billNorm}_${p.gstin}`)) docs.push(p);
+  res.json({ docs });
+}));
+
+// ---------------------------------------------------------------- adding missing invoices to the books
+const ownState = async () => (await gsp.getContext({ needToken: false })).gstin.slice(0, 2);
+
+// expense / tax accounts, supplier GSTIN -> party, last accounts used per supplier, GSTR-2B trade names
+router.get('/gst/books/masters', handle(async (req, res) => {
+  const fp = gsp.validPeriod(req.query.fp) ? String(req.query.fp) : null;
+  const [m, names, sugg, state] = await Promise.all([books.loadMasters(), books.tradeNames(), fp ? books.suggestions(fp) : {}, ownState()]);
+  const accounts = Object.values(m.accounts).sort((x, y) => x.code.localeCompare(y.code));
+  res.json({ ownState: state, accounts, expense: m.expense, tax: m.tax, parties: m.parties, tradeNames: names, suggestions: sugg });
+}));
+
+router.get('/gst/books/journals', handle(async (req, res) => {
+  res.json({ journals: (await books.readStore()).journals.map((j) => ({ ...j, lines: books.linesOf(j) })) });
+}));
+
+router.post('/gst/books/journals', handle(async (req, res) => {
+  const created = await books.createJournals(req.body.entries, req.user && (req.user.name || req.user.username), await ownState());
+  res.json({ ok: true, created });
+}));
+
+// change the debit / credit lines, entry date or narration of a draft
+router.patch('/gst/books/journals/:id', handle(async (req, res) => {
+  const b = req.body || {};
+  const journal = await books.updateJournal(req.params.id, { lines: b.lines, entryDate: b.entryDate, narration: b.narration }, await ownState());
+  res.json({ ok: true, journal });
+}));
+
+router.delete('/gst/books/journals/:id', handle(async (req, res) => {
+  await books.deleteJournal(req.params.id);
+  res.json({ ok: true });
+}));
+
+// writes the selected drafts to CASH.DBF as JB vouchers
+router.post('/gst/books/journals/post', handle(async (req, res) => {
+  const posted = await books.postJournals(req.body.ids, await ownState());
+  res.json({ ok: true, posted });
+}));
+
+// new creditor (Sundry Creditors, CT…) in CMPL.DBF
+router.post('/gst/books/parties', handle(async (req, res) => {
+  res.json({ ok: true, party: await books.createParty(req.body || {}) });
 }));
 
 // which of the given periods already have downloaded JSON on disk

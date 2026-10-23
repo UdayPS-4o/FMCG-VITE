@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { errMsg, fmtNum, gstApi, isValidPeriod, previousPeriod } from './gstApi';
+import { errMsg, fmtNum, gstApi, isValidPeriod, notifyError, notifySuccess, notifyWarn, previousPeriod } from './gstApi';
 import {
   AVL_ROWS, ECO_ROWS, FULL_KEYS, Full, Gstr3bForm, HEAD_LABEL, INELG_ROWS, INTER_ROWS, InterKey, LOCKED_SUP, LedgerBal, LiabLedger,
   PdCash, PdItc, REV_ROWS, STATES, SUP_ROWS, TAX_KEYS, Tax, advisoryChecks, applyLocked, cashNeed, computeOffset, emptyForm,
@@ -107,7 +107,7 @@ const Gstr3bUpload: React.FC = () => {
   const [fresh, setFresh] = useState(false);
   const [busy, setBusy] = useState('');
   const [status, setStatus] = useState('Ready… Start with “1. Load portal data”.');
-  const [error, setError] = useState('');
+  const setError = (m: string) => notifyError(m);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [response, setResponse] = useState<{ title: string; body: unknown } | null>(null);
   const [tab, setTab] = useState<TabKey>('liab');
@@ -181,6 +181,7 @@ const Gstr3bUpload: React.FC = () => {
     setStatus(`${label}…`);
     try {
       await fn();
+      notifySuccess(`${label} — done`);
     } catch (e) {
       setError(errMsg(e));
       setStatus(`${label} failed.`);
@@ -239,6 +240,7 @@ const Gstr3bUpload: React.FC = () => {
       if (t.status === 'fulfilled') setTrack(t.value.list || []);
       else warn.push(`Filing status: ${errMsg(t.reason)}`);
       setWarnings(warn);
+      if (warn.length) notifyWarn(`${warn.length} item(s) could not be loaded from the portal — see the warnings on the page.`);
 
       if (!filled && newAuto) {
         const f = clone(newAuto);
@@ -472,7 +474,6 @@ const Gstr3bUpload: React.FC = () => {
         </div>
       </div>
 
-      {error && <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">{error}</div>}
       {warnings.length > 0 && (
         <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
           {warnings.map((w, i) => <div key={i}>{w}</div>)}

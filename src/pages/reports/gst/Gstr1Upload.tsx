@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { downloadText, errMsg, fmtNum, gstApi, isValidPeriod, previousPeriod } from './gstApi';
+import { downloadText, errMsg, fmtNum, gstApi, isValidPeriod, notifyError, notifySuccess, previousPeriod } from './gstApi';
 
 type Modules = { b2b: boolean; b2cs: boolean; cdnr: boolean; hsn: boolean; doc: boolean };
 interface SecSum {
@@ -27,7 +27,7 @@ const Gstr1Upload: React.FC = () => {
   const [modules, setModules] = useState<Modules>({ b2b: true, b2cs: true, cdnr: true, hsn: true, doc: true });
   const [busy, setBusy] = useState('');
   const [status, setStatus] = useState('Ready…');
-  const [error, setError] = useState('');
+  const setError = (m: string) => notifyError(m);
   const [response, setResponse] = useState<{ title: string; body: unknown } | null>(null);
   const [preview, setPreview] = useState<{ payload: any; counts: Record<string, number>; gross: number; missing: string[] } | null>(null);
   const [refId, setRefId] = useState('');
@@ -49,6 +49,7 @@ const Gstr1Upload: React.FC = () => {
     setStatus(`${label}…`);
     try {
       await fn();
+      notifySuccess(`${label} — done`);
     } catch (e) {
       setError(errMsg(e));
       setStatus(`${label} failed.`);
@@ -202,7 +203,6 @@ const Gstr1Upload: React.FC = () => {
         </div>
       </div>
 
-      {error && <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">{error}</div>}
 
       {preview && (
         <div className="rounded-lg bg-white p-4 shadow dark:bg-gray-800">
