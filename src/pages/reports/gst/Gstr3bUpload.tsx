@@ -125,6 +125,8 @@ const Gstr3bUpload: React.FC = () => {
 
   const [pditc, setPditc] = useState<PdItc>(emptyPdItc());
   const [pdcash, setPdcash] = useState<PdCash[]>([emptyPdCash(0, 30002, 'Other than reverse charge'), emptyPdCash(0, 30003, 'Reverse charge and supplies u/s 9(5)')]);
+  // use the ITC balance already in the electronic credit ledger in the set-off
+  const [useLedgerBal, setUseLedgerBal] = useState(true);
 
   // closing balances of the reclaim (ECRS) and RCM statements - read from the portal (CLOSINGBAL / RCMCLOSINGBAL)
   const [reclaimBal, setReclaimBal] = useState<Tax>(zTax());
@@ -371,10 +373,15 @@ const Gstr3bUpload: React.FC = () => {
   };
 
   const autoOffset = () => {
-    const r = computeOffset(form, bal, ldgNormal, ldgRc);
+    const r = computeOffset(form, bal, ldgNormal, ldgRc, useLedgerBal);
     setPditc(r.pditc);
     setPdcash(r.pdcash);
-    setStatus('Offset calculated with Rule 88A from ledger balance + this return\'s net ITC. Review before offsetting.');
+    const cashTotal = r2(r.pdcash.reduce((a, c) => a + c.ipd + c.cpd + c.spd + c.cspd, 0));
+    const left = r.leftCredit;
+    setStatus(`Offset calculated with Rule 88A from ${useLedgerBal ? 'ledger balance + ' : ''}this return's net ITC. Review before offsetting.`);
+    notifySuccess(
+      `Set-off: tax in cash ₹${fmtNum(cashTotal)}. ITC carried forward — IGST ₹${fmtNum(left.igst)}, CGST ₹${fmtNum(left.cgst)}, SGST ₹${fmtNum(left.sgst)}.`,
+    );
   };
 
   const cash = useMemo(() => cashNeed(pdcash, bal), [pdcash, bal]);
@@ -775,6 +782,10 @@ const Gstr3bUpload: React.FC = () => {
 
             <div className="flex flex-wrap gap-2">
               <Btn onClick={autoOffset} disabled={!!busy} tone="bg-blue-600 hover:bg-blue-700">Auto-calculate (Rule 88A)</Btn>
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input type="checkbox" checked={useLedgerBal} onChange={(e) => setUseLedgerBal(e.target.checked)} />
+                Also use ITC already in the credit ledger{bal ? ` (IGST ₹${fmtNum(bal.itc.igst)} · CGST ₹${fmtNum(bal.itc.cgst)} · SGST ₹${fmtNum(bal.itc.sgst)})` : ''}
+              </label>
             </div>
 
             <div>

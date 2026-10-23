@@ -356,9 +356,11 @@ async function postJournals(ids, ownState) {
       for (const r of existing) {
         const vr = str(r.VR);
         if (vr.startsWith('JB-')) { const n = parseInt(vr.slice(3), 10); if (n > maxJb) maxJb = n; }
-        // guard against posting an invoice twice (narration INV#<no> + creditor GSTIN)
+        // guard against posting an invoice twice (narration INV#<no> + creditor GSTIN; when AC_GST is empty,
+        // the GSTIN of the credited account from the party master)
         const m = /INV#\s*([A-Z0-9/-]+)/i.exec(str(r.REMARK));
-        if (m && str(r.AC_GST).trim()) booked.add(`${normInv(m[1])}_${str(r.AC_GST).trim().toUpperCase()}`);
+        const g = str(r.AC_GST).trim().toUpperCase() || (num(r.CR) > 0 ? ((masters.accounts[str(r.C_CODE).trim()] || {}).gstin || '') : '');
+        if (m && g) booked.add(`${normInv(m[1])}_${g}`);
       }
       const toInsert = [];
       const posted = [];

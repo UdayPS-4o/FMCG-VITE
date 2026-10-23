@@ -459,10 +459,28 @@ const docsCache = new Map(); // file -> { mtime, docs }
 const normInv = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^0+/, '');
 const INV_IN_REMARK = /(?:INV(?:OICE)?|BILL)\s*(?:NO\.?)?\s*[#:.]\s*([A-Z0-9][A-Z0-9\/-]*)/i;
 
+// party master next to the CASH export: account code -> { gstin, name } (journals often leave AC_GST empty)
+async function partyGstins(cashFile) {
+  const cmplFile = path.join(path.dirname(cashFile), 'CMPL.json');
+  let mtime = 0;
+  try { mtime = (await fs.stat(cmplFile)).mtimeMs; } catch { return { mtime: 0, map: {} }; }
+  const map = {};
+  try {
+    const { data } = await readJsonStable(cmplFile, { retries: 3, waitMs: 1000 });
+    for (const c of data) {
+      if (c._deleted) continue;
+      const g = [c.GSTNO, c.C_GST, c.C_CST].map((x) => str(x).trim().toUpperCase()).find((x) => /^\d{2}[A-Z0-9]{13}$/.test(x));
+      if (g) map[str(c.C_CODE).trim()] = { gstin: g, name: str(c.C_NAME).trim() };
+    }
+  } catch { /* CMPL mid-update: use AC_GST only */ }
+  return { mtime, map };
+}
+
 async function loadPurchaseDocs(file) {
   const stat = await fs.stat(file);
   const hit = docsCache.get(file);
-  if (hit && hit.mtime === stat.mtimeMs) return hit.docs;
+  const parties = await partyGstins(file);
+  if (hit && hit.mtime === stat.mtimeMs && hit.cmplMtime === parties.mtime) return hit.docs;
   let rows, mtime;
   try {
     ({ data: rows, mtime } = await readJsonStable(file));
@@ -490,9 +508,17 @@ async function loadPurchaseDocs(file) {
       const g = str(r.PUR_GST || r.AC_GST).trim().toUpperCase();
       if (!gstin && /^\d{2}[A-Z0-9]{13}$/.test(g)) gstin = g;
       if (cr > 0 && str(r.AC_GST).trim()) { value = cr; party = str(r.AC_NAME || r.PUR_NAME); partyCode = str(r.C_CODE).trim(); }
+      // credited account without AC_GST (common in journals): remember it, its GSTIN comes from the party master
+      else if (cr > 0 && !partyCode && !['VI', 'VG', 'VC'].includes(code) && str(r.C_CODE).trim() !== 'EE001' && code !== 'GG' && code !== 'EE' && parties.map[str(r.C_CODE).trim()]) {
+        value = cr; party = str(r.AC_NAME); partyCode = str(r.C_CODE).trim();
+      }
       if (!bill && str(r.BILL).trim()) bill = str(r.BILL).trim();
       if (!billDate && r.DT_BILL) billDate = toIst(r.DT_BILL);
       if (!bill) { const m = INV_IN_REMARK.exec(str(r.REMARK)); if (m) bill = m[1]; }
+    }
+    if (!gstin && partyCode && parties.map[partyCode]) {
+      gstin = parties.map[partyCode].gstin;
+      if (!party) party = parties.map[partyCode].name;
     }
     if (Math.abs(tax) < 0.01 || !gstin) return; // only vouchers with GST input from a registered supplier
     const d = billDate || toIst(lines[0].DATE);
@@ -502,7 +528,7 @@ async function loadPurchaseDocs(file) {
       taxable: r2(taxable), gst: r2(tax), value: r2(value), partyCode, expenseCode, taxCode,
     });
   });
-  docsCache.set(file, { mtime, docs });
+  docsCache.set(file, { mtime, cmplMtime: parties.mtime, docs });
   return docs;
 }
 

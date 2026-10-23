@@ -162,25 +162,38 @@ export function liabilities(f: Gstr3bForm) {
 
 // Rule 88A set-off: IGST credit first against IGST, then CGST / SGST; CGST & SGST credit never cross-utilised.
 // Credit available = ITC balance in the credit ledger + net ITC of this return (4C). Whatever is left is paid in cash.
-export function computeOffset(f: Gstr3bForm, bal: LedgerBal | null, normalLdg: LiabLedger | null, rcLdg: LiabLedger | null) {
+// includeLedger: also use the ITC balance already in the electronic credit ledger (carried forward from earlier periods).
+export function computeOffset(f: Gstr3bForm, bal: LedgerBal | null, normalLdg: LiabLedger | null, rcLdg: LiabLedger | null, includeLedger = true) {
   const L = liabilities(f);
   const net = toHeads(itcNet(f));
+  const ledger = includeLedger && bal ? bal.itc : zHeads();
   const credit: Heads = {
-    igst: Math.max(0, (bal?.itc.igst || 0) + net.igst), cgst: Math.max(0, (bal?.itc.cgst || 0) + net.cgst),
-    sgst: Math.max(0, (bal?.itc.sgst || 0) + net.sgst), cess: Math.max(0, (bal?.itc.cess || 0) + net.cess),
+    igst: Math.max(0, ledger.igst + net.igst), cgst: Math.max(0, ledger.cgst + net.cgst),
+    sgst: Math.max(0, ledger.sgst + net.sgst), cess: Math.max(0, ledger.cess + net.cess),
   };
   let iL = L.normal.igst, cL = L.normal.cgst, sL = L.normal.sgst, csL = L.normal.cess;
   let iI = credit.igst, cI = credit.cgst, sI = credit.sgst, csI = credit.cess;
   const take = (liab: number, cr: number) => (liab > 0 && cr > 0 ? Math.min(liab, cr) : 0);
   const p = emptyPdItc(normalLdg?.liab_ldg_id || 0);
   let x: number;
+  // 1. IGST credit against IGST liability
   x = take(iL, iI); p.i_pdi = x; iL -= x; iI -= x;
-  x = take(cL, iI); p.c_pdi = x; cL -= x; iI -= x;
-  x = take(sL, iI); p.s_pdi = x; sL -= x; iI -= x;
+  // 2. remaining IGST credit against CGST / SGST "in any order and in any proportion" (Rule 88A). Split it so that
+  //    it first covers what the CGST / SGST credit itself cannot pay - this minimises cash. IGST credit must be
+  //    exhausted before CGST / SGST credit is used, so whatever is still left goes to the remaining liability.
+  const sShort = Math.max(0, sL - sI);
+  const cShort = Math.max(0, cL - cI);
+  x = take(sShort, iI); p.s_pdi = x; sL -= x; iI -= x;
+  x = take(cShort, iI); p.c_pdi = x; cL -= x; iI -= x;
+  x = take(cL, iI); p.c_pdi += x; cL -= x; iI -= x;
+  x = take(sL, iI); p.s_pdi += x; sL -= x; iI -= x;
+  // 3. CGST credit -> CGST, SGST credit -> SGST (CGST and SGST credit are never cross-utilised)
   x = take(cL, cI); p.c_pdc = x; cL -= x; cI -= x;
   x = take(sL, sI); p.s_pds = x; sL -= x; sI -= x;
+  // 4. CGST / SGST credit left over may pay any IGST still due
   x = take(iL, cI); p.i_pdc = x; iL -= x; cI -= x;
   x = take(iL, sI); p.i_pds = x; iL -= x; sI -= x;
+  // 5. cess only by cess
   x = take(csL, csI); p.cs_pdcs = x; csL -= x; csI -= x;
   (Object.keys(p) as (keyof PdItc)[]).forEach((k) => { if (k !== 'liab_ldg_id' && k !== 'trans_typ') p[k] = r2(p[k]); });
 

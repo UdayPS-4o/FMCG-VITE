@@ -55,6 +55,7 @@ const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm dark:border-g
 
 // ---------------------------------------------------------------- account picker
 // Searchable list of all ledger accounts (code + name); search by code, name, place or GSTIN, optional group filter.
+// Keyboard: ↓ / Enter / typing opens it; ↑ ↓ PgUp PgDn Home End move; Enter selects; Esc closes.
 export const AccountPicker: React.FC<{
   accounts: LedgerAccount[];
   value: string;
@@ -65,7 +66,10 @@ export const AccountPicker: React.FC<{
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [group, setGroup] = useState(preferGroup || '');
+  const [active, setActive] = useState(0);
   const ref = React.useRef<HTMLDivElement>(null);
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
   const selected = accounts.find((a) => a.code === value);
 
   useEffect(() => {
@@ -87,12 +91,77 @@ export const AccountPicker: React.FC<{
       .slice(0, 80);
   }, [accounts, q, group]);
 
+  // highlight the current account when opening, the first match while searching
+  useEffect(() => {
+    if (!open) return;
+    const i = matches.findIndex((a) => a.code === value);
+    setActive(q || i < 0 ? 0 : i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, q, group]);
+
+  // keep the highlighted row visible
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${active}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [active, open]);
+
+  const close = (refocus = true) => {
+    setOpen(false);
+    if (refocus) setTimeout(() => buttonRef.current?.focus(), 0);
+  };
+  const pick = (code: string) => {
+    onChange(code);
+    close();
+  };
+  const openWith = (text: string) => {
+    setQ(text);
+    setOpen(true);
+  };
+
+  const onListKey = (e: React.KeyboardEvent) => {
+    const last = matches.length - 1;
+    const move = (to: number) => { e.preventDefault(); setActive(Math.max(0, Math.min(last, to))); };
+    switch (e.key) {
+      case 'ArrowDown': return move(active + 1);
+      case 'ArrowUp': return move(active - 1);
+      case 'PageDown': return move(active + 10);
+      case 'PageUp': return move(active - 10);
+      case 'Home': if (e.ctrlKey) return move(0); return undefined;
+      case 'End': if (e.ctrlKey) return move(last); return undefined;
+      case 'Enter':
+        e.preventDefault();
+        if (matches[active]) pick(matches[active].code);
+        return undefined;
+      case 'Escape':
+        e.preventDefault();
+        e.stopPropagation();
+        return close();
+      case 'Tab':
+        return close(false);
+      default:
+        return undefined;
+    }
+  };
+
+  const onButtonKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'F4') {
+      e.preventDefault();
+      openWith('');
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && e.key !== ' ') {
+      // start searching with the typed character
+      e.preventDefault();
+      openWith(e.key);
+    }
+  };
+
   return (
     <div ref={ref} className="relative">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => { setOpen(!open); setQ(''); }}
-        className="w-full truncate rounded border border-gray-300 bg-white px-2 py-1 text-left text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+        onClick={() => (open ? close(false) : openWith(''))}
+        onKeyDown={onButtonKey}
+        className="w-full truncate rounded border border-gray-300 bg-white px-2 py-1 text-left text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
         title={selected ? `${selected.code} · ${selected.name}${selected.place ? ', ' + selected.place : ''}` : undefined}
       >
         {selected ? <><span className="font-mono font-semibold">{selected.code}</span> · {selected.name}{selected.place ? <span className="text-gray-500">, {selected.place}</span> : null}</>
@@ -105,25 +174,38 @@ export const AccountPicker: React.FC<{
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search code, name, place or GSTIN…"
+              onKeyDown={onListKey}
+              placeholder="Search code, name, place or GSTIN…  (↑ ↓ to move, Enter to select)"
               className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
             />
-            <select value={group} onChange={(e) => setGroup(e.target.value)} className="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+            <select
+              value={group}
+              onChange={(e) => setGroup(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } }}
+              className="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            >
               <option value="">All groups</option>
               {groups.map(([g, n]) => <option key={g} value={g}>{g} · {n}</option>)}
             </select>
           </div>
-          <div className="max-h-64 overflow-y-auto">
-            {matches.map((a) => (
+          <div ref={listRef} role="listbox" className="max-h-64 overflow-y-auto">
+            {matches.map((a, i) => (
               <button
                 key={a.code}
+                data-idx={i}
                 type="button"
-                onClick={() => { onChange(a.code); setOpen(false); }}
-                className={`flex w-full items-baseline gap-2 rounded px-2 py-1 text-left text-sm hover:bg-blue-50 dark:hover:bg-gray-700 ${a.code === value ? 'bg-blue-100 dark:bg-blue-900/40' : ''}`}
+                role="option"
+                aria-selected={i === active}
+                tabIndex={-1}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => pick(a.code)}
+                className={`flex w-full items-baseline gap-2 rounded px-2 py-1 text-left text-sm ${
+                  i === active ? 'bg-blue-600 text-white' : a.code === value ? 'bg-blue-100 dark:bg-blue-900/40' : ''
+                }`}
               >
-                <span className="w-16 shrink-0 font-mono font-semibold text-gray-800 dark:text-gray-100">{a.code}</span>
-                <span className="flex-1 truncate text-gray-800 dark:text-gray-100">{a.name}</span>
-                <span className="shrink-0 truncate text-xs text-gray-500">{[a.place, a.gstin].filter(Boolean).join(' · ')}</span>
+                <span className={`w-16 shrink-0 font-mono font-semibold ${i === active ? '' : 'text-gray-800 dark:text-gray-100'}`}>{a.code}</span>
+                <span className={`flex-1 truncate ${i === active ? '' : 'text-gray-800 dark:text-gray-100'}`}>{a.name}</span>
+                <span className={`shrink-0 truncate text-xs ${i === active ? 'text-blue-100' : 'text-gray-500'}`}>{[a.place, a.gstin].filter(Boolean).join(' · ')}</span>
               </button>
             ))}
             {!matches.length && <div className="px-2 py-3 text-sm text-gray-500">No accounts match</div>}
@@ -211,6 +293,45 @@ function buildDraft(inv: MissingInvoice, m: BooksMasters): Draft {
   return { key: `${inv.invoiceNumber}_${inv.partyGST}`, inv, entryDate: inv.invoiceDate, narration: name.slice(0, 25), lines };
 }
 
+// ---------------------------------------------------------------- movable dialog
+// Drag the title bar to move the dialog (so the rows behind it stay readable); double-click the bar to put it back.
+const DraggableModal: React.FC<{ title: React.ReactNode; maxWidth: string; children: React.ReactNode }> = ({ title, maxWidth, children }) => {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const startDrag = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const sx = e.clientX - pos.x;
+    const sy = e.clientY - pos.y;
+    const move = (ev: MouseEvent) => setPos({ x: ev.clientX - sx, y: ev.clientY - sy });
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+      <div
+        style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+        className={`flex max-h-[92vh] w-full ${maxWidth} flex-col overflow-hidden rounded-lg bg-white shadow-2xl ring-1 ring-black/10 dark:bg-gray-800`}
+      >
+        <div
+          onMouseDown={startDrag}
+          onDoubleClick={() => setPos({ x: 0, y: 0 })}
+          title="Drag to move · double-click to reset"
+          className="flex cursor-move select-none items-center gap-2 border-b border-gray-200 bg-gray-50 px-5 py-3 dark:border-gray-700 dark:bg-gray-900"
+        >
+          <span className="text-gray-400">⠿</span>
+          <h3 className="flex-1 text-lg font-semibold text-gray-800 dark:text-white">{title}</h3>
+          <span className="text-[11px] text-gray-400">drag to move</span>
+        </div>
+        <div className="overflow-auto p-5">{children}</div>
+      </div>
+    </div>
+  );
+};
+
 // ---------------------------------------------------------------- create party
 export const CreatePartyDialog: React.FC<{
   gstin: string;
@@ -237,9 +358,7 @@ export const CreatePartyDialog: React.FC<{
     }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800">
-        <h3 className="mb-1 text-lg font-semibold text-gray-800 dark:text-white">Create supplier (Sundry Creditors)</h3>
+    <DraggableModal maxWidth="max-w-md" title="Create supplier (Sundry Creditors)">
         <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
           GSTIN {gstin} · state {gstin.slice(0, 2)} · PAN {gstin.slice(2, 12)}. A new CT… account is added to CMPL.DBF.
         </p>
@@ -258,8 +377,7 @@ export const CreatePartyDialog: React.FC<{
             {busy ? 'Creating…' : 'Create party'}
           </button>
         </div>
-      </div>
-    </div>
+    </DraggableModal>
   );
 };
 
@@ -419,11 +537,7 @@ export const ExpenseJournalDialog: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[92vh] w-full max-w-6xl overflow-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800">
-        <h3 className="mb-1 text-lg font-semibold text-gray-800 dark:text-white">
-          Add {drafts.length === 1 ? 'invoice' : `${drafts.length} invoices`} as journal (JB)
-        </h3>
+    <DraggableModal maxWidth="max-w-6xl" title={<>Add {drafts.length === 1 ? 'invoice' : `${drafts.length} invoices`} as journal (JB)</>}>
         <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
           Pre-filled from GSTR-2A. Add, remove or change debit and credit rows on any account — the voucher must balance (total debit = total credit).
           Entries are saved as drafts and posted from “Expense journal drafts”. The narration is written as “INV#&lt;invoice&gt; …” so the next match finds it.
@@ -471,8 +585,7 @@ export const ExpenseJournalDialog: React.FC<{
             {busy ? 'Saving…' : `Save ${drafts.length} draft${drafts.length === 1 ? '' : 's'}`}
           </button>
         </div>
-      </div>
-    </div>
+    </DraggableModal>
   );
 };
 
@@ -498,11 +611,7 @@ const EditJournalDialog: React.FC<{ journal: Journal; masters: BooksMasters; onC
     }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[92vh] w-full max-w-6xl overflow-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800">
-        <h3 className="mb-2 text-lg font-semibold text-gray-800 dark:text-white">
-          Edit draft — invoice {journal.invoice.number} ({journal.invoice.date}) · GSTIN {journal.supplier.gstin}
-        </h3>
+    <DraggableModal maxWidth="max-w-6xl" title={<>Edit draft — invoice {journal.invoice.number} ({journal.invoice.date}) · GSTIN {journal.supplier.gstin}</>}>
         <div className="mb-2 flex flex-wrap gap-4">
           <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
             Entry date <input value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className={`${inputCls} w-28`} />
@@ -519,8 +628,7 @@ const EditJournalDialog: React.FC<{ journal: Journal; masters: BooksMasters; onC
             {busy ? 'Saving…' : 'Save draft'}
           </button>
         </div>
-      </div>
-    </div>
+    </DraggableModal>
   );
 };
 
