@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { errMsg, fmtNum, gstApi, isValidPeriod, notifyError, notifySuccess, notifyWarn, previousPeriod } from './gstApi';
 import {
   AVL_ROWS, ECO_ROWS, FULL_KEYS, Full, Gstr3bForm, HEAD_LABEL, INELG_ROWS, INTER_ROWS, InterKey, LOCKED_SUP, LedgerBal, LiabLedger,
-  CASH_CELL_HEAD, ITC_CELL_HEAD, PdCash, PdItc, REV_ROWS, availableCredit, STATES, SUP_ROWS, TAX_KEYS, Tax, advisoryChecks, applyLocked, cashNeed, computeOffset, emptyForm,
+  CASH_CELL_HEAD, ITC_CELL_HEAD, PdCash, PdItc, REV_ROWS, availableCredit, payableFromLedgers, STATES, SUP_ROWS, TAX_KEYS, Tax, advisoryChecks, applyLocked, cashNeed, computeOffset, emptyForm,
   emptyPdCash, emptyPdItc, itcNet, liabilities, liabilityLocked, r2, table32Locked, timeBar, zTax,
 } from './gstr3bModel';
 
@@ -373,7 +373,13 @@ const Gstr3bUpload: React.FC = () => {
   };
 
   const autoOffset = () => {
-    const r = computeOffset(form, bal, ldgNormal, ldgRc, useLedgerBal);
+    // with the saved return loaded, set off exactly what GSTN says is payable, using the ITC saved on the portal,
+    // in whole rupees (anything else is rejected as partial / excess payment)
+    const usePortal = !!retsum && retsum.ledgers.length > 0;
+    const r = usePortal
+      ? computeOffset(retsum!.form, bal, ldgNormal, ldgRc, useLedgerBal, { payable: payableFromLedgers(ldgNormal, ldgRc), rupees: true })
+      : computeOffset(form, bal, ldgNormal, ldgRc, useLedgerBal);
+    if (!usePortal) notifyWarn('Saved return not loaded — calculated from the form. Load portal data (after saving) so the offset matches the portal exactly.');
     setPditc(r.pditc);
     setPdcash(r.pdcash);
     const cashTotal = r2(r.pdcash.reduce((a, c) => a + c.ipd + c.cpd + c.spd + c.cspd, 0));
@@ -411,7 +417,7 @@ const Gstr3bUpload: React.FC = () => {
   const offset = () => {
     const why = blockReason();
     if (why) return setError(why);
-    if (!pditc.liab_ldg_id) return setError('Liability ledger IDs are not known yet — save the return (or load portal data) first.');
+    if (!retsum || !retsum.ledgers.length) return setError('Save the return and load portal data first — the offset must match the liability saved on the portal.');
     const allZero = [pditc.i_pdi, pditc.i_pdc, pditc.i_pds, pditc.c_pdi, pditc.c_pdc, pditc.s_pdi, pditc.s_pds, pditc.cs_pdcs].every((x) => !x)
       && pdcash.every((c) => !(c.ipd || c.cpd || c.spd || c.cspd));
     if (allZero && !window.confirm('The offset matrix is empty. Send anyway? (use “Auto-calculate” to fill it)')) return;

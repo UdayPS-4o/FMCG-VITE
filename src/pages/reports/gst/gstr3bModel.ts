@@ -179,13 +179,26 @@ export const CASH_CELL_HEAD: Record<string, keyof Heads> = {
 };
 
 // includeLedger: also use the ITC balance already in the electronic credit ledger (carried forward from earlier periods).
-export function computeOffset(f: Gstr3bForm, bal: LedgerBal | null, normalLdg: LiabLedger | null, rcLdg: LiabLedger | null, includeLedger = true) {
-  const L = liabilities(f);
+// payable amounts of the saved return (RETSUM net_tax_pay), per liability ledger - GSTN keeps them in whole rupees
+export function payableFromLedgers(normal: LiabLedger | null, rc: LiabLedger | null) {
+  const tx = (l: LiabLedger | null): Heads => ({ igst: l?.payable.igst.tx || 0, cgst: l?.payable.cgst.tx || 0, sgst: l?.payable.sgst.tx || 0, cess: l?.payable.cess.tx || 0 });
+  const part = (l: LiabLedger | null, k: 'intr' | 'fee'): Heads => ({ igst: l?.payable.igst[k] || 0, cgst: l?.payable.cgst[k] || 0, sgst: l?.payable.sgst[k] || 0, cess: l?.payable.cess[k] || 0 });
+  return { normal: tx(normal), rc: tx(rc), interest: part(normal, 'intr'), fee: part(normal, 'fee') };
+}
+
+// opts.payable: use the portal's payable amounts instead of the form; opts.rupees: work in whole rupees
+// (GSTN rejects an offset that is not exactly equal to the liability - RT-3BAS1070)
+export function computeOffset(
+  f: Gstr3bForm, bal: LedgerBal | null, normalLdg: LiabLedger | null, rcLdg: LiabLedger | null, includeLedger = true,
+  opts: { payable?: ReturnType<typeof payableFromLedgers>; rupees?: boolean } = {},
+) {
+  const L = opts.payable || liabilities(f);
   const net = toHeads(itcNet(f));
   const ledger = includeLedger && bal ? bal.itc : zHeads();
+  const whole = (n: number) => (opts.rupees ? Math.floor(n + 0.0001) : n); // never use more credit than available
   const credit: Heads = {
-    igst: Math.max(0, ledger.igst + net.igst), cgst: Math.max(0, ledger.cgst + net.cgst),
-    sgst: Math.max(0, ledger.sgst + net.sgst), cess: Math.max(0, ledger.cess + net.cess),
+    igst: Math.max(0, whole(ledger.igst + net.igst)), cgst: Math.max(0, whole(ledger.cgst + net.cgst)),
+    sgst: Math.max(0, whole(ledger.sgst + net.sgst)), cess: Math.max(0, whole(ledger.cess + net.cess)),
   };
   let iL = L.normal.igst, cL = L.normal.cgst, sL = L.normal.sgst, csL = L.normal.cess;
   let iI = credit.igst, cI = credit.cgst, sI = credit.sgst, csI = credit.cess;

@@ -546,9 +546,12 @@ router.post('/gst/gstr3b/offset', handle(async (req, res) => {
   const fp = fpOf(req.body);
   const ctx = await gsp.getContext();
   const payload = g3b.buildOffsetPayload({ gstin: ctx.gstin, fp, pditc: req.body.pditc, pdcash: req.body.pdcash });
-  if (!payload.pditc.liab_ldg_id || payload.pdcash.some((c) => !c.liab_ldg_id)) {
-    throw badRequest('Liability ledger IDs are missing - save the return and click "Get Summary" so they can be read from the portal.');
-  }
+  // GSTN rejects partial / excess payment (RT-3BAS1070): every head must equal what the saved return says is payable
+  const sum = await gstr3bCachedGet(fp, 'RETSUM', true);
+  if (sum.pack && !sum.pack.ok) return sendPack(res, sum.pack, { step: 'RETSUM' });
+  const { ledgers } = g3b.formFromRetsum(gsp.parseJson(sum.text));
+  const problems = g3b.offsetProblems(payload, ledgers);
+  if (problems.length) throw badRequest(`Offset does not equal the liability on the portal: ${problems.join('; ')}`);
   await assertNotFiled(fp);
   const pack = await putGstr3b(fp, 'RETOFFSET', payload);
   if (pack.ok) await dropCache(fp, 'RETSUM');
