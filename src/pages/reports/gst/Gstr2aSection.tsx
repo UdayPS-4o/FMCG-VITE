@@ -692,16 +692,18 @@ const Gstr2aSection: React.FC = () => {
     const norm = (x: string) => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^0+/, '');
     const kind = (d: PurchaseDoc) => (d.type === 'JB' ? 'journal entry' : 'purchase bill');
     const used = new Set<string>();
+    // one voucher may hold several invoices, so a document is voucher + invoice + period
+    const docKey = (d: PurchaseDoc) => `${d.vr}|${d.billNorm}|${d.period}`;
     const tol = 2;
     for (const r of results) {
       if (r.status !== 'Missing in Purchase') continue;
       const inv = norm(r.invoiceNumber);
-      let cands = docs.filter((d) => d.gstin === r.partyGST && d.billNorm && d.billNorm === inv && !used.has(d.vr + d.period));
+      let cands = docs.filter((d) => d.gstin === r.partyGST && d.billNorm && d.billNorm === inv && !used.has(docKey(d)));
       let byAmount = false;
       if (!cands.length) {
         // journal entries without an invoice number in the narration: same supplier, same invoice date, same amounts
         cands = docs.filter((d) => d.gstin === r.partyGST && !d.billNorm && d.date === r.invoiceDate.split('/').join('-')
-          && Math.abs(d.taxable - (r.gstr2aTaxableValue || 0)) <= tol && Math.abs(d.gst - (r.gstr2aGSTAmount || 0)) <= tol && !used.has(d.vr + d.period));
+          && Math.abs(d.taxable - (r.gstr2aTaxableValue || 0)) <= tol && Math.abs(d.gst - (r.gstr2aGSTAmount || 0)) <= tol && !used.has(docKey(d)));
         byAmount = cands.length > 0;
       }
       if (!cands.length) continue;
@@ -710,7 +712,7 @@ const Gstr2aSection: React.FC = () => {
       const entryPeriod = (d: PurchaseDoc) => d.entryDate.slice(3, 5) + d.entryDate.slice(6, 10);
       const inMonth = (d: PurchaseDoc) => d.period === month || entryPeriod(d) === month;
       const doc = cands.find((d) => d.period === month) || cands.find(inMonth) || cands[0];
-      used.add(doc.vr + doc.period);
+      used.add(docKey(doc));
       const details: string[] = [];
       const gstrDate = r.invoiceDate.split('/').join('-');
       if (doc.type !== 'JB' && doc.date && doc.date !== gstrDate) details.push(`Date mismatch: GSTR2A(${gstrDate}) vs Books bill date(${doc.date})`);
@@ -733,7 +735,7 @@ const Gstr2aSection: React.FC = () => {
     // GST expense journals of this month that GSTR-2A does not show
     const inResults = new Set(results.map((r) => `${norm(r.invoiceNumber)}_${r.partyGST}`));
     for (const d of docs) {
-      if (d.type !== 'JB' || d.period !== month || d.gst <= 0 || used.has(d.vr + d.period)) continue;
+      if (d.type !== 'JB' || d.period !== month || d.gst <= 0 || used.has(docKey(d))) continue;
       if (d.billNorm && inResults.has(`${d.billNorm}_${d.gstin}`)) continue;
       results.push({
         invoiceNumber: d.bill || d.vr,

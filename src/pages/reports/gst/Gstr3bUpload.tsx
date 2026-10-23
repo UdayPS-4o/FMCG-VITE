@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { errMsg, fmtNum, gstApi, isValidPeriod, notifyError, notifySuccess, notifyWarn, previousPeriod } from './gstApi';
 import {
   AVL_ROWS, ECO_ROWS, FULL_KEYS, Full, Gstr3bForm, HEAD_LABEL, INELG_ROWS, INTER_ROWS, InterKey, LOCKED_SUP, LedgerBal, LiabLedger,
-  PdCash, PdItc, REV_ROWS, STATES, SUP_ROWS, TAX_KEYS, Tax, advisoryChecks, applyLocked, cashNeed, computeOffset, emptyForm,
+  CASH_CELL_HEAD, ITC_CELL_HEAD, PdCash, PdItc, REV_ROWS, availableCredit, STATES, SUP_ROWS, TAX_KEYS, Tax, advisoryChecks, applyLocked, cashNeed, computeOffset, emptyForm,
   emptyPdCash, emptyPdItc, itcNet, liabilities, liabilityLocked, r2, table32Locked, timeBar, zTax,
 } from './gstr3bModel';
 
@@ -385,6 +385,28 @@ const Gstr3bUpload: React.FC = () => {
   };
 
   const cash = useMemo(() => cashNeed(pdcash, bal), [pdcash, bal]);
+
+  // "Available balance is …" tooltip on the set-off cells, like the GST portal: what is left of that credit /
+  // cash head after everything entered in all cells (updates while typing and when moving between cells)
+  type HeadKey = 'igst' | 'cgst' | 'sgst' | 'cess';
+  const [balTip, setBalTip] = useState<{ kind: 'itc' | 'cash'; head: HeadKey; rect: DOMRect } | null>(null);
+  const creditAvail = useMemo(() => availableCredit(form, bal, useLedgerBal), [form, bal, useLedgerBal]);
+  const itcLeft = (h: HeadKey) => r2(creditAvail[h] - Object.entries(ITC_CELL_HEAD).reduce((a, [k, hh]) => a + (hh === h ? Number(pditc[k as keyof PdItc]) || 0 : 0), 0));
+  const cashLeft = (h: HeadKey) => r2((bal?.cash[h] || 0) - pdcash.reduce((a, c) => a + Object.entries(CASH_CELL_HEAD).reduce((b, [k, hh]) => b + (hh === h ? Number(c[k as keyof PdCash]) || 0 : 0), 0), 0));
+  const tipOn = (kind: 'itc' | 'cash', head: HeadKey) => (e: React.FocusEvent<HTMLElement>) =>
+    setBalTip({ kind, head, rect: (e.target as HTMLElement).getBoundingClientRect() });
+  const tipOff = () => setBalTip(null);
+  // keep the tooltip on the focused box while the page or the table scrolls
+  useEffect(() => {
+    if (!balTip) return;
+    const follow = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && el.tagName === 'INPUT') setBalTip((t) => (t ? { ...t, rect: el.getBoundingClientRect() } : t));
+    };
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    return () => { window.removeEventListener('scroll', follow, true); window.removeEventListener('resize', follow); };
+  }, [balTip?.kind, balTip?.head]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const offset = () => {
     const why = blockReason();
@@ -802,7 +824,7 @@ const Gstr3bUpload: React.FC = () => {
                   <tbody>
                     <tr>
                       {(['i_pdi', 'i_pdc', 'i_pds', 'c_pdi', 'c_pdc', 's_pdi', 's_pds', 'cs_pdcs'] as (keyof PdItc)[]).map((k) => (
-                        <td key={k} className="px-1 py-1"><Num value={pditc[k]} onChange={(v) => setPditc({ ...pditc, [k]: v })} /></td>
+                        <td key={k} className="px-1 py-1" onFocus={tipOn('itc', ITC_CELL_HEAD[k])} onBlur={tipOff}><Num value={pditc[k]} onChange={(v) => setPditc({ ...pditc, [k]: v })} /></td>
                       ))}
                     </tr>
                   </tbody>
@@ -827,7 +849,7 @@ const Gstr3bUpload: React.FC = () => {
                       <tr key={i} className="border-t border-gray-100 dark:border-gray-700">
                         <td className="px-2 py-1 text-xs text-gray-700 dark:text-gray-200">{c.label} #{c.liab_ldg_id || '—'}</td>
                         {(['ipd', 'cpd', 'spd', 'cspd', 'i_intrpd', 'c_intrpd', 's_intrpd', 'cs_intrpd', 'c_lfeepd', 's_lfeepd'] as (keyof PdCash)[]).map((k) => (
-                          <td key={k} className="px-1 py-1">
+                          <td key={k} className="px-1 py-1" onFocus={tipOn('cash', CASH_CELL_HEAD[k])} onBlur={tipOff}>
                             <Num value={Number(c[k])} onChange={(v) => setPdcash(pdcash.map((x, j) => (j === i ? { ...x, [k]: v } : x)))} />
                           </td>
                         ))}
@@ -967,6 +989,23 @@ const Gstr3bUpload: React.FC = () => {
           <pre className="max-h-72 overflow-auto rounded bg-gray-50 p-2 text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200">{JSON.stringify(response.body, null, 2)}</pre>
         </div>
       )}
+
+      {balTip && (() => {
+        const left = balTip.kind === 'itc' ? itcLeft(balTip.head) : cashLeft(balTip.head);
+        // the portal works in whole rupees - a shortfall under ₹1 is rounding, not over-use
+        const over = left <= -1;
+        const shown = over ? left : Math.max(0, left);
+        const what = `${balTip.kind === 'itc' ? '' : 'cash '}${balTip.head.toUpperCase()}`;
+        return (
+          <div
+            style={{ position: 'fixed', left: balTip.rect.left + balTip.rect.width / 2, top: balTip.rect.top - 8, transform: 'translate(-50%, -100%)' }}
+            className={`pointer-events-none z-[60] whitespace-nowrap rounded px-2.5 py-1 text-xs font-semibold text-white shadow-lg ${over ? 'bg-red-700' : 'bg-gray-900'}`}
+          >
+            {over ? `Exceeds available ${what} balance by ${fmtNum(-shown)}` : `Available ${what} balance is ${fmtNum(shown)}`}
+            <span className={`absolute left-1/2 top-full -translate-x-1/2 border-x-[6px] border-t-[6px] border-x-transparent ${over ? 'border-t-red-700' : 'border-t-gray-900'}`} />
+          </div>
+        );
+      })()}
 
       {/* ------------------------------------------------ save preview */}
       {preview && (

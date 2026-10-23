@@ -480,7 +480,7 @@ async function loadPurchaseDocs(file) {
   const stat = await fs.stat(file);
   const hit = docsCache.get(file);
   const parties = await partyGstins(file);
-  if (hit && hit.mtime === stat.mtimeMs && hit.cmplMtime === parties.mtime) return hit.docs;
+  if (hit && hit.mtime === stat.mtimeMs && hit.cmplMtime === parties.mtime && hit.v === 2) return hit.docs;
   let rows, mtime;
   try {
     ({ data: rows, mtime } = await readJsonStable(file));
@@ -497,7 +497,22 @@ async function loadPurchaseDocs(file) {
     byVr.get(vr).push(r);
   }
   const docs = [];
-  byVr.forEach((lines, vr) => {
+  // invoice number carried by a line: BILL, else "INV#…" / "bill#…" in the narration
+  const lineInvoice = (r) => {
+    if (str(r.BILL).trim()) return str(r.BILL).trim();
+    const m = INV_IN_REMARK.exec(str(r.REMARK));
+    return m ? m[1] : '';
+  };
+  // one voucher can hold several invoices (e.g. JB-000208: bill#737 and bill#738 of the same supplier) -
+  // split it into one document per invoice number; lines without a number stay with the first invoice
+  const groupsOf = (lines) => {
+    const keys = [...new Set(lines.map((l) => normInv(lineInvoice(l))).filter(Boolean))];
+    if (keys.length <= 1) return [lines];
+    const groups = new Map(keys.map((k) => [k, []]));
+    for (const l of lines) groups.get(normInv(lineInvoice(l)) || keys[0]).push(l);
+    return [...groups.values()];
+  };
+  byVr.forEach((voucherLines, vr) => groupsOf(voucherLines).forEach((lines) => {
     const type = vr.slice(0, 2);
     let tax = 0, taxable = 0, value = 0, gstin = '', bill = '', billDate = null, party = '', partyCode = '', expenseCode = '', taxCode = '';
     for (const r of lines) {
@@ -527,8 +542,8 @@ async function loadPurchaseDocs(file) {
       date: dmy(d), period: pOf(d), entryDate: dmy(toIst(lines[0].DATE)),
       taxable: r2(taxable), gst: r2(tax), value: r2(value), partyCode, expenseCode, taxCode,
     });
-  });
-  docsCache.set(file, { mtime, cmplMtime: parties.mtime, docs });
+  }));
+  docsCache.set(file, { v: 2, mtime, cmplMtime: parties.mtime, docs });
   return docs;
 }
 

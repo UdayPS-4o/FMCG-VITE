@@ -162,6 +162,22 @@ export function liabilities(f: Gstr3bForm) {
 
 // Rule 88A set-off: IGST credit first against IGST, then CGST / SGST; CGST & SGST credit never cross-utilised.
 // Credit available = ITC balance in the credit ledger + net ITC of this return (4C). Whatever is left is paid in cash.
+// ITC available for set-off per head: credit-ledger balance (optional) + net ITC of this return (4C)
+export function availableCredit(f: Gstr3bForm, bal: LedgerBal | null, includeLedger = true): Heads {
+  const net = toHeads(itcNet(f));
+  const ledger = includeLedger && bal ? bal.itc : zHeads();
+  return { igst: r2(ledger.igst + net.igst), cgst: r2(ledger.cgst + net.cgst), sgst: r2(ledger.sgst + net.sgst), cess: r2(ledger.cess + net.cess) };
+}
+// credit head used by each "paid through ITC" cell (i_pdc = IGST liability paid by CGST credit, …)
+export const ITC_CELL_HEAD: Record<string, keyof Heads> = {
+  i_pdi: 'igst', c_pdi: 'igst', s_pdi: 'igst', i_pdc: 'cgst', c_pdc: 'cgst', i_pds: 'sgst', s_pds: 'sgst', cs_pdcs: 'cess',
+};
+// cash-ledger head used by each "paid in cash" cell
+export const CASH_CELL_HEAD: Record<string, keyof Heads> = {
+  ipd: 'igst', i_intrpd: 'igst', i_lfeepd: 'igst', cpd: 'cgst', c_intrpd: 'cgst', c_lfeepd: 'cgst',
+  spd: 'sgst', s_intrpd: 'sgst', s_lfeepd: 'sgst', cspd: 'cess', cs_intrpd: 'cess', cs_lfeepd: 'cess',
+};
+
 // includeLedger: also use the ITC balance already in the electronic credit ledger (carried forward from earlier periods).
 export function computeOffset(f: Gstr3bForm, bal: LedgerBal | null, normalLdg: LiabLedger | null, rcLdg: LiabLedger | null, includeLedger = true) {
   const L = liabilities(f);
