@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { getOrders, getPastInvoices } from '../lib/api';
 import { Package, Calendar, ChevronDown, FileText } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import { OrderMiniProgress } from '../components/OrderTracker';
+import PullToRefresh from '../components/PullToRefresh';
+import { ORDER_REFRESH_EVENT } from '../lib/orderEvents';
 
 interface OrderItem {
     productCode: string;
@@ -41,8 +44,8 @@ const Orders = () => {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchData = async () => {
-        setLoading(true);
+    const fetchData = async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const [ordersData, invoicesData] = await Promise.all([
                 getOrders().catch(() => []),
@@ -59,9 +62,14 @@ const Orders = () => {
 
     useEffect(() => {
         fetchData();
-        const onVisible = () => { if (document.visibilityState === 'visible') fetchData(); };
+        const onVisible = () => { if (document.visibilityState === 'visible') fetchData(true); };
+        const onOrderUpdate = () => fetchData(true); // live push (see LiveOrderBanner)
         document.addEventListener('visibilitychange', onVisible);
-        return () => document.removeEventListener('visibilitychange', onVisible);
+        window.addEventListener(ORDER_REFRESH_EVENT, onOrderUpdate);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisible);
+            window.removeEventListener(ORDER_REFRESH_EVENT, onOrderUpdate);
+        };
     }, []);
 
     const combinedList = [
@@ -78,6 +86,7 @@ const Orders = () => {
             <div className="bg-white px-4 py-4 border-b border-gray-100 sticky top-0 z-40">
                 <h1 className="text-xl font-bold text-gray-900">{language === 'en' ? 'My Orders' : 'मेरे ऑर्डर्स'}</h1>
             </div>
+            <PullToRefresh language={language} onRefresh={() => fetchData(true)} />
 
             <div className="p-4 space-y-3 pb-24 flex-1">
                 {loading ? (
@@ -126,6 +135,7 @@ const Orders = () => {
                                                     day: '2-digit', month: 'short', year: 'numeric'
                                                 })}
                                             </div>
+                                            <OrderMiniProgress status={order.status} />
                                         </div>
                                         <div className="flex flex-col items-end gap-1 shrink-0">
                                             <span className={`px-2.5 py-1 ${s.bg} ${s.text} text-[10px] font-bold rounded-full uppercase tracking-wide`}>

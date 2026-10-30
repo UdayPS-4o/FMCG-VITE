@@ -14,7 +14,6 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -46,5 +45,7 @@ server/whatsapp-files/
 
 # Claude AI project files
 .claude/
-.env
-.env.*
+config.bat
+
+# Bizom auto-download browser profile (keeps login session)
+server/.bizom-profile

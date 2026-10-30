@@ -342,6 +342,22 @@
   transition: background 0.15s;
 }
 .wa-header-action:hover { background: #2a3942; }
+.wa-resend-all-btn {
+  gap: 6px;
+  margin-right: 4px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(231, 76, 60, 0.55);
+  color: #ff8a7a;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.wa-resend-all-btn:hover { background: rgba(231, 76, 60, 0.15); }
+.wa-resend-all-btn:disabled { opacity: 0.6; cursor: default; }
+.wa-spin { animation: spin 0.9s linear infinite; }
+.wa-resent-label { font-size: 11px; color: #8696a0; margin-right: 4px; }
+.wa-ctx-item--resend { color: #ff8a7a; }
 
 /* Messages area */
 .wa-messages-area {

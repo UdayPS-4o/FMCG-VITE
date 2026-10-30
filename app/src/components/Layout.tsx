@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
+import CartFxLayer from './CartFxLayer';
+import WelcomeSplash from './WelcomeSplash';
+import LiveOrderBanner from './LiveOrderBanner';
 import { fetchActiveSchemes } from '../lib/api';
 import { useStore } from '../context/StoreContext';
 
 const Layout = () => {
-    const { language } = useStore();
+    const { language, user } = useStore();
     const [banners, setBanners] = useState<any[]>([]);
 
     const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -34,7 +37,8 @@ const Layout = () => {
         <div className="flex flex-col min-h-screen relative bg-gray-50">
 
             {banners.length > 0 && (
-                <div className="sticky top-0 z-50 w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 shadow-md">
+                <div className="sticky top-0 z-50 w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 shadow-md overflow-hidden">
+                    <div className="offer-shine" aria-hidden="true" />
                     <div className="max-w-7xl mx-auto py-2.5 px-3 overflow-hidden">
                         <div className="relative h-6 flex items-center justify-center">
                             {banners.map((b, idx) => (
@@ -61,6 +65,9 @@ const Layout = () => {
             <main className="flex-1 pb-20"> {/* Add padding bottom to avoid overlap with nav */}
                 <Outlet />
             </main>
+            <CartFxLayer />
+            <LiveOrderBanner />
+            {user && <WelcomeSplash name={user.name} language={language} />}
             <BottomNav />
         </div>
     );

@@ -26,6 +26,8 @@ self.addEventListener('push', event => {
     }
 
     const { title, message, url } = payload;
+    // Notifications sent to non-admin users carry noApprove: no Approve button
+    const canApprove = !(payload.data && String(payload.data.noApprove) === 'true');
 
     const options = {
         body: message,
@@ -34,13 +36,13 @@ self.addEventListener('push', event => {
         data: payload.data || { url: url || '/' },
         requireInteraction: true,
         vibrate: [200, 100, 200],
-        actions: [
+        actions: canApprove ? [
             {
                 action: 'approve',
                 title: 'Approve',
                 icon: '/icons/approve-icon.svg'
             }
-        ]
+        ] : []
     };
 
     event.waitUntil(self.registration.showNotification(title, options));

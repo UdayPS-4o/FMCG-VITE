@@ -1,0 +1,74 @@
+/* Godown Transfer: tile picker + truck success animation.
+   Colours come from the theme tokens (--color-brand-*, --color-gray-*) so every theme applies. */
+
+/* ── Godown tiles ─────────────────────────────────────────── */
+.gt-tiles { scrollbar-width: none; }
+.gt-tiles::-webkit-scrollbar { display: none; }
+
+.gt-tile .gt-door { transition: transform .45s ease; }
+.gt-tile.is-selected .gt-door { transform: translateY(-9px); }
+.gt-tile .gt-check { transform: scale(0); transition: transform .2s cubic-bezier(.3, 1.6, .6, 1); }
+.gt-tile.is-selected .gt-check { transform: scale(1); }
+
+.gt-route-arrow { animation: gt-flow 1s linear infinite; }
+@keyframes gt-flow { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+
+/* ── Success overlay ──────────────────────────────────────── */
+.gt-overlay { animation: gt-fade .3s ease; }
+@keyframes gt-fade { from { opacity: 0; } }
+
+.gt-sheet { animation: gt-pop .35s cubic-bezier(.2, .9, .3, 1); }
+@keyframes gt-pop { from { transform: scale(.94); opacity: 0; } }
+@media (max-width: 639px) {
+  .gt-sheet { animation-name: gt-sheet-up; }
+  @keyframes gt-sheet-up { from { transform: translateY(100%); } }
+}
+
+.gt-road-dash { animation: gt-road 0.6s linear infinite; }
+.gt-scene.is-parked .gt-road-dash { animation-play-state: paused; }
+@keyframes gt-road { to { stroke-dashoffset: -40; } }
+
+.gt-truck { transition: transform 2.6s cubic-bezier(.45, 0, .55, 1); }
+.gt-truck-body { animation: gt-bounce .35s ease-in-out infinite alternate; }
+.gt-scene.is-parked .gt-truck-body { animation: none; }
+@keyframes gt-bounce { to { transform: translateY(-1.5px); } }
+
+.gt-wheel { transform-box: fill-box; transform-origin: center; animation: gt-spin .45s linear infinite; }
+.gt-scene.is-parked .gt-wheel { animation-play-state: paused; }
+@keyframes gt-spin { to { transform: rotate(360deg); } }
+
+.gt-puff { transform-box: fill-box; transform-origin: center; animation: gt-puff .7s ease-out infinite; }
+.gt-puff.p2 { animation-delay: .23s; }
+.gt-puff.p3 { animation-delay: .46s; }
+.gt-scene.is-parked .gt-puff { display: none; }
+@keyframes gt-puff {
+  from { opacity: .7; transform: translate(0, 0) scale(.5); }
+  to   { opacity: 0;  transform: translate(-26px, -10px) scale(1.6); }
+}
+
+.gt-cloud { animation: gt-drift 18s linear infinite; }
+.gt-cloud.c2 { animation-delay: -9s; }
+@keyframes gt-drift { from { transform: translateX(-120px); } to { transform: translateX(900px); } }
+
+.gt-crates { transition: opacity .6s ease; }
+.gt-to-door { transition: transform .5s ease; }
+
+.gt-tick-circle { stroke-dasharray: 300; stroke-dashoffset: 300; animation: gt-draw .6s ease-out forwards; }
+.gt-tick-mark { stroke-dasharray: 80; stroke-dashoffset: 80; animation: gt-draw .35s .55s ease-out forwards; }
+.gt-tick { animation: gt-tick-pop .5s .9s cubic-bezier(.3, 1.7, .6, 1) both; }
+@keyframes gt-draw { to { stroke-dashoffset: 0; } }
+@keyframes gt-tick-pop { 50% { transform: scale(1.15); } }
+
+/* Sky per theme: daytime for light themes, dusk for dark ones */
+.gt-sky-top    { stop-color: #7cc0ff; }
+.gt-sky-bottom { stop-color: #e3f2ff; }
+.dark .gt-sky-top                 { stop-color: #0f1a3a; }
+.dark .gt-sky-bottom              { stop-color: #2f3f78; }
+.theme-indigo .gt-sky-top         { stop-color: #3b2a7a; }
+.theme-indigo .gt-sky-bottom      { stop-color: #7a5bc4; }
+.theme-glass .gt-sky-top          { stop-color: #0a3c96; }
+.theme-glass .gt-sky-bottom       { stop-color: #14a096; }
+.theme-glass-sunset .gt-sky-top    { stop-color: #a01e50; }
+.theme-glass-sunset .gt-sky-bottom { stop-color: #f08a3c; }
+.theme-glass-obsidian .gt-sky-top    { stop-color: #1e1e28; }
+.theme-glass-obsidian .gt-sky-bottom { stop-color: #505058; }

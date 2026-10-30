@@ -35,6 +35,7 @@ interface User {
   requireMandatoryDocs?: boolean;
   mandatoryDocsFromDate?: string;
   reportsAccess?: string[];
+  notificationAccess?: string[];
 }
 
 interface SubGroup {
@@ -65,6 +66,7 @@ const AddUser: React.FC = () => {
     'App Orders',
     'App Schemes',
     'App Listings',
+    'Notifications',
   ]);
 
   const availableReports = [
@@ -81,6 +83,19 @@ const AddUser: React.FC = () => {
     "GSTR - Match Pur. B2B with GSTR2A",
     "Shikhar Scheme Update",
     "Godrej Scheme Update"
+  ];
+
+  // Keys must match server/utils/notificationTypes.js
+  const availableNotifications = [
+    { key: 'attendance-marked', label: 'Attendance Marked (by any user)' },
+    { key: 'attendance-reminder', label: 'Attendance Reminder (12:45 PM if not marked)' },
+    { key: 'invoicing', label: 'Invoice Created / Modified' },
+    { key: 'cash-receipts', label: 'Cash Receipt Created / Modified' },
+    { key: 'cash-payments', label: 'Cash Payment Created / Modified' },
+    { key: 'godown', label: 'Godown Transfer Created / Modified' },
+    { key: 'purchases', label: 'Purchase Created / Modified' },
+    { key: 'account-master', label: 'Account Master Created / Modified' },
+    { key: 'whatsapp', label: 'WhatsApp Inbox Messages' },
   ];
 
   const [powersOptions] = useState<string[]>(['Read', 'Write', 'Delete']);
@@ -116,6 +131,8 @@ const AddUser: React.FC = () => {
   const [mandatoryDocsFromDate, setMandatoryDocsFromDate] = useState<string>('');
   const [reportsAccess, setReportsAccess] = useState<string[]>([]);
   const [isReportsModalOpen, setIsReportsModalOpen] = useState<boolean>(false);
+  const [notificationAccess, setNotificationAccess] = useState<string[]>([]);
+  const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -175,6 +192,8 @@ const AddUser: React.FC = () => {
         } else {
           setReportsAccess([]);
         }
+
+        setNotificationAccess(userToEdit.notificationAccess || []);
 
         // Handle subgroups (can be either old format with single subgroup or new format with array)
         if (userToEdit.subgroups) {
@@ -386,7 +405,8 @@ const AddUser: React.FC = () => {
         allowPastDateEntries,
         requireMandatoryDocs,
         mandatoryDocsFromDate: requireMandatoryDocs ? mandatoryDocsFromDate : undefined,
-        reportsAccess: routeAccess.includes('Reports') ? reportsAccess : undefined
+        reportsAccess: routeAccess.includes('Reports') ? reportsAccess : undefined,
+        notificationAccess: routeAccess.includes('Notifications') ? notificationAccess : undefined
       };
 
       if (isEdit && userId) {
@@ -475,6 +495,7 @@ const AddUser: React.FC = () => {
     setRequireMandatoryDocs(false);
     setMandatoryDocsFromDate('');
     setReportsAccess([]);
+    setNotificationAccess([]);
     setIsEdit(false);
     setUserId(null);
     setFormKey(prevKey => prevKey + 1);
@@ -636,9 +657,12 @@ const AddUser: React.FC = () => {
                         value={routeAccess}
                         onChange={(values) => {
                           const addedReports = !routeAccess.includes('Reports') && values.includes('Reports');
+                          const addedNotifications = !routeAccess.includes('Notifications') && values.includes('Notifications');
                           setRouteAccess(values);
                           if (addedReports) {
                             setIsReportsModalOpen(true);
+                          } else if (addedNotifications) {
+                            setIsNotificationsModalOpen(true);
                           }
                         }}
                         allowFiltering={true}
@@ -654,6 +678,16 @@ const AddUser: React.FC = () => {
                         style={{ height: '42px', flexShrink: 0 }}
                       >
                         Configure Reports
+                      </button>
+                    )}
+                    {routeAccess.includes('Notifications') && (
+                      <button
+                        type="button"
+                        onClick={() => setIsNotificationsModalOpen(true)}
+                        className="px-3 py-2 bg-brand-50 text-brand-600 border border-brand-200 rounded hover:bg-brand-100 mb-[1px]"
+                        style={{ height: '42px', flexShrink: 0 }}
+                      >
+                        Configure Notifications
                       </button>
                     )}
                   </div>
@@ -887,6 +921,67 @@ const AddUser: React.FC = () => {
                   className="bg-brand-500 text-white hover:bg-brand-600 font-bold uppercase text-sm px-6 py-3 rounded shadow outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150"
                   type="button"
                   onClick={() => setIsReportsModalOpen(false)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notifications Access Modal */}
+      {isNotificationsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto outline-none focus:outline-none">
+          <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => setIsNotificationsModalOpen(false)}></div>
+          <div className="relative w-full max-w-lg mx-auto my-6 z-[60]">
+            <div className="relative flex flex-col w-full bg-white dark:bg-gray-800 border-0 rounded-lg shadow-lg outline-none focus:outline-none">
+              <div className="flex items-start justify-between p-5 border-b border-solid border-gray-200 dark:border-gray-700 rounded-t">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Configure Notifications
+                </h3>
+                <button
+                  className="p-1 ml-auto bg-transparent border-0 text-gray-500 float-right text-3xl leading-none font-semibold outline-none focus:outline-none"
+                  onClick={() => setIsNotificationsModalOpen(false)}
+                >
+                  <span className="text-gray-500 h-6 w-6 text-2xl block outline-none focus:outline-none">
+                    ×
+                  </span>
+                </button>
+              </div>
+              <div className="relative p-6 flex-auto max-h-[60vh] overflow-y-auto">
+                <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                  Push notifications this user will get on devices they are logged in on.
+                </p>
+                <div className="mb-4 flex gap-4">
+                  <button type="button" onClick={() => setNotificationAccess(availableNotifications.map(n => n.key))} className="text-sm text-brand-600 hover:underline">Select All</button>
+                  <button type="button" onClick={() => setNotificationAccess([])} className="text-sm text-brand-600 hover:underline">Deselect All</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {availableNotifications.map(({ key, label }) => (
+                    <label key={key} className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                        checked={notificationAccess.includes(key)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNotificationAccess([...notificationAccess, key]);
+                          } else {
+                            setNotificationAccess(notificationAccess.filter(n => n !== key));
+                          }
+                        }}
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300 select-none">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-end p-6 border-t border-solid border-gray-200 dark:border-gray-700 rounded-b">
+                <button
+                  className="bg-brand-500 text-white hover:bg-brand-600 font-bold uppercase text-sm px-6 py-3 rounded shadow outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150"
+                  type="button"
+                  onClick={() => setIsNotificationsModalOpen(false)}
                 >
                   Done
                 </button>

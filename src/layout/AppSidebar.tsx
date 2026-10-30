@@ -201,7 +201,10 @@ const fmcgItems: NavItem[] = [
   {
     icon: <InvoiceIcon />,
     name: "Purchases",
-    path: "/purchases",
+    subItems: [
+      { name: "New Purchase", path: "/purchases/new", pro: false },
+      { name: "Godrej Purchase Import", path: "/purchases/godrej-import", pro: false },
+    ],
   },
   {
     icon: <WarehouseIcon />,
@@ -460,6 +463,11 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
           }
           
           return item.subItems.length > 0;
+        }
+
+        // Purchases section (New Purchase / Godrej Purchase Import)
+        if (item.name === "Purchases") {
+          return user.routeAccess.includes('Purchases');
         }
 
         // For Database section, filter subitems based on user access

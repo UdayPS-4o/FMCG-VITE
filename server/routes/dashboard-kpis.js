@@ -302,7 +302,10 @@ const handlers = {
     const ref = getRefDates(days);
     const bills = await getBills();
     const rows = bills
-      .filter((b) => b.recd === 'N' && b.date)
+      // Unpaid = RECD not 'Y'. Since Sep 2026 new bills are saved with RECD blank instead of 'N',
+      // so checking for 'N' dropped every recent bill. Cash bills are settled at the counter
+      // (and mostly have 0 due days), so only credit bills can fall due.
+      .filter((b) => b.recd !== 'Y' && !b.cash && b.date)
       .map((b) => ({
         date: addDays(b.date, b.dueDays),
         billDate: b.date,

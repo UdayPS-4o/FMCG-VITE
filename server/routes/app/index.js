@@ -1628,6 +1628,32 @@ router.get('/admin/orders', async (req, res) => {
 });
 
 /**
+ * Push the customer-app shop when its order moves forward (live tracker in the app).
+ * Fire-and-forget: a failed push never blocks the admin action.
+ */
+const ORDER_PUSH_TEXT = {
+    Approved: o => ({ title: `✅ Order #${String(o.id).slice(-6)} confirmed`, message: 'Ekta Enterprises has confirmed your order. Your bill is being prepared.' }),
+    Invoiced: o => ({
+        title: `🧾 Order #${String(o.id).slice(-6)} billed`,
+        message: o.invoiceRef ? `Invoice ${o.invoiceRef} is ready. Tap to view.` : 'Your bill is ready. Tap to view.',
+    }),
+    Rejected: o => ({ title: `Order #${String(o.id).slice(-6)} cancelled`, message: o.adminNote || 'Please contact Ekta Enterprises for details.' }),
+};
+const notifyOrderStatus = (order, prevStatus) => {
+    const text = ORDER_PUSH_TEXT[order.status];
+    if (!text || order.status === prevStatus || !order.partyCode) return;
+    try {
+        const { sendNotificationToParty } = require('../push');
+        sendNotificationToParty(order.partyCode, {
+            ...text(order),
+            data: { url: `/order/${order.id}`, type: 'order-status', orderId: String(order.id), status: order.status },
+        }).catch(err => console.error('[app/orders] push failed:', err.message));
+    } catch (err) {
+        console.error('[app/orders] push unavailable:', err.message);
+    }
+};
+
+/**
  * PATCH /api/app/admin/orders/:id/status
  * Body: { status: 'Approved' | 'Rejected', note?: string }
  */
@@ -1645,11 +1671,13 @@ router.patch('/admin/orders/:id/status', async (req, res) => {
         const idx = orders.findIndex(o => o.id === id);
         if (idx === -1) return res.status(404).json({ error: 'Order not found' });
 
+        const prevStatus = orders[idx].status;
         orders[idx].status = status;
         orders[idx].adminNote = note || '';
         orders[idx].updatedAt = new Date().toISOString();
 
         await writeOrdersWithFlag(orders);
+        notifyOrderStatus(orders[idx], prevStatus);
         res.json({ success: true, order: orders[idx] });
     } catch (err) {
         console.error('[app/admin/orders PATCH]', err);
@@ -1675,6 +1703,7 @@ router.patch('/admin/orders/:id/mark-invoiced', async (req, res) => {
         const idx = orders.findIndex(o => o.id === id);
         if (idx === -1) return res.status(404).json({ error: 'Order not found' });
 
+        const prevStatus = orders[idx].status;
         orders[idx].status = 'Invoiced';
         orders[idx].invoiceBillNo = billNo;
         orders[idx].invoiceSeries = series;
@@ -1682,6 +1711,7 @@ router.patch('/admin/orders/:id/mark-invoiced', async (req, res) => {
         orders[idx].updatedAt = new Date().toISOString();
 
         await writeOrdersWithFlag(orders);
+        notifyOrderStatus(orders[idx], prevStatus);
         res.json({ success: true, order: orders[idx] });
     } catch (err) {
         console.error('[app/admin/orders/mark-invoiced PATCH]', err);

@@ -160,7 +160,7 @@ const PushNotifications: React.FC = () => {
                 applicationServerKey: applicationServerKey as BufferSource,
             });
 
-            await subscribeToPush(subscription, user?.username || 'admin');
+            await subscribeToPush(subscription, user ? `user:${user.id}` : 'admin');
             toast.success('Successfully subscribed to notifications!');
             setIsSubscribed(true);
             fetchTokens();

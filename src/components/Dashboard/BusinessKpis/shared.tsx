@@ -37,6 +37,57 @@ export const longDate = (ymd?: string | null) =>
 export const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 
+// ---------- Count-up animation ----------
+export const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const easeOutExpo = (t: number) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+
+// Rolls from the currently shown value to `target` (from 0 on first mount)
+export function useCountUp(target: number, duration = 1200) {
+  const reduce = prefersReducedMotion();
+  const [value, setValue] = useState(reduce ? target : 0);
+  const shown = useRef(value);
+
+  useEffect(() => {
+    const to = Number(target) || 0;
+    const from = shown.current;
+    if (reduce || from === to) {
+      shown.current = to;
+      setValue(to);
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const v = from + (to - from) * easeOutExpo(t);
+      shown.current = v;
+      setValue(v);
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration, reduce]);
+
+  return value;
+}
+
+// Its own component so only this text re-renders per frame, not the card (which would redraw charts)
+export const CountUp: React.FC<{ value: number; format?: (n: number) => string; duration?: number }> = ({
+  value,
+  format = (n) => String(Math.round(n)),
+  duration,
+}) => <>{format(useCountUp(value, duration))}</>;
+
+// Shared ApexCharts entrance animation
+export const CHART_ANIMATIONS = {
+  enabled: true,
+  speed: 1100,
+  animateGradually: { enabled: true, delay: 120 },
+  dynamicAnimation: { enabled: true, speed: 600 },
+};
+
 // ---------- Types shared by KPI responses ----------
 export type RangeKey = 'today' | 'yest' | 'lastN';
 export interface RangeBucket<T> {

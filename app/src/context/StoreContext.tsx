@@ -50,6 +50,7 @@ interface StoreContextType {
     cart: CartItem[];
     addToCart: (product: Product, pcs: number, boxes: number) => void;
     removeFromCart: (productCode: string) => void;
+    restoreCartItem: (item: CartItem, index: number) => void;
     clearCart: () => void;
     cartTotal: number;
     cartCount: number;
@@ -191,6 +192,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const removeFromCart = (productCode: string) =>
         setCart(prev => prev.filter(item => item.product.CODE !== productCode));
 
+    // Undo for a removed line: put it back where it was
+    const restoreCartItem = (item: CartItem, index: number) =>
+        setCart(prev => {
+            if (prev.some(ci => ci.product.CODE === item.product.CODE)) return prev;
+            const next = [...prev];
+            next.splice(Math.min(index, next.length), 0, item);
+            return next;
+        });
+
     const clearCart = () => setCart([]);
 
     const cartTotal = cart.reduce((sum, item) => sum + item.netAmount, 0);
@@ -200,7 +210,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         <StoreContext.Provider value={{
             user, isLoading,
             login, logout, updateUser,
-            cart, addToCart, removeFromCart, clearCart,
+            cart, addToCart, removeFromCart, restoreCartItem, clearCart,
             cartTotal, cartCount,
             language, setLanguage,
         }}>

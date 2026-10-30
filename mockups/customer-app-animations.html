@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ekta App – Premium Animations Preview</title>
+<style>
+  :root {
+    --emerald: #10b981; --emerald-d: #059669; --emerald-l: #ecfdf5;
+    --ink: #111827; --muted: #6b7280; --line: #e5e7eb; --bg: #f9fafb;
+    --orange: #f97316; --red: #ef4444; --violet: #6d28d9;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; font-family: "Inter", "Segoe UI", system-ui, sans-serif; background: #eef0f6; color: var(--ink); }
+  .wrap { display: flex; gap: 28px; justify-content: center; align-items: flex-start; padding: 24px 16px 40px; flex-wrap: wrap; }
+
+  /* ── Scene list ── */
+  .side { width: 340px; max-width: 100%; }
+  .side h1 { font-size: 20px; margin: 0 0 4px; }
+  .side .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  .banner { background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 10px; padding: 8px 12px; font-size: 12px; margin-bottom: 14px; }
+  .scene-btn { display: flex; gap: 12px; width: 100%; text-align: left; background: #fff; border: 2px solid transparent; border-radius: 14px;
+    padding: 12px; margin-bottom: 10px; cursor: pointer; font: inherit; box-shadow: 0 1px 3px rgba(0,0,0,.06); transition: border-color .2s, transform .2s; }
+  .scene-btn:hover { transform: translateY(-1px); }
+  .scene-btn.active { border-color: var(--emerald); }
+  .scene-btn .n { flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--emerald-l); color: var(--emerald-d); display: grid; place-items: center; font-weight: 800; }
+  .scene-btn b { display: block; font-size: 14px; }
+  .scene-btn span { font-size: 12px; color: var(--muted); line-height: 1.35; display: block; margin-top: 2px; }
+  .controls { display: flex; gap: 8px; margin-top: 4px; }
+  .controls button { flex: 1; padding: 10px; border-radius: 10px; border: 0; font: inherit; font-weight: 600; cursor: pointer; }
+  .controls .play { background: var(--ink); color: #fff; }
+  .controls .all { background: #fff; border: 1px solid var(--line); }
+
+  /* ── Phone ── */
+  .phone { width: 360px; height: 740px; border-radius: 44px; background: #0b0b10; padding: 12px; box-shadow: 0 30px 60px rgba(0,0,0,.25); flex-shrink: 0; }
+  .screen { position: relative; width: 100%; height: 100%; border-radius: 34px; overflow: hidden; background: var(--bg); }
+  .notch { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 92px; height: 24px; background: #0b0b10; border-radius: 14px; z-index: 90; }
+  .scene { position: absolute; inset: 0; display: none; flex-direction: column; }
+  .scene.on { display: flex; }
+  .status { height: 40px; flex-shrink: 0; }
+  .offer { background: linear-gradient(90deg, #2563eb, #4f46e5, #7c3aed); color: #fff; font-size: 12px; font-weight: 700; display: flex; justify-content: center; align-items: center; gap: 8px; padding: 9px; }
+  .offer i { font-style: normal; background: #fff; color: #4f46e5; font-size: 10px; padding: 2px 7px; border-radius: 5px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 14px 14px 10px; background: #fff; }
+  .topbar h2 { margin: 0; font-size: 19px; }
+  .content { flex: 1; overflow: hidden; padding: 12px; position: relative; }
+
+  .nav { height: 62px; background: rgba(255,255,255,.92); border-top: 1px solid var(--line); display: flex; justify-content: space-around; align-items: center; flex-shrink: 0; position: relative; z-index: 5; }
+  .nav div { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--muted); position: relative; }
+  .nav div.act { color: #4f46e5; }
+  .nav svg { width: 22px; height: 22px; }
+  .badge { position: absolute; top: -5px; right: -9px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; min-width: 17px; height: 17px; border-radius: 9px; display: grid; place-items: center; padding: 0 4px; }
+
+  /* product grid */
+  .search { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; color: #9ca3af; font-size: 13px; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { background: #fff; border-radius: 16px; padding: 10px; border: 1px solid #f1f1f4; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .card .img { aspect-ratio: 1; background: #f9fafb; border-radius: 12px; display: grid; place-items: center; overflow: hidden; margin-bottom: 8px; }
+  .card .img img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
+  .card h4 { font-size: 12px; font-weight: 500; margin: 0 0 4px; line-height: 1.25; min-height: 30px; }
+  .card .rate { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+  .addbtn { height: 34px; border-radius: 11px; background: var(--emerald-l); color: var(--emerald-d); font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background .2s; }
+  .stepper { height: 34px; border-radius: 11px; background: var(--emerald-l); display: flex; align-items: center; justify-content: space-between; padding: 0 4px; animation: pop .3s; }
+  .stepper b { font-size: 14px; }
+  .stepper span { width: 30px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-weight: 700; }
+  .stepper .m { background: #fff; color: #4b5563; }
+  .stepper .p { background: var(--emerald); color: #fff; }
+  @keyframes pop { 0% { transform: scale(.85); } 60% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+  .flyer { position: absolute; width: 70px; height: 70px; z-index: 80; pointer-events: none; border-radius: 14px; background: #fff; box-shadow: 0 10px 25px rgba(0,0,0,.25); padding: 6px; }
+  .flyer img { width: 100%; height: 100%; object-fit: contain; }
+  .cart-bounce { animation: cartBounce .55s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes cartBounce { 0%{transform:scale(1)} 30%{transform:scale(1.35) rotate(-8deg)} 60%{transform:scale(.92)} 100%{transform:scale(1)} }
+  .badge-pop { animation: badgePop .45s cubic-bezier(.3,1.8,.5,1); }
+  @keyframes badgePop { 0%{transform:scale(0)} 100%{transform:scale(1)} }
+  .ripple { position: absolute; border-radius: 50%; border: 2px solid var(--emerald); pointer-events: none; animation: ripple .6s ease-out forwards; z-index: 4; }
+  @keyframes ripple { from { width: 0; height: 0; opacity: 1; } to { width: 60px; height: 60px; opacity: 0; margin: -30px 0 0 -30px; } }
+
+  .toast { position: absolute; left: 12px; right: 12px; bottom: 74px; background: var(--ink); color: #fff; border-radius: 14px; padding: 11px 14px; display: flex; align-items: center; gap: 10px;
+    font-size: 13px; transform: translateY(140%); transition: transform .35s cubic-bezier(.2,.9,.3,1.2); z-index: 60; }
+  .toast.show { transform: translateY(0); }
+  .toast img { width: 32px; height: 32px; object-fit: contain; background: #fff; border-radius: 8px; padding: 2px; }
+  .toast .grow { flex: 1; }
+  .toast .act { color: #6ee7b7; font-weight: 700; }
+  .toast .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: #6ee7b7; border-radius: 0 0 14px 14px; width: 100%; }
+
+  /* cursor */
+  .finger { position: absolute; width: 34px; height: 34px; border-radius: 50%; background: rgba(17,24,39,.18); border: 2px solid rgba(255,255,255,.9);
+    z-index: 85; pointer-events: none; transition: left .55s ease, top .55s ease, transform .12s; display: none; box-shadow: 0 2px 8px rgba(0,0,0,.2); margin: -17px 0 0 -17px; }
+  .finger.show { display: block; }
+  .finger.tap { transform: scale(.75); }
+
+  /* product detail (scheme) */
+  .pd { background: #fff; border-radius: 18px; padding: 14px; }
+  .pd .big { height: 180px; display: grid; place-items: center; background: #f9fafb; border-radius: 14px; margin-bottom: 12px; position: relative; overflow: hidden; }
+  .pd .big img { height: 90%; object-fit: contain; }
+  .pd h3 { margin: 0 0 6px; font-size: 15px; }
+  .chips { display: flex; gap: 6px; margin: 8px 0 12px; flex-wrap: wrap; }
+  .chip { position: relative; overflow: hidden; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 7px; background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; transition: all .3s; }
+  .chip.on { background: var(--orange); color: #fff; border-color: #ea580c; transform: scale(1.06); box-shadow: 0 4px 12px rgba(249,115,22,.4); }
+  .chip.on::after { content: ""; position: absolute; top: 0; left: -60%; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent); animation: shine .9s ease-out; transform: skewX(-20deg); }
+  @keyframes shine { to { left: 130%; } }
+  .progress-msg { font-size: 12px; color: #9a3412; background: #fff7ed; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; }
+  .pbar { height: 6px; border-radius: 3px; background: #ffedd5; overflow: hidden; margin-top: 6px; }
+  .pbar div { height: 100%; background: linear-gradient(90deg, #fb923c, #f97316); width: 0; transition: width .35s ease; border-radius: 3px; }
+  .rate-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+  .rate-row .now { font-size: 22px; font-weight: 800; }
+  .rate-row .old { font-size: 13px; color: var(--muted); text-decoration: line-through; opacity: 0; transition: opacity .3s; }
+  .rate-row .old.show { opacity: 1; }
+  .bigstep { display: flex; align-items: center; justify-content: space-between; background: var(--emerald-l); border-radius: 14px; padding: 6px; }
+  .bigstep span { width: 44px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 20px; font-weight: 700; }
+  .bigstep .m { background: #fff; color: #4b5563; }
+  .bigstep .p { background: var(--emerald); color: #fff; }
+  .bigstep b { font-size: 20px; }
+  .bigstep b.tick { animation: numTick .25s; }
+  @keyframes numTick { 0%{transform:translateY(-6px);opacity:.3} 100%{transform:none;opacity:1} }
+  .saved-pill { margin-top: 12px; text-align: center; font-weight: 700; color: var(--emerald-d); background: var(--emerald-l); border-radius: 12px; padding: 10px; transform: scale(0); transition: transform .4s cubic-bezier(.3,1.7,.5,1); }
+  .saved-pill.show { transform: scale(1); }
+  .confetti { position: absolute; width: 8px; height: 12px; border-radius: 2px; z-index: 70; pointer-events: none; }
+
+  /* cart rows */
+  .crow-wrap { position: relative; margin-bottom: 10px; border-radius: 16px; overflow: hidden; transition: height .35s ease, margin .35s ease, opacity .35s; }
+  .crow-wrap .crow-del { opacity: 0; } .crow-wrap.swiping .crow-del { opacity: 1; }
+  .crow-del { position: absolute; inset: 0; background: var(--red); color: #fff; display: flex; justify-content: flex-end; align-items: center; padding-right: 22px; font-weight: 700; font-size: 13px; gap: 6px; }
+  .crow { position: relative; background: #fff; border: 1px solid #f1f1f4; border-radius: 16px; padding: 10px; display: flex; gap: 10px; transition: transform .35s ease; }
+  .crow img { width: 62px; height: 62px; object-fit: contain; background: #f9fafb; border-radius: 10px; padding: 4px; }
+  .crow .info { flex: 1; min-width: 0; }
+  .crow h4 { margin: 0 0 3px; font-size: 12.5px; font-weight: 600; }
+  .crow small { color: var(--muted); font-size: 11px; }
+  .crow .amt { font-weight: 800; color: #4f46e5; font-size: 13px; align-self: flex-end; }
+  .totals { background: #fff; border-top: 1px solid var(--line); padding: 12px 14px; flex-shrink: 0; }
+  .totals .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .totals .row span { color: var(--muted); font-size: 13px; }
+  .totals .row b { font-size: 20px; color: #4f46e5; }
+  .place { height: 46px; border-radius: 12px; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700;
+    transition: width .35s ease, border-radius .35s ease; margin: 0 auto; width: 100%; overflow: hidden; }
+  .place.loading { width: 46px; border-radius: 23px; }
+  .spinner { width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* order placed overlay */
+  .op { position: absolute; inset: 0; background: #fff; z-index: 75; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 70px; opacity: 0; pointer-events: none; transition: opacity .3s; }
+  .op.show { opacity: 1; }
+  .op svg.stage { width: 100%; height: 300px; }
+  .op .msg { font-size: 15px; color: var(--muted); height: 22px; margin-top: 4px; }
+  .op .done { display: flex; flex-direction: column; align-items: center; gap: 6px; opacity: 0; transform: translateY(14px); transition: all .4s; }
+  .op .done.show { opacity: 1; transform: none; }
+  .op .done h2 { margin: 6px 0 0; font-size: 22px; color: var(--emerald-d); }
+  .op .done p { margin: 0; color: var(--muted); font-size: 13px; }
+  .op .done .btns { display: flex; gap: 8px; margin-top: 14px; }
+  .op .done .btns div { padding: 11px 16px; border-radius: 12px; font-weight: 700; font-size: 13px; }
+  .tick-c { stroke-dasharray: 300; stroke-dashoffset: 300; }
+  .tick-m { stroke-dasharray: 80; stroke-dashoffset: 80; }
+  .op .done.show .tick-c { animation: draw .6s ease-out forwards; }
+  .op .done.show .tick-m { animation: draw .35s .5s ease-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .road-dash { animation: road .5s linear infinite; }
+  @keyframes road { to { stroke-dashoffset: -36; } }
+  .wheel { transform-box: fill-box; transform-origin: center; animation: spin .4s linear infinite; }
+
+  /* tracking */
+  .ocard { background: #fff; border-radius: 18px; padding: 14px; border: 1px solid #f1f1f4; }
+  .ocard .head { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .ocard .head b { font-size: 14px; }
+  .ocard .head span { font-size: 12px; color: var(--muted); }
+  .eta { font-size: 12px; color: var(--emerald-d); font-weight: 600; margin-bottom: 14px; }
+  .track { position: relative; height: 54px; margin: 6px 6px 4px; }
+  .track .line { position: absolute; left: 10px; right: 10px; top: 20px; height: 4px; background: #e5e7eb; border-radius: 2px; }
+  .track .fill { position: absolute; left: 10px; top: 20px; height: 4px; background: var(--emerald); border-radius: 2px; width: 0; transition: width .9s ease; }
+  .track .van { position: absolute; top: -4px; left: 0; font-size: 22px; transition: left .9s ease; transform: translateX(-50%) scaleX(-1); }
+  .dots { position: absolute; left: 10px; right: 10px; top: 14px; display: flex; justify-content: space-between; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 3px solid #d1d5db; transition: all .3s; position: relative; }
+  .dot.done { background: var(--emerald); border-color: var(--emerald); }
+  .dot.cur { border-color: var(--emerald); }
+  .dot.cur::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 2px solid var(--emerald); animation: pulse 1.2s ease-out infinite; }
+  @keyframes pulse { from { opacity: .9; transform: scale(.6); } to { opacity: 0; transform: scale(1.4); } }
+  .labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin: 0 -4px 12px; }
+  .labels span { width: 60px; text-align: center; transition: color .3s; }
+  .labels span.on { color: var(--ink); font-weight: 700; }
+  .events { border-top: 1px dashed var(--line); padding-top: 10px; }
+  .ev { display: flex; gap: 10px; font-size: 12px; padding: 6px 0; opacity: 0; transform: translateX(-10px); transition: all .35s; }
+  .ev.show { opacity: 1; transform: none; }
+  .ev i { font-style: normal; width: 24px; height: 24px; border-radius: 50%; background: var(--emerald-l); display: grid; place-items: center; flex-shrink: 0; }
+  .ev small { display: block; color: var(--muted); font-size: 10.5px; }
+  .invoice-chip { margin-top: 10px; display: flex; align-items: center; gap: 8px; background: #eef2ff; color: #4338ca; border-radius: 12px; padding: 10px 12px; font-size: 12.5px; font-weight: 600;
+    transform: scale(0); transition: transform .4s cubic-bezier(.3,1.6,.5,1); }
+  .invoice-chip.show { transform: scale(1); }
+  .skel { height: 70px; border-radius: 16px; margin-top: 10px; background: linear-gradient(90deg, #f1f1f4 25%, #e9e9ee 37%, #f1f1f4 63%); background-size: 400% 100%; animation: shimmer 1.3s ease infinite; }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="side">
+    <h1>Ekta App: premium moments</h1>
+    <p class="sub">Tap a moment to play it in the phone. Real product images, same look as the live app.</p>
+    <div class="banner">PREVIEW ONLY: standalone mockup. The app code is unchanged.</div>
+    <div id="sceneList"></div>
+    <div class="controls">
+      <button class="play" id="replay">↻ Replay</button>
+      <button class="all" id="playAll">▶ Play all</button>
+    </div>
+  </div>
+
+  <div class="phone"><div class="screen" id="screen">
+    <div class="notch"></div>
+
+    <!-- 1. Fly to cart -->
+    <section class="scene" id="s1">
+      <div class="status"></div>
+      <div class="offer"><i>OFFER</i> Get 100 Rs off Instantly</div>
+      <div class="content">
+        <div class="search">🔍 Search products…</div>
+        <div class="grid" id="grid"></div>
+      </div>
+      <div class="toast" id="t1"><img id="t1img" alt="" /><div class="grow"><b>Added to cart</b><br /><small id="t1sub" style="color:#d1d5db">1 item · ₹43.50</small></div><div class="act">VIEW CART</div></div>
+      <div class="nav" id="nav1"></div>
+    </section>
+
+    <!-- 2. Scheme unlocked -->
+    <section class="scene" id="s2">
+      <div class="status"></div>
+      <div class="topbar"><h2>‹ Product</h2><span style="font-size:20px">🛒</span></div>
+      <div class="content">
+        <div class="pd">
+          <div class="big"><img src="https://storage.googleapis.com/hul-shikhar-cms/CMS-PROD-HERO/2025052213522444302.png" alt="" /></div>
+          <h3>DOVE CREAM BAR 75G</h3>
+          <div class="chips"><div class="chip" id="chip1">5% OFF (12+ pcs)</div><div class="chip">8% OFF (24+ pcs)</div></div>
+          <div class="rate-row"><span class="now" id="rateNow">₹52.00</span><span class="old" id="rateOld">₹52.00</span></div>
+          <div class="progress-msg" id="pmsg">Add <b id="need">3</b> more pcs to unlock <b>5% OFF</b><div class="pbar"><div id="pbar"></div></div></div>
+          <div class="bigstep"><span class="m">−</span><b id="qty">9</b><span class="p" id="plus">+</span></div>
+          <div class="saved-pill" id="saved">🎉 Scheme unlocked! You save ₹31.20</div>
+        </div>
+      </div>
+      <div class="nav" id="nav2"></div>
+    </section>
+
+    <!-- 3. Remove + undo -->
+    <section class="scene" id="s3">
+      <div class="status"></div>
+      <div class="topbar"><h2>My Cart (<span id="ccount">3</span>)</h2><span style="background:#fef2f2;color:#ef4444;font-size:12px;font-weight:600;padding:6px 10px;border-radius:9px">Clear Cart</span></div>
+      <div class="content" id="cartList"></div>
+      <div class="toast" id="t3"><div class="grow">Baby Dove removed</div><div class="act" id="undo">UNDO</div><div class="bar" id="undoBar"></div></div>
+      <div class="totals"><div class="row"><span>Total Amount</span><b id="total3">₹0</b></div></div>
+      <div class="nav" id="nav3"></div>
+    </section>
+
+    <!-- 4. Place order -->
+    <section class="scene" id="s4">
+      <div class="status"></div>
+      <div class="offer"><i>OFFER</i> Get 100 Rs off Instantly</div>
+      <div class="topbar"><h2>My Cart (2)</h2></div>
+      <div class="content" id="cartList4"></div>
+      <div class="totals"><div class="row"><span>Total Amount</span><b>₹1,186.40</b></div><div class="place" id="place"><span id="placeTxt">Place Order →</span></div></div>
+      <div class="nav" id="nav4"></div>
+      <div class="op" id="op">
+        <svg class="stage" viewBox="0 0 340 300" id="stage">
+          <defs><linearGradient id="sky4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e0e7ff"/><stop offset="1" stop-color="#ffffff"/></linearGradient></defs>
+          <rect width="340" height="300" fill="url(#sky4)"/>
+          <!-- godown at right -->
+          <g transform="translate(250,118)">
+            <path d="M0 40 L45 10 L90 40 V110 H0Z" fill="#e5e7eb"/>
+            <path d="M-4 42 L45 6 L94 42" fill="none" stroke="#4f46e5" stroke-width="7" stroke-linejoin="round"/>
+            <rect x="22" y="58" width="46" height="52" fill="#6b7280"/>
+            <rect id="gdoor" x="22" y="58" width="46" height="52" fill="#4b5563" style="transition:transform .5s"/>
+            <rect x="18" y="22" width="54" height="16" rx="3" fill="#111827"/>
+            <text x="45" y="34" text-anchor="middle" font-size="9" font-weight="800" fill="#a5b4fc">EKTA</text>
+          </g>
+          <rect y="228" width="340" height="40" fill="#374151"/>
+          <line class="road-dash" x1="0" y1="248" x2="340" y2="248" stroke="#fde68a" stroke-width="3" stroke-dasharray="18 18"/>
+          <rect y="268" width="340" height="32" fill="#d1fae5"/>
+          <!-- box being packed -->
+          <g id="box" transform="translate(120,150)">
+            <rect x="0" y="20" width="100" height="62" fill="#c08a4a" stroke="#8b5e2b" stroke-width="2"/>
+            <g id="items"></g>
+            <path id="flapL" d="M0 20 L-22 4 L28 4 L50 20Z" fill="#d9a066" stroke="#8b5e2b" stroke-width="2" style="transform-origin:0px 20px;transition:transform .35s"/>
+            <path id="flapR" d="M100 20 L122 4 L72 4 L50 20Z" fill="#d9a066" stroke="#8b5e2b" stroke-width="2" style="transform-origin:100px 20px;transition:transform .35s"/>
+            <rect id="tape" x="44" y="20" width="12" height="0" fill="#fde68a" style="transition:height .3s"/>
+            <text x="50" y="62" text-anchor="middle" font-size="10" font-weight="800" fill="#5b3b16" id="boxLabel" opacity="0">#ORD-1042</text>
+          </g>
+          <!-- van -->
+          <g id="van" style="transform:translateX(-160px)">
+            <rect x="0" y="176" width="92" height="52" rx="5" fill="#4f46e5"/>
+            <text x="46" y="207" text-anchor="middle" font-size="11" font-weight="800" fill="#fff">EKTA</text>
+            <path d="M94 192 H120 L134 210 V228 H94Z" fill="#111827"/>
+            <path d="M100 196 H118 L128 210 H100Z" fill="#93c5fd"/>
+            <g class="wheel"><circle cx="24" cy="230" r="10" fill="#111"/><circle cx="24" cy="230" r="4" fill="#9ca3af"/><rect x="23" y="221" width="2" height="5" fill="#9ca3af"/></g>
+            <g class="wheel"><circle cx="112" cy="230" r="10" fill="#111"/><circle cx="112" cy="230" r="4" fill="#9ca3af"/><rect x="111" y="221" width="2" height="5" fill="#9ca3af"/></g>
+          </g>
+        </svg>
+        <div class="msg" id="opmsg"></div>
+        <div class="done" id="opdone">
+          <svg width="84" height="84" viewBox="0 0 100 100"><circle class="tick-c" cx="50" cy="50" r="45" fill="#ecfdf5" stroke="#10b981" stroke-width="6" transform="rotate(-90 50 50)"/><path class="tick-m" d="M30 52 L45 66 L71 37" fill="none" stroke="#10b981" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h2>Order Placed!</h2>
+          <p>#ORD-1042 · 2 items · ₹1,186.40</p>
+          <p>Expected delivery: <b style="color:#111827">Tomorrow</b></p>
+          <div class="btns"><div style="background:#f3f4f6">Continue shopping</div><div style="background:#000;color:#fff">Track order</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Order tracking -->
+    <section class="scene" id="s5">
+      <div class="status"></div>
+      <div class="topbar"><h2>My Orders</h2></div>
+      <div class="content">
+        <div class="ocard">
+          <div class="head"><b>#ORD-1042</b><span>30 Oct · ₹1,186.40</span></div>
+          <div class="eta" id="eta">Arriving tomorrow</div>
+          <div class="track">
+            <div class="line"></div><div class="fill" id="tfill"></div>
+            <div class="dots" id="tdots"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+            <div class="van" id="tvan">🚚</div>
+          </div>
+          <div class="labels" id="tlabels"><span>Placed</span><span>Confirmed</span><span>Billed</span><span>On the way</span><span>Delivered</span></div>
+          <div class="events" id="events"></div>
+          <div class="invoice-chip" id="inv">🧾 Invoice EK-2207 is ready · <u>View PDF</u></div>
+        </div>
+        <div class="skel"></div><div class="skel" style="opacity:.6"></div>
+      </div>
+      <div class="nav" id="nav5"></div>
+    </section>
+
+    <div class="finger" id="finger"></div>
+  </div></div>
+</div>
+
+<script>
+const IMG = {
+  surf100: 'https://storage.googleapis.com/hul-shikhar-cms/CMS-PROD-HERO/2024112115283316018.png',
+  surf250: 'https://storage.googleapis.com/hul-shikhar-cms/CMS-PROD-HERO/2024112115283216020.png',
+  babydove: 'https://storage.googleapis.com/hul-shikhar-cms/CMS-PROD-HERO/17377.png',
+  dove: 'https://storage.googleapis.com/hul-shikhar-cms/CMS-PROD-HERO/2025052213522444302.png',
+};
+const SCENES = [
+  { id: 's1', title: 'Add to cart: item flies to cart', desc: 'Product photo arcs into the cart icon, cart bounces, badge pops, Add turns into a stepper, toast with total.' },
+  { id: 's2', title: 'Scheme unlocked', desc: 'Progress bar fills as qty grows; at the slab the offer chip shines, confetti bursts, rate drops, savings shown.' },
+  { id: 's3', title: 'Remove item + Undo', desc: 'Swipe left to delete, row collapses, total counts down; Undo slides it back.' },
+  { id: 's4', title: 'Place order: parcel to godown', desc: 'Button morphs to spinner; items drop into a box, box is taped, van carries it to the Ekta godown, green tick.' },
+  { id: 's5', title: 'Live order tracking', desc: 'Van moves along Placed → Confirmed → Billed → On the way, events slide in, invoice chip pops when billed.' },
+];
+const NAV = (active, count) => {
+  const ic = {
+    Home: '<path d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+    Search: '<circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.8"/>',
+    Cart: '<path d="M3 4h2l2.5 11h11L21 7H6.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="19" r="1.5" fill="currentColor"/><circle cx="17" cy="19" r="1.5" fill="currentColor"/>',
+    Orders: '<path d="M6 3h9l4 4v14H6z M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+    Profile: '<circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+  };
+  return Object.keys(ic).map(k => `<div class="${k === active ? 'act' : ''}" data-nav="${k}"><span style="position:relative;display:inline-flex"><svg viewBox="0 0 24 24">${ic[k]}</svg>${k === 'Cart' && count ? `<span class="badge">${count}</span>` : ''}</span>${k}</div>`).join('');
+};
+
+const $ = id => document.getElementById(id);
+const screen = $('screen');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let runId = 0;                   // cancels stale runs when switching scenes
+const alive = id => id === runId;
+
+function rel(el) { const a = el.getBoundingClientRect(), s = screen.getBoundingClientRect(); return { x: a.left - s.left, y: a.top - s.top, w: a.width, h: a.height }; }
+async function tap(el, id) {
+  const f = $('finger'), r = rel(el);
+  f.classList.add('show');
+  f.style.left = (r.x + r.w / 2) + 'px'; f.style.top = (r.y + r.h / 2) + 'px';
+  await sleep(600); if (!alive(id)) return false;
+  f.classList.add('tap');
+  const rp = document.createElement('div'); rp.className = 'ripple'; rp.style.left = (r.x + r.w / 2) + 'px'; rp.style.top = (r.y + r.h / 2) + 'px';
+  screen.appendChild(rp); setTimeout(() => rp.remove(), 650);
+  await sleep(140); f.classList.remove('tap');
+  return alive(id);
+}
+function countTo(el, from, to, ms) {
+  const t0 = performance.now();
+  const step = () => {
+    const k = Math.min(1, (performance.now() - t0) / ms), v = from + (to - from) * (1 - Math.pow(1 - k, 3));
+    el.textContent = '₹' + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (k < 1) setTimeout(step, 16);
+  };
+  step();
+}
+function confetti(x, y) {
+  const colors = ['#f97316', '#10b981', '#6366f1', '#facc15', '#ec4899'];
+  for (let i = 0; i < 26; i++) {
+    const c = document.createElement('div'); c.className = 'confetti';
+    c.style.background = colors[i % colors.length]; c.style.left = x + 'px'; c.style.top = y + 'px';
+    screen.appendChild(c);
+    const ang = Math.random() * Math.PI * 2, dist = 60 + Math.random() * 90;
+    c.animate([
+      { transform: 'translate(0,0) rotate(0)', opacity: 1 },
+      { transform: `translate(${Math.cos(ang) * dist}px, ${Math.sin(ang) * dist - 40}px) rotate(${Math.random() * 540}deg)`, opacity: 1, offset: .6 },
+      { transform: `translate(${Math.cos(ang) * dist}px, ${Math.sin(ang) * dist + 80}px) rotate(${Math.random() * 720}deg)`, opacity: 0 },
+    ], { duration: 1300, easing: 'cubic-bezier(.2,.7,.4,1)' });
+    setTimeout(() => c.remove(), 1350);
+  }
+}
+
+/* ── Scene 1: fly to cart ─────────────────────────────── */
+const PRODUCTS = [
+  { img: IMG.surf100, name: 'SURF EXCEL BAR 100G', rate: 9.50 },
+  { img: IMG.surf250, name: 'SURF EXCEL BAR 250G', rate: 22.80 },
+  { img: IMG.babydove, name: 'BABY DOVE SOAP 3X75G', rate: 158.00 },
+  { img: IMG.dove, name: 'DOVE CREAM BAR 75G', rate: 52.00 },
+];
+async function scene1(id) {
+  let count = 0, total = 0;
+  $('grid').innerHTML = PRODUCTS.map((p, i) => `<div class="card"><div class="img"><img src="${p.img}" alt=""></div><h4>${p.name}</h4><div class="rate">Rate: ₹${p.rate.toFixed(2)}</div><div class="addbtn" id="add${i}">🛒 Add</div></div>`).join('');
+  $('nav1').innerHTML = NAV('Home', 0);
+  $('t1').classList.remove('show');
+  await sleep(500);
+  for (const i of [0, 1]) {
+    const btn = $('add' + i);
+    if (!await tap(btn, id)) return;
+    // fly
+    const card = btn.closest('.card'), from = rel(card.querySelector('.img'));
+    const cart = document.querySelector('#nav1 [data-nav="Cart"] svg'), to = rel(cart);
+    const fl = document.createElement('div'); fl.className = 'flyer'; fl.innerHTML = `<img src="${PRODUCTS[i].img}">`;
+    fl.style.left = (from.x + from.w / 2 - 35) + 'px'; fl.style.top = (from.y + from.h / 2 - 35) + 'px';
+    screen.appendChild(fl);
+    const dx = to.x + to.w / 2 - (from.x + from.w / 2), dy = to.y + to.h / 2 - (from.y + from.h / 2);
+    btn.outerHTML = `<div class="stepper" id="add${i}"><span class="m">−</span><b>1</b><span class="p">+</span></div>`;
+    await fl.animate([
+      { transform: 'translate(0,0) scale(1) rotate(0)', opacity: 1 },
+      { transform: `translate(${dx * .35}px, ${dy * .35 - 130}px) scale(.8) rotate(-12deg)`, opacity: 1, offset: .45 },
+      { transform: `translate(${dx}px, ${dy}px) scale(.18) rotate(8deg)`, opacity: .7 },
+    ], { duration: 850, easing: 'cubic-bezier(.45,.05,.55,.95)' }).finished;
+    fl.remove();
+    if (!alive(id)) return;
+    count++; total += PRODUCTS[i].rate * 4;
+    $('nav1').innerHTML = NAV('Home', count);
+    const navCart = document.querySelector('#nav1 [data-nav="Cart"] span');
+    navCart.classList.add('cart-bounce'); navCart.querySelector('.badge').classList.add('badge-pop');
+    $('t1img').src = PRODUCTS[i].img;
+    $('t1sub').textContent = `${count} item${count > 1 ? 's' : ''} · ₹${total.toFixed(2)}`;
+    $('t1').classList.add('show');
+    await sleep(1300); if (!alive(id)) return;
+  }
+  $('finger').classList.remove('show');
+}
+
+/* ── Scene 2: scheme unlocked ─────────────────────────── */
+async function scene2(id) {
+  $('nav2').innerHTML = NAV('Home', 2);
+  const q = $('qty'), slab = 12, rate = 52, disc = .05;
+  let n = 9;
+  q.textContent = n; $('need').textContent = slab - n; $('pbar').style.width = (n / slab * 100) + '%';
+  $('chip1').classList.remove('on'); $('rateOld').classList.remove('show'); $('rateNow').textContent = '₹52.00';
+  $('saved').classList.remove('show'); $('pmsg').style.display = '';
+  await sleep(500);
+  for (let k = 0; k < 3; k++) {
+    if (!await tap($('plus'), id)) return;
+    n++; q.textContent = n; q.classList.remove('tick'); void q.offsetWidth; q.classList.add('tick');
+    $('need').textContent = slab - n; $('pbar').style.width = (n / slab * 100) + '%';
+    await sleep(250);
+  }
+  if (!alive(id)) return;
+  $('finger').classList.remove('show');
+  await sleep(250);
+  $('pmsg').style.display = 'none';
+  $('chip1').classList.add('on');
+  const c = rel($('chip1')); confetti(c.x + c.w / 2, c.y + c.h / 2);
+  $('rateOld').classList.add('show');
+  countTo($('rateNow'), rate, rate * (1 - disc), 700);
+  await sleep(400);
+  $('saved').textContent = `🎉 Scheme unlocked! You save ₹${(rate * disc * n).toFixed(2)}`;
+  $('saved').classList.add('show');
+}
+
+/* ── Scene 3: remove + undo ───────────────────────────── */
+const CART = [
+  { img: IMG.surf250, name: 'SURF EXCEL BAR 250G', q: 'Box 1 · Pcs 0', amt: 547.20 },
+  { img: IMG.babydove, name: 'BABY DOVE SOAP 3X75G', q: 'Box 0 · Pcs 2', amt: 316.00 },
+  { img: IMG.dove, name: 'DOVE CREAM BAR 75G', q: 'Box 0 · Pcs 12', amt: 592.80 },
+];
+const crowHTML = (c, i) => `<div class="crow-wrap" id="cw${i}"><div class="crow-del">🗑 Delete</div><div class="crow" id="cr${i}"><img src="${c.img}" alt=""><div class="info"><h4>${c.name}</h4><small>Rate applied · ${c.q}</small></div><div class="amt">₹${c.amt.toFixed(2)}</div></div></div>`;
+async function scene3(id) {
+  $('nav3').innerHTML = NAV('Cart', 3);
+  $('cartList').innerHTML = CART.map(crowHTML).join('');
+  $('ccount').textContent = 3;
+  const sum = CART.reduce((a, c) => a + c.amt, 0);
+  $('total3').textContent = '₹' + sum.toFixed(2);
+  $('t3').classList.remove('show');
+  await sleep(600);
+  const row = $('cr1'), wrap = $('cw1'), r = rel(row), f = $('finger');
+  // swipe gesture
+  f.classList.add('show'); f.style.left = (r.x + r.w - 40) + 'px'; f.style.top = (r.y + r.h / 2) + 'px';
+  await sleep(650); if (!alive(id)) return;
+  f.style.left = (r.x + 60) + 'px';
+  wrap.classList.add('swiping');
+  row.style.transform = 'translateX(-110px)';
+  await sleep(700); if (!alive(id)) return;
+  f.classList.remove('show');
+  row.style.transform = 'translateX(-110%)';
+  await sleep(300);
+  wrap.style.height = wrap.offsetHeight + 'px'; void wrap.offsetHeight;
+  wrap.style.height = '0px'; wrap.style.marginBottom = '0px'; wrap.style.opacity = '0';
+  $('ccount').textContent = 2;
+  $('nav3').innerHTML = NAV('Cart', 2);
+  countTo($('total3'), sum, sum - CART[1].amt, 600);
+  const bar = $('undoBar'); bar.style.transition = 'none'; bar.style.width = '100%';
+  $('t3').classList.add('show');
+  void bar.offsetWidth; bar.style.transition = 'width 3s linear'; bar.style.width = '0%';
+  await sleep(1400); if (!alive(id)) return;
+  if (!await tap($('undo'), id)) return;
+  f.classList.remove('show');
+  $('t3').classList.remove('show');
+  wrap.style.height = '84px'; wrap.style.marginBottom = '10px'; wrap.style.opacity = '1';
+  await sleep(250);
+  row.style.transform = 'translateX(0)';
+  setTimeout(() => wrap.classList.remove('swiping'), 380);
+  $('ccount').textContent = 3; $('nav3').innerHTML = NAV('Cart', 3);
+  document.querySelector('#nav3 [data-nav="Cart"] .badge').classList.add('badge-pop');
+  countTo($('total3'), sum - CART[1].amt, sum, 600);
+}
+
+/* ── Scene 4: place order ─────────────────────────────── */
+async function scene4(id) {
+  $('nav4').innerHTML = NAV('Cart', 2);
+  $('cartList4').innerHTML = [CART[0], CART[2]].map(crowHTML).join('');
+  const op = $('op'), place = $('place');
+  op.classList.remove('show'); $('opdone').classList.remove('show'); $('opmsg').textContent = '';
+  place.classList.remove('loading'); $('placeTxt').innerHTML = 'Place Order →';
+  const van = $('van'), box = $('box'), items = $('items');
+  van.style.transition = 'none'; van.style.transform = 'translateX(-160px)';
+  box.style.transition = 'none'; box.style.transform = 'translate(120px,150px)'; box.style.opacity = 1;
+  $('flapL').style.transform = 'rotate(-150deg)'; $('flapR').style.transform = 'rotate(150deg)';
+  $('tape').setAttribute('height', 0); $('boxLabel').setAttribute('opacity', 0); $('gdoor').style.transform = '';
+  items.innerHTML = '';
+  await sleep(500);
+  if (!await tap(place, id)) return;
+  $('finger').classList.remove('show');
+  place.classList.add('loading'); $('placeTxt').innerHTML = '<div class="spinner"></div>';
+  await sleep(1000); if (!alive(id)) return;
+  op.classList.add('show');
+  $('opmsg').textContent = 'Packing your order…';
+  // items drop in
+  const ns = 'http://www.w3.org/2000/svg';
+  for (const [k, src] of [[0, IMG.surf250], [1, IMG.dove]]) {
+    const im = document.createElementNS(ns, 'image');
+    im.setAttribute('href', src); im.setAttribute('width', 46); im.setAttribute('height', 46);
+    im.setAttribute('x', 6 + k * 44); im.setAttribute('y', -14);
+    items.appendChild(im);
+    await im.animate([{ transform: 'translateY(-150px)', opacity: 0 }, { transform: 'translateY(0)', opacity: 1 }], { duration: 520, easing: 'cubic-bezier(.3,1.3,.6,1)' }).finished;
+    if (!alive(id)) return;
+  }
+  await sleep(200);
+  $('flapL').style.transform = 'rotate(0)'; await sleep(220); $('flapR').style.transform = 'rotate(0)';
+  await sleep(350); $('tape').setAttribute('height', 62);
+  await sleep(300); $('boxLabel').setAttribute('opacity', 1); items.innerHTML = '';
+  await sleep(400); if (!alive(id)) return;
+  // van arrives, box loads in
+  $('opmsg').textContent = 'Sending to Ekta godown…';
+  van.style.transition = 'transform 1s cubic-bezier(.2,.8,.3,1)'; van.style.transform = 'translateX(-28px)';
+  await sleep(1050); if (!alive(id)) return;
+  box.style.transition = 'transform .5s ease, opacity .3s .35s'; box.style.transform = 'translate(-6px,160px) scale(.6)'; box.style.opacity = 0;
+  await sleep(650);
+  $('gdoor').style.transform = 'translateY(-46px)';
+  van.style.transition = 'transform 1.6s cubic-bezier(.5,0,.4,1)'; van.style.transform = 'translateX(205px)';
+  await sleep(1700); if (!alive(id)) return;
+  $('opmsg').textContent = '';
+  $('opdone').classList.add('show');
+  confetti(170, 470);
+}
+
+/* ── Scene 5: tracking ────────────────────────────────── */
+const EVENTS = [
+  ['🧾', 'Order placed', '30 Oct, 9:52 AM'],
+  ['✅', 'Confirmed by Ekta Enterprises', '30 Oct, 10:05 AM'],
+  ['📄', 'Billed · Invoice EK-2207', '30 Oct, 11:40 AM'],
+  ['🚚', 'Out for delivery with Ramesh', '31 Oct, 8:15 AM'],
+];
+async function scene5(id) {
+  $('nav5').innerHTML = NAV('Orders', 0);
+  const dots = [...$('tdots').children], labels = [...$('tlabels').children];
+  dots.forEach(d => d.className = 'dot'); labels.forEach(l => l.classList.remove('on'));
+  $('tfill').style.width = '0'; $('tvan').style.left = '10px'; $('events').innerHTML = ''; $('inv').classList.remove('show');
+  $('eta').textContent = 'Arriving tomorrow';
+  const lineW = $('tdots').offsetWidth;
+  await sleep(500);
+  for (let s = 0; s < 4; s++) {
+    if (!alive(id)) return;
+    dots.forEach((d, i) => d.className = 'dot' + (i < s ? ' done' : i === s ? ' cur' : ''));
+    if (s > 0) dots[s - 1].className = 'dot done';
+    labels.forEach((l, i) => l.classList.toggle('on', i === s));
+    const x = 10 + lineW * (s / 4);
+    $('tfill').style.width = (lineW * (s / 4)) + 'px';
+    $('tvan').style.left = x + 'px';
+    const ev = document.createElement('div'); ev.className = 'ev';
+    ev.innerHTML = `<i>${EVENTS[s][0]}</i><div>${EVENTS[s][1]}<small>${EVENTS[s][2]}</small></div>`;
+    $('events').prepend(ev); void ev.offsetWidth; ev.classList.add('show');
+    if (s === 2) { await sleep(400); $('inv').classList.add('show'); }
+    if (s === 3) $('eta').textContent = 'Arriving today by 2 PM 🎉';
+    await sleep(1300);
+  }
+}
+
+const RUN = { s1: scene1, s2: scene2, s3: scene3, s4: scene4, s5: scene5 };
+let current = 's1';
+function show(sid, play = true) {
+  current = sid;
+  document.querySelectorAll('.scene').forEach(s => s.classList.toggle('on', s.id === sid));
+  document.querySelectorAll('.scene-btn').forEach(b => b.classList.toggle('active', b.dataset.s === sid));
+  $('finger').classList.remove('show');
+  const id = ++runId;
+  if (play) return RUN[sid](id);
+}
+$('sceneList').innerHTML = SCENES.map((s, i) => `<button class="scene-btn" data-s="${s.id}"><div class="n">${i + 1}</div><div><b>${s.title}</b><span>${s.desc}</span></div></button>`).join('');
+document.querySelectorAll('.scene-btn').forEach(b => b.onclick = () => show(b.dataset.s));
+$('replay').onclick = () => show(current);
+$('playAll').onclick = async () => {
+  for (const s of SCENES) {
+    const id = runId + 1;
+    await show(s.id);
+    if (runId !== id) return;
+    await sleep(1800);
+    if (runId !== id) return;
+  }
+};
+show('s1');
+</script>
+</body>
+</html>

@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
 const { DBFFile } = require('../dbf-orm/dbffile.js');
+const { downloadSchemes, SCHEMES_FILE } = require('../utils/bizomSchemes');
 
 // Helper function to read PMPL.dbf and create a mapping for ITEM_MAP
 async function getPmplMapping() {
@@ -26,6 +27,53 @@ async function getPmplMapping() {
     }
     return mapping;
 }
+
+// Bizom scheme dump: written by POST /download, else an older scraper output. GODREJ_SCHEMES_JSON overrides.
+const SCHEME_JSON_CANDIDATES = [
+    process.env.GODREJ_SCHEMES_JSON,
+    SCHEMES_FILE,
+    path.join(__dirname, '../../../src/Bizom/new_scraper/all_schemes.json'),
+    'F:\\FMCG\\src\\Bizom\\new_scraper\\all_schemes.json'
+].filter(Boolean);
+
+async function findSchemesJson() {
+    for (const p of SCHEME_JSON_CANDIDATES) {
+        try {
+            await fs.access(p);
+            return p;
+        } catch { /* try next */ }
+    }
+    return null;
+}
+
+// Fallback for scheme files downloaded before outlet_segment existed: read the _RT / _WS tags in the name
+function segmentFromName(name = '') {
+    const tags = new Set(name.toUpperCase().split(/[_\s-]+/));
+    const rt = tags.has('RT'), ws = tags.has('WS');
+    if (rt && !ws) return 'RT';
+    if (ws && !rt) return 'WS';
+    return 'BOTH';
+}
+
+// Returns why a scheme can't go into SCHDTL (quantity slab + % discount), or null if it can
+function notImportableReason(scheme) {
+    const qty = parseFloat(scheme.forquantity) || 0;
+    const amount = parseFloat(scheme.foramount) || 0;
+    const discount = parseFloat(scheme.discountpercent) || 0;
+    if (scheme.type && scheme.type !== 'sku') {
+        return scheme.type.includes('qps') ? 'QPS (monthly purchase value)' : 'Invoice value slab';
+    }
+    if (qty <= 0 && amount > 0) return 'Invoice value slab';
+    if (discount <= 0) {
+        if (Array.isArray(scheme.free_skus) && scheme.free_skus.length) return 'Free goods';
+        if (parseFloat(scheme.saverupee) > 0) return 'Fixed rupee saving';
+        return '0% discount';
+    }
+    return null;
+}
+
+// SCHDTL.CUST_CAT: R = retail parties only, W = wholesale only, blank = everyone
+const CUST_CAT_FOR_SEGMENT = { RT: 'R', WS: 'W', BOTH: '' };
 
 // GET /api/godrej-schemes/next-bill-no
 router.get('/next-bill-no', async (req, res) => {
@@ -55,17 +103,37 @@ router.get('/next-bill-no', async (req, res) => {
 // GET /api/godrej-schemes/preview
 router.get('/preview', async (req, res) => {
     try {
+        const allJsonPath = await findSchemesJson();
+        if (!allJsonPath) {
+            return res.status(404).json({
+                success: false,
+                message: 'No Bizom scheme data yet. Click "Download from Bizom" first.'
+            });
+        }
         const pmplMap = await getPmplMapping();
-        const allJsonPath = 'F:\\FMCG\\src\\Bizom\\new_scraper\\all_schemes.json';
 
+        const { mtime } = await fs.stat(allJsonPath);
         const allJsonContent = await fs.readFile(allJsonPath, 'utf8');
         const godrejData = JSON.parse(allJsonContent);
+
+        const activeSchemes = Array.isArray(godrejData) ? godrejData.filter(s => s.active === "1") : [];
+        for (const scheme of activeSchemes) {
+            scheme.outlet_segment = scheme.outlet_segment || segmentFromName(scheme.name);
+        }
+
+        // SCHDTL only holds quantity slabs with a % discount. Anything else is listed, not imported.
+        const valueSchemes = [];
+        const slabSchemes = [];
+        for (const scheme of activeSchemes) {
+            const reason = notImportableReason(scheme);
+            if (reason) valueSchemes.push({ scheme, reason });
+            else slabSchemes.push(scheme);
+        }
 
         // Calculate dynamic slab ends based on schemegroup_id and forquantity
         if (Array.isArray(godrejData)) {
             const groups = {};
-            for (const scheme of godrejData) {
-                if (scheme.active !== "1") continue;
+            for (const scheme of slabSchemes) {
                 const groupId = scheme.schemegroup_id;
                 if (groupId) {
                     if (!groups[groupId]) groups[groupId] = [];
@@ -105,10 +173,7 @@ router.get('/preview', async (req, res) => {
 
         if (Array.isArray(godrejData)) {
             totalProcessed = godrejData.length;
-            for (const scheme of godrejData) {
-                // Ignore inactive schemes if needed? The JSON shows active: "1"
-                if (scheme.active !== "1") continue;
-
+            for (const scheme of slabSchemes) {
                 if (scheme.for_skucode && Array.isArray(scheme.for_skucode)) {
                     let hasMatch = false;
                     for (const skuCode of scheme.for_skucode) {
@@ -126,7 +191,9 @@ router.get('/preview', async (req, res) => {
                                     activitycode: scheme.id || '',
                                     scheme_desc: scheme.name || '',
                                     slab_start: parseFloat(scheme.forquantity) || 1,
-                                    slab_end: scheme.calculated_slab_end
+                                    slab_end: scheme.calculated_slab_end,
+                                    segment: scheme.outlet_segment,
+                                    scheme_group: scheme.schemegroup_id || ''
                                 });
                             }
                         }
@@ -136,16 +203,40 @@ router.get('/preview', async (req, res) => {
             }
         }
 
+        const notImported = valueSchemes.map(({ scheme, reason }) => ({
+            activitycode: scheme.id || '',
+            scheme_desc: scheme.name || '',
+            segment: scheme.outlet_segment,
+            reason,
+            min_amount: parseFloat(scheme.foramount) || 0,
+            discount: parseFloat(scheme.discountpercent) || 0,
+            save_rupees: parseFloat(scheme.saverupee) || 0,
+            matched_products: (scheme.for_skucode || []).filter(c => pmplMap[c]).length
+        }));
+
         res.json({
             success: true,
             total_products: totalProcessed,
             matched_products: totalMatched,
-            schemes: matchedSchemes
+            data_as_of: mtime,
+            schemes: matchedSchemes,
+            not_imported: notImported
         });
 
     } catch (error) {
         console.error('Error in /api/godrej-schemes/preview:', error);
         res.status(500).json({ success: false, message: 'Failed to preview schemes', error: error.message });
+    }
+});
+
+// POST /api/godrej-schemes/download - refresh all_schemes.json from Bizom
+router.post('/download', async (req, res) => {
+    try {
+        const result = await downloadSchemes();
+        res.json({ success: true, message: `Downloaded ${result.schemes} schemes (${result.active} active) from Bizom`, ...result });
+    } catch (error) {
+        console.error('Error in /api/godrej-schemes/download:', error);
+        res.status(502).json({ success: false, message: error.message });
     }
 });
 
@@ -206,7 +297,7 @@ router.post('/import', async (req, res) => {
                 SLAB2: Number(scheme.slab_end),
                 SCH_FROM: new Date(validFrom),
                 SCH_TO: new Date(validTo),
-                CUST_CAT: "A"
+                CUST_CAT: CUST_CAT_FOR_SEGMENT[scheme.segment] ?? ''
             };
         });
 

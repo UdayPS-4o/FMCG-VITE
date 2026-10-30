@@ -390,6 +390,9 @@ function buildConversations() {
         source: p.source || null,
         timestamp: msgTs,
         status: p.status || 'sent',
+        error: p.error || null,
+        resendPayload: p.resendPayload || null,
+        resendOf: p.resendOf || null,
       };
       thread.messages.push(msgObj);
       thread.outboundCount++;
@@ -478,6 +481,15 @@ function buildConversations() {
   for (const thread of threads.values()) {
     thread.messages.sort((a, b) => a.timestamp - b.timestamp);
     delete thread._seen;
+    // Any resend attempt retires the original; if it failed again, the newer
+    // failed copy is the one that offers Resend — never both.
+    const byId = new Map(thread.messages.map((m) => [m.id, m]));
+    for (const m of thread.messages) {
+      if (m.resendOf && byId.has(m.resendOf)) byId.get(m.resendOf).resent = true;
+    }
+    for (const m of thread.messages) {
+      if (m.direction === 'outbound' && m.status === 'failed') m.canResend = !m.resent && !!buildResendPayload(m);
+    }
   }
   threads._unmatchedStatuses = unmatchedStatuses;
   threads._unmatchedReactions = unmatchedReactions;
@@ -502,6 +514,7 @@ router.post('/read', (req, res) => {
   const { phone } = req.body || {};
   if (!phone) return res.status(400).json({ error: 'Missing phone' });
   markAsRead(normalizePhone(phone));
+  _cache = null; // unread counts changed — don't serve a stale list
   res.json({ success: true });
 });
 
@@ -678,6 +691,98 @@ router.post('/send', async (req, res) => {
 
     invalidateCache();
     res.status(result.status).json(Object.assign({ ok }, result.data));
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── Resend failed messages ───────────────────────────────────────────────────
+/**
+ * The AOC payload to send again for a failed outbound message. Sends logged by
+ * whatsapp.js since the Resend feature carry it verbatim (resendPayload); older
+ * failures only have the rendered text, so known templates are parsed back
+ * into their params.
+ */
+function buildResendPayload(m) {
+  if (!m || m.direction !== 'outbound') return null;
+  if (m.resendPayload && m.resendPayload.type) return m.resendPayload;
+
+  const body = String(m.body || '');
+  const tpl = String(m.templateName || '').toLowerCase();
+  const doc = m.documentUrl
+    ? { document: { link: m.documentUrl, filename: m.documentFilename || path.basename(m.documentUrl) } }
+    : null;
+  const template = (params, header) => ({
+    type: 'template', templateName: m.templateName, language: { code: 'en' },
+    components: Object.assign({ body: { params } }, header ? { header } : {}),
+  });
+
+  let x;
+  if (tpl === 'bankrec' && (x = body.match(/receipt Rs: (\S*) (.*?) on Date ([^\n]*)/))) {
+    return template([x[1], x[2], x[3].trim()]);
+  }
+  if (tpl === 'balrem' && (x = body.match(/^Dear (.*)\nYour balance as on (.*) is Rs\.(.*)/))) {
+    return template([x[1].trim(), x[2].trim(), x[3].trim()]);
+  }
+  if ((tpl === 'bill' || tpl === 'invoice_genrated') && doc &&
+      (x = body.match(/^Dear (.*)\.\nThank you for Purchasing Bill No\. (.*)\nFor Amount : (.*)/))) {
+    return template([x[1].trim(), x[2].trim(), x[3].trim()], doc);
+  }
+  if (tpl === 'ledger' && doc && (x = body.match(/^Dear (.*?)\.\n/))) {
+    return template([x[1].trim()], doc);
+  }
+  if (m.type === 'text' && body) return { type: 'text', text: { body } };
+  if ((m.type === 'document' || m.type === 'image') && (m.documentUrl || m.imageUrl)) {
+    return m.type === 'image'
+      ? { type: 'image', image: { link: m.imageUrl } }
+      : { type: 'document', document: { link: m.documentUrl, filename: m.documentFilename || 'Attachment' } };
+  }
+  return null;
+}
+
+const _resending = new Set();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * POST /resend  { phone, ids?: string[] }
+ * Resends the given failed messages of a thread, or every failed one when
+ * `ids` is omitted. Goes through whatsapp.js /send like every other send, so
+ * the retry is logged as a new bubble with resendOf → original.
+ */
+router.post('/resend', async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body && req.body.phone);
+    if (!phone) return res.status(400).json({ ok: false, error: 'Missing phone' });
+    const thread = getCachedConversations().get(phone);
+    if (!thread) return res.status(404).json({ ok: false, error: 'Conversation not found' });
+
+    const want = Array.isArray(req.body.ids) ? new Set(req.body.ids) : null;
+    const targets = thread.messages.filter((m) =>
+      m.canResend && !_resending.has(m.id) && (!want || want.has(m.id)));
+    if (!targets.length) return res.json({ ok: true, results: [], resent: 0, failed: 0 });
+
+    const to = '+91' + phone;
+    const results = [];
+    for (const [i, m] of targets.entries()) {
+      _resending.add(m.id);
+      try {
+        if (i > 0) await sleep(1500);   // stay well under AOC's rate limit
+        const r = await axios.post(
+          'http://127.0.0.1:' + WHATSAPP_PORT + '/send',
+          Object.assign({ to, resendOf: m.id }, buildResendPayload(m)),
+          { headers: { 'Content-Type': 'application/json' }, timeout: 30000, validateStatus: () => true }
+        );
+        const ok = r.status >= 200 && r.status < 300 && !(r.data && r.data.error);
+        results.push({ id: m.id, ok, error: ok ? null : String((r.data && r.data.message) || ('HTTP ' + r.status)) });
+      } catch (e) {
+        results.push({ id: m.id, ok: false, error: e.message });
+      } finally {
+        _resending.delete(m.id);
+      }
+    }
+    invalidateCache();
+    const resent = results.filter((r) => r.ok).length;
+    res.json({ ok: true, results, resent, failed: results.length - resent });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

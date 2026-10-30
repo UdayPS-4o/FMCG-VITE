@@ -125,7 +125,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
     if (item.item && invoiceDate) {
       const fetchSchemes = async () => {
         try {
-          const response = await fetch(`${constants.baseURL}/api/schemes/for-item?itemCode=${encodeURIComponent(item.item)}&date=${encodeURIComponent(invoiceDate)}`, {
+          // partyCode lets the server drop retail-only / wholesale-only schemes that don't apply to this party
+          const response = await fetch(`${constants.baseURL}/api/schemes/for-item?itemCode=${encodeURIComponent(item.item)}&date=${encodeURIComponent(invoiceDate)}&partyCode=${encodeURIComponent(partyCode || '')}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
           });
           if (response.ok) {
@@ -147,7 +148,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
     } else {
       setActiveSchemes([]);
     }
-  }, [item.item, invoiceDate]);
+  }, [item.item, invoiceDate, partyCode]);
 
   // Ref to track if swap unit was focused by Enter on Godown
   const swapUnitFocusedByEnter = useRef(false);

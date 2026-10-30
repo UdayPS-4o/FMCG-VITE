@@ -12,6 +12,10 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ShoppingCart, Plus, Minus, Package, ChevronRight, ArrowDownUp } from 'lucide-react';
 import { AdminImageModal } from '../components/AdminImageModal';
+import SchemeProgress from '../components/SchemeProgress';
+import FadeImg from '../components/FadeImg';
+import PullToRefresh from '../components/PullToRefresh';
+import { notifyCartChange } from '../lib/cartFx';
 
 interface Brand { brand_code: string; brand_desc: string; image_url: string; }
 
@@ -61,7 +65,12 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
   const effectiveRate = rate * (1 - currentDiscount / 100);
   const isInCart = pcs > 0 || boxes > 0;
 
-  const upd = (p: number, b: number) => { setPcs(p); setBoxes(b); addToCart(product, p, b); if (p === 0 && b === 0) toggleExpand(false); };
+  const cardRef = useRef<HTMLDivElement>(null);
+  const upd = (p: number, b: number) => {
+    setPcs(p); setBoxes(b); addToCart(product, p, b);
+    notifyCartChange({ product, prevQty: totalQty, newQty: p + b * conv, anchor: cardRef.current });
+    if (p === 0 && b === 0) toggleExpand(false);
+  };
 
   const stepBtn = (fill: boolean, onClick: () => void, icon: React.ReactNode, isGray: boolean = false) => {
     const acc = isGray ? '#6b7280' : pal.acc;
@@ -71,13 +80,13 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
   };
 
   return (
-    <motion.div layout transition={{ layout: { type: 'spring', damping: 26, stiffness: 220 } }} style={{ borderRadius: 20, background: '#fff', boxShadow: isExpanded ? `0 4px 20px ${pal.acc}20` : '0 2px 12px rgba(0,0,0,0.06)', border: isExpanded ? `2px solid ${pal.acc}` : `1px solid ${pal.lt}`, overflow: 'hidden', position: 'relative', transition: 'box-shadow 0.2s', height: '100%', display: 'flex', flexDirection: isExpanded && hasMulti ? 'row' : 'column' }}>
+    <motion.div ref={cardRef} layout transition={{ layout: { type: 'spring', damping: 26, stiffness: 220 } }} style={{ borderRadius: 20, background: '#fff', boxShadow: isExpanded ? `0 4px 20px ${pal.acc}20` : '0 2px 12px rgba(0,0,0,0.06)', border: isExpanded ? `2px solid ${pal.acc}` : `1px solid ${pal.lt}`, overflow: 'hidden', position: 'relative', transition: 'box-shadow 0.2s', height: '100%', display: 'flex', flexDirection: isExpanded && hasMulti ? 'row' : 'column' }}>
       {hasScheme && <div style={{ position: 'absolute', top: 0, right: 0, background: pal.acc, color: '#fff', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderBottomLeftRadius: 10, zIndex: 1 }}>{maxDiscount}% OFF</div>}
 
       <motion.div layout style={{ flex: isExpanded && hasMulti ? '0 0 calc(50% - 6px)' : undefined, display: 'flex', flexDirection: 'column' }}>
         <div style={{ aspectRatio: '1/1', background: pal.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
           {product.image_url
-            ? <img src={getImageUrl(product.image_url)} alt={product.PRODUCT} style={{ width: '72%', height: '72%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+            ? <FadeImg src={getImageUrl(product.image_url)} alt={product.PRODUCT} style={{ width: '72%', height: '72%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
             : isAdmin ? (
               <button onClick={() => setShowAdminImageModal(true)} style={{ width: 48, height: 48, background: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${pal.lt}`, cursor: 'pointer', color: pal.acc, boxShadow: `0 2px 8px ${pal.acc}20` }}>
                 <Plus size={24} />
@@ -108,7 +117,9 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 9, marginTop: 'auto' }}>
+          {isInCart && <div style={{ marginTop: 'auto' }}><SchemeProgress product={product} totalQty={totalQty} language={language} accent={pal.acc} /></div>}
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 9, marginTop: isInCart ? 0 : 'auto' }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: '#111' }}>{language === 'en' ? 'Rate:' : 'दर:'} ₹{effectiveRate.toFixed(2)}</span>
             {mrp > effectiveRate && <span style={{ fontSize: 10, color: '#9ca3af' }}>MRP: ₹{mrp.toFixed(2)}</span>}
           </div>
@@ -120,7 +131,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
         <AnimatePresence mode="popLayout">
           {!isExpanded && !isInCart ? (
             <motion.button key="add" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0 }}
-              onClick={() => hasMulti ? toggleExpand(true) : addToCart(product, 1, 0)}
+              onClick={() => hasMulti ? toggleExpand(true) : upd(1, 0)}
               style={{ width: '100%', height: 34, border: `2px solid ${pal.acc}`, borderRadius: 10, background: '#fff', color: pal.acc, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer' }}>
               <Plus size={14} /> {language === 'en' ? 'Add' : 'जोड़ें'}
             </motion.button>
@@ -231,14 +242,14 @@ const Home = () => {
 
   const TTL_PRODUCTS = 5 * 60 * 1000;
 
-  const load = useCallback(async (reset = false) => {
+  const load = useCallback(async (reset = false, force = false) => {
     if (loadingRef.current && !reset) return;
     if (!reset && !hasMore) return;
     const pg = reset ? 1 : page;
     const cacheKey = `products_p${pg}_b${activeBrand}_s${sortOrder}_u${!sortOrder ? (user?.partyCode || 'guest') : 'all'}`;
 
     // On page-1 reset: try stale cache first for instant display
-    if (reset && pg === 1) {
+    if (reset && pg === 1 && !force) {
       const cached = await getStale<{ data: Product[]; total: number }>(cacheKey);
       if (cached) {
         setProducts(cached.data.data);
@@ -348,6 +359,8 @@ const Home = () => {
         </div>
       </div>
 
+      <PullToRefresh language={language} onRefresh={() => load(true, true)} />
+
       {/* Brands */}
       <div style={{ padding: '12px 0 4px' }}>
         <p style={{ fontSize: 12, fontWeight: 700, color: '#374151', margin: '0 16px 8px' }}>Shop by Brand</p>
@@ -358,10 +371,14 @@ const Home = () => {
             return (
               <button key={b.brand_code} onClick={() => setActiveBrand(b.brand_code)}
                 style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer' }}>
-                <div style={{ width: 50, height: 50, borderRadius: '50%', background: isActive ? pal.acc : pal.bg, border: isActive ? `2.5px solid ${pal.acc}` : '2px solid transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: isActive ? `0 4px 14px ${pal.acc}40` : 'none', transition: 'all 0.2s' }}>
+                <div style={{ position: 'relative' }}>
+                {/* ring glides from the old brand to the new one */}
+                {isActive && <motion.div layoutId="brand-active-ring" transition={{ type: 'spring', damping: 22, stiffness: 320 }} style={{ position: 'absolute', inset: -4, borderRadius: '50%', border: `2.5px solid ${pal.acc}`, boxShadow: `0 4px 14px ${pal.acc}40` }} />}
+                <motion.div whileTap={{ scale: 0.9 }} style={{ width: 50, height: 50, borderRadius: '50%', background: isActive ? pal.acc : pal.bg, border: '2px solid transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'background 0.25s' }}>
                   {b.image_url
                     ? <img src={getImageUrl(b.image_url)} alt={b.brand_desc} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontSize: 9, fontWeight: 700, color: isActive ? '#fff' : pal.acc }}>{b.brand_desc.slice(0, 3)}</span>}
+                </motion.div>
                 </div>
                 <span style={{ fontSize: 8.5, fontWeight: 600, color: isActive ? pal.acc : '#6b7280', maxWidth: 50, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.brand_desc || b.brand_code}</span>
               </button>
@@ -389,9 +406,13 @@ const Home = () => {
             return (
               <motion.div
                 layout
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ opacity: { duration: 0.3 }, layout: { type: 'spring', damping: 26, stiffness: 220 } }}
+                initial={{ opacity: 0, y: 14, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{
+                  // cascade in (per page of 20) when the list or brand changes
+                  default: { duration: 0.35, delay: (i % 20) * 0.035, ease: 'easeOut' },
+                  layout: { type: 'spring', damping: 26, stiffness: 220 },
+                }}
                 key={`${p.CODE}-${isShifted ? 'shifted' : 'normal'}`}
                 ref={i === displayProducts.length - 1 ? lastRef : undefined}
                 style={{ gridColumn: isExpanded ? 'span 2' : 'span 1' }}

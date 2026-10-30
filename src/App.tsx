@@ -57,6 +57,7 @@ import ShikharSchemeUpdate from './pages/reports/ShikharSchemeUpdate';
 import GodrejSchemeUpdate from './pages/reports/GodrejSchemeUpdate';
 import Home from './pages/Dashboard/Home';
 import NewPurchase from './pages/purchases/NewPurchase';
+import GodrejPurchaseImport from './pages/purchases/GodrejPurchaseImport';
 import DatabasePurchases from "./pages/database/Purchases";
 import PurchasesApproved from "./pages/approved/PurchasesApproved";
 import MandatoryDocs from './pages/mandatory-docs/MandatoryDocs';
@@ -160,6 +161,11 @@ const AppRoutes = () => {
         <Route path="/purchases/new" element={
           <ProtectedRoute>
             <NewPurchase />
+          </ProtectedRoute>
+        } />
+        <Route path="/purchases/godrej-import" element={
+          <ProtectedRoute requiredAccess="Purchases">
+            <GodrejPurchaseImport />
           </ProtectedRoute>
         } />
         <Route path="/purchases/edit/:id" element={

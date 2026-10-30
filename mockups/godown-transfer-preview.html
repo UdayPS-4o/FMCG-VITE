@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Godown Transfer – Animated Preview</title>
+<style>
+  /* Each theme maps onto the same tokens the app already uses
+     (--gold = brand-500, --panel = white/card, --bg = gray-50, --line = gray-200 …) */
+  :root, [data-theme="indigo"] {
+    --bg: #1e1040; --panel: #2d1b5e; --panel-2: #36226b; --line: #4d3590;
+    --gold: #c9a227; --gold-soft: rgba(201,162,39,.18); --on-accent: #1e1040;
+    --text: #f5f0ff; --muted: #b5a0d5; --footer: rgba(30,16,64,.92);
+    --sky1: #3b2a7a; --sky2: #7a5bc4; --plate: #1e1040;
+    --green: #22c55e; --bg-img: none;
+  }
+  [data-theme="dark"] {
+    --bg: #0c111d; --panel: #1d2939; --panel-2: #283447; --line: #3b475a;
+    --gold: #465fff; --gold-soft: rgba(70,95,255,.2); --on-accent: #fff;
+    --text: #f2f4f7; --muted: #98a2b3; --footer: rgba(12,17,29,.92);
+    --sky1: #0f1a3a; --sky2: #2f3f78; --plate: #0c111d;
+  }
+  [data-theme="light"] {
+    --bg: #f9fafb; --panel: #ffffff; --panel-2: #f2f4f7; --line: #e4e7ec;
+    --gold: #465fff; --gold-soft: rgba(70,95,255,.12); --on-accent: #fff;
+    --text: #101828; --muted: #667085; --footer: rgba(255,255,255,.94);
+    --sky1: #8ec5ff; --sky2: #dcefff; --plate: #101828;
+  }
+  [data-theme="sage"] {
+    --bg: #e4f7eb; --panel: #f0fdf6; --panel-2: #dcfce7; --line: #a8ddb9;
+    --gold: #16a34a; --gold-soft: rgba(22,163,74,.15); --on-accent: #fff;
+    --text: #102a1c; --muted: #4b6b57; --footer: rgba(240,253,246,.94);
+    --sky1: #9fd8ff; --sky2: #e4f7eb; --plate: #14532d;
+  }
+  [data-theme="saffron"] {
+    --bg: #fef5e4; --panel: #fffcf5; --panel-2: #fff3dc; --line: #f8d49a;
+    --gold: #d97706; --gold-soft: rgba(217,119,6,.15); --on-accent: #fff;
+    --text: #2a1a08; --muted: #7c6a4f; --footer: rgba(255,252,245,.94);
+    --sky1: #ffc98a; --sky2: #fff1d6; --plate: #451a03;
+  }
+  [data-theme^="glass"] {
+    --panel: rgba(255,255,255,.08); --panel-2: rgba(255,255,255,.1); --line: rgba(255,255,255,.22);
+    --gold: #4982f6; --gold-soft: rgba(73,130,246,.25); --on-accent: #fff;
+    --text: #ffffff; --muted: #cbd5e1; --footer: rgba(5,10,20,.55);
+    --sky1: #0a3c96; --sky2: #14a096; --plate: #050a14;
+    --bg: #050a14; --bg-img: radial-gradient(at 10% 0%, rgba(10,60,150,.8), transparent 50%),
+          radial-gradient(at 90% 90%, rgba(20,160,150,.7), transparent 50%);
+  }
+  [data-theme="glass-sunset"] {
+    --gold: #f43f5e; --gold-soft: rgba(244,63,94,.25);
+    --sky1: #a01e50; --sky2: #c83c0a; --plate: #1a0a05;
+    --bg: #1a0a05; --bg-img: radial-gradient(at 10% 0%, rgba(200,60,10,.8), transparent 50%),
+          radial-gradient(at 90% 90%, rgba(150,100,20,.7), transparent 50%);
+  }
+  [data-theme="glass-obsidian"] {
+    --gold: #e2e8f0; --gold-soft: rgba(226,232,240,.18); --on-accent: #0f172a;
+    --sky1: #1e1e28; --sky2: #505050; --plate: #050505;
+    --bg: #050505; --bg-img: radial-gradient(at 10% 0%, rgba(60,60,60,.8), transparent 50%),
+          radial-gradient(at 90% 90%, rgba(80,80,80,.7), transparent 50%);
+  }
+  [data-theme^="glass"] .card, [data-theme^="glass"] .tile, [data-theme^="glass"] .prod,
+  [data-theme^="glass"] .scene-card, [data-theme^="glass"] .footer { backdrop-filter: blur(14px); }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Outfit", "Segoe UI", system-ui, sans-serif;
+    background: var(--bg-img, none) fixed, var(--bg); color: var(--text); min-height: 100vh;
+    transition: background .3s, color .3s;
+  }
+  .theme-pick { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 13px; }
+  .theme-pick option { color: #000; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 28px 24px 120px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; }
+  .crumb { color: var(--muted); font-size: 14px; }
+  .crumb b { color: var(--text); font-weight: 500; }
+  .demo-btn {
+    background: transparent; border: 1px dashed var(--gold); color: var(--gold);
+    padding: 8px 14px; border-radius: 10px; cursor: pointer; font: inherit; font-size: 13px;
+  }
+
+  .card { background: var(--panel); border-radius: 14px; padding: 20px; margin-bottom: 22px; }
+  .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .field { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 15px; }
+  .field label { position: absolute; top: -9px; left: 10px; background: var(--panel); padding: 0 4px; font-size: 11px; color: var(--gold); }
+  .field.hl { border-color: var(--gold); }
+
+  .section-title { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; margin: 4px 0 12px; }
+  .step { width: 24px; height: 24px; border-radius: 50%; background: var(--gold-soft); color: var(--gold);
+    display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  .hint { color: var(--muted); font-weight: 400; font-size: 13px; }
+
+  /* Godown tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .tile {
+    position: relative; background: var(--panel-2); border: 2px solid transparent; border-radius: 14px;
+    padding: 14px 12px 12px; cursor: pointer; text-align: center;
+    transition: transform .18s, border-color .18s, box-shadow .18s, opacity .18s;
+  }
+  .tile:hover { transform: translateY(-3px); border-color: var(--line); }
+  .tile.selected { border-color: var(--gold); box-shadow: 0 0 0 4px var(--gold-soft), 0 10px 24px rgba(0,0,0,.35); transform: translateY(-3px); }
+  .tile.disabled { opacity: .3; pointer-events: none; filter: grayscale(1); }
+  .tile svg { width: 74px; height: 58px; display: block; margin: 0 auto 8px; }
+  .tile .code { font-size: 22px; font-weight: 800; color: var(--gold); line-height: 1; }
+  .tile .name { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .tile .check {
+    position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--gold); color: var(--on-accent); font-size: 13px; font-weight: 900;
+    display: grid; place-items: center; transform: scale(0); transition: transform .2s cubic-bezier(.3,1.6,.6,1);
+  }
+  .tile.selected .check { transform: scale(1); }
+  .tile.selected .door { animation: doorOpen .5s ease forwards; }
+  @keyframes doorOpen { to { transform: translateY(-9px); } }
+
+  .route {
+    display: flex; align-items: center; justify-content: center; gap: 14px; margin: 18px 0 2px;
+    color: var(--muted); font-size: 14px; min-height: 30px;
+  }
+  .route .pill { background: var(--gold-soft); color: var(--gold); padding: 5px 12px; border-radius: 99px; font-weight: 700; }
+  .route .arrow { letter-spacing: 3px; color: var(--gold); animation: flow 1s linear infinite; }
+  @keyframes flow { 0%{opacity:.3} 50%{opacity:1} 100%{opacity:.3} }
+
+  /* Items */
+  .search { width: 100%; max-width: 520px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: transparent; color: var(--text); font: inherit; margin-bottom: 12px; }
+  .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+  .prod { display: flex; align-items: center; gap: 10px; background: var(--panel-2); border-radius: 12px; padding: 10px 12px;
+    border: 1px solid transparent; transition: border-color .2s; }
+  .prod.added { border-color: var(--green); }
+  .prod .ic { width: 38px; height: 38px; border-radius: 10px; background: var(--line); display: grid; place-items: center; font-size: 20px; }
+  .prod .info { flex: 1; min-width: 0; }
+  .prod .info div:first-child { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prod .info small { color: var(--muted); font-size: 12px; }
+  .qty { display: flex; align-items: center; gap: 6px; }
+  .qty button { width: 28px; height: 28px; border-radius: 8px; border: 0; background: var(--gold); color: var(--on-accent); font-weight: 900; cursor: pointer; font-size: 16px; }
+  .qty button.minus { background: var(--line); color: var(--text); }
+  .qty span { min-width: 22px; text-align: center; font-weight: 700; }
+
+  .footer {
+    position: fixed; left: 0; right: 0; bottom: 0; background: var(--footer); backdrop-filter: blur(6px);
+    border-top: 1px solid var(--line);
+  }
+  .footer .inner { max-width: 1180px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .footer .total { font-size: 18px; font-weight: 700; }
+  .footer .total small { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
+  .submit { background: var(--gold); color: var(--on-accent); border: 0; padding: 12px 26px; border-radius: 10px; font: inherit; font-weight: 700; cursor: pointer; }
+  .submit:disabled { opacity: .4; cursor: not-allowed; }
+  .bump { animation: bump .3s; }
+  @keyframes bump { 50% { transform: scale(1.15); } }
+
+  /* ===== Success overlay ===== */
+  .overlay { position: fixed; inset: 0; background: rgba(10, 6, 24, .82); display: none; place-items: center; z-index: 50; }
+  .overlay.show { display: grid; animation: fade .3s; }
+  @keyframes fade { from { opacity: 0; } }
+  .scene-card { width: min(860px, 94vw); background: var(--panel); border-radius: 20px; padding: 22px; box-shadow: 0 30px 80px rgba(0,0,0,.5); text-align: center; }
+  .scene { width: 100%; height: auto; display: block; border-radius: 14px; overflow: hidden; }
+  .status { margin-top: 14px; font-size: 16px; color: var(--muted); min-height: 24px; }
+
+  .road-dash { animation: roadMove .6s linear infinite; }
+  @keyframes roadMove { to { stroke-dashoffset: -40; } }
+  .wheel { transform-box: fill-box; transform-origin: center; animation: spin .45s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .truck-body { animation: bounce .35s ease-in-out infinite alternate; }
+  @keyframes bounce { to { transform: translateY(-1.5px); } }
+  .cloud { animation: drift 18s linear infinite; }
+  @keyframes drift { from { transform: translateX(-120px); } to { transform: translateX(900px); } }
+  .puff { animation: puff 0.7s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+  .puff.p2 { animation-delay: .23s; } .puff.p3 { animation-delay: .46s; }
+  @keyframes puff { from { opacity: .7; transform: translate(0,0) scale(.5); } to { opacity: 0; transform: translate(-26px,-10px) scale(1.6); } }
+
+  .done { display: none; flex-direction: column; align-items: center; gap: 10px; margin-top: 6px; }
+  .done.show { display: flex; }
+  .tick-circle { stroke-dasharray: 300; stroke-dashoffset: 300; animation: draw .6s ease-out forwards; }
+  .tick-mark { stroke-dasharray: 80; stroke-dashoffset: 80; animation: draw .35s .55s ease-out forwards; }
+  .tick-wrap { animation: pop .5s .9s cubic-bezier(.3,1.7,.6,1) both; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  .done h2 { margin: 0; color: var(--green); font-size: 22px; }
+  .done p { margin: 0; color: var(--muted); }
+  .done .actions { display: flex; gap: 10px; margin-top: 8px; }
+  .done .actions button { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); padding: 10px 18px; border-radius: 10px; font: inherit; cursor: pointer; }
+  .done .actions button.primary { background: var(--gold); color: var(--on-accent); border: 0; font-weight: 700; }
+
+  /* fake demo cursor */
+  .cursor { position: fixed; width: 22px; height: 22px; pointer-events: none; z-index: 100; display: none;
+    transition: left .7s ease, top .7s ease; }
+  .cursor.show { display: block; }
+  .cursor::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: rgba(212,167,44,.55); transform: scale(0); }
+  .cursor.click::after { animation: ripple .4s; }
+  @keyframes ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }
+
+  .banner { background: var(--gold-soft); border: 1px solid var(--gold); color: var(--text); border-radius: 10px; padding: 8px 14px; font-size: 13px; margin-bottom: 16px; }
+
+  .top-actions { display: flex; gap: 16px; align-items: center; }
+
+  /* ===== Mobile ===== */
+  @media (max-width: 640px) {
+    .page { padding: 16px 12px 110px; }
+    .top { flex-wrap: wrap; gap: 10px; }
+    .top-actions { width: 100%; gap: 8px; }
+    .top-actions .crumb { display: none; }
+    .theme-pick { flex: 1; }
+    .card { padding: 14px 12px; border-radius: 12px; margin-bottom: 14px; }
+    .meta { grid-template-columns: 1fr 1fr; gap: 14px 10px; }
+    .field { padding: 10px 12px; font-size: 14px; }
+
+    /* godown tiles become a swipeable strip */
+    .tiles { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px;
+      padding: 6px 2px 10px; margin: 0 -12px; padding-left: 12px; scrollbar-width: none; }
+    .tiles::-webkit-scrollbar { display: none; }
+    .tile { flex: 0 0 104px; scroll-snap-align: start; padding: 10px 6px 8px; }
+    .tile svg { width: 52px; height: 40px; margin-bottom: 4px; }
+    .tile .code { font-size: 19px; }
+    .tile .name { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tile:hover { transform: none; }
+    .route { flex-wrap: wrap; gap: 6px; font-size: 12px; }
+    .route .arrow { letter-spacing: 0; }
+
+    .products { grid-template-columns: 1fr; }
+    .qty button { width: 34px; height: 34px; }   /* finger-sized */
+    .search { max-width: none; }
+
+    .footer .inner { padding: 10px 12px; }
+    .footer .total { font-size: 15px; }
+    .footer .total small { display: block; margin: 0; }
+    .submit { padding: 12px 18px; }
+
+    /* success sheet slides up from the bottom */
+    .overlay.show { place-items: end center; }
+    .scene-card { width: 100%; border-radius: 20px 20px 0 0; padding: 14px 10px 22px;
+      animation: sheetUp .35s cubic-bezier(.2,.9,.3,1); }
+    .scene { margin: 0 -4px; width: calc(100% + 8px); }
+    @keyframes sheetUp { from { transform: translateY(100%); } }
+    .done .actions { width: 100%; }
+    .done .actions button { flex: 1; padding: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="banner">PREVIEW ONLY: this is a standalone mockup with sample data. The app code is unchanged.</div>
+  <div class="top">
+    <h1>Godown Transfer</h1>
+    <div class="top-actions">
+      <select class="theme-pick" id="themePick" title="Theme">
+        <option value="light">☀️ Day</option>
+        <option value="dark">🌙 Night</option>
+        <option value="sage">🌿 Sage</option>
+        <option value="saffron">🔥 Saffron</option>
+        <option value="indigo" selected>👑 Royal</option>
+        <option value="glass">🌊 Glass Ocean</option>
+        <option value="glass-sunset">🌅 Glass Sunset</option>
+        <option value="glass-obsidian">🌑 Glass Obsidian</option>
+      </select>
+      <button class="demo-btn" id="demoBtn">▶ Play demo</button>
+      <span class="crumb">Home › <b>Godown Transfer</b></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="meta">
+      <div class="field hl"><label>Date</label>30-10-2026</div>
+      <div class="field hl"><label>Series</label>T</div>
+      <div class="field hl"><label>ID</label>36</div>
+      <div class="field"><label>S/M</label>RAMESH</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><span class="step">1</span> From Godown <span class="hint">tap to pick</span></div>
+    <div class="tiles" id="fromTiles"></div>
+    <div class="section-title" style="margin-top:22px"><span class="step">2</span> To Godown</div>
+    <div class="tiles" id="toTiles"></div>
+    <div class="route" id="route"><span class="hint">Pick both godowns to see the route</span></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><span class="step">3</span> Items <span class="hint">stock shown is in the From godown</span></div>
+    <input class="search" placeholder="Search items" id="search" />
+    <div class="products" id="products"></div>
+  </div>
+</div>
+
+<div class="footer"><div class="inner">
+  <div class="total" id="total">Total Items: 0 <small>0 cases</small></div>
+  <div style="display:flex;gap:14px;align-items:center">
+    <span style="color:var(--muted);cursor:pointer">Cancel</span>
+    <button class="submit" id="submit" disabled>Submit Transfer</button>
+  </div>
+</div></div>
+
+<!-- Success overlay -->
+<div class="overlay" id="overlay">
+  <div class="scene-card">
+    <svg class="scene" viewBox="0 0 800 300" id="scene">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style="stop-color:var(--sky1)" /><stop offset="1" style="stop-color:var(--sky2)" />
+        </linearGradient>
+      </defs>
+      <rect width="800" height="300" fill="url(#sky)" />
+      <circle cx="680" cy="60" r="26" fill="#ffd36b" opacity=".9" />
+      <g class="cloud" opacity=".5"><ellipse cx="80" cy="60" rx="38" ry="12" fill="#fff"/><ellipse cx="105" cy="52" rx="24" ry="12" fill="#fff"/></g>
+      <g class="cloud" opacity=".35" style="animation-delay:-9s"><ellipse cx="60" cy="95" rx="30" ry="9" fill="#fff"/></g>
+      <!-- hills -->
+      <path d="M0 200 Q120 150 240 195 T480 190 T800 185 V300 H0Z" fill="#2c6b4a" />
+      <!-- road -->
+      <rect y="215" width="800" height="55" fill="#2b2b33" />
+      <line x1="0" y1="242" x2="800" y2="242" stroke="#f5d98a" stroke-width="4" stroke-dasharray="22 18" class="road-dash" id="roadDash"/>
+      <rect y="270" width="800" height="30" fill="#24573c" />
+
+      <!-- From warehouse -->
+      <g transform="translate(20,95)">
+        <path d="M0 50 L70 10 L140 50 V125 H0Z" fill="#c9cbd6" />
+        <path d="M-6 52 L70 6 L146 52" fill="none" stroke="#8b2e2e" stroke-width="10" stroke-linejoin="round"/>
+        <rect x="35" y="65" width="70" height="60" fill="#5a5f73" />
+        <g stroke="#454a5c" stroke-width="2"><line x1="35" y1="77" x2="105" y2="77"/><line x1="35" y1="89" x2="105" y2="89"/><line x1="35" y1="101" x2="105" y2="101"/><line x1="35" y1="113" x2="105" y2="113"/></g>
+        <rect x="45" y="28" width="50" height="24" rx="4" style="fill:var(--plate)" />
+        <text x="70" y="46" text-anchor="middle" font-size="17" font-weight="800" style="fill:var(--gold)" id="fromCodeSvg">02</text>
+      </g>
+      <text x="90" y="292" text-anchor="middle" font-size="13" fill="#e6fff0" id="fromNameSvg">Main Godown</text>
+
+      <!-- To warehouse -->
+      <g transform="translate(640,95)">
+        <path d="M0 50 L70 10 L140 50 V125 H0Z" fill="#c9cbd6" />
+        <path d="M-6 52 L70 6 L146 52" fill="none" stroke="#1f5e8b" stroke-width="10" stroke-linejoin="round"/>
+        <rect x="35" y="65" width="70" height="60" fill="#5a5f73" />
+        <rect x="35" y="65" width="70" height="60" fill="#3a3f52" id="toDoor" />
+        <rect x="45" y="28" width="50" height="24" rx="4" style="fill:var(--plate)" />
+        <text x="70" y="46" text-anchor="middle" font-size="17" font-weight="800" style="fill:var(--gold)" id="toCodeSvg">03</text>
+      </g>
+      <text x="710" y="292" text-anchor="middle" font-size="13" fill="#e6fff0" id="toNameSvg">Retail Godown</text>
+
+      <!-- Truck -->
+      <g id="truck" transform="translate(110,0)">
+        <g class="truck-body">
+          <!-- cargo box -->
+          <rect x="0" y="160" width="110" height="62" rx="4" style="fill:var(--gold)" />
+          <text x="55" y="196" text-anchor="middle" font-size="13" font-weight="800" style="fill:var(--plate)">EKTA</text>
+          <!-- cargo boxes peeking -->
+          <g id="crates">
+            <rect x="8" y="146" width="22" height="16" fill="#a8742a" stroke="#6e4a17"/>
+            <rect x="34" y="146" width="22" height="16" fill="#b9843a" stroke="#6e4a17"/>
+            <rect x="60" y="146" width="22" height="16" fill="#a8742a" stroke="#6e4a17"/>
+            <rect x="21" y="132" width="22" height="16" fill="#c49548" stroke="#6e4a17"/>
+            <rect x="47" y="132" width="22" height="16" fill="#a8742a" stroke="#6e4a17"/>
+          </g>
+          <!-- cab -->
+          <path d="M112 178 H150 L168 198 V222 H112Z" fill="#e8e8f0" />
+          <path d="M120 183 H146 L159 198 H120Z" fill="#7fc4ff" />
+          <rect x="164" y="208" width="6" height="6" fill="#ffd36b" />
+        </g>
+        <!-- exhaust -->
+        <g fill="#cfcfe0">
+          <circle class="puff" cx="-4" cy="214" r="6"/><circle class="puff p2" cx="-4" cy="214" r="6"/><circle class="puff p3" cx="-4" cy="214" r="6"/>
+        </g>
+        <g class="wheel"><circle cx="28" cy="224" r="13" fill="#15151b"/><circle cx="28" cy="224" r="5" fill="#9a9aab"/><rect x="26.5" y="212" width="3" height="8" fill="#9a9aab"/></g>
+        <g class="wheel"><circle cx="140" cy="224" r="13" fill="#15151b"/><circle cx="140" cy="224" r="5" fill="#9a9aab"/><rect x="138.5" y="212" width="3" height="8" fill="#9a9aab"/></g>
+      </g>
+    </svg>
+
+    <div class="status" id="statusLine">Loading goods at godown 02…</div>
+
+    <div class="done" id="done">
+      <svg width="96" height="96" viewBox="0 0 100 100" class="tick-wrap">
+        <circle cx="50" cy="50" r="45" fill="rgba(34,197,94,.12)" stroke="#22c55e" stroke-width="6" class="tick-circle" transform="rotate(-90 50 50)"/>
+        <path d="M30 52 L45 66 L71 37" fill="none" stroke="#22c55e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" class="tick-mark"/>
+      </svg>
+      <h2>Transfer Saved</h2>
+      <p id="doneText">T-36 · 3 items moved from 02 → 03</p>
+      <div class="actions">
+        <button id="printBtn">Print</button>
+        <button class="primary" id="newBtn">New Transfer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cursor" id="cursor">
+  <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 2 L3 19 L8 14 L11 21 L14 20 L11 13 L18 13Z" fill="#fff" stroke="#000" stroke-width="1.2"/></svg>
+</div>
+
+<script>
+const GODOWNS = [
+  { code: '01', name: 'Head Office' },
+  { code: '02', name: 'Main Godown' },
+  { code: '03', name: 'Retail Godown' },
+  { code: '04', name: 'Damage Store' },
+  { code: '05', name: 'Van Stock' },
+];
+const PRODUCTS = [
+  { code: 'GCP001', name: 'Godrej No.1 Soap 100g (x4)', icon: '🧼', stock: 142 },
+  { code: 'CNT010', name: 'Cinthol Lime 125g', icon: '🍋', stock: 88 },
+  { code: 'GHK220', name: 'Good Knight Gold Flash', icon: '🦟', stock: 61 },
+  { code: 'HIT400', name: 'HIT Red Spray 400ml', icon: '🧴', stock: 37 },
+  { code: 'EZE050', name: 'Ezee Liquid Detergent 500g', icon: '🫧', stock: 54 },
+  { code: 'GXP075', name: 'Godrej Expert Hair Colour', icon: '💈', stock: 120 },
+];
+
+const state = { from: null, to: null, qty: {} };
+
+const warehouseSvg = `
+<svg viewBox="0 0 80 62">
+  <path d="M4 24 L40 4 L76 24 V60 H4Z" fill="#c9cbd6"/>
+  <path d="M1 25 L40 2 L79 25" fill="none" style="stroke:var(--gold)" stroke-width="5" stroke-linejoin="round"/>
+  <rect x="22" y="32" width="36" height="28" fill="#5a5f73"/>
+  <g stroke="#454a5c" stroke-width="1.5"><line x1="22" y1="39" x2="58" y2="39"/><line x1="22" y1="46" x2="58" y2="46"/><line x1="22" y1="53" x2="58" y2="53"/></g>
+  <rect class="door" x="22" y="32" width="36" height="9" fill="#3a3f52"/>
+  <rect x="8" y="46" width="10" height="8" fill="#a8742a"/><rect x="62" y="46" width="10" height="8" fill="#a8742a"/>
+</svg>`;
+
+function renderTiles() {
+  const mk = (g, side) => {
+    const sel = state[side] === g.code;
+    const dis = side === 'to' && (!state.from || state.from === g.code);
+    return `<div class="tile ${sel ? 'selected' : ''} ${dis ? 'disabled' : ''}" data-side="${side}" data-code="${g.code}">
+      <div class="check">✓</div>${warehouseSvg}
+      <div class="code">${g.code}</div><div class="name">${g.name}</div></div>`;
+  };
+  fromTiles.innerHTML = GODOWNS.map(g => mk(g, 'from')).join('');
+  toTiles.innerHTML = GODOWNS.map(g => mk(g, 'to')).join('');
+  const f = GODOWNS.find(g => g.code === state.from), t = GODOWNS.find(g => g.code === state.to);
+  route.innerHTML = f && t
+    ? `<span class="pill">${f.code} · ${f.name}</span><span class="arrow">▶▶▶</span>🚚<span class="arrow">▶▶▶</span><span class="pill">${t.code} · ${t.name}</span>`
+    : `<span class="hint">Pick both godowns to see the route</span>`;
+}
+
+function renderProducts() {
+  const q = search.value.toLowerCase();
+  products.innerHTML = PRODUCTS.filter(p => p.name.toLowerCase().includes(q)).map(p => {
+    const n = state.qty[p.code] || 0;
+    return `<div class="prod ${n ? 'added' : ''}" data-code="${p.code}">
+      <div class="ic">${p.icon}</div>
+      <div class="info"><div>${p.name}</div><small>${p.code} · Stock ${p.stock}</small></div>
+      <div class="qty">${n ? `<button class="minus" data-act="-">−</button><span>${n}</span>` : ''}<button data-act="+">+</button></div>
+    </div>`;
+  }).join('');
+  const items = Object.values(state.qty).filter(Boolean);
+  total.innerHTML = `Total Items: ${items.length} <small>${items.reduce((a, b) => a + b, 0)} cases</small>`;
+  total.classList.remove('bump'); void total.offsetWidth; total.classList.add('bump');
+  submit.disabled = !(state.from && state.to && items.length);
+}
+
+document.addEventListener('click', e => {
+  const tile = e.target.closest('.tile');
+  if (tile) {
+    const side = tile.dataset.side, code = tile.dataset.code;
+    state[side] = code;
+    if (side === 'from' && state.to === code) state.to = null;
+    renderTiles(); renderProducts();
+  }
+  const btn = e.target.closest('.qty button');
+  if (btn) {
+    const code = btn.closest('.prod').dataset.code;
+    state.qty[code] = Math.max(0, (state.qty[code] || 0) + (btn.dataset.act === '+' ? 1 : -1));
+    renderProducts();
+  }
+});
+search.addEventListener('input', renderProducts);
+
+/* ===== Truck animation ===== */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function animate(from, to, dur, fn) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - t0) / dur);
+      const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      fn(from + (to - from) * e);
+      k < 1 ? setTimeout(() => step(performance.now()), 16) : res();
+    };
+    step(performance.now());
+  });
+}
+
+async function playTransfer() {
+  const f = GODOWNS.find(g => g.code === state.from), t = GODOWNS.find(g => g.code === state.to);
+  fromCodeSvg.textContent = f.code; fromNameSvg.textContent = f.name;
+  toCodeSvg.textContent = t.code; toNameSvg.textContent = t.name;
+  const items = Object.values(state.qty).filter(Boolean).length;
+  doneText.textContent = `T-36 · ${items} item${items > 1 ? 's' : ''} moved from ${f.code} → ${t.code}`;
+
+  overlay.classList.add('show'); done.classList.remove('show');
+  statusLine.style.display = '';
+  truck.setAttribute('transform', 'translate(110,0)');
+  toDoor.setAttribute('height', 60); toDoor.setAttribute('y', 65);
+  const crates = document.getElementById('crates');
+  crates.style.opacity = 0;
+  statusLine.textContent = `Loading goods at godown ${f.code}…`;
+  await animate(0, 1, 700, v => crates.style.opacity = v);
+  statusLine.textContent = `On the way: ${f.code} → ${t.code} 🚚`;
+  await animate(110, 520, 2600, x => truck.setAttribute('transform', `translate(${x},0)`));
+  statusLine.textContent = `Unloading at godown ${t.code}…`;
+  await animate(60, 6, 500, h => { toDoor.setAttribute('height', h); toDoor.setAttribute('y', 65 + (60 - h) * 0); });
+  await animate(1, 0, 600, v => crates.style.opacity = v);
+  statusLine.style.display = 'none';
+  done.classList.add('show');
+}
+
+submit.addEventListener('click', playTransfer);
+newBtn.addEventListener('click', () => { overlay.classList.remove('show'); state.from = state.to = null; state.qty = {}; renderTiles(); renderProducts(); });
+printBtn.addEventListener('click', () => overlay.classList.remove('show'));
+
+/* ===== Auto demo with fake cursor ===== */
+async function clickEl(el) {
+  const r = el.getBoundingClientRect();
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  await sleep(450);
+  const r2 = el.getBoundingClientRect();
+  cursor.style.left = (r2.left + r2.width / 2) + 'px';
+  cursor.style.top = (r2.top + r2.height / 2) + 'px';
+  await sleep(800);
+  cursor.classList.remove('click'); void cursor.offsetWidth; cursor.classList.add('click');
+  el.click();
+  await sleep(450);
+}
+demoBtn.addEventListener('click', async () => {
+  newBtn.click();
+  cursor.classList.add('show');
+  cursor.style.left = '50%'; cursor.style.top = '40%';
+  await sleep(300);
+  await clickEl(document.querySelector('.tile[data-side="from"][data-code="02"]'));
+  await clickEl(document.querySelector('.tile[data-side="to"][data-code="03"]'));
+  for (const [code, times] of [['GCP001', 3], ['GHK220', 2], ['HIT400', 1]]) {
+    for (let i = 0; i < times; i++) await clickEl(document.querySelector(`.prod[data-code="${code}"] button[data-act="+"]`));
+  }
+  await clickEl(submit);
+  cursor.classList.remove('show');
+});
+
+themePick.addEventListener('change', () => document.documentElement.dataset.theme = themePick.value);
+document.documentElement.dataset.theme = themePick.value;
+
+renderTiles(); renderProducts();
+</script>
+</body>
+</html>

@@ -48,6 +48,12 @@ interface Message {
   status: string;
   replyTo?: { body: string; direction: 'inbound' | 'outbound' };
   reaction?: string;
+  /** API error text for a failed send */
+  error?: string;
+  /** failed, and the server can send it again */
+  canResend?: boolean;
+  /** failed original that has since been resent */
+  resent?: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -181,7 +187,7 @@ function EmojiPicker({ onSelect, onClose }: { onSelect: (e: string) => void; onC
 
 // ─── Message Context Menu ─────────────────────────────────────────────────────
 function MessageContextMenu({
-  msg, x, y, onClose, onReply, onCopy, onForward, onReact, onDelete
+  msg, x, y, onClose, onReply, onCopy, onForward, onReact, onDelete, onResend
 }: {
   msg: Message; x: number; y: number;
   onClose: () => void;
@@ -190,6 +196,7 @@ function MessageContextMenu({
   onForward: () => void;
   onReact: (emoji: string) => void;
   onDelete?: () => void;
+  onResend?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [showReactions, setShowReactions] = useState(false);
@@ -224,6 +231,12 @@ function MessageContextMenu({
         </button>
       </div>
       <div className="wa-ctx-divider" />
+      {onResend && msg.canResend && (
+        <button className="wa-ctx-item wa-ctx-item--resend" onClick={() => { onResend(); onClose(); }}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" /></svg>
+          Resend
+        </button>
+      )}
       <button className="wa-ctx-item" onClick={() => { onReply(); onClose(); }}>
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" /></svg>
         Reply
@@ -415,7 +428,8 @@ function MessageBubble({
           <div className="wa-reaction-badge">{msg.reaction}</div>
         )}
 
-        <div className="wa-meta">
+        <div className="wa-meta" title={msg.status === 'failed' && msg.error ? `Failed: ${msg.error}` : undefined}>
+          {msg.resent && <span className="wa-resent-label">↻ Resent</span>}
           <span className="wa-msg-time">{time}</span>
           {isOut && <StatusTick status={msg.status} />}
         </div>
@@ -1076,6 +1090,39 @@ export default function WhatsAppInbox() {
     setTimeout(() => { if (activePhone) fetchMessages(activePhone); }, 2000);
   }, [activePhone, fetchMessages]);
 
+  // ── Resend failed messages ───────────────────────────────────────────────────
+  const [resending, setResending] = useState(false);
+  const failedCount = useMemo(
+    () => (activeThread?.messages || []).filter(m => m.canResend).length,
+    [activeThread]
+  );
+
+  const handleResend = useCallback(async (ids?: string[]) => {
+    if (!activePhone || resending) return;
+    if (!ids && !window.confirm(`Resend ${failedCount} failed message${failedCount === 1 ? '' : 's'} to this customer?`)) return;
+    setResending(true);
+    try {
+      const res = await fetch(`${API_BASE}/resend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ phone: activePhone, ids }),
+      });
+      const data = await res.json();
+      if (!data.ok) alert(`Resend failed: ${data.error || res.status}`);
+      else if (data.failed) {
+        const reasons = Array.from(new Set((data.results || []).filter((r: any) => !r.ok).map((r: any) => r.error))).join('\n');
+        alert(`${data.resent} resent, ${data.failed} failed again.\n${reasons}`);
+      }
+    } catch (e) {
+      alert('Resend failed: could not reach the server');
+    } finally {
+      setResending(false);
+      fetchMessages(activePhone);
+      fetchConversations();
+    }
+  }, [activePhone, resending, failedCount, fetchMessages, fetchConversations]);
+
   // ── Grouped messages ─────────────────────────────────────────────────────────
   const groupedMessages = useMemo(() => {
     if (!activeThread?.messages.length) return [];
@@ -1146,6 +1193,7 @@ export default function WhatsAppInbox() {
           onForward={() => handleForward(contextMenu.msg)}
           onReact={(em) => handleReact(contextMenu.msg, em)}
           onDelete={() => handleDelete(contextMenu.msg)}
+          onResend={() => handleResend([contextMenu.msg.id])}
         />
       )}
 
@@ -1271,6 +1319,16 @@ export default function WhatsAppInbox() {
                   {activeConv && <span className="wa-msg-count"> · {activeConv.messageCount} messages</span>}
                 </div>
               </div>
+              {failedCount > 0 && (
+                <button id="wa-resend-all-btn" className="wa-header-action wa-resend-all-btn"
+                  onClick={() => handleResend()} disabled={resending}
+                  title={`Resend all ${failedCount} failed message${failedCount === 1 ? '' : 's'}`}>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" className={resending ? 'wa-spin' : undefined}>
+                    <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                  </svg>
+                  <span>{resending ? 'Resending…' : `Resend failed (${failedCount})`}</span>
+                </button>
+              )}
               <button id="wa-refresh-btn" className="wa-header-action"
                 onClick={() => { fetchConversations(); if (activePhone) fetchMessages(activePhone); }}
                 title="Refresh">

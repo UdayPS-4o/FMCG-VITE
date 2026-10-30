@@ -61,6 +61,7 @@ interface Props {
   onQtyEnterNavigate?: () => void;
   onTabToNextItem?: (currentIndex: number) => void;
   onShiftTabToPreviousItem?: (currentIndex: number) => void;
+  imageMap?: Record<string, string>; // item CODE -> image_url; enables thumbnails when provided
 }
 
 interface StockItem {
@@ -90,6 +91,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Props
   onQtyEnterNavigate,
   onTabToNextItem,
   onShiftTabToPreviousItem,
+  imageMap,
 }, ref) => {
   const [error, setError] = useState('');
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
@@ -455,7 +457,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Props
       })
       .map(product => ({
         value: product.CODE,
-        label: `${product.CODE} | ${product.PRODUCT || product.NAME || 'Unknown'}`
+        label: `${product.CODE} | ${product.PRODUCT || product.NAME || 'Unknown'}`,
+        ...(imageMap ? { image: imageMap[product.CODE] || '' } : {})
       }));
   };
 
@@ -468,7 +471,15 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Props
         className={`p-4 cursor-pointer flex justify-between items-center ${isExpanded ? 'bg-brand-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-900'}`}
         onClick={(e) => handleChange(index)(e, !isExpanded)}
       >
-        <h3 className="text-lg font-medium dark:text-white">
+        <h3 className="text-lg font-medium dark:text-white flex items-center gap-3 min-w-0">
+          {imageMap && itemData.item && imageMap[itemData.item] && (
+            <img
+              src={imageMap[itemData.item]}
+              alt=""
+              className="w-10 h-10 rounded-md object-contain bg-white flex-shrink-0"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
           {itemData.item
             ? `${itemData.item} | ${getProductName()}`
             : `Select an item`}

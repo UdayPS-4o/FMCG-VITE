@@ -34,6 +34,7 @@ const handle = (fn) => async (req, res) => {
 };
 
 const badRequest = (msg) => Object.assign(new Error(msg), { status: 400 });
+const num = (v) => Number(v) || 0;
 const periodsOf = (body) => {
   const periods = Array.isArray(body.periods) ? [...new Set(body.periods.map(String))] : [];
   if (!periods.length || !periods.every(gsp.validPeriod)) throw badRequest('Select at least one valid return period (MMYYYY).');
@@ -478,7 +479,15 @@ router.post('/gst/gstr3b/validate', handle(async (req, res) => {
   const ctx = await gsp.getContext();
   const payload = g3b.buildPayload({ gstin: ctx.gstin, fp, form: req.body.form });
   const text = await gsp.gspRequest({ method: 'POST', url: gstr3bUrl(ctx, fp, 'VALID'), headers: GSTR3B_HEADERS, body: payload });
-  sendPack(res, await gsp.packResponse(text));
+  const pack = await gsp.packResponse(text);
+  if (!pack.ok) return sendPack(res, pack);
+  // GSTN answers 200 with isValid "N" and the tables / fields that differ from its computed values
+  const d = pack.data || {};
+  const fields = g3b.validationFields(d);
+  if (String(d.isValid || '').toUpperCase() === 'N' || fields.length) {
+    return res.status(422).json({ ...pack, ok: false, isValid: 'N', fields, message: `${d.error_message || 'GSTN validation failed.'} ${fields.map((x) => x.label).join('; ')}`.trim() });
+  }
+  sendPack(res, pack);
 }));
 
 // ask GSTN to re-compute the system interest (action CMPINT); RETINT is re-read afterwards
@@ -552,9 +561,23 @@ router.post('/gst/gstr3b/offset', handle(async (req, res) => {
   const { ledgers } = g3b.formFromRetsum(gsp.parseJson(sum.text));
   const problems = g3b.offsetProblems(payload, ledgers);
   if (problems.length) throw badRequest(`Offset does not equal the liability on the portal: ${problems.join('; ')}`);
+  // the liability ledger ids appear in RETSUM only once GSTN has posted the return's liability to the ledger
+  const ids = new Map(ledgers.filter((l) => l.liab_ldg_id).map((l) => [l.trans_typ, l.liab_ldg_id]));
+  const needed = [payload.pditc, ...payload.pdcash].filter((x) => x && (num(x.trans_typ) === 30002 || num(x.trans_typ) === 30003));
+  // before the first offset RETSUM has no ids (seen Sep-2026: they appeared only after the offset), and an id of 0
+  // was rejected with RT-3BGC-9017 - so leave the field out when it is not known yet
+  const noIds = needed.some((x) => !ids.get(num(x.trans_typ)));
+  needed.forEach((x) => {
+    const id = ids.get(num(x.trans_typ));
+    if (id) x.liab_ldg_id = id; else delete x.liab_ldg_id;
+  });
   await assertNotFiled(fp);
   const pack = await putGstr3b(fp, 'RETOFFSET', payload);
   if (pack.ok) await dropCache(fp, 'RETSUM');
+  else if (noIds && !pack.tokenExpired) {
+    pack.message = `${pack.message || 'Offset failed.'} — GSTN did not accept the offset through the API. Do it on gst.gov.in instead: `
+      + 'GSTR-3B → Proceed to payment → "Make payment / Post credit to ledger"; then click "Load portal data" here and file.';
+  }
   sendPack(res, pack, { payload });
 }));
 
@@ -568,9 +591,12 @@ router.post('/gst/gstr3b/file', handle(async (req, res) => {
   const sumText = await gsp.gspRequest({ url: gstr3bUrl(ctx, fp, 'RETSUM'), headers: GSTR3B_HEADERS });
   const sumPack = await gsp.packResponse(sumText);
   if (!sumPack.ok) return sendPack(res, sumPack, { step: 'RETSUM' });
-  const sign = gsp.evcSignature(pan, otp, gsp.stripWhitespaceChars(sumText));
+  // the summary (without whitespace) is both the signed data and the request body - sending no body is rejected
+  // with RT-3BAS1029 "mismatch between signed data and payload"
+  const summary = gsp.stripWhitespaceChars(sumText);
+  const sign = gsp.evcSignature(pan, otp, summary);
   const url = `${gstr3bUrl(ctx, fp, 'RETFILE')}&st=EVC&sid=${encodeURIComponent(pan)}%7C${encodeURIComponent(otp)}&sign=${sign}`;
-  const text = await gsp.gspRequest({ method: 'POST', url, headers: GSTR3B_HEADERS });
+  const text = await gsp.gspRequest({ method: 'POST', url, headers: GSTR3B_HEADERS, body: summary });
   const pack = await gsp.packResponse(text);
   if (pack.ok) await dropCache(fp, 'RETSUM');
   sendPack(res, pack);

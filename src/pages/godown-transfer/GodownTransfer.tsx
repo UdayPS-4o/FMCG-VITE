@@ -11,6 +11,8 @@ import CollapsibleItemSection, { CollapsibleItemSectionRefHandle } from './Colla
 import apiCache from '../../utils/apiCache';
 import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
 import useAuth from "../../hooks/useAuth";
+import GodownTiles, { GodownTilesRefHandle } from './GodownTiles';
+import TransferSuccess from './TransferSuccess';
 
 // Update the item interface to include godown field
 interface ItemData {
@@ -74,6 +76,8 @@ const GodownTransfer: React.FC = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+  const [imageMap, setImageMap] = useState<Record<string, string>>({}); // item CODE -> image_url
+  const [savedTransfer, setSavedTransfer] = useState<{ docNo: string; itemCount: number } | null>(null);
 
   // Helper function to format local date as DD-MM-YYYY
   const getLocalDateDDMMYYYY = (date: Date): string => {
@@ -101,8 +105,8 @@ const GodownTransfer: React.FC = () => {
 
   // Refs for focus management
   const seriesRef = useRef<InputRefHandle>(null);
-  const fromGodownRef = useRef<AutocompleteRefHandle>(null);
-  const toGodownRef = useRef<AutocompleteRefHandle>(null);
+  const fromGodownRef = useRef<GodownTilesRefHandle>(null);
+  const toGodownRef = useRef<GodownTilesRefHandle>(null);
   const smSelectRef = useRef<AutocompleteRefHandle>(null);
   const searchItemsRef = useRef<InputRefHandle>(null);
   const addAnotherItemButtonRef = useRef<HTMLButtonElement>(null);
@@ -230,6 +234,18 @@ const GodownTransfer: React.FC = () => {
 
     fetchData();
 
+    // Product thumbnails (same image_url source as App Listings). Non-blocking: page works without them.
+    apiCache.fetchWithCache<{ CODE?: string; image_url?: string }[]>(`${baseURL}/api/app/admin/products`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+      .then((products) => {
+        if (!Array.isArray(products)) return;
+        const map: Record<string, string> = {};
+        products.forEach((p) => { if (p?.CODE && p.image_url) map[p.CODE] = p.image_url; });
+        setImageMap(map);
+      })
+      .catch((error) => console.warn('Product images unavailable:', error));
+
     // Clean up expired cache items
     try {
       apiCache.clearExpiredCache();
@@ -352,13 +368,18 @@ const GodownTransfer: React.FC = () => {
       };
     });
 
+    // To Godown can't be the same as From Godown
+    const toGodownValue = formValues.toGodown === value ? '' : formValues.toGodown;
+    if (!toGodownValue) setToGodown(null);
+
     setFormValues({
       ...formValues,
       fromGodown: value,
+      toGodown: toGodownValue,
       items: updatedItems
     });
 
-    setToGodown(null); // Reset toGodown when fromGodown changes
+    setTimeout(() => toGodownRef.current?.focus(), 50);
   };
 
   const handleToGodownChange = (value: string) => {
@@ -515,13 +536,9 @@ const GodownTransfer: React.FC = () => {
         throw new Error(`Error ${res.status}: ${await res.text()}`);
       }
 
-      const json = await res.json();
-      showToast(json.message || 'Godown transfer created successfully', 'success');
-
-      // Reset form or redirect
-      setTimeout(() => {
-        window.location.href = '/db/godown-transfer';
-      }, 2000);
+      await res.json();
+      // Truck animation + tick; user picks where to go next
+      setSavedTransfer({ docNo: `${formValues.series}-${id}`, itemCount: items.length });
     } catch (error: any) {
       showToast('Error submitting form: ' + (error.message || 'Unknown error'), 'error');
       console.error('Error submitting form:', error);
@@ -638,8 +655,8 @@ const GodownTransfer: React.FC = () => {
       )}
 
       <FormComponent onSubmit={handleSubmit} autoComplete="off">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-sm mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6">
             <div>
               <DatePicker
                 id="date"
@@ -701,54 +718,39 @@ const GodownTransfer: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <Autocomplete
-                id="fromGodown"
-                label="From Godown"
-                options={partyOptions.map(option => ({
-                  value: option.GDN_CODE,
-                  label: option.GDN_NAME
-                }))}
-                onChange={handleFromGodownChange}
-                defaultValue={formValues.fromGodown || ""} // Ensure defaultValue is string
-                ref={fromGodownRef}
-                onEnter={() => {
-                  toGodownRef.current?.focus();
-                  centerElementInViewport(document.getElementById('toGodown'));
-                }}
-              />
-            </div>
-            <div>
-              <Autocomplete
-                id="toGodown"
-                label="To Godown"
-                options={allGodowns
-                  // Only filter out the current fromGodown
-                  .filter(option => option.GDN_CODE !== formValues.fromGodown)
-                  .map(option => ({
-                    value: option.GDN_CODE,
-                    label: option.GDN_NAME
-                  }))}
-                onChange={handleToGodownChange}
-                defaultValue={formValues.toGodown || ""} // Ensure defaultValue is string
-                ref={toGodownRef}
-                onEnter={() => {
-                  // If items exist, focus the first one, otherwise focus search/add button
-                  if (formValues.items.length > 0 && collapsibleItemRefs.current[0]?.current) {
-                    setExpanded(0);
-                    setTimeout(() => {
-                      collapsibleItemRefs.current[0]?.current?.focusItemName();
-                    }, 50);
-                  } else if (searchItemsRef.current) {
-                    searchItemsRef.current.focus();
-                    centerElementInViewport(document.getElementById('searchItems'));
-                  } else if (addAnotherItemButtonRef.current) {
-                    addAnotherItemButtonRef.current.focus();
-                    centerElementInViewport(addAnotherItemButtonRef.current);
-                  }
-                }}
-              />
+          <div className="flex flex-col gap-6">
+            <GodownTiles
+              id="fromGodown"
+              step={1}
+              label="From Godown"
+              hint="tap to pick"
+              godowns={partyOptions}
+              value={formValues.fromGodown}
+              onChange={handleFromGodownChange}
+              ref={fromGodownRef}
+              emptyText="You don't have access to any godown"
+            />
+            <GodownTiles
+              id="toGodown"
+              step={2}
+              label="To Godown"
+              godowns={allGodowns}
+              value={formValues.toGodown}
+              onChange={handleToGodownChange}
+              disabledCodes={formValues.fromGodown ? [formValues.fromGodown] : allGodowns.map(g => g.GDN_CODE)}
+              hint={formValues.fromGodown ? undefined : 'pick From Godown first'}
+              ref={toGodownRef}
+            />
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3.5 min-h-8 text-xs sm:text-sm">
+              {fromGodown && toGodown ? (
+                <>
+                  <span className="px-3 py-1 rounded-full bg-brand-500/15 text-brand-500 font-bold">{fromGodown.GDN_CODE} · {fromGodown.GDN_NAME}</span>
+                  <span className="gt-route-arrow text-brand-500" aria-hidden="true">▶▶▶ 🚚 ▶▶▶</span>
+                  <span className="px-3 py-1 rounded-full bg-brand-500/15 text-brand-500 font-bold">{toGodown.GDN_CODE} · {toGodown.GDN_NAME}</span>
+                </>
+              ) : (
+                <span className="text-gray-500 dark:text-gray-400">Pick both godowns to see the route</span>
+              )}
             </div>
           </div>
         </div>
@@ -795,6 +797,7 @@ const GodownTransfer: React.FC = () => {
               onQtyEnterNavigate={handleQtyEnterNavigate}
               onTabToNextItem={handleTabToNextItem}
               onShiftTabToPreviousItem={handleShiftTabToPreviousItem}
+              imageMap={imageMap}
             />
           ))}
         </div>
@@ -835,6 +838,19 @@ const GodownTransfer: React.FC = () => {
           </div>
         </div>
       </FormComponent>
+
+      {savedTransfer && fromGodown && toGodown && (
+        <TransferSuccess
+          fromCode={fromGodown.GDN_CODE}
+          fromName={fromGodown.GDN_NAME}
+          toCode={toGodown.GDN_CODE}
+          toName={toGodown.GDN_NAME}
+          docNo={savedTransfer.docNo}
+          itemCount={savedTransfer.itemCount}
+          onNewTransfer={() => window.location.reload()}
+          onViewTransfers={() => { window.location.href = '/db/godown-transfer'; }}
+        />
+      )}
     </div>
   );
 };

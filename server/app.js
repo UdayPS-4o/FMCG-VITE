@@ -494,6 +494,9 @@ app.use('/api/dashboard', dashboardRoutes);
 const { router: pushRouter } = require('./routes/push');
 app.use('/api/push', pushRouter);
 
+// 12:45 PM IST push reminder to users who haven't marked attendance
+require('./utils/attendanceReminder').startAttendanceReminder();
+
 const billsRoutes = require('./routes/bills');
 app.use('/api', billsRoutes);
 
@@ -505,6 +508,9 @@ app.use('/api', shikharSchemeRoutes);
 
 const godrejSchemeRoutes = require('./routes/godrej_scheme');
 app.use('/api/godrej-schemes', godrejSchemeRoutes);
+
+const godrejImportRoutes = require('./routes/godrejImport');
+app.use('/api/godrej-import', godrejImportRoutes);
 
 
 const slinkRoutes = require('./routes/slink');

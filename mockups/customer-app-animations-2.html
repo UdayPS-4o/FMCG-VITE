@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ekta App – 10 More Premium Moments</title>
+<style>
+  :root { --emerald:#10b981; --emerald-d:#059669; --emerald-l:#ecfdf5; --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --bg:#f9fafb; --indigo:#4f46e5; --orange:#f97316; --red:#ef4444; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Inter","Segoe UI",system-ui,sans-serif; background:#eef0f6; color:var(--ink); }
+  .wrap { display:flex; gap:28px; justify-content:center; align-items:flex-start; padding:24px 16px 40px; flex-wrap:wrap; }
+  .side { width:340px; max-width:100%; }
+  .side h1 { font-size:20px; margin:0 0 4px; }
+  .side .sub { color:var(--muted); font-size:13px; margin:0 0 12px; }
+  .banner { background:#fff7ed; border:1px solid #fdba74; color:#9a3412; border-radius:10px; padding:8px 12px; font-size:12px; margin-bottom:12px; }
+  .scene-btn { display:flex; gap:10px; width:100%; text-align:left; background:#fff; border:2px solid transparent; border-radius:14px; padding:10px 12px; margin-bottom:8px; cursor:pointer; font:inherit; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .scene-btn.active { border-color:var(--emerald); }
+  .scene-btn .n { flex:0 0 28px; height:28px; border-radius:50%; background:var(--emerald-l); color:var(--emerald-d); display:grid; place-items:center; font-weight:800; font-size:13px; }
+  .scene-btn b { display:block; font-size:13.5px; }
+  .scene-btn span { font-size:11.5px; color:var(--muted); line-height:1.35; display:block; margin-top:1px; }
+  .controls { display:flex; gap:8px; margin-top:4px; }
+  .controls button { flex:1; padding:10px; border-radius:10px; border:0; font:inherit; font-weight:600; cursor:pointer; }
+  .controls .play { background:var(--ink); color:#fff; } .controls .all { background:#fff; border:1px solid var(--line); }
+
+  .phone { width:360px; height:740px; border-radius:44px; background:#0b0b10; padding:12px; box-shadow:0 30px 60px rgba(0,0,0,.25); flex-shrink:0; }
+  .screen { position:relative; width:100%; height:100%; border-radius:34px; overflow:hidden; background:var(--bg); }
+  .screen.shake { animation: shake .45s; }
+  @keyframes shake { 20%{transform:translateX(-4px)} 40%{transform:translateX(4px)} 60%{transform:translateX(-3px)} 80%{transform:translateX(2px)} }
+  .notch { position:absolute; top:8px; left:50%; transform:translateX(-50%); width:92px; height:24px; background:#0b0b10; border-radius:14px; z-index:95; }
+  .scene { position:absolute; inset:0; display:none; flex-direction:column; }
+  .scene.on { display:flex; }
+  .status { height:40px; flex-shrink:0; background:#fff; }
+  .offer { position:relative; overflow:hidden; background:linear-gradient(90deg,#2563eb,#4f46e5,#7c3aed); color:#fff; font-size:12px; font-weight:700; height:36px; flex-shrink:0; }
+  .offer .msg { position:absolute; inset:0; display:flex; justify-content:center; align-items:center; gap:8px; transition:transform .6s ease, opacity .6s; }
+  .offer i { font-style:normal; background:#fff; color:#4f46e5; font-size:10px; padding:2px 7px; border-radius:5px; }
+  .offer .shine { position:absolute; top:0; left:-40%; width:30%; height:100%; background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent); transform:skewX(-20deg); }
+  .topbar { display:flex; justify-content:space-between; align-items:center; padding:12px 14px 10px; background:#fff; flex-shrink:0; }
+  .topbar h2 { margin:0; font-size:19px; }
+  .content { flex:1; overflow:hidden; padding:12px; position:relative; }
+  .nav { height:62px; background:rgba(255,255,255,.95); border-top:1px solid var(--line); display:flex; justify-content:space-around; align-items:center; flex-shrink:0; position:relative; z-index:5; }
+  .nav > div { display:flex; flex-direction:column; align-items:center; gap:2px; font-size:10px; color:var(--muted); }
+  .nav > div.act { color:var(--indigo); }
+  .nav svg { width:22px; height:22px; }
+  .badge { position:absolute; top:-5px; right:-9px; background:var(--red); color:#fff; font-size:10px; font-weight:700; min-width:17px; height:17px; border-radius:9px; display:grid; place-items:center; padding:0 4px; }
+  .pop { animation: pop .4s cubic-bezier(.3,1.8,.5,1); }
+  @keyframes pop { from { transform:scale(0); } }
+  .bounce { animation: bounce .55s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes bounce { 30%{transform:scale(1.35) rotate(-8deg)} 60%{transform:scale(.92)} }
+
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .card { background:#fff; border-radius:16px; padding:10px; border:1px solid #f1f1f4; position:relative; }
+  .card .img { aspect-ratio:1; background:#f9fafb; border-radius:12px; display:grid; place-items:center; overflow:hidden; margin-bottom:8px; }
+  .card .img img { width:100%; height:100%; object-fit:contain; padding:8px; }
+  .card h4 { font-size:12px; font-weight:500; margin:0 0 4px; line-height:1.25; min-height:30px; }
+  .card .rate { font-size:12px; font-weight:700; }
+  .fadeimg { opacity:0; filter:blur(8px); transform:scale(.92); transition:opacity .5s, filter .6s, transform .6s; }
+  .fadeimg.in { opacity:1; filter:none; transform:none; }
+  .skel { background:linear-gradient(90deg,#eef0f3 25%,#e3e6ea 37%,#eef0f3 63%); background-size:400% 100%; animation:shimmer 1.2s ease infinite; border-radius:10px; }
+  @keyframes shimmer { from{background-position:100% 0} to{background-position:0 0} }
+
+  .finger { position:absolute; width:34px; height:34px; border-radius:50%; background:rgba(17,24,39,.18); border:2px solid rgba(255,255,255,.9); z-index:90; pointer-events:none; transition:left .55s ease, top .55s ease, transform .12s; display:none; margin:-17px 0 0 -17px; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+  .finger.show { display:block; } .finger.tap { transform:scale(.75); }
+  .toast { position:absolute; left:12px; right:12px; bottom:74px; background:var(--ink); color:#fff; border-radius:14px; padding:11px 14px; display:flex; align-items:center; gap:10px; font-size:13px; transform:translateY(160%); transition:transform .35s cubic-bezier(.2,.9,.3,1.2); z-index:60; }
+  .toast.show { transform:none; }
+  .flyer { position:absolute; width:56px; height:56px; z-index:80; pointer-events:none; border-radius:12px; background:#fff; box-shadow:0 10px 25px rgba(0,0,0,.25); padding:5px; }
+  .flyer img { width:100%; height:100%; object-fit:contain; }
+
+  /* 2 empty cart */
+  .empty { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:20px; }
+  .empty svg { width:170px; height:150px; }
+  .boxhop { animation: hop 1.6s ease-in-out infinite; transform-origin: 85px 130px; }
+  @keyframes hop { 0%,100%{transform:translateY(0)} 40%{transform:translateY(-14px) rotate(-3deg)} 55%{transform:translateY(0) scaleY(.93)} 65%{transform:scaleY(1)} }
+  .shadow { animation: shad 1.6s ease-in-out infinite; transform-origin:85px 140px; }
+  @keyframes shad { 40%{transform:scaleX(.7); opacity:.4} }
+  .flapl { transform-origin:40px 62px; animation: flapl 1.6s ease-in-out infinite; }
+  .flapr { transform-origin:130px 62px; animation: flapr 1.6s ease-in-out infinite; }
+  @keyframes flapl { 40%{transform:rotate(-18deg)} }
+  @keyframes flapr { 40%{transform:rotate(18deg)} }
+  .pulse-btn { background:var(--indigo); color:#fff; border-radius:14px; padding:13px 30px; font-weight:700; margin-top:16px; animation: pbtn 1.6s ease infinite; }
+  @keyframes pbtn { 0%{box-shadow:0 0 0 0 rgba(79,70,229,.5)} 70%{box-shadow:0 0 0 14px rgba(79,70,229,0)} 100%{box-shadow:0 0 0 0 rgba(79,70,229,0)} }
+
+  /* 3 pull to refresh */
+  .ptr { height:0; overflow:hidden; background:linear-gradient(#e0e7ff,#f9fafb); transition:height .3s ease; position:relative; flex-shrink:0; }
+  .ptr svg { position:absolute; bottom:0; left:0; width:100%; height:80px; }
+  .ptr .lbl { position:absolute; top:8px; width:100%; text-align:center; font-size:11px; color:var(--indigo); font-weight:700; }
+  .row { display:flex; gap:10px; align-items:center; background:#fff; border-radius:14px; padding:10px; margin-bottom:10px; border:1px solid #f1f1f4; }
+  .row img { width:46px; height:46px; object-fit:contain; background:#f9fafb; border-radius:10px; }
+  .row .t { flex:1; font-size:12.5px; font-weight:600; } .row .t small { display:block; color:var(--muted); font-weight:400; }
+
+  /* 4 reorder */
+  .ocard { background:#fff; border-radius:18px; padding:14px; border:1px solid #f1f1f4; }
+  .thumbs { display:flex; gap:8px; margin:10px 0 12px; }
+  .thumbs img { width:62px; height:62px; object-fit:contain; background:#f9fafb; border-radius:12px; padding:4px; transition:opacity .3s, transform .3s; }
+  .thumbs img.gone { opacity:.25; transform:scale(.85); }
+  .btn { border-radius:12px; padding:11px; font-weight:700; text-align:center; font-size:13px; }
+
+  /* 5 brands */
+  .chips { position:relative; display:flex; gap:6px; margin-bottom:12px; }
+  .chip { position:relative; z-index:1; font-size:12px; font-weight:600; padding:7px 12px; border-radius:20px; color:#4b5563; transition:color .3s; white-space:nowrap; }
+  .chip.on { color:#fff; }
+  .chip-bg { position:absolute; top:0; height:100%; border-radius:20px; background:var(--indigo); transition:left .4s cubic-bezier(.3,1.3,.5,1), width .4s cubic-bezier(.3,1.3,.5,1); z-index:0; }
+  .grid5 .card { transition: transform .45s cubic-bezier(.3,1.1,.5,1), opacity .3s; }
+
+  /* 6 ledger */
+  .ring-wrap { display:flex; gap:16px; align-items:center; }
+  .ring-wrap svg { width:120px; height:120px; flex-shrink:0; }
+  .big { font-size:24px; font-weight:800; }
+  .pay { display:flex; justify-content:space-between; font-size:12.5px; padding:9px 0; border-bottom:1px dashed var(--line); opacity:0; transform:translateY(8px); transition:all .35s; }
+  .pay.in { opacity:1; transform:none; }
+
+  /* 7 login */
+  .login { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(160deg,#eef2ff,#fff 60%); position:relative; overflow:hidden; }
+  .logo { width:96px; height:96px; border-radius:28px; background:linear-gradient(135deg,#2563eb,#7c3aed); color:#fff; display:grid; place-items:center; font-size:30px; font-weight:900; transform:scale(0) rotate(-20deg); transition:transform .7s cubic-bezier(.3,1.6,.5,1); position:relative; z-index:2; }
+  .logo.in { transform:none; }
+  .ripple { position:absolute; width:96px; height:96px; border-radius:28px; border:2px solid #818cf8; animation: rip 1.6s ease-out infinite; opacity:0; }
+  .ripple.r2 { animation-delay:.5s; }
+  @keyframes rip { 0%{transform:scale(1);opacity:.8} 100%{transform:scale(2.4);opacity:0} }
+  .hello { margin-top:22px; font-size:22px; font-weight:800; min-height:30px; text-align:center; }
+  .hello .caret { display:inline-block; width:2px; height:22px; background:var(--indigo); vertical-align:middle; animation: blink .8s steps(1) infinite; }
+  @keyframes blink { 50%{opacity:0} }
+  .greet { color:var(--muted); font-size:14px; margin-top:6px; opacity:0; transition:opacity .5s; }
+  .greet.in { opacity:1; }
+  .sun { position:absolute; bottom:-60px; right:40px; width:70px; height:70px; border-radius:50%; background:radial-gradient(#fde047,#f59e0b); box-shadow:0 0 40px #fcd34d; transition:bottom 1.4s ease; }
+  .sun.up { bottom:120px; }
+
+  /* 9 price drop */
+  .pdcard { background:#fff; border-radius:18px; padding:14px; border:1px solid #f1f1f4; position:relative; }
+  .pdcard .pic { height:170px; background:#f9fafb; border-radius:14px; display:grid; place-items:center; margin-bottom:10px; }
+  .pdcard .pic { overflow:hidden; }
+  .pdcard .pic img { max-height:150px; max-width:90%; object-fit:contain; }
+  .drop-badge { position:absolute; top:22px; left:22px; background:#dcfce7; color:#15803d; font-size:12px; font-weight:800; padding:6px 10px; border-radius:10px; display:flex; gap:4px; align-items:center; transform:scale(0); transition:transform .45s cubic-bezier(.3,1.8,.5,1); }
+  .drop-badge.in { transform:scale(1); }
+  .drop-badge .arr { display:inline-block; animation: arr 1s ease-in-out infinite; }
+  @keyframes arr { 50%{transform:translateY(3px)} }
+  .prices { display:flex; align-items:baseline; gap:10px; }
+  .prices .now { font-size:24px; font-weight:800; }
+  .prices .was { position:relative; color:var(--muted); font-size:14px; }
+  .prices .was::after { content:""; position:absolute; left:0; top:50%; height:2px; width:0; background:var(--red); transition:width .45s ease; }
+  .prices .was.cut::after { width:100%; }
+  .lastbuy { font-size:12px; color:var(--muted); margin-top:4px; }
+
+  /* 10 live update */
+  .push { position:absolute; top:46px; left:10px; right:10px; background:rgba(255,255,255,.96); border-radius:18px; padding:11px 12px; display:flex; gap:10px; box-shadow:0 12px 30px rgba(0,0,0,.18); z-index:70; transform:translateY(-150%); transition:transform .45s cubic-bezier(.2,.9,.3,1.2); }
+  .push.in { transform:none; }
+  .push .ic { width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg,#2563eb,#7c3aed); color:#fff; display:grid; place-items:center; font-weight:900; font-size:13px; flex-shrink:0; }
+  .push b { font-size:13px; } .push small { display:block; font-size:12px; color:#374151; }
+  .track { position:relative; height:48px; margin:6px 8px 2px; }
+  .track .line { position:absolute; left:0; right:0; top:22px; height:4px; background:#e5e7eb; border-radius:2px; }
+  .track .fill { position:absolute; left:0; top:22px; height:4px; background:var(--emerald); border-radius:2px; transition:width 1s ease; }
+  .track .dots { position:absolute; left:0; right:0; top:16px; display:flex; justify-content:space-between; }
+  .dot { width:16px; height:16px; border-radius:50%; background:#fff; border:3px solid #d1d5db; transition:all .3s; position:relative; }
+  .dot.done { background:var(--emerald); border-color:var(--emerald); }
+  .dot.cur { border-color:var(--emerald); }
+  .dot.cur::after { content:""; position:absolute; inset:-7px; border-radius:50%; border:2px solid var(--emerald); animation: pul 1.2s ease-out infinite; }
+  @keyframes pul { from{opacity:.9;transform:scale(.6)} to{opacity:0;transform:scale(1.4)} }
+  .truck { position:absolute; top:-6px; font-size:22px; transition:left 1s ease; transform:translateX(-50%) scaleX(-1); }
+  .labels { display:flex; justify-content:space-between; font-size:10px; color:var(--muted); }
+  .labels span.on { color:var(--ink); font-weight:700; }
+  .ding { position:absolute; font-size:22px; opacity:0; z-index:71; }
+  .ding.go { animation: ding 1s ease-out; }
+  @keyframes ding { 0%{opacity:0;transform:scale(.5) rotate(-20deg)} 30%{opacity:1;transform:scale(1.2) rotate(15deg)} 60%{transform:rotate(-10deg)} 100%{opacity:0;transform:translateY(-20px)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="side">
+    <h1>Ekta App: 10 more moments</h1>
+    <p class="sub">Tap any idea to play it in the phone. Real product photos, same look as the live app.</p>
+    <div class="banner">PREVIEW ONLY: standalone mockup. The app code is unchanged.</div>
+    <div id="sceneList"></div>
+    <div class="controls"><button class="play" id="replay">↻ Replay</button><button class="all" id="playAll">▶ Play all</button></div>
+  </div>
+  <div class="phone"><div class="screen" id="screen"><div class="notch"></div><div id="stage" style="position:absolute;inset:0"></div><div class="finger" id="finger"></div></div></div>
+</div>
+
+<script>
+const H = 'https://storage.googleapis.com/hul-shikhar-cms/CMS-PROD-HERO/';
+const P = [
+  { img: H + '2024112115283316018.png', name: 'SURF EXCEL BAR 100G', rate: 9.50, brand: 'Surf Excel' },
+  { img: H + '17377.png', name: 'BABY DOVE SOAP 3X75G', rate: 158.00, brand: 'Dove' },
+  { img: H + '2024112115283216020.png', name: 'SURF EXCEL BAR 250G', rate: 22.80, brand: 'Surf Excel' },
+  { img: H + '2025052213522444302.png', name: 'DOVE CREAM BAR 75G', rate: 52.00, brand: 'Dove' },
+  { img: H + '16023.png', name: 'SURF EXCEL BAR 4X200G', rate: 68.00, brand: 'Surf Excel' },
+  { img: H + '2025081910333044304.png', name: 'DOVE BODY WASH 300ML', rate: 249.00, brand: 'Dove' },
+];
+const SCENES = [
+  ['Loading shimmer + photo fade-in', 'Grey shimmering cards while products load; photos fade in from a soft blur, one after another.'],
+  ['Animated empty cart', 'A friendly box hops with flapping lids; the Start shopping button gently pulses.'],
+  ['Pull-to-refresh with the van', 'Pull the list down to reveal a road; release and the EKTA van drives across while it reloads.'],
+  ['One-tap reorder', 'Tap Reorder on a past order: each item flies into the cart in turn and the badge counts up.'],
+  ['Smooth brand filter', 'A highlight pill slides between brand chips; products shuffle into place instead of jumping.'],
+  ['Ledger & balance ring', 'Outstanding balance counts up, a ring fills to show how much is paid, payments slide in.'],
+  ['Login welcome', 'Logo springs in with ripples, "Namaste, {shop}" types itself, the sun rises for a morning greeting.'],
+  ['Offer bar sparkle', 'A shine sweeps across the purple offer strip, and offers slide one after another.'],
+  ['Price-drop badge', '"₹2 cheaper than your last order" pops on the card; old price gets struck through.'],
+  ['Live order update', 'A push banner drops in when you bill an order; phone shakes, bell dings, tracker moves to Billed.'],
+];
+const NAVI = { Home:'<path d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" fill="none" stroke="currentColor" stroke-width="1.8"/>', Search:'<circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.8"/>', Cart:'<path d="M3 4h2l2.5 11h11L21 7H6.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="19" r="1.5" fill="currentColor"/><circle cx="17" cy="19" r="1.5" fill="currentColor"/>', Orders:'<path d="M6 3h9l4 4v14H6z M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.8"/>', Profile:'<circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6" fill="none" stroke="currentColor" stroke-width="1.8"/>' };
+const nav = (active, count = 0) => `<div class="nav">${Object.keys(NAVI).map(k => `<div class="${k === active ? 'act' : ''}"><span style="position:relative;display:inline-flex" ${k === 'Cart' ? 'id="cartIc"' : ''}><svg viewBox="0 0 24 24">${NAVI[k]}</svg>${k === 'Cart' ? `<span class="badge" id="badge" style="${count ? '' : 'display:none'}">${count}</span>` : ''}</span>${k}</div>`).join('')}</div>`;
+const offer = (t = 'Get 100 Rs off Instantly') => `<div class="offer"><div class="msg"><i>OFFER</i> ${t}</div></div>`;
+const $ = id => document.getElementById(id);
+const screen = $('screen'), stage = $('stage');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let runId = 0; const alive = id => id === runId;
+const rel = el => { const a = el.getBoundingClientRect(), s = screen.getBoundingClientRect(); return { x: a.left - s.left, y: a.top - s.top, w: a.width, h: a.height }; };
+async function tap(el, id) {
+  const f = $('finger'), r = rel(el);
+  f.classList.add('show'); f.style.left = (r.x + r.w / 2) + 'px'; f.style.top = (r.y + r.h / 2) + 'px';
+  await sleep(600); if (!alive(id)) return false;
+  f.classList.add('tap'); await sleep(150); f.classList.remove('tap'); return alive(id);
+}
+function countTo(el, from, to, ms, fmt = v => '₹' + Math.round(v).toLocaleString('en-IN')) {
+  const t0 = performance.now();
+  const step = () => { const k = Math.min(1, (performance.now() - t0) / ms); el.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) setTimeout(step, 16); };
+  step();
+}
+function fly(fromEl, src, done) {
+  const a = rel(fromEl), b = rel($('cartIc'));
+  const fl = document.createElement('div'); fl.className = 'flyer'; fl.innerHTML = `<img src="${src}">`;
+  fl.style.left = (a.x + a.w / 2 - 28) + 'px'; fl.style.top = (a.y + a.h / 2 - 28) + 'px'; screen.appendChild(fl);
+  const dx = b.x + b.w / 2 - (a.x + a.w / 2), dy = b.y + b.h / 2 - (a.y + a.h / 2);
+  fl.animate([{ transform: 'translate(0,0) scale(1)' }, { transform: `translate(${dx * .4}px,${dy * .4 - 110}px) scale(.85) rotate(-10deg)`, offset: .45 }, { transform: `translate(${dx}px,${dy}px) scale(.2)`, opacity: .7 }], { duration: 800, easing: 'cubic-bezier(.45,.05,.55,.95)' }).onfinish = () => { fl.remove(); done && done(); };
+}
+const cardHTML = (p, extra = '') => `<div class="card" ${extra}><div class="img"><img class="fadeimg" src="${p.img}" alt=""></div><h4>${p.name}</h4><div class="rate">Rate: ₹${p.rate.toFixed(2)}</div></div>`;
+
+/* 1 shimmer */
+async function s1(id) {
+  stage.innerHTML = `<div class="scene on"><div class="status"></div>${offer()}<div class="content"><div class="grid" id="g">${Array.from({ length: 4 }, () => `<div class="card"><div class="skel" style="aspect-ratio:1;margin-bottom:8px"></div><div class="skel" style="height:11px;margin-bottom:6px"></div><div class="skel" style="height:11px;width:60%"></div></div>`).join('')}</div></div>${nav('Home')}</div>`;
+  await sleep(1800); if (!alive(id)) return;
+  $('g').innerHTML = P.slice(0, 4).map(p => cardHTML(p)).join('');
+  const imgs = [...stage.querySelectorAll('.fadeimg')];
+  for (const im of imgs) { await sleep(180); if (!alive(id)) return; im.classList.add('in'); }
+}
+/* 2 empty cart */
+async function s2(id) {
+  stage.innerHTML = `<div class="scene on"><div class="status"></div><div class="topbar"><h2>My Cart</h2></div><div class="content"><div class="empty">
+    <svg viewBox="0 0 170 150"><ellipse class="shadow" cx="85" cy="140" rx="48" ry="7" fill="#e5e7eb"/>
+      <g class="boxhop"><rect x="40" y="62" width="90" height="70" rx="4" fill="#c08a4a" stroke="#8b5e2b" stroke-width="2"/>
+        <path class="flapl" d="M40 62 L18 44 L64 44 L85 62Z" fill="#d9a066" stroke="#8b5e2b" stroke-width="2"/>
+        <path class="flapr" d="M130 62 L152 44 L106 44 L85 62Z" fill="#d9a066" stroke="#8b5e2b" stroke-width="2"/>
+        <circle cx="70" cy="95" r="4" fill="#5b3b16"/><circle cx="100" cy="95" r="4" fill="#5b3b16"/><path d="M76 106 Q85 116 94 106" stroke="#5b3b16" stroke-width="3" fill="none" stroke-linecap="round"/></g></svg>
+    <h3 style="margin:10px 0 4px">Your cart is empty</h3><p style="margin:0;color:#6b7280;font-size:13px">Let's fill this box with something good!</p>
+    <div class="pulse-btn" id="start">Start Shopping</div></div></div>${nav('Cart')}</div>`;
+  await sleep(2600); if (!alive(id)) return;
+  await tap($('start'), id); $('finger').classList.remove('show');
+}
+/* 3 pull to refresh */
+async function s3(id) {
+  stage.innerHTML = `<div class="scene on"><div class="status"></div><div class="topbar"><h2>Products</h2></div>
+    <div class="ptr" id="ptr"><div class="lbl" id="plbl">Pull to refresh</div><svg viewBox="0 0 336 80" preserveAspectRatio="none"><rect y="56" width="336" height="24" fill="#374151"/><line x1="0" y1="68" x2="336" y2="68" stroke="#fde68a" stroke-width="2" stroke-dasharray="12 12"/></svg>
+      <div id="pvan" style="position:absolute;bottom:14px;left:-90px;width:78px;height:40px;transition:left 1.6s cubic-bezier(.5,0,.4,1)"><svg viewBox="0 0 134 64" width="78" height="40"><rect x="0" y="6" width="92" height="44" rx="5" fill="#4f46e5"/><text x="46" y="34" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">EKTA</text><path d="M94 18 H118 L132 34 V50 H94Z" fill="#111827"/><circle cx="24" cy="52" r="10" fill="#111"/><circle cx="112" cy="52" r="10" fill="#111"/></svg></div></div>
+    <div class="content" id="list">${P.slice(0, 5).map(p => `<div class="row"><img src="${p.img}"><div class="t">${p.name}<small>Rate ₹${p.rate.toFixed(2)}</small></div></div>`).join('')}</div>${nav('Search')}</div>`;
+  await sleep(500); const list = $('list'), f = $('finger'), r = rel(list);
+  f.classList.add('show'); f.style.left = (r.x + r.w / 2) + 'px'; f.style.top = (r.y + 40) + 'px';
+  await sleep(650); if (!alive(id)) return;
+  f.style.top = (r.y + 150) + 'px'; $('ptr').style.height = '96px'; $('plbl').textContent = 'Release to refresh';
+  await sleep(700); if (!alive(id)) return;
+  f.classList.remove('show'); $('plbl').textContent = 'Refreshing…'; $('pvan').style.left = '350px';
+  [...list.children].forEach(c => c.animate([{ opacity: 1 }, { opacity: .35 }], { duration: 300, fill: 'forwards' }));
+  await sleep(1700); if (!alive(id)) return;
+  $('plbl').textContent = '✓ Updated just now'; await sleep(500);
+  $('ptr').style.height = '0px';
+  [...list.children].forEach((c, i) => c.animate([{ opacity: .35, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }], { duration: 350, delay: i * 70, fill: 'forwards', easing: 'ease-out' }));
+}
+/* 4 reorder */
+async function s4(id) {
+  stage.innerHTML = `<div class="scene on"><div class="status"></div><div class="topbar"><h2>‹ Order #T1042</h2></div><div class="content"><div class="ocard">
+    <div style="display:flex;justify-content:space-between"><b>Last order · 29 Oct</b><span style="color:#6b7280;font-size:12px">₹1,186.40</span></div>
+    <div class="thumbs">${[P[0], P[3], P[1]].map(p => `<img src="${p.img}">`).join('')}</div>
+    <div class="btn" id="reo" style="background:#4f46e5;color:#fff">🛒 Reorder all 3 items</div></div></div>
+    <div class="toast" id="t4"><span style="font-size:20px">🛒</span><div style="flex:1"><b>3 items added to cart</b><br><small style="color:#d1d5db">Same quantities as last time · ₹1,186.40</small></div><b style="color:#6ee7b7">VIEW</b></div>${nav('Orders')}</div>`;
+  await sleep(500); if (!await tap($('reo'), id)) return; $('finger').classList.remove('show');
+  const thumbs = [...stage.querySelectorAll('.thumbs img')];
+  for (let i = 0; i < 3; i++) {
+    if (!alive(id)) return;
+    fly(thumbs[i], thumbs[i].src, () => { const b = $('badge'); if (!b) return; b.style.display = ''; b.textContent = i + 1; b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); const c = $('cartIc'); c.classList.remove('bounce'); void c.offsetWidth; c.classList.add('bounce'); });
+    thumbs[i].classList.add('gone'); await sleep(320);
+  }
+  await sleep(800); if (!alive(id)) return; $('t4').classList.add('show');
+}
+/* 5 brand filter */
+async function s5(id) {
+  const brands = ['All', 'Surf Excel', 'Dove'];
+  stage.innerHTML = `<div class="scene on"><div class="status"></div>${offer()}<div class="content"><div class="chips" id="chips"><div class="chip-bg" id="cbg"></div>${brands.map((b, i) => `<div class="chip ${i ? '' : 'on'}" data-b="${b}">${b}</div>`).join('')}</div><div class="grid grid5" id="g5">${P.map((p, i) => cardHTML(p, `data-i="${i}"`)).join('')}</div></div>${nav('Home')}</div>`;
+  stage.querySelectorAll('.fadeimg').forEach(i => i.classList.add('in'));
+  const moveBg = chip => { const c = rel(chip), w = rel($('chips')); $('cbg').style.left = (c.x - w.x) + 'px'; $('cbg').style.width = c.w + 'px'; };
+  moveBg(stage.querySelector('.chip'));
+  const filter = brand => {
+    const g = $('g5'), cards = [...g.children], first = new Map(cards.map(c => [c, c.getBoundingClientRect()]));
+    cards.forEach(c => { const show = brand === 'All' || P[c.dataset.i].brand === brand; c.style.display = show ? '' : 'none'; });
+    cards.forEach(c => {
+      if (c.style.display === 'none') return;
+      const a = first.get(c), b = c.getBoundingClientRect();
+      if (a.width === 0) { c.animate([{ opacity: 0, transform: 'scale(.8)' }, { opacity: 1, transform: 'none' }], { duration: 350 }); return; }
+      c.animate([{ transform: `translate(${a.left - b.left}px,${a.top - b.top}px)` }, { transform: 'none' }], { duration: 450, easing: 'cubic-bezier(.3,1.1,.5,1)' });
+    });
+  };
+  for (const b of ['Dove', 'Surf Excel', 'All']) {
+    await sleep(700); const chip = stage.querySelector(`[data-b="${b}"]`);
+    if (!await tap(chip, id)) return;
+    stage.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === chip)); moveBg(chip); filter(b);
+  }
+  $('finger').classList.remove('show');
+}
+/* 6 ledger */
+async function s6(id) {
+  stage.innerHTML = `<div class="scene on"><div class="status"></div><div class="topbar"><h2>Profile</h2></div><div class="content">
+    <div class="ocard"><div style="font-size:12px;color:#6b7280;margin-bottom:10px">ACCOUNT · Sharma General Store</div>
+      <div class="ring-wrap"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="48" fill="none" stroke="#fee2e2" stroke-width="12"/><circle id="ring" cx="60" cy="60" r="48" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round" stroke-dasharray="301.6" stroke-dashoffset="301.6" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset 1.4s cubic-bezier(.3,1,.4,1)"/><text x="60" y="58" text-anchor="middle" font-size="20" font-weight="800" id="pct">0%</text><text x="60" y="76" text-anchor="middle" font-size="10" fill="#6b7280">paid</text></svg>
+        <div><div style="font-size:12px;color:#6b7280">Outstanding</div><div class="big" id="out" style="color:#dc2626">₹0</div><div style="font-size:12px;color:#6b7280;margin-top:6px">Paid this month</div><div style="font-weight:700;color:#059669" id="paid">₹0</div></div></div></div>
+    <div class="ocard" style="margin-top:12px"><b style="font-size:13px">Recent payments</b><div id="pays"></div></div></div>${nav('Profile')}</div>`;
+  await sleep(400); if (!alive(id)) return;
+  countTo($('out'), 0, 12450, 1300); countTo($('paid'), 0, 26600, 1300);
+  $('ring').style.strokeDashoffset = 301.6 * (1 - .68); countTo($('pct'), 0, 68, 1300, v => Math.round(v) + '%');
+  const pays = [['UPI · 28 Oct', '₹8,000'], ['Cash · 21 Oct', '₹12,600'], ['Cheque · 09 Oct', '₹6,000']];
+  for (const [a, b] of pays) { await sleep(450); if (!alive(id)) return; const d = document.createElement('div'); d.className = 'pay'; d.innerHTML = `<span>${a}</span><b style="color:#059669">${b}</b>`; $('pays').appendChild(d); void d.offsetWidth; d.classList.add('in'); }
+}
+/* 7 login */
+async function s7(id) {
+  stage.innerHTML = `<div class="scene on"><div class="login"><div class="sun" id="sun"></div><div style="position:relative;display:grid;place-items:center"><div class="ripple"></div><div class="ripple r2"></div><div class="logo" id="logo">EK</div></div><div class="hello" id="hello"><span class="caret"></span></div><div class="greet" id="greet">☀️ Good morning! Fresh offers are waiting.</div></div></div>`;
+  await sleep(300); $('logo').classList.add('in'); $('sun').classList.add('up');
+  await sleep(800); const txt = 'Namaste, Sharma General Store 🙏'; const h = $('hello');
+  for (let i = 1; i <= [...txt].length; i++) { if (!alive(id)) return; h.innerHTML = [...txt].slice(0, i).join('') + '<span class="caret"></span>'; await sleep(55); }
+  $('greet').classList.add('in');
+}
+/* 8 offer sparkle */
+async function s8(id) {
+  const offers = ['Get 100 Rs off Instantly', 'Dove: Buy 12, get 5% OFF', 'Free delivery above ₹2,000'];
+  stage.innerHTML = `<div class="scene on"><div class="status"></div><div class="offer" id="of"><div class="msg">${'<i>OFFER</i> ' + offers[0]}</div><div class="shine" id="shine"></div></div><div class="content"><div class="grid">${P.slice(0, 4).map(p => cardHTML(p)).join('')}</div></div>${nav('Home')}</div>`;
+  stage.querySelectorAll('.fadeimg').forEach(i => i.classList.add('in'));
+  for (let k = 1; k <= 3; k++) {
+    await sleep(500); if (!alive(id)) return;
+    $('shine').animate([{ left: '-40%' }, { left: '130%' }], { duration: 900, easing: 'ease-in-out' });
+    await sleep(1300); if (!alive(id)) return;
+    const of = $('of'), old = of.querySelector('.msg'), nu = document.createElement('div');
+    nu.className = 'msg'; nu.innerHTML = '<i>OFFER</i> ' + offers[k % 3]; nu.style.transform = 'translateX(100%)'; of.insertBefore(nu, $('shine'));
+    void nu.offsetWidth; old.style.transform = 'translateX(-100%)'; old.style.opacity = 0; nu.style.transform = 'none';
+    setTimeout(() => old.remove(), 650);
+  }
+}
+/* 9 price drop */
+async function s9(id) {
+  stage.innerHTML = `<div class="scene on"><div class="status"></div><div class="topbar"><h2>‹ Product</h2></div><div class="content"><div class="pdcard">
+    <div class="pic"><img src="${P[3].img}"></div><div class="drop-badge" id="db"><span class="arr">↓</span> ₹2 cheaper than your last order</div>
+    <h3 style="margin:0 0 6px;font-size:15px">DOVE CREAM BAR 75G</h3>
+    <div class="prices"><span class="now" id="now">₹52.00</span><span class="was" id="was">₹52.00</span></div>
+    <div class="lastbuy">You bought this at ₹52.00 on 12 Oct</div>
+    <div class="btn" style="background:#ecfdf5;color:#059669;margin-top:12px">+ Add to cart</div></div></div>${nav('Home')}</div>`;
+  await sleep(700); if (!alive(id)) return;
+  countTo($('now'), 52, 50, 700, v => '₹' + v.toFixed(2)); $('was').classList.add('cut');
+  await sleep(500); $('db').classList.add('in');
+}
+/* 10 live update */
+async function s10(id) {
+  stage.innerHTML = `<div class="scene on"><div class="status"></div><div class="topbar"><h2>‹ Order #T1042</h2></div><div class="content"><div class="ocard">
+    <div style="font-size:13px;font-weight:600;color:#059669;margin-bottom:12px" id="head">Confirmed! Your bill is being prepared</div>
+    <div class="track"><div class="line"></div><div class="fill" id="fill" style="width:50%"></div><div class="dots"><div class="dot done"></div><div class="dot cur" id="d1"></div><div class="dot" id="d2"></div></div><div class="truck" id="trk" style="left:50%">🚚</div></div>
+    <div class="labels"><span>Placed</span><span class="on" id="l1">Confirmed</span><span id="l2">Billed</span></div>
+    <div class="btn" id="inv" style="background:#eef2ff;color:#4338ca;margin-top:14px;transform:scale(0);transition:transform .45s cubic-bezier(.3,1.7,.5,1)">🧾 Invoice EK-2207 is ready · View</div></div></div>
+    <div class="push" id="push"><div class="ic">EK</div><div><b>Ekta Enterprises · now</b><small>🧾 Your order #T1042 has been billed. Invoice EK-2207 is ready.</small></div></div>
+    <div class="ding" id="ding" style="top:52px;right:24px">🔔</div>${nav('Orders')}</div>`;
+  await sleep(1200); if (!alive(id)) return;
+  $('push').classList.add('in'); screen.classList.remove('shake'); void screen.offsetWidth; screen.classList.add('shake'); $('ding').classList.add('go');
+  await sleep(1300); if (!alive(id)) return;
+  $('fill').style.width = '100%'; $('trk').style.left = '100%';
+  $('d1').className = 'dot done'; $('d2').className = 'dot cur'; $('l1').className = ''; $('l2').className = 'on';
+  $('head').textContent = 'Billed and ready for dispatch 🎉';
+  await sleep(900); $('inv').style.transform = 'scale(1)';
+  await sleep(1500); if (!alive(id)) return; $('push').classList.remove('in');
+}
+
+const RUN = [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10];
+let current = 0;
+function show(i) {
+  current = i; const id = ++runId; $('finger').classList.remove('show'); screen.querySelectorAll('.flyer').forEach(f => f.remove());
+  document.querySelectorAll('.scene-btn').forEach((b, k) => b.classList.toggle('active', k === i));
+  return RUN[i](id);
+}
+$('sceneList').innerHTML = SCENES.map(([t, d], i) => `<button class="scene-btn"><div class="n">${i + 1}</div><div><b>${t}</b><span>${d}</span></div></button>`).join('');
+document.querySelectorAll('.scene-btn').forEach((b, i) => b.onclick = () => show(i));
+$('replay').onclick = () => show(current);
+$('playAll').onclick = async () => { for (let i = 0; i < RUN.length; i++) { const id = runId + 1; await show(i); if (runId !== id) return; await sleep(2200); if (runId !== id) return; } };
+show(0);
+</script>
+</body>
+</html>
