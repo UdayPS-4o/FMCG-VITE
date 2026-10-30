@@ -123,6 +123,36 @@ app.post('/:formType', async (req, res) => {
     
     formData.id = (maxId + 1).toString();
   }
+
+  if (formType === 'purchases') {
+    // Bill numbers must be unique across the DBF and every not-yet-synced purchase
+    // (pending + approved), otherwise the sync writes one and drops the other.
+    const usedBills = new Set();
+    const addBill = (v) => {
+      const n = parseInt(String(v ?? '').replace(/\D/g, ''), 10);
+      if (!isNaN(n)) usedBills.add(n);
+    };
+    dbData.forEach(p => addBill(p.bill));
+    try {
+      const approved = JSON.parse(await fss.readFile(path.join(__dirname, '..', 'db', 'approved', 'purchases.json'), 'utf8'));
+      (approved || []).forEach(p => addBill(p.bill));
+    } catch (err) {
+      if (err.code !== 'ENOENT') console.error('Error reading approved purchases:', err);
+    }
+    try {
+      const pur = JSON.parse(await fss.readFile(path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'PUR.json'), 'utf8'));
+      (pur || []).forEach(r => { addBill(r.BILL); addBill(r.BILL_BB); });
+    } catch (err) {
+      console.error('Error reading PUR.json for bill check:', err);
+    }
+
+    const requested = parseInt(String(formData.bill ?? ''), 10);
+    if (isNaN(requested) || usedBills.has(requested)) {
+      const next = Math.max(0, ...usedBills) + 1;
+      console.log(`Purchase bill ${formData.bill} already used, assigning ${next}`);
+      formData.bill = String(next);
+    }
+  }
   console.log('-------------------------------------------');
   if (shouldSave) {
     try {
@@ -192,6 +222,7 @@ app.post('/:formType', async (req, res) => {
       return res.status(200).json({ 
           message: 'Entry added successfully.',
           id: formData.id,
+          bill: formData.bill,
       });
       
     } catch (err) {

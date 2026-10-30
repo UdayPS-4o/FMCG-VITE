@@ -4,6 +4,7 @@ import Input, { InputRefHandle } from '../../components/form/input/Input';
 import { useInvoiceContext, type ItemData } from '../../contexts/InvoiceContext';
 import Toast from '../../components/ui/toast/Toast';
 import constants from '../../constants'; // Added import for constants
+import useProductImages from '../../hooks/useProductImages';
 
 // Replace scrollIntoViewIfNeeded with centerElementInViewport
 const centerElementInViewport = (element: HTMLElement) => {
@@ -87,6 +88,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   
   // Get shared data from context
   const { pmplData, stockList, godownOptions, items } = useInvoiceContext();
+  const imageMap = useProductImages(); // item photos for the dropdown thumbnails
 
   // Check if an item is incomplete (missing godown or qty)
   const isIncomplete = item.item && (!item.godown || !item.qty);
@@ -879,6 +881,14 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
         className={`flex justify-between items-center p-4 cursor-pointer ${expanded ? 'bg-brand-50 dark:bg-gray-800' : showRedOutline ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-900'}`}
         onClick={(e) => handleAccordionChange(index)(e, !expanded)}
       >
+        {item.item && imageMap[item.item] && (
+          <img
+            src={imageMap[item.item]}
+            alt=""
+            className="w-9 h-9 rounded-md object-contain bg-white mr-3 shrink-0"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        )}
         <h3 className={`text-md font-medium text-gray-800 dark:text-gray-100 ${item.item ? 'text-brand-600 dark:text-brand-400' : ''} ${showRedOutline ? 'text-red-600 dark:text-red-400' : ''} truncate flex-1 pr-4`} title={item.item ? `${index + 1}. ${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}` : 'Select an item'}>
           {item.item
             ? `${index + 1}. ${item.item} | ${item.selectedItem?.PRODUCT || 'No Product Name'}`
@@ -918,7 +928,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
       
       {expanded && (
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 relative">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="flex flex-wrap items-start gap-3 mb-4">
             <div 
               onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
                 if (e.key === 'Tab' && e.shiftKey) {
@@ -928,7 +938,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                   }
                 }
               }}
-              className="relative" style={{ zIndex: 100 }}
+              className="relative w-full md:flex-1 md:min-w-[320px]" style={{ zIndex: 100 }}
             >
               <Autocomplete
                 key={itemAutocompleteKey}
@@ -951,7 +961,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                   })
                   .map((item) => ({
                     value: item.CODE,
-                    label: `${item.CODE} | ${item.PRODUCT || 'No Product Name'} [${item.MRP1 !== null && item.MRP1 !== undefined ? item.MRP1 : 'N/A'}]`
+                    label: `${item.CODE} | ${item.PRODUCT || 'No Product Name'} [${item.MRP1 !== null && item.MRP1 !== undefined ? item.MRP1 : 'N/A'}]`,
+                    image: imageMap[item.CODE] || ''
                   }))}
                 onChange={(value) => {
                   const selectedPmplItem = pmplData.find(p => p.CODE === value);
@@ -962,7 +973,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 ref={itemNameAutocompleteRef}
               />
             </div>
-            <div>
+            <div className="w-28">
               <Input
                 id={`total-stock-item-${index}`}
                 label="Total Stock"
@@ -974,7 +985,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 variant="outlined"
               />
             </div>
-            <div className="relative" style={{ zIndex: 90 }}>
+            <div className="relative w-full sm:w-56" style={{ zIndex: 90 }}>
               <Autocomplete
                 id={`godown-${index}`}
                 label="Godown"
@@ -993,7 +1004,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 <p className="text-xs text-red-500 mt-1">Godown is required</p>
               )}
             </div>
-            <div>
+            <div className="w-28">
               <Input
                 id={`pack-${index}`}
                 label="Pack"
@@ -1004,8 +1015,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
-            <div>
+          <div className="flex flex-wrap items-start gap-3 mb-4">
+            <div className="w-20">
               <Input
                 id={`gst-${index}`}
                 label="GST%"
@@ -1014,7 +1025,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 variant="outlined"
               />
             </div>
-            <div className="relative">
+            <div className="relative w-32">
               <div className="relative border border-gray-300 dark:border-gray-700 rounded-lg transition-all duration-200 bg-white dark:bg-gray-800">
                 <Input
                   id={`unit-${index}`}
@@ -1047,7 +1058,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 )}
               </div>
             </div>
-            <div>
+            <div className="w-20">
               <Input
                 id={`pcBx-${index}`}
                 label="Pc/Bx"
@@ -1056,7 +1067,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 variant="outlined"
               />
             </div>
-            <div>
+            <div className="w-24">
               <Input
                 id={`mrp-${index}`}
                 label="M.R.P."
@@ -1065,7 +1076,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 variant="outlined"
               />
             </div>
-            <div className="relative">
+            <div className="relative w-28">
               <Input
                 id={`rate-${index}`}
                 label="Rate"
@@ -1077,7 +1088,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 onBlur={() => setTimeout(() => setActiveTooltipField(null), 150)}
               />
             </div>
-            <div>
+            <div className="w-32">
               <Input
                 id={`qty-${index}`}
                 label={`QTY (${item.billdtlUnit || item.unit || ''})`}
@@ -1105,8 +1116,8 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            <div className="relative">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="relative w-28">
               <Input
                 id={`schRs-${index}`}
                 label="SCH (RS)"
@@ -1130,7 +1141,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 }}
               />
             </div>
-            <div className="relative">
+            <div className="relative w-24">
               <Input
                 id={`sch-${index}`}
                 label="Sch%"
@@ -1154,7 +1165,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 }}
               />
             </div>
-            <div>
+            <div className="w-24">
               <Input
                 id={`cd-${index}`}
                 label="CD%"
@@ -1202,7 +1213,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 }}
               />
             </div>
-            <div>
+            <div className="w-32">
               <Input
                 id={`amount-${index}`}
                 label="Amount"
@@ -1211,7 +1222,7 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
                 variant="outlined"
               />
             </div>
-            <div>
+            <div className="w-36">
               <Input
                 id={`netAmount-${index}`}
                 label="Net Amount"

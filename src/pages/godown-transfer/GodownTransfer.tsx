@@ -13,6 +13,7 @@ import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader"
 import useAuth from "../../hooks/useAuth";
 import GodownTiles, { GodownTilesRefHandle } from './GodownTiles';
 import TransferSuccess from './TransferSuccess';
+import useProductImages from '../../hooks/useProductImages';
 
 // Update the item interface to include godown field
 interface ItemData {
@@ -76,7 +77,7 @@ const GodownTransfer: React.FC = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
-  const [imageMap, setImageMap] = useState<Record<string, string>>({}); // item CODE -> image_url
+  const imageMap = useProductImages(); // item CODE -> photo (cached, shared with Invoicing)
   const [savedTransfer, setSavedTransfer] = useState<{ docNo: string; itemCount: number } | null>(null);
 
   // Helper function to format local date as DD-MM-YYYY
@@ -233,18 +234,6 @@ const GodownTransfer: React.FC = () => {
     };
 
     fetchData();
-
-    // Product thumbnails (same image_url source as App Listings). Non-blocking: page works without them.
-    apiCache.fetchWithCache<{ CODE?: string; image_url?: string }[]>(`${baseURL}/api/app/admin/products`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-    })
-      .then((products) => {
-        if (!Array.isArray(products)) return;
-        const map: Record<string, string> = {};
-        products.forEach((p) => { if (p?.CODE && p.image_url) map[p.CODE] = p.image_url; });
-        setImageMap(map);
-      })
-      .catch((error) => console.warn('Product images unavailable:', error));
 
     // Clean up expired cache items
     try {

@@ -59,8 +59,11 @@ const PurchasesApproved: React.FC = () => {
         try {
           const token2 = getAuthToken();
           const processedKeys: string[] = Array.isArray(data.processed) ? data.processed : [];
-          // Only delete the records that were processed successfully, match on BILL
+          const processedCreatedAt: string[] = Array.isArray(data.processedCreatedAt) ? data.processedCreatedAt : [];
+          // Only delete the records actually written to the DBF. Match on createdAt (unique per entry);
+          // matching on BILL alone would also delete a skipped entry that shares the bill number.
           const recordsToDelete = selectedRecords.filter((rec: any) => {
+            if (rec.createdAt) return processedCreatedAt.includes(String(rec.createdAt));
             const billNo = String(rec.bill || rec.BILL || '').trim();
             return billNo && processedKeys.includes(`P-${billNo}`);
           });
