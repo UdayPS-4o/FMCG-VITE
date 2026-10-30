@@ -71,6 +71,30 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [theme, isInitialized]);
 
+  // Glass Obsidian: specular highlight that follows the cursor across the hovered glass panel
+  useEffect(() => {
+    if (theme !== "glass-obsidian") return;
+    let lit: HTMLElement | null = null;
+    const onMove = (e: PointerEvent) => {
+      const el = (e.target as Element | null)?.closest?.<HTMLElement>(".rounded-2xl, .rounded-xl, .app-sidebar, .auth-card");
+      if (lit && lit !== el) {
+        lit.style.removeProperty("--mx");
+        lit.style.removeProperty("--my");
+      }
+      lit = el ?? null;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      el.style.setProperty("--my", `${e.clientY - r.top}px`);
+    };
+    document.addEventListener("pointermove", onMove, { passive: true });
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      lit?.style.removeProperty("--mx");
+      lit?.style.removeProperty("--my");
+    };
+  }, [theme]);
+
   const setTheme = (t: Theme) => setThemeState(t);
 
   // Backward-compat toggle: cycles light ↔ dark only

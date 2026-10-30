@@ -236,7 +236,7 @@ const AppHeader: React.FC = () => {
       ref={headerRef}
       onMouseEnter={handleHeaderMouseEnter}
       onMouseLeave={handleHeaderMouseLeave}
-      className={`flex w-full bg-white/95 backdrop-blur-sm border-gray-200 dark:border-gray-800 dark:bg-gray-900/95 lg:border-b transition-transform duration-300 ease-in-out ${
+      className={`app-header flex w-full bg-white/95 backdrop-blur-sm border-gray-200 dark:border-gray-800 dark:bg-gray-900/95 lg:border-b transition-transform duration-300 ease-in-out ${
         isDesktop 
           ? `fixed top-0 ${isHeaderVisible ? 'translate-y-0' : '-translate-y-full'}` 
           : 'sticky top-0'

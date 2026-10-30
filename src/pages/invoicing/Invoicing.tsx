@@ -493,7 +493,7 @@ const InvoicingContent: React.FC = () => {
   };
 
   const handleBillNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setBillNo(e.target.value);
+    setBillNo(e.target.value.replace(/\D/g, '').slice(0, 5));
   };
 
   const toggleCash = () => {
@@ -511,7 +511,7 @@ const InvoicingContent: React.FC = () => {
   };
 
   const handleDueDaysChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDueDays(e.target.value);
+    setDueDays(e.target.value.replace(/\D/g, '').slice(0, 3));
   };
 
   const handleRefChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1039,8 +1039,8 @@ const InvoicingContent: React.FC = () => {
       
       <FormComponent onSubmit={handleSubmit} autoComplete="off">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-            <div>
+          <div className="flex flex-wrap items-center gap-6 mb-6">
+            <div className="w-full sm:w-44">
               <DatePicker
                 id="date"
                 label="Date"
@@ -1052,7 +1052,7 @@ const InvoicingContent: React.FC = () => {
                 // ref={dateRef} // Add if direct focus needed
               />
             </div>
-            <div>
+            <div className="w-16">
               <Input
                 id="series"
                 label="Series"
@@ -1067,13 +1067,15 @@ const InvoicingContent: React.FC = () => {
                 ref={seriesRef}
               />
             </div>
-            <div>
+            <div className="w-28">
               <Input
                 id="billNo"
                 label="Bill No."
                 value={billNo}
                 onChange={handleBillNoChange}
                 variant="outlined"
+                maxLength={5}
+                inputMode="numeric"
                 autoComplete="off"
                 required
                 disabled={user && !user.routeAccess.includes('Admin')}
@@ -1081,7 +1083,7 @@ const InvoicingContent: React.FC = () => {
               />
             </div>
             <div>
-              <div className="flex items-center h-full">
+              <div className="flex items-center">
                 <Stretchy3DToggle
                   id="cash-toggle"
                   checked={cash === 'Y'}
@@ -1093,8 +1095,8 @@ const InvoicingContent: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
+          <div className="flex flex-col md:flex-row gap-6 mb-6">
+            <div className="flex-1 min-w-0">
               <Autocomplete
                 id="party"
                 label="Party"
@@ -1110,12 +1112,13 @@ const InvoicingContent: React.FC = () => {
                 <p className="mt-1 text-sm text-red-500">{errors.party}</p>
               )}
             </div>
-            <div>
+            <div className="w-full md:w-52">
               <Input
                 id="gst"
                 label="GST"
                 value={party ? (party as any).gst || '' : ''}
                 disabled
+                maxLength={15}
                 variant="outlined"
                 autoComplete="off"
               />
@@ -1158,14 +1161,16 @@ const InvoicingContent: React.FC = () => {
           </div>
 
           {cash === 'N' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
+            <div className="flex gap-6 mb-6">
+              <div className="w-24">
                 <Input
                   id="dueDays"
                   label="Due Date"
                   value={dueDays}
                   onChange={handleDueDaysChange}
                   variant="outlined"
+                  maxLength={3}
+                  inputMode="numeric"
                   autoComplete="off"
                   ref={dueDaysRef}
                   onKeyDown={(e) => {if (e.key === 'Enter') {e.preventDefault(); handleDueDaysEnter();}}}

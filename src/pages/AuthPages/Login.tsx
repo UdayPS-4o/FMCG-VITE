@@ -103,7 +103,7 @@ const Login: React.FC = () => {
         description="Login page for Ekta Enterprises FMCG application"
       />
       <AuthLayout>
-        <div className="bg-white/90 dark:bg-gray-800/90 p-8 rounded-lg shadow-xl backdrop-blur-sm">
+        <div className="auth-card bg-white/90 dark:bg-gray-800/90 p-8 rounded-lg shadow-xl backdrop-blur-sm">
           <div className="mb-5 sm:mb-8 text-center">
             <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
               Welcome to Ekta Enterprises

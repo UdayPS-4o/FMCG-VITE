@@ -376,8 +376,28 @@ const handlers = {
       })
     );
 
+    // Full per-company monthly figures for the company comparison picker:
+    // companySeries[code][fyLabel] = [12 monthly amounts, Apr..Mar]
+    const companySeries = {};
+    const companyTotals = {};
+    fyYears.forEach((fy) => {
+      yearlyCo[fy].forEach((byCo, idx) => {
+        Object.entries(byCo).forEach(([cc, amt]) => {
+          companySeries[cc] = companySeries[cc] || Object.fromEntries(fyYears.map((y) => [fyLabel(y), Array(12).fill(0)]));
+          companySeries[cc][fyLabel(fy)][idx] = round2(companySeries[cc][fyLabel(fy)][idx] + amt);
+          companyTotals[cc] = (companyTotals[cc] || 0) + (fy === ref.fy ? amt : 0);
+        });
+      });
+    });
+    // Sorted by current-FY sales so the biggest companies come first in the picker
+    const companyList = Object.keys(companySeries)
+      .map((code) => ({ code, company: companyLabel(code, companies), curFyTotal: round2(companyTotals[code] || 0) }))
+      .sort((a, b) => b.curFyTotal - a.curFyTotal || a.company.localeCompare(b.company));
+
     return {
       months: MONTHS,
+      companyList,
+      companySeries,
       monthly: {
         fy: fyLabel(ref.fy),
         values: curValues,

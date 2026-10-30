@@ -1765,6 +1765,7 @@ router.post('/admin/product-image', requireAdminJwtAuth, async (req, res) => {
 
     try {
         await appDb.updateProductMetaImage(productCode, finalUrl);
+        invalidateImageMap();
         res.json({ success: true, imageUrl: finalUrl });
     } catch (err) {
         console.error('[app/admin/product-image POST]', err);
@@ -2089,6 +2090,73 @@ router.delete('/admin/schemes/:id', async (req, res) => {
 // ── App Listings / Products Admin ─────────────────────────────────────────────
 
 /**
+ * GET /api/app/product-images
+ * Compact { CODE: image_url } for every product that has a photo (webapp item
+ * dropdown thumbnails). Matching all products to photos takes ~1s, so the map is
+ * built once and reused until PMPL.json changes, a photo is edited, or 10 min pass.
+ */
+const IMAGE_MAP_TTL = 10 * 60 * 1000;
+let _imageMapCache = null; // { map, builtAt, pmplMtime }
+const invalidateImageMap = () => { _imageMapCache = null; };
+
+async function buildProductImageMap() {
+    const jsonPath = path.resolve(process.env.DBF_FOLDER_PATH, 'data/json', 'PMPL.json');
+    let pmplMtime = 0;
+    try { pmplMtime = (await fs.stat(jsonPath)).mtimeMs; } catch (e) { /* DBF fallback below */ }
+    if (_imageMapCache && _imageMapCache.pmplMtime === pmplMtime && Date.now() - _imageMapCache.builtAt < IMAGE_MAP_TTL) {
+        return _imageMapCache;
+    }
+
+    let products;
+    try {
+        products = JSON.parse(await fs.readFile(jsonPath, 'utf8'));
+    } catch (e) {
+        products = await getDbfData(path.join(process.env.DBF_FOLDER_PATH, 'data', 'PMPL.DBF'));
+    }
+    const [productImages, productMeta] = await Promise.all([
+        appDb.getAllProductImages().catch(() => []),
+        appDb.getAllProductMeta().catch(() => []),
+    ]);
+    const metaMap = {};
+    productMeta.forEach(m => { metaMap[m.product_code] = m; });
+
+    // Same matching rules as /admin/products
+    const findImage = (productName, code, basepack) => {
+        if (!productName) return null;
+        const name = productName.toUpperCase().trim();
+        for (const img of productImages) {
+            if (basepack && img.basepack_code && String(img.basepack_code).trim() === String(basepack).trim()) return img.image_url;
+            if (img.basepack_code && code && String(img.basepack_code).trim() === String(code).trim()) return img.image_url;
+            if (!img.itemvarient_desc) continue;
+            const desc = img.itemvarient_desc.toUpperCase().trim();
+            const matchLen = Math.min(12, name.length, desc.length);
+            if (matchLen >= 8 && name.substring(0, matchLen) === desc.substring(0, matchLen)) return img.image_url;
+        }
+        return null;
+    };
+
+    const map = {};
+    for (const p of products) {
+        if (!p.CODE || !p.PRODUCT) continue;
+        const img = (metaMap[p.CODE] && metaMap[p.CODE].image_url) || findImage(p.PRODUCT, p.CODE, p.IT_DESC2);
+        if (img) map[p.CODE] = img;
+    }
+    _imageMapCache = { map, builtAt: Date.now(), pmplMtime };
+    return _imageMapCache;
+}
+
+router.get('/product-images', async (req, res) => {
+    try {
+        const { map } = await buildProductImageMap();
+        res.set('Cache-Control', 'no-cache'); // always revalidate; unchanged map → 304 via ETag
+        res.json(map);
+    } catch (err) {
+        console.error('[app/product-images]', err);
+        res.status(500).json({ error: 'Failed to fetch product images' });
+    }
+});
+
+/**
  * GET /api/app/admin/products
  */
 router.get('/admin/products', async (req, res) => {
@@ -2176,6 +2244,7 @@ router.put('/admin/products/:code/meta', async (req, res) => {
     try {
         const product_code = req.params.code;
         await appDb.upsertProductMeta(product_code, req.body);
+        invalidateImageMap();
         res.json({ success: true });
     } catch (err) {
         console.error('[app/admin/products/:code/meta]', err);

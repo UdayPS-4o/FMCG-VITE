@@ -1,0 +1,316 @@
+/* =====================================================
+   🌑 GLASS OBSIDIAN — iOS 26 "Liquid Glass"
+   Everything here is scoped to html.theme-glass-obsidian, which
+   also carries .theme-glass, so these rules refine the shared
+   glass base in index.css without touching any other theme.
+   Lens refraction uses the #lg-lens SVG filter in index.html
+   (Chromium only; other browsers fall back to frosted blur).
+   ===================================================== */
+
+html.theme-glass-obsidian {
+  /* iOS system blue as the brand palette */
+  --color-brand-25:  #f2f8ff;
+  --color-brand-50:  #e5f1ff;
+  --color-brand-100: #cce4ff;
+  --color-brand-200: #99c9ff;
+  --color-brand-300: #66adff;
+  --color-brand-400: #3d9bff;
+  --color-brand-500: #0a84ff;
+  --color-brand-600: #0a6cf0;
+  --color-brand-700: #0758c4;
+  --color-brand-800: #05449a;
+  --color-brand-900: #033170;
+  --color-brand-950: #021f47;
+  --shadow-focus-ring: 0 0 0 4px rgba(10, 132, 255, 0.28);
+
+  /* iOS dark label hierarchy */
+  --color-gray-400: rgba(235, 235, 245, 0.50);
+  --color-gray-500: rgba(235, 235, 245, 0.66);
+  --color-gray-600: rgba(235, 235, 245, 0.86);
+  --color-gray-dark: rgba(22, 22, 28, 0.30);
+
+  --lg-ease: cubic-bezier(.2, .9, .25, 1.15);
+  --lg-rim:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.12),
+    inset 1px 0 1px rgba(255, 255, 255, 0.10),
+    inset -1px 0 1px rgba(255, 255, 255, 0.10),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+  --lg-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.02)), rgba(22, 22, 28, 0.32);
+  --lg-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 28%, transparent 55%);
+
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Outfit, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #030305;
+  background-image: radial-gradient(120% 90% at 50% 0%, #0d0d16 0%, #040406 55%, #000 100%);
+}
+
+/* ---------- Wallpaper: slow-drifting aurora behind the glass ---------- */
+html.theme-glass-obsidian body::before,
+html.theme-glass-obsidian body::after {
+  content: "";
+  position: fixed;
+  inset: 0;               /* stay inside the viewport — an oversized layer adds page scrollbars */
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  /* the gradient image is larger than the layer, so drifting it never exposes an edge */
+  background-size: calc(100% + 40vmax) calc(100% + 40vmax);
+  background-position: -20vmax -20vmax;
+}
+html.theme-glass-obsidian body::before {
+  background-image:
+    radial-gradient(30vmax 30vmax at 22% 18%, rgba(94, 92, 230, 0.55), transparent 70%),
+    radial-gradient(26vmax 26vmax at 82% 22%, rgba(10, 132, 255, 0.40), transparent 70%),
+    radial-gradient(22vmax 22vmax at 55% 55%, rgba(255, 159, 10, 0.12), transparent 70%);
+  animation: lg-drift-a 32s ease-in-out infinite alternate;
+}
+html.theme-glass-obsidian body::after {
+  background-image:
+    radial-gradient(30vmax 30vmax at 78% 82%, rgba(191, 90, 242, 0.38), transparent 70%),
+    radial-gradient(24vmax 24vmax at 30% 85%, rgba(48, 209, 88, 0.18), transparent 70%);
+  animation: lg-drift-b 40s ease-in-out infinite alternate;
+}
+@keyframes lg-drift-a { to { background-position: calc(-20vmax + 8vw) calc(-20vmax + 6vh); } }
+@keyframes lg-drift-b { to { background-position: calc(-20vmax - 7vw) calc(-20vmax - 8vh); } }
+@media (prefers-reduced-motion: reduce) {
+  html.theme-glass-obsidian body::before,
+  html.theme-glass-obsidian body::after { animation: none; }
+}
+
+/* ---------- Liquid glass surfaces (same targets as the shared glass base) ---------- */
+html.theme-glass-obsidian :is(.bg-white, .bg-white\/90, .bg-white\/95, .dark\:bg-gray-900, .dark\:bg-gray-800, .bg-gray-dark, .rounded-2xl, .rounded-xl) {
+  background: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.09), transparent 45%), var(--lg-sheen), var(--lg-fill) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(190%) brightness(1.06);
+  backdrop-filter: blur(22px) saturate(190%) brightness(1.06);
+  border: 0 !important;
+  box-shadow: var(--lg-rim), 0 2px 6px rgba(0, 0, 0, 0.22), 0 16px 44px -12px rgba(0, 0, 0, 0.55);
+}
+html.theme-glass-obsidian .rounded-2xl { border-radius: 26px; }
+/* full-page wrappers (incl. the app layout root) are canvas, not panels */
+html.theme-glass-obsidian :is(.min-h-screen, .h-screen):not(.app-sidebar):is(.bg-white, .bg-brand-950, .dark\:bg-gray-900, .dark\:bg-gray-800, .bg-gray-dark) {
+  background: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+/* nested glass gets lighter so stacked layers don't turn muddy */
+html.theme-glass-obsidian :is(.rounded-2xl, .rounded-xl) :is(.rounded-2xl, .rounded-xl, .bg-white) {
+  background: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.09), transparent 45%), linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(170%);
+  backdrop-filter: blur(12px) saturate(170%);
+  box-shadow: var(--lg-rim), 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+
+/* lens refraction on the big outer panels */
+@supports (backdrop-filter: url("#lg-lens")) {
+  html.theme-glass-obsidian :is(.app-sidebar, .app-header, .rounded-2xl):not(:is(.rounded-2xl, .rounded-xl) *) {
+    backdrop-filter: url("#lg-lens") blur(16px) saturate(200%) brightness(1.06);
+  }
+}
+
+html.theme-glass-obsidian .bg-gray-100 { background-color: rgba(120, 120, 128, 0.16) !important; }
+html.theme-glass-obsidian label.bg-white,
+html.theme-glass-obsidian label.bg-gray-50,
+html.theme-glass-obsidian label[class*="bg-gray-"] {
+  background: #101016 !important;
+  box-shadow: none !important;
+}
+/* floated input labels: sit above the field (iOS style) instead of cutting into its border */
+html.theme-glass-obsidian label.absolute.-top-2 {
+  background: transparent !important;
+  transform: translateY(-9px);
+  left: 4px;
+  padding: 0;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+html.theme-glass-obsidian select option,
+html.theme-glass-obsidian select optgroup { background-color: #15151b; }
+
+/* pastel gradient panels read as smudges on dark glass */
+html.theme-glass-obsidian [class*="bg-gradient-to-"]:is([class*="from-slate-50"], [class*="from-blue-50"], [class*="from-gray-50"]) {
+  background-image: none !important;
+}
+
+/* ---------- Sidebar: floating glass panel with iOS Settings-style icons ---------- */
+html.theme-glass-obsidian .app-sidebar {
+  top: 12px;
+  left: 12px;
+  height: calc(100vh - 24px);
+  border-radius: 30px;
+  padding-left: 14px;
+  padding-right: 14px;
+  background: var(--lg-sheen), var(--lg-fill) !important;
+  border: 0 !important;
+  box-shadow: var(--lg-rim), 0 18px 50px -10px rgba(0, 0, 0, 0.6);
+}
+html.theme-glass-obsidian .app-sidebar.w-\[290px\] { width: 272px; }
+html.theme-glass-obsidian .app-sidebar.w-\[90px\]  { width: 78px; }
+@media (max-width: 1023px) {
+  html.theme-glass-obsidian .app-sidebar { top: 0; left: 0; height: 100vh; border-radius: 0 28px 28px 0; }
+}
+html.theme-glass-obsidian .app-sidebar h2 { letter-spacing: 0.08em; font-weight: 600; color: rgba(235, 235, 245, 0.36); }
+
+html.theme-glass-obsidian .menu-item {
+  border-radius: 14px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  transition: background-color .2s, box-shadow .3s, transform .35s var(--lg-ease);
+}
+html.theme-glass-obsidian .menu-item-inactive { color: rgba(255, 255, 255, 0.86); }
+html.theme-glass-obsidian .menu-item-inactive:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+html.theme-glass-obsidian .menu-item-active,
+html.theme-glass-obsidian .menu-dropdown-item-active {
+  color: #fff;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
+  box-shadow: var(--lg-rim), 0 4px 14px rgba(0, 0, 0, 0.3);
+  animation: lg-pop .5s var(--lg-ease);
+}
+@keyframes lg-pop { from { transform: scale(.94); opacity: .6; } }
+html.theme-glass-obsidian .menu-dropdown-item { border-radius: 12px; }
+html.theme-glass-obsidian .menu-dropdown-item-inactive { color: rgba(235, 235, 245, 0.7); }
+html.theme-glass-obsidian .menu-dropdown-item-inactive:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+html.theme-glass-obsidian .menu-dropdown-badge { color: var(--color-brand-400); background: rgba(10, 132, 255, 0.18); }
+
+/* squircle app icons — tint comes from data-tint on the icon span */
+html.theme-glass-obsidian .menu-item-icon-size[data-tint] {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--tint, linear-gradient(180deg, #a5a5ac, #636369));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.45), inset 0 -2px 4px rgba(0, 0, 0, 0.18), 0 3px 8px rgba(0, 0, 0, 0.35);
+}
+html.theme-glass-obsidian .menu-item-icon-size[data-tint] svg {
+  transform: scale(0.72);  /* size-6! is an !important utility, so scale instead of resizing */
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+html.theme-glass-obsidian [data-tint="blue"]   { --tint: linear-gradient(180deg, #4da3ff, #0a6cf0); }
+html.theme-glass-obsidian [data-tint="green"]  { --tint: linear-gradient(180deg, #5ee27f, #1fb04a); }
+html.theme-glass-obsidian [data-tint="orange"] { --tint: linear-gradient(180deg, #ffb547, #f57f00); }
+html.theme-glass-obsidian [data-tint="red"]    { --tint: linear-gradient(180deg, #ff6e66, #e5281e); }
+html.theme-glass-obsidian [data-tint="purple"] { --tint: linear-gradient(180deg, #d88bff, #a23fe0); }
+html.theme-glass-obsidian [data-tint="indigo"] { --tint: linear-gradient(180deg, #8583ff, #4442d6); }
+html.theme-glass-obsidian [data-tint="teal"]   { --tint: linear-gradient(180deg, #7edcff, #1fa8e0); }
+html.theme-glass-obsidian [data-tint="mint"]   { --tint: linear-gradient(180deg, #7ff0ea, #18b8b0); }
+html.theme-glass-obsidian [data-tint="pink"]   { --tint: linear-gradient(180deg, #ff6a88, #e5194a); }
+html.theme-glass-obsidian [data-tint="yellow"] { --tint: linear-gradient(180deg, #ffe24d, #f2b400); }
+html.theme-glass-obsidian [data-tint="gray"]   { --tint: linear-gradient(180deg, #a5a5ac, #636369); }
+
+/* ---------- Login card ---------- */
+html.theme-glass-obsidian .auth-card {
+  border-radius: 30px;
+  padding: 36px 34px;
+  background: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.09), transparent 45%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.03) 30%, transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03)), rgba(18, 18, 24, 0.45) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
+  backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
+  box-shadow: var(--lg-rim), 0 30px 80px -20px rgba(0, 0, 0, 0.75), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+}
+@supports (backdrop-filter: url("#lg-lens")) {
+  html.theme-glass-obsidian .auth-card { backdrop-filter: url("#lg-lens") blur(22px) saturate(200%) brightness(1.05); }
+}
+html.theme-glass-obsidian .auth-card h1 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  background: linear-gradient(180deg, #fff 35%, rgba(255, 255, 255, 0.7));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+html.theme-glass-obsidian .auth-card p { color: rgba(235, 235, 245, 0.62); }
+html.theme-glass-obsidian .auth-card label { color: rgba(235, 235, 245, 0.8); font-weight: 600; }
+html.theme-glass-obsidian .auth-card :is(input) { height: 48px; border-radius: 14px; font-size: 15px; }
+html.theme-glass-obsidian .auth-card button[type="submit"] { height: 50px; border-radius: 999px; font-size: 16px; font-weight: 600; }
+
+/* ---------- Header: glass bar ---------- */
+html.theme-glass-obsidian .app-header {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)), rgba(10, 10, 14, 0.35) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  backdrop-filter: blur(24px) saturate(190%);
+  border-bottom: 0 !important;
+  box-shadow: inset 0 -0.5px 0 rgba(255, 255, 255, 0.12), 0 10px 30px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- Dashboard hero banner: large-title glass instead of the blue gradient ---------- */
+html.theme-glass-obsidian [class*="bg-gradient-to-r"][class*="from-indigo-600"][class*="via-blue-600"] {
+  background: transparent !important;
+  padding-top: 22px;
+  padding-bottom: 22px;
+  box-shadow: inset 0 -0.5px 0 rgba(255, 255, 255, 0.1);
+}
+html.theme-glass-obsidian [class*="from-indigo-600"][class*="via-blue-600"] h2 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  background: linear-gradient(180deg, #fff 30%, rgba(255, 255, 255, 0.62));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+html.theme-glass-obsidian [class*="from-indigo-600"][class*="via-blue-600"] > div:first-child {
+  background: linear-gradient(180deg, #4da3ff, #0a6cf0) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.45), 0 6px 16px rgba(10, 132, 255, 0.35) !important;
+}
+html.theme-glass-obsidian [class*="from-indigo-600"][class*="via-blue-600"] button {
+  border-radius: 999px;
+  padding: 10px 20px;
+  background: linear-gradient(180deg, #3d9bff, #0a6cf0) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55), inset 0 -2px 6px rgba(0, 0, 0, 0.18), 0 8px 24px rgba(10, 132, 255, 0.45) !important;
+}
+
+/* ---------- Controls ---------- */
+html.theme-glass-obsidian :is(button, a):is(.bg-brand-500, .bg-brand-600, .bg-blue-500, .bg-blue-600) {
+  background: linear-gradient(180deg, #3d9bff, #0a6cf0) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.16), 0 6px 18px rgba(10, 132, 255, 0.35);
+}
+html.theme-glass-obsidian button:not(:disabled) { transition: transform .35s var(--lg-ease), background-color .2s, box-shadow .2s; }
+html.theme-glass-obsidian button:not(:disabled):active { transform: scale(.96); }
+
+html.theme-glass-obsidian :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea) {
+  background: rgba(120, 120, 128, 0.16) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  color: #fff;
+  transition: box-shadow .2s, background-color .2s;
+}
+html.theme-glass-obsidian :is(input, select, textarea):focus {
+  outline: none;
+  background: rgba(120, 120, 128, 0.22) !important;
+  border-color: rgba(10, 132, 255, 0.9) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 4px rgba(10, 132, 255, 0.25) !important;
+}
+html.theme-glass-obsidian ::placeholder { color: rgba(235, 235, 245, 0.32); }
+html.theme-glass-obsidian input[type="checkbox"],
+html.theme-glass-obsidian input[type="radio"] { accent-color: #30d158; }
+
+/* ---------- Tables ---------- */
+html.theme-glass-obsidian thead,
+html.theme-glass-obsidian thead tr,
+html.theme-glass-obsidian th { background-color: rgba(255, 255, 255, 0.03) !important; }
+html.theme-glass-obsidian th { color: rgba(235, 235, 245, 0.5); letter-spacing: 0.04em; }
+html.theme-glass-obsidian :is(td, th) { border-color: rgba(255, 255, 255, 0.07) !important; }
+html.theme-glass-obsidian tbody tr { transition: background-color .15s; }
+html.theme-glass-obsidian tbody tr:hover { background-color: rgba(255, 255, 255, 0.045) !important; }
+
+/* ---------- Scrollbars ---------- */
+html.theme-glass-obsidian * { scrollbar-color: rgba(255, 255, 255, 0.22) transparent; }
+html.theme-glass-obsidian *::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.22); }
+
+@media (prefers-reduced-transparency: reduce) {
+  html.theme-glass-obsidian :is(.bg-white, .rounded-2xl, .rounded-xl, .app-sidebar, .app-header) {
+    background: rgba(28, 28, 32, 0.94) !important;
+    backdrop-filter: none !important;
+  }
+}

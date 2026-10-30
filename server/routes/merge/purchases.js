@@ -307,6 +307,7 @@ router.post('/sync', async (req, res) => {
     const cashToInsert = [];
     const purTranToInsert = [];
     const processed = [];
+    const processedCreatedAt = [];
     const skipped = [];
 
     for (const purchase of records) {
@@ -554,6 +555,7 @@ router.post('/sync', async (req, res) => {
       }
 
       processed.push(key);
+      if (purchase.createdAt) processedCreatedAt.push(purchase.createdAt);
       existingKeys.add(key);
     }
 
@@ -574,6 +576,7 @@ router.post('/sync', async (req, res) => {
       success: true,
       message: `Purchases sync completed. Processed: ${processed.length}, Skipped: ${skipped.length}`,
       processed,
+      processedCreatedAt,
       skipped
     });
   } catch (error) {

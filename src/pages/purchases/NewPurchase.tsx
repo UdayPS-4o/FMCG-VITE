@@ -77,6 +77,26 @@ const GST_STATES: { code: string; name: string }[] = [
   { code: '97', name: 'Other Territory' },
 ];
 
+// Highest purchase BILL across PUR DBF rows (BILL / BILL_BB) and unsynced web-app bills.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const maxPurchaseBill = (purRows: any[], unsynced: number[]): number => {
+  let maxBillNum = 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (purRows || []).forEach((r: any) => {
+    const b = parseInt(String(r.BILL || 0), 10);
+    if (!isNaN(b) && b > maxBillNum) maxBillNum = b;
+    const bbStr = String(r.BILL_BB || '').match(/(\d+)/);
+    if (bbStr) {
+      const bb = parseInt(bbStr[1], 10);
+      if (!isNaN(bb) && bb > maxBillNum) maxBillNum = bb;
+    }
+  });
+  (unsynced || []).forEach((b) => {
+    if (b > maxBillNum) maxBillNum = b;
+  });
+  return maxBillNum;
+};
+
 const NewPurchase: React.FC = () => {
   const navigate = useNavigate();
   const [vendor, setVendor] = useState('');
@@ -92,6 +112,7 @@ const NewPurchase: React.FC = () => {
   const [pmplData, setPmplData] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [purData, setPurData] = useState<any[]>([]);
+  const [unsyncedBills, setUnsyncedBills] = useState<number[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [itemMap, setItemMap] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -340,20 +361,35 @@ const NewPurchase: React.FC = () => {
         return;
       }
     }
-    let maxBillNum = 0;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (arr || []).forEach((r: any) => {
-      const b = parseInt(String(r.BILL || 0), 10);
-      if (!isNaN(b) && b > maxBillNum) maxBillNum = b;
-      const bbStr = String(r.BILL_BB || '').match(/(\d+)/);
-      if (bbStr) {
-        const bb = parseInt(bbStr[1], 10);
-        if (!isNaN(bb) && bb > maxBillNum) maxBillNum = bb;
+    setPBillBB(`P-${maxPurchaseBill(arr, unsyncedBills) + 1}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingBill, purData, unsyncedBills]);
+
+  // Bill numbers of purchases saved/approved in the web app but not yet synced to the DBF.
+  // They must be counted when picking the next BILL, otherwise two unsynced entries get the same number.
+  const fetchUnsyncedBills = async (): Promise<number[]> => {
+    const token = localStorage.getItem('token');
+    const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    const results = await Promise.allSettled([
+      fetch(`${constants.baseURL}/json/purchases`, { headers, cache: 'no-store' }).then(r => (r.ok ? r.json() : [])),
+      fetch(`${constants.baseURL}/approved/json/purchases`, { headers, cache: 'no-store' }).then(r => (r.ok ? r.json() : [])),
+    ]);
+    const bills: number[] = [];
+    results.forEach((res) => {
+      if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        res.value.forEach((p: any) => {
+          const n = parseInt(String(p?.bill ?? ''), 10);
+          if (!isNaN(n)) bills.push(n);
+        });
       }
     });
-    setPBillBB(`P-${maxBillNum + 1}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingBill, purData]);
+    return bills;
+  };
+
+  useEffect(() => {
+    fetchUnsyncedBills().then(setUnsyncedBills).catch((err) => console.error('Unsynced bills fetch error:', err));
+  }, []);
 
   const gstGroupOptions = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -976,19 +1012,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
       // Determine BILL to use
       let billNo: string | null = editingBill;
       if (!billNo) {
-        const arr = purData;
-        let maxBillNum = 0;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (arr || []).forEach((r: any) => {
-          const b = parseInt(String(r.BILL || 0), 10);
-          if (!isNaN(b) && b > maxBillNum) maxBillNum = b;
-          const bbStr = String(r.BILL_BB || '').match(/(\d+)/);
-          if (bbStr) {
-            const bb = parseInt(bbStr[1], 10);
-            if (!isNaN(bb) && bb > maxBillNum) maxBillNum = bb;
-          }
-        });
-        billNo = String(maxBillNum + 1);
+        const freshUnsynced = await fetchUnsyncedBills().catch(() => unsyncedBills);
+        billNo = String(maxPurchaseBill(purData, freshUnsynced) + 1);
       }
       const payload = {
         bill: billNo || undefined,
@@ -1116,7 +1141,8 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        alert(isEditing ? 'Purchase updated' : 'Purchase saved');
+        const saved = await res.json().catch(() => ({}));
+        alert(isEditing ? 'Purchase updated' : `Purchase saved as P-${saved?.bill || billNo}`);
         navigate('/db/purchases');
       } else {
         const err = await res.json().catch(() => ({ message: 'Failed to save purchase' }));

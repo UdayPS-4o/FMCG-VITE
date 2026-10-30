@@ -513,6 +513,8 @@ app.post('/delete-approved-records', verifyToken, async (req, res) => {
     const toLowerStr = (v) => String(v ?? '').toLowerCase();
     const purchaseKeys = ['pbillno', 'PBILLNO', 'bill', 'BILL', 'createdAt'];
     const purchaseMatch = (a, b) => {
+      // createdAt identifies one exact entry; bill numbers can repeat between unsynced entries
+      if (a.createdAt && b.createdAt) return String(a.createdAt) === String(b.createdAt);
       const aVals = purchaseKeys.map(k => toLowerStr(a[k])).filter(Boolean);
       const bVals = purchaseKeys.map(k => toLowerStr(b[k])).filter(Boolean);
       if (aVals.length === 0 || bVals.length === 0) return false;
