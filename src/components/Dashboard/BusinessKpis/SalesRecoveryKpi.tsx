@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { EmptyState, KpiCard, SearchBox, inr, inrCompact, longDate, useKpiData } from './shared';
+import { CountUp, EmptyState, KpiCard, SearchBox, inr, inrCompact, longDate, useKpiData } from './shared';
 
 interface RecRow {
   party: string;
@@ -99,15 +99,15 @@ const SalesRecoveryKpi: React.FC<{ title: string; color: string; icon: React.Rea
                 </div>
                 <div className="mt-1 flex items-baseline gap-2">
                   <span className="text-2xl font-bold" style={{ color: c }}>
-                    {s > 0 ? `${v.toFixed(1)}%` : '—'}
+                    {s > 0 ? <CountUp value={v} format={(n) => `${n.toFixed(1)}%`} /> : '—'}
                   </span>
                 </div>
                 <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-                  <div className="h-full rounded-full" style={{ width: `${Math.min(v, 100)}%`, background: c }} />
+                  <div className="kpi-bar-grow kpi-width-anim h-full rounded-full" style={{ width: `${Math.min(v, 100)}%`, background: c }} />
                 </div>
                 <div className="mt-1.5 flex justify-between text-[11px] text-gray-500">
-                  <span>Sales {inrCompact(s)}</span>
-                  <span>Rec {inrCompact(r)}</span>
+                  <span>Sales <CountUp value={s} format={inrCompact} /></span>
+                  <span>Rec <CountUp value={r} format={inrCompact} /></span>
                 </div>
               </div>
             );

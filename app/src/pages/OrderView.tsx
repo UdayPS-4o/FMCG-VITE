@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, Plus, Minus, ShoppingCart, Loader2, Check, Edit2, Save, X, Trash2, Search as SearchIcon } from 'lucide-react';
-import { getOrders, fetchProducts, updateOrder } from '../lib/api';
+import { getOrders, fetchProducts, updateOrder, getImageUrl } from '../lib/api';
+import { flyManyToCart } from '../lib/cartFx';
+import { ORDER_REFRESH_EVENT } from '../lib/orderEvents';
 import { useStore, type Product } from '../context/StoreContext';
+import OrderTracker from '../components/OrderTracker';
 
 interface OrderItem {
     productCode: string;
@@ -28,6 +31,7 @@ interface Order {
     invoiceBillNo?: string;
     invoiceSeries?: string;
     invoiceRef?: string;
+    updatedAt?: string;
 }
 
 const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
@@ -57,13 +61,15 @@ const OrderView = () => {
     const [editPaymentMode, setEditPaymentMode] = useState<'Cash' | 'Credit' | null>(null);
     const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
-    const loadOrder = () => {
-        setLoading(true);
+    // silent: refresh in place (live push / back to app) so the tracker animates instead of reloading
+    const loadOrder = (silent = false) => {
+        if (!silent) setLoading(true);
         getOrders()
             .then(orders => {
                 const found = orders.find((o: Order) => o.id === id);
                 if (found) {
                     setOrder(found);
+                    if (silent) return; // don't overwrite items the user may be editing
                     const initItems = found.items.map((it: any) => {
                         let multF = 1;
                         if (it.qtyBoxes > 0 && it.rate > 0) {
@@ -80,7 +86,15 @@ const OrderView = () => {
 
     useEffect(() => {
         loadOrder();
-    }, [id]);
+        const onRefresh = () => loadOrder(true);
+        const onVisible = () => { if (document.visibilityState === 'visible') loadOrder(true); };
+        window.addEventListener(ORDER_REFRESH_EVENT, onRefresh);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            window.removeEventListener(ORDER_REFRESH_EVENT, onRefresh);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleReorder = async (item: OrderItem) => {
         setAddedItemId(item.productCode);
@@ -108,8 +122,17 @@ const OrderView = () => {
         setTimeout(() => setAddedItemId(null), 1000);
     };
 
+    const reorderBtnRef = useRef<HTMLButtonElement>(null);
+
     const handleReorderAll = async () => {
         if (!order) return;
+        // photos fly from the Reorder button into the cart, one per item
+        const n = order.items.length;
+        flyManyToCart(
+            reorderBtnRef.current,
+            order.items.slice(0, 6).map(it => (it.image_url ? getImageUrl(it.image_url) : undefined)),
+            language === 'en' ? `${n} ${n === 1 ? 'item' : 'items'} added to cart` : `${n} आइटम कार्ट में जोड़े गए`,
+        );
         const codes = order.items.map(i => i.productCode).join(',');
         try {
             const res = await fetchProducts(1, 1000, '', '', '', codes);
@@ -303,6 +326,7 @@ const OrderView = () => {
             </header>
 
             <div className="p-4 pt-[76px] space-y-4">
+                {!isEditing && <OrderTracker order={order} language={language} />}
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                         <div>
@@ -321,6 +345,7 @@ const OrderView = () => {
                                     </button>
                                 )}
                                 <button 
+                                    ref={reorderBtnRef}
                                     onClick={handleReorderAll}
                                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm transition-transform active:scale-95"
                                 >

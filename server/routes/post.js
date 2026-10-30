@@ -128,6 +128,9 @@ app.post('/:formType', async (req, res) => {
     try {
       
       formData.createdAt = new Date().toISOString();
+      if (req.user && req.user.id != null) {
+        formData.createdBy = req.user.id; // used to notify only the creator (non-admins)
+      }
       dbData.push(formData);
       await fs.promises.writeFile(filePath, JSON.stringify(dbData, null, 2), 'utf8');
 
@@ -183,7 +186,7 @@ app.post('/:formType', async (req, res) => {
           id: uniqueId
         } 
       };
-      sendNotificationToAdmins(notificationPayload);
+      sendNotificationToAdmins(notificationPayload, formType, { owner: formData });
       // --- END PUSH NOTIFICATION LOGIC ---
 
       return res.status(200).json({ 
@@ -244,9 +247,13 @@ app.post('/edit/:formType', async (req, res) => {
     }
 
     const originalCreatedAt = dbData[entryIndex].createdAt;
+    const originalCreatedBy = dbData[entryIndex].createdBy;
     dbData[entryIndex] = { ...dbData[entryIndex], ...formData, updatedAt: new Date().toISOString() };
     if (originalCreatedAt) {
       dbData[entryIndex].createdAt = originalCreatedAt;
+    }
+    if (originalCreatedBy != null) {
+      dbData[entryIndex].createdBy = originalCreatedBy;
     }
 
     await fs.promises.writeFile(filePath, JSON.stringify(dbData, null, 2), 'utf8');
@@ -302,7 +309,7 @@ app.post('/edit/:formType', async (req, res) => {
         id: uniqueId
       }
     };
-    sendNotificationToAdmins(notificationPayload);
+    sendNotificationToAdmins(notificationPayload, formType, { owner: dbData[entryIndex] });
     // --- END PUSH NOTIFICATION LOGIC ---
     
     res.status(200).json({

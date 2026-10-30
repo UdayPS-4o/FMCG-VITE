@@ -1,18 +1,47 @@
-import { useState } from 'react';
-import { useStore } from '../context/StoreContext';
-import { ShoppingBag, ArrowRight, Trash2, Plus, Minus, X } from 'lucide-react';
-import { placeOrder } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { useStore, type CartItem } from '../context/StoreContext';
+import { ArrowRight, Trash2, Plus, Minus, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { placeOrder, getImageUrl } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
+import AnimatedAmount from '../components/AnimatedAmount';
+import OrderPlacedOverlay from '../components/OrderPlacedOverlay';
+import EmptyCartBox from '../components/EmptyCartBox';
+
+const SWIPE_DELETE_PX = 100;
+const UNDO_MS = 4000;
 
 const Cart = () => {
-    const { cart, cartTotal, user, clearCart, removeFromCart, addToCart, language } = useStore();
+    const { cart, cartTotal, user, clearCart, removeFromCart, restoreCartItem, addToCart, language } = useStore();
     const [loading, setLoading] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentMode, setPaymentMode] = useState<'Cash' | 'Credit' | null>(null);
     const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
     const navigate = useNavigate();
+    const [lastRemoved, setLastRemoved] = useState<{ item: CartItem; index: number } | null>(null);
+    const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [placed, setPlaced] = useState<{ id?: string; itemCount: number; total: number; images: string[] } | null>(null);
 
-    const handleCheckout = async (mode: string | null) => {
+    useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
+
+    const handleRemove = (code: string) => {
+        const index = cart.findIndex(ci => ci.product.CODE === code);
+        if (index === -1) return;
+        setLastRemoved({ item: cart[index], index });
+        removeFromCart(code);
+        try { navigator.vibrate?.(15); } catch { /* unsupported */ }
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+        undoTimer.current = setTimeout(() => setLastRemoved(null), UNDO_MS);
+    };
+
+    const handleUndo = () => {
+        if (!lastRemoved) return;
+        restoreCartItem(lastRemoved.item, lastRemoved.index);
+        setLastRemoved(null);
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+    };
+
+    const handleCheckout= async (mode: string | null) => {
         if (!user) return;
         setLoading(true);
         try {
@@ -51,9 +80,15 @@ const Cart = () => {
                 paymentMode: mode
             };
 
-            await placeOrder(orderData);
+            const res = await placeOrder(orderData);
+            setPlaced({
+                id: res?.order?.id,
+                itemCount: cart.length,
+                total: cartTotal,
+                images: cart.map(ci => ci.product.image_url).filter((u): u is string => !!u).slice(0, 3).map(getImageUrl),
+            });
+            setLastRemoved(null);
             clearCart();
-            navigate('/orders');
         } catch (error) {
             console.error(error);
             alert(language === 'en' ? 'Failed to place order' : 'ऑर्डर करने में विफल');
@@ -62,20 +97,60 @@ const Cart = () => {
         }
     };
 
+    const placedOverlay = placed && (
+        <OrderPlacedOverlay
+            orderId={placed.id}
+            itemCount={placed.itemCount}
+            total={placed.total}
+            images={placed.images}
+            language={language}
+            onTrack={() => navigate(placed.id ? `/order/${placed.id}` : '/orders')}
+            onContinue={() => navigate('/')}
+        />
+    );
+
+    const undoToast = (
+        <AnimatePresence>
+            {lastRemoved && (
+                <motion.div
+                    key={lastRemoved.item.product.CODE}
+                    initial={{ y: 40, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 30, opacity: 0 }}
+                    transition={{ type: 'spring', damping: 22, stiffness: 320 }}
+                    className={`fixed left-3 right-3 z-[55] bg-gray-900 text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl overflow-hidden ${cart.length > 0 ? 'bottom-[214px]' : 'bottom-[80px]'}`}
+                >
+                    <span className="flex-1 text-sm truncate text-left">
+                        {lastRemoved.item.product.PRODUCT} {language === 'en' ? 'removed' : 'हटाया गया'}
+                    </span>
+                    <button onClick={handleUndo} className="text-emerald-300 font-extrabold text-sm tracking-wide px-1">
+                        {language === 'en' ? 'UNDO' : 'वापस लाएं'}
+                    </button>
+                    <motion.div
+                        className="absolute left-0 bottom-0 h-[3px] bg-emerald-300"
+                        initial={{ width: '100%' }}
+                        animate={{ width: '0%' }}
+                        transition={{ duration: UNDO_MS / 1000, ease: 'linear' }}
+                    />
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+
     if (cart.length === 0) {
         return (
             <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
-                <div className="bg-white p-6 rounded-full shadow-sm mb-4">
-                    <ShoppingBag size={48} className="text-gray-300" />
-                </div>
+                {placedOverlay}
+                <div className="mb-2"><EmptyCartBox /></div>
                 <h2 className="text-xl font-bold text-gray-800 mb-2">{language === 'en' ? 'Your cart is empty' : 'आपका कार्ट खाली है'}</h2>
-                <p className="text-gray-500 mb-8 max-w-xs">{language === 'en' ? "Looks like you haven't added any items to your cart yet." : 'ऐसा लगता है कि आपने अभी तक अपने कार्ट में कोई आइटम नहीं जोड़ा है।'}</p>
+                <p className="text-gray-500 mb-8 max-w-xs">{language === 'en' ? "Let's fill this box with something good!" : 'चलिए इस बॉक्स को कुछ अच्छे सामान से भरें!'}</p>
                 <button
                     onClick={() => navigate('/')}
-                    className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-medium shadow-lg hover:bg-indigo-700 transition-colors"
+                    className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-medium shadow-lg hover:bg-indigo-700 transition-colors animate-[cta-pulse_1.6s_ease_infinite]"
                 >
                     {language === 'en' ? 'Start Shopping' : 'खरीदारी शुरू करें'}
                 </button>
+                {undoToast}
             </div>
         );
     }
@@ -95,13 +170,34 @@ const Cart = () => {
                 </button>
             </div>
 
-            <div className="p-3 space-y-3">
+            <div className="p-3">
+                <AnimatePresence initial={false}>
                 {cart.map(item => {
                     const conversion = parseFloat(item.product.MULT_F || '1') || 1;
                     const hasMultipleUnits = conversion > 1 || item.qtyBoxes > 0;
-                    
+
                     return (
-                        <div key={item.product.CODE} className="flex gap-3 bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+                        <motion.div
+                            key={item.product.CODE}
+                            layout
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0, transition: { duration: 0.28 } }}
+                            className="overflow-hidden"
+                        >
+                        <div className="relative pb-3">
+                        {/* revealed while swiping left */}
+                        <div className="absolute inset-x-0 top-0 bottom-3 rounded-2xl bg-red-500 flex items-center justify-end pr-6 gap-1.5 text-white font-bold text-sm">
+                            <Trash2 size={16} /> {language === 'en' ? 'Delete' : 'हटाएं'}
+                        </div>
+                        <motion.div
+                            drag="x"
+                            dragDirectionLock
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={{ left: 0.9, right: 0.05 }}
+                            onDragEnd={(_, info) => { if (info.offset.x < -SWIPE_DELETE_PX) handleRemove(item.product.CODE); }}
+                            className="relative flex gap-3 bg-white p-3 rounded-2xl shadow-sm border border-gray-100 touch-pan-y"
+                        >
                             {/* Product Image */}
                             <div className="w-20 h-20 bg-gray-50 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-50">
                                 {item.product.image_url ? (
@@ -125,8 +221,8 @@ const Cart = () => {
                                     <h3 className="font-medium text-gray-800 text-sm leading-tight line-clamp-2">
                                         {item.product.PRODUCT}
                                     </h3>
-                                    <button 
-                                        onClick={() => removeFromCart(item.product.CODE)}
+                                    <button
+                                        onClick={() => handleRemove(item.product.CODE)}
                                         className="text-gray-400 hover:text-red-500 transition-colors p-1 -mt-1 -mr-1"
                                     >
                                         <Trash2 size={16} />
@@ -160,29 +256,45 @@ const Cart = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    <span className="font-bold text-indigo-600 text-sm">₹{item.netAmount.toFixed(2)}</span>
+                                    <AnimatedAmount value={item.netAmount} className="font-bold text-indigo-600 text-sm" />
                                 </div>
                             </div>
+                        </motion.div>
                         </div>
+                        </motion.div>
                     );
                 })}
+                </AnimatePresence>
+                <p className="text-center text-[11px] text-gray-400 mt-1">
+                    {language === 'en' ? 'Tip: swipe an item left to remove it' : 'टिप: हटाने के लिए आइटम को बाईं ओर स्वाइप करें'}
+                </p>
             </div>
 
             {/* Checkout Footer */}
             <div className="fixed bottom-[64px] left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40">
                 <div className="flex justify-between items-center mb-4">
                     <span className="text-gray-500 font-medium text-sm">{language === 'en' ? 'Total Amount' : 'कुल राशि'}</span>
-                    <span className="text-xl font-bold text-indigo-600">₹{cartTotal.toFixed(2)}</span>
+                    <AnimatedAmount value={cartTotal} className="text-xl font-bold text-indigo-600" />
                 </div>
 
-                <button
+                <motion.button
                     onClick={() => setShowPaymentModal(true)}
                     disabled={loading}
-                    className="w-full bg-black text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors disabled:opacity-70 shadow-md"
+                    animate={{ width: loading ? 52 : '100%', borderRadius: loading ? 26 : 12 }}
+                    transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="mx-auto h-[52px] bg-black text-white font-bold flex items-center justify-center gap-2 hover:bg-gray-800 shadow-md overflow-hidden"
+                    aria-label={loading ? (language === 'en' ? 'Processing...' : 'प्रोसेस हो रहा है...') : undefined}
                 >
-                    {loading ? (language === 'en' ? 'Processing...' : 'प्रोसेस हो रहा है...') : (language === 'en' ? 'Place Order' : 'ऑर्डर करें')}
-                    {!loading && <ArrowRight size={18} />}
-                </button>
+                    {loading ? (
+                        <span className="w-5 h-5 border-[3px] border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                        <>
+                            {language === 'en' ? 'Place Order' : 'ऑर्डर करें'}
+                            <ArrowRight size={18} />
+                        </>
+                    )}
+                </motion.button>
             </div>
 
             {/* Payment Modal */}
@@ -256,6 +368,9 @@ const Cart = () => {
                 </div>
             )}
             
+            {undoToast}
+            {placedOverlay}
+
             {/* Enlarged Image Modal */}
             {enlargedImage && (
                 <div 

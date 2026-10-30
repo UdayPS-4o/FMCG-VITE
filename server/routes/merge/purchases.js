@@ -10,6 +10,11 @@ const purDtlDbfPath = path.join(dbfFolderPath, 'data', 'PURDTL.DBF');
 const pmplDbfPath = path.join(dbfFolderPath, 'data', 'PMPL.DBF');
 const cmplDbfPath = path.join(dbfFolderPath, 'data', 'CMPL.DBF');
 const cashDbfPath = path.join(dbfFolderPath, 'data', 'CASH.DBF');
+const purTranDbfPath = path.join(dbfFolderPath, 'data', 'PURTRAN.DBF');
+
+// Firm's own GST state; purchases from other states post tax to IGST accounts (VIxxx) like the DOS software
+const FIRM_STATE_CODE = process.env.FIRM_STATE_CODE || '23';
+const taxAccountFor = (goodsCode, interState) => goodsCode.replace(/^G./, interState ? 'VI' : 'VG'); // GG021 -> VI021 / VG021
 
 const toFloat = (v, d = 2) => parseFloat(parseFloat(v || 0).toFixed(d));
 const toInt = (v) => parseInt(String(v || 0), 10) || 0;
@@ -251,6 +256,7 @@ router.post('/sync', async (req, res) => {
   const pmplDbf = new DbfORM(pmplDbfPath);
   const cmplDbf = new DbfORM(cmplDbfPath);
   const cashDbf = new DbfORM(cashDbfPath, { autoCreate: true });
+  const purTranDbf = new DbfORM(purTranDbfPath);
 
   try {
     const { records } = req.body || {};
@@ -263,7 +269,8 @@ router.post('/sync', async (req, res) => {
       purDtlDbf.open(),
       pmplDbf.open(),
       cmplDbf.open(),
-      cashDbf.open()
+      cashDbf.open(),
+      purTranDbf.open()
     ]);
 
     const pmplRecords = await pmplDbf.findAll();
@@ -298,6 +305,7 @@ router.post('/sync', async (req, res) => {
     const purToInsert = [];
     const purDtlToInsert = [];
     const cashToInsert = [];
+    const purTranToInsert = [];
     const processed = [];
     const skipped = [];
 
@@ -323,6 +331,8 @@ router.post('/sync', async (req, res) => {
       const supplierCode = purchase.supplierCode || purchase.party || '';
       const vrNo = padBillVRNo(billNo);
       const bill2 = padBillNumber('P', billNo);
+      const supplierState = extractStateCode(purchase.state) || String(supplier?.C_STATE || '').trim();
+      const interState = !!supplierState && supplierState !== FIRM_STATE_CODE;
 
       // If gstBreakdown is missing (legacy?), we could try to rebuild it, but for now we rely on it.
       // If missing, we might skip cash entries or try to group from items.
@@ -385,7 +395,7 @@ router.post('/sync', async (req, res) => {
 
           // 2. Debit Tax Account
           if (tax > 0) {
-              const taxCode = code.replace(/^G/, 'V'); // GG010 -> VG010
+              const taxCode = taxAccountFor(code, interState);
               cashToInsert.push({
                   DATE: entryDate,
                   VR: vrNo,
@@ -432,6 +442,18 @@ router.post('/sync', async (req, res) => {
               QDR: 0
           });
       }
+
+      // PURTRAN (bill-wise GST summary, as the DOS software keeps it):
+      // one goods row per GST code (taxable) then one tax row (VGxxx local / VIxxx inter-state),
+      // round off of the bill in RF_AMT of the first row
+      const purTranBase = { BILL2: bill2, DATE: entryDate, PBILL: invoiceNo, PBILLDATE: invoiceDate, GR_CODE: '', GD_ADJ: 0, VT_ADJ: 0, FRGT: 0, TCS_AMT: 0 };
+      const coded = breakdownToUse.filter((b) => b.code);
+      coded.forEach((b, i) => {
+          purTranToInsert.push({ ...purTranBase, C_CODE: b.code, DR: toFloat(b.taxable, 2), RF_AMT: i === 0 ? roundOff : 0 });
+      });
+      coded.filter((b) => toFloat(b.tax, 2) > 0).forEach((b) => {
+          purTranToInsert.push({ ...purTranBase, C_CODE: taxAccountFor(b.code, interState), DR: toFloat(b.tax, 2), RF_AMT: 0 });
+      });
 
       // 4. Credit Supplier
       cashToInsert.push({
@@ -544,6 +566,9 @@ router.post('/sync', async (req, res) => {
     if (cashToInsert.length > 0) {
         await cashDbf.insertMany(cashToInsert);
     }
+    if (purTranToInsert.length > 0) {
+        await purTranDbf.insertMany(purTranToInsert);
+    }
 
     return res.json({
       success: true,
@@ -565,7 +590,8 @@ router.post('/sync', async (req, res) => {
         purDtlDbf.close(),
         pmplDbf.close(),
         cmplDbf.close(),
-        cashDbf.close()
+        cashDbf.close(),
+        purTranDbf.close()
       ]);
     } catch (e) {
     }

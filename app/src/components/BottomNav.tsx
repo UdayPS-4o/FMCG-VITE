@@ -1,11 +1,26 @@
+import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, Search, ShoppingCart, FileText, User } from 'lucide-react';
+import { AnimatePresence, motion, useAnimationControls } from 'framer-motion';
 import clsx from 'clsx';
 import { useStore } from '../context/StoreContext';
+import { CARTFX_BUMP } from '../lib/cartFx';
 
 const BottomNav = () => {
     const { cart, language } = useStore();
     const cartItemCount = cart.length; // distinct products
+    const cartIconControls = useAnimationControls();
+
+    // Cart wobble when a flying product lands (see lib/cartFx)
+    useEffect(() => {
+        const bump = () => cartIconControls.start({
+            scale: [1, 1.35, 0.92, 1],
+            rotate: [0, -10, 4, 0],
+            transition: { duration: 0.55, ease: 'easeOut' },
+        });
+        window.addEventListener(CARTFX_BUMP, bump);
+        return () => window.removeEventListener(CARTFX_BUMP, bump);
+    }, [cartIconControls]);
 
     const navItems = [
         { to: '/', icon: Home, label: language === 'en' ? 'Home' : 'होम' },
@@ -29,14 +44,27 @@ const BottomNav = () => {
                             )
                         }
                     >
-                        <div className="relative">
+                        <motion.div
+                            className="relative"
+                            animate={to === '/cart' ? cartIconControls : undefined}
+                            {...(to === '/cart' ? { 'data-cart-icon': '' } : {})}
+                        >
                             <Icon size={24} strokeWidth={2} />
-                            {badge !== undefined && badge > 0 && (
-                                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center">
-                                    {badge > 99 ? '99+' : badge}
-                                </span>
-                            )}
-                        </div>
+                            <AnimatePresence>
+                                {badge !== undefined && badge > 0 && (
+                                    <motion.span
+                                        key={badge}
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        exit={{ scale: 0 }}
+                                        transition={{ type: 'spring', damping: 12, stiffness: 400 }}
+                                        className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center"
+                                    >
+                                        {badge > 99 ? '99+' : badge}
+                                    </motion.span>
+                                )}
+                            </AnimatePresence>
+                        </motion.div>
                         <span className="text-[10px] font-medium">{label}</span>
                     </NavLink>
                 ))}

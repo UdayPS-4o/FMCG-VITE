@@ -6,6 +6,7 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const admin = require('firebase-admin');
+const { NOTIFICATION_TYPES } = require('../utils/notificationTypes');
 
 // Initialize Firebase Admin using the explicit file path
 try {
@@ -67,6 +68,27 @@ const removeToken = (token) => {
     });
 };
 
+const removeTokenFromOtherUsers = (token, userId) => {
+    return new Promise((resolve, reject) => {
+        const tokenStr = typeof token === 'string' ? token : JSON.stringify(token);
+        db.run(`DELETE FROM push_tokens WHERE token = ? AND user_id != ?`, [tokenStr, userId], (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+};
+
+const getTokensByUserIds = (userIds) => {
+    if (!userIds.length) return Promise.resolve([]);
+    return new Promise((resolve, reject) => {
+        const placeholders = userIds.map(() => '?').join(',');
+        db.all(`SELECT * FROM push_tokens WHERE user_id IN (${placeholders})`, userIds, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
+    });
+};
+
 // VAPID keys should be stored as environment variables
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
@@ -107,6 +129,13 @@ router.post('/subscribe', async (req, res) => {
     }
 
     try {
+        // A device belongs to whoever logged in on it last: when a web user
+        // subscribes as "user:<id>", drop any other owner of the same token
+        // (including the legacy shared "admin" id) so it isn't notified twice
+        // or for the wrong user.
+        if (String(userId).startsWith('user:')) {
+            await removeTokenFromOtherUsers(subscription, userId);
+        }
         await saveToken(userId, subscription, type || 'webpush');
         res.status(201).json({ message: 'Subscription saved.' });
     } catch (err) {
@@ -355,75 +384,180 @@ router.post('/send-advanced', async (req, res) => {
     }
 });
 
-const sendNotificationToAdmins = async (payload) => {
-    console.log(`-------------------------------------------
-        Sending notification to admins with payload:
-        -------------------------------------------`);
-    console.log(payload);
-
+const loadUsers = () => {
     try {
-        const adminTokens = await getTokensByUserId('admin');
-        if (!adminTokens || adminTokens.length === 0) {
-            console.log('No admin subscriptions found. Cannot send notification.');
-            return;
-        }
+        return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'db', 'users.json'), 'utf8'));
+    } catch (e) {
+        console.error('Failed to read users.json for push targeting:', e.message);
+        return [];
+    }
+};
 
-        const notificationPayload = JSON.stringify({
-            title: payload.title,
-            message: payload.message,
-            url: payload.data ? payload.data.url : '/',
-            data: payload.data
-        });
+const isAdminUser = (u) => Array.isArray(u.routeAccess) && u.routeAccess.includes('Admin');
 
-        const promises = adminTokens.map(row => {
-            if (row.type === 'webpush') {
-                let sub;
-                try { sub = JSON.parse(row.token); } catch(e) { sub = row.token; }
-                if (!vapidPublicKey) return Promise.resolve();
-                return webpush.sendNotification(sub, notificationPayload)
-                    .catch(async err => {
-                        console.error(`Error sending admin notification:`, err.statusCode, err.body);
-                        if (err.statusCode === 410 || err.statusCode === 404) {
+// Send one payload ({ title, message, data }) to a list of push_tokens rows.
+// Duplicate tokens (same device stored under two ids) are only notified once.
+const deliverToTokens = async (rows, payload, label) => {
+    const seen = new Set();
+    const uniqueRows = rows.filter(row => {
+        if (seen.has(row.token)) return false;
+        seen.add(row.token);
+        return true;
+    });
+
+    const notificationPayload = JSON.stringify({
+        title: payload.title,
+        message: payload.message,
+        url: payload.data ? payload.data.url : '/',
+        data: payload.data
+    });
+
+    const promises = uniqueRows.map(row => {
+        if (row.type === 'webpush') {
+            let sub;
+            try { sub = JSON.parse(row.token); } catch(e) { sub = row.token; }
+            if (!vapidPublicKey) return Promise.resolve();
+            return webpush.sendNotification(sub, notificationPayload)
+                .catch(async err => {
+                    console.error(`Error sending ${label} notification:`, err.statusCode, err.body);
+                    if (err.statusCode === 410 || err.statusCode === 404) {
+                        await removeToken(row.token);
+                    }
+                });
+        } else if (row.type === 'fcm') {
+            try {
+                const messagePayload = {
+                    notification: {
+                        title: payload.title || 'New Notification',
+                        body: payload.message || 'You have a new notification.'
+                    },
+                    token: row.token,
+                    data: {
+                        url: payload.data && payload.data.url ? String(payload.data.url) : '/',
+                        ...(payload.data ? Object.fromEntries(
+                            Object.entries(payload.data).map(([k, v]) => [k, String(v)])
+                        ) : {})
+                    }
+                };
+                return admin.messaging().send(messagePayload)
+                    .then((response) => {
+                        console.log(`Successfully sent FCM ${label} message:`, response);
+                    })
+                    .catch(async (error) => {
+                        console.error(`Error sending FCM ${label} message:`, error);
+                        if (error.code === 'messaging/invalid-registration-token' ||
+                            error.code === 'messaging/registration-token-not-registered') {
                             await removeToken(row.token);
                         }
                     });
-            } else if (row.type === 'fcm') {
-                try {
-                    const messagePayload = {
-                        notification: {
-                            title: payload.title || 'New Notification',
-                            body: payload.message || 'You have a new notification.'
-                        },
-                        token: row.token,
-                        data: {
-                            url: payload.data && payload.data.url ? String(payload.data.url) : '/',
-                            ...(payload.data ? Object.fromEntries(
-                                Object.entries(payload.data).map(([k, v]) => [k, String(v)])
-                            ) : {})
-                        }
-                    };
-                    return admin.messaging().send(messagePayload)
-                        .then((response) => {
-                            console.log('Successfully sent FCM admin message:', response);
-                        })
-                        .catch(async (error) => {
-                            console.error('Error sending FCM admin message:', error);
-                            if (error.code === 'messaging/invalid-registration-token' ||
-                                error.code === 'messaging/registration-token-not-registered') {
-                                await removeToken(row.token);
-                            }
-                        });
-                } catch(e) {
-                    console.error('Failed to send FCM admin message', e);
-                    return Promise.resolve();
-                }
+            } catch(e) {
+                console.error(`Failed to send FCM ${label} message`, e);
+                return Promise.resolve();
             }
-        });
+        }
+        return Promise.resolve();
+    });
 
-        await Promise.all(promises);
-        console.log('Finished sending all notifications to admins.');
+    await Promise.all(promises);
+    return uniqueRows.length;
+};
+
+// Copy of a payload for a non-admin user: opens the relevant page instead of
+// the approve URL, and tells sw.js not to show the "Approve" action.
+const toUserPayload = (payload, notificationType) => {
+    const typeInfo = NOTIFICATION_TYPES[notificationType] || {};
+    return {
+        ...payload,
+        data: {
+            ...(payload.data || {}),
+            url: typeInfo.userUrl || '/',
+            noApprove: true
+        }
+    };
+};
+
+// Does this user own the record the notification is about?
+//   ownerUserId: users.json id (e.g. who marked attendance)
+//   owner: the saved entry; matched on createdBy, or on its S/M code for
+//          entries saved before createdBy existed
+const isOwner = (u, { ownerUserId, owner } = {}) => {
+    if (ownerUserId != null) return Number(u.id) === Number(ownerUserId);
+    if (owner) {
+        if (owner.createdBy != null) return Number(u.id) === Number(owner.createdBy);
+        return !!(owner.sm && u.smCode && owner.sm === u.smCode);
+    }
+    return true; // not tied to a creator (e.g. WhatsApp messages)
+};
+
+/**
+ * Notify admins (as before) plus non-admin users whose notificationAccess
+ * (set from the Add User page) includes notificationType. When ownership
+ * info is passed, non-admins only get notifications for their own records.
+ */
+const sendNotificationToAdmins = async (payload, notificationType, ownership) => {
+    console.log(`-------------------------------------------
+        Sending notification to admins with payload:
+        -------------------------------------------`);
+    console.log(payload, notificationType ? `(type: ${notificationType})` : '');
+
+    try {
+        const users = loadUsers();
+        const adminIds = users.filter(isAdminUser).map(u => `user:${u.id}`);
+        // 'admin' / 'ADMIN' are legacy ids from before per-user subscriptions
+        const adminTokens = await getTokensByUserIds(['admin', 'ADMIN', ...adminIds]);
+
+        let userTokens = [];
+        if (notificationType) {
+            const permittedIds = users
+                .filter(u => !isAdminUser(u) && Array.isArray(u.notificationAccess) && u.notificationAccess.includes(notificationType))
+                .filter(u => isOwner(u, ownership))
+                .map(u => `user:${u.id}`);
+            const adminTokenSet = new Set(adminTokens.map(r => r.token));
+            userTokens = (await getTokensByUserIds(permittedIds)).filter(r => !adminTokenSet.has(r.token));
+        }
+
+        if (adminTokens.length === 0 && userTokens.length === 0) {
+            console.log('No admin/user subscriptions found. Cannot send notification.');
+            return;
+        }
+
+        await Promise.all([
+            deliverToTokens(adminTokens, payload, 'admin'),
+            deliverToTokens(userTokens, toUserPayload(payload, notificationType), 'user'),
+        ]);
+        console.log(`Finished sending notifications (${adminTokens.length} admin, ${userTokens.length} user devices).`);
     } catch (err) {
         console.error('A critical error occurred during admin notification sending:', err);
+    }
+};
+
+/**
+ * Notify specific web users (users.json ids) directly, e.g. reminders.
+ */
+const sendNotificationToUsers = async (userIds, payload, notificationType) => {
+    try {
+        const tokens = await getTokensByUserIds(userIds.map(id => `user:${id}`));
+        if (tokens.length === 0) return 0;
+        return await deliverToTokens(tokens, toUserPayload(payload, notificationType), 'user');
+    } catch (err) {
+        console.error('Error sending notification to users:', err);
+        return 0;
+    }
+};
+
+/**
+ * Notify a customer-app shop (the app subscribes with its party code, e.g. "BC016").
+ * payload: { title, message, data: { url, ... } }
+ */
+const sendNotificationToParty = async (partyCode, payload) => {
+    if (!partyCode) return 0;
+    try {
+        const tokens = await getTokensByUserId(String(partyCode));
+        if (tokens.length === 0) return 0;
+        return await deliverToTokens(tokens, payload, `party ${partyCode}`);
+    } catch (err) {
+        console.error('Error sending notification to party:', err);
+        return 0;
     }
 };
 
@@ -467,4 +601,4 @@ router.post('/upload-image', async (req, res) => {
     }
 });
 
-module.exports = { router, sendNotificationToAdmins };
+module.exports = { router, sendNotificationToAdmins, sendNotificationToUsers, sendNotificationToParty };

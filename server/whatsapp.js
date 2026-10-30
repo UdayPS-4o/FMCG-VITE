@@ -285,6 +285,9 @@ function renderTemplateBody(templateName, params) {
  * @param {object} rest - remaining AOC payload fields (type, text/templateName/components/...)
  */
 async function sendWhatsAppMessage(to, rest) {
+  // `resendOf` is our own marker (inbox Resend button) — never forwarded to AOC
+  const { resendOf, ...aocRest } = rest || {};
+  rest = aocRest;
   const body = {
     from: AOC_WA_FROM,
     to: String(to).startsWith('+') ? to : `+${to}`,
@@ -388,6 +391,13 @@ async function sendWhatsAppMessage(to, rest) {
     documentUrl: _outDocumentUrl,
     documentFilename: _outDocumentFilename,
     status: _outOk ? 'sent' : 'failed',
+    // Failed sends keep the original AOC payload + reason so the inbox can
+    // offer a Resend button; a successful resend points back at the original.
+    error: _outOk ? null : String(
+      (res.data && (res.data.message || res.data.error)) || ('HTTP ' + res.status)
+    ).slice(0, 300),
+    resendPayload: _outOk ? null : rest,
+    resendOf: resendOf || null,
     timestamp: _outTs,
   });
 
@@ -635,7 +645,7 @@ app.post('/webhook', (req, res) => {
           endpoint: 'whatsapp-inbox',
           phone: senderPhone,
         }
-      });
+      }, 'whatsapp');
     }
   } catch (pushErr) {
     console.warn('[WA WEBHOOK] Push notification failed (non-fatal):', pushErr.message);

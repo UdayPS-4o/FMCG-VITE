@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  CountUp,
   EmptyState,
   KpiCard,
   DaysInput,
@@ -89,21 +90,21 @@ const TransactionsKpi: React.FC<Props> = ({ id, title, color, icon }) => {
       <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-3xl font-bold tracking-tight" style={{ color }}>
-            {inr(bucket?.total)}
+            <CountUp value={bucket?.total ?? 0} format={inr} />
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            {bucket?.count ?? 0} {countNoun} · {rangeLabel(range, days).toLowerCase()}
+            <CountUp value={bucket?.count ?? 0} /> {countNoun} · {rangeLabel(range, days).toLowerCase()}
           </div>
         </div>
         {split && bucket && bucket.total > 0 && (
           <div className="min-w-[180px] flex-1 sm:max-w-[260px]">
             <div className="mb-1 flex justify-between text-[11px] font-medium">
-              <span style={{ color: CASH_COLOR }}>Cash {inrCompact(split.cash)}</span>
-              <span style={{ color: CREDIT_COLOR }}>Credit {inrCompact(split.credit)}</span>
+              <span style={{ color: CASH_COLOR }}>Cash <CountUp value={split.cash} format={inrCompact} /></span>
+              <span style={{ color: CREDIT_COLOR }}>Credit <CountUp value={split.credit} format={inrCompact} /></span>
             </div>
-            <div className="flex h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-              <div style={{ width: `${(split.cash / bucket.total) * 100}%`, background: CASH_COLOR }} />
-              <div style={{ width: `${(split.credit / bucket.total) * 100}%`, background: CREDIT_COLOR }} />
+            <div className="kpi-bar-grow flex h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+              <div className="kpi-width-anim" style={{ width: `${(split.cash / bucket.total) * 100}%`, background: CASH_COLOR }} />
+              <div className="kpi-width-anim" style={{ width: `${(split.credit / bucket.total) * 100}%`, background: CREDIT_COLOR }} />
             </div>
           </div>
         )}

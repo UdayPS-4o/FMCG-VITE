@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
 import { requestOtp, verifyOtp } from '../lib/api';
+import { WELCOME_FLAG } from '../components/WelcomeSplash';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, ArrowLeft, MessageSquare } from 'lucide-react';
@@ -37,6 +38,7 @@ const Login = () => {
         setError('');
         try {
             const res = await verifyOtp(loginId, otp);
+            sessionStorage.setItem(WELCOME_FLAG, '1'); // one-time welcome animation (Layout)
             login(res.user, res.token);
             navigate(res.mustChangePassword ? '/change-password' : '/');
         } catch (err: any) {

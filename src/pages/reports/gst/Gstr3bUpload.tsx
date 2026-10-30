@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { errMsg, fmtNum, gstApi, isValidPeriod, notifyError, notifySuccess, notifyWarn, previousPeriod } from './gstApi';
+import { errMsg, fmtNum, gstApi, isValidPeriod, notifyError, notifyInfo, notifySuccess, notifyWarn, previousPeriod } from './gstApi';
 import {
   AVL_ROWS, ECO_ROWS, FULL_KEYS, Full, Gstr3bForm, HEAD_LABEL, INELG_ROWS, INTER_ROWS, InterKey, LOCKED_SUP, LedgerBal, LiabLedger,
-  CASH_CELL_HEAD, ITC_CELL_HEAD, PdCash, PdItc, REV_ROWS, availableCredit, payableFromLedgers, STATES, SUP_ROWS, TAX_KEYS, Tax, advisoryChecks, applyLocked, cashNeed, computeOffset, emptyForm,
+  CASH_CELL_HEAD, ITC_CELL_HEAD, PdCash, PdItc, REV_ROWS, availableCredit, fitOffsetToPayable, payableFromLedgers, STATES, SUP_ROWS, TAX_KEYS, Tax, advisoryChecks, applyLocked, cashNeed, computeOffset, emptyForm,
   emptyPdCash, emptyPdItc, itcNet, liabilities, liabilityLocked, r2, table32Locked, timeBar, zTax,
 } from './gstr3bModel';
 
@@ -339,7 +339,10 @@ const Gstr3bUpload: React.FC = () => {
         setResponse({ title: 'GSTN validation response', body: res.data });
         setStatus('Validation passed.');
       } catch (e) {
-        setValidation({ ok: false, text: `GSTN validation failed: ${errMsg(e)}` });
+        const msg = errMsg(e);
+        // 4A ITC above what GSTR-2B / the auto-drafted values allow
+        const hint = /4A\(/.test(msg) ? ' Compare table 4A with the GSTN auto-populated (GSTR-2B) values, correct it, save and validate again.' : '';
+        setValidation({ ok: false, text: `GSTN validation failed: ${msg}${hint}` });
         throw e;
       }
     });
@@ -422,9 +425,16 @@ const Gstr3bUpload: React.FC = () => {
       && pdcash.every((c) => !(c.ipd || c.cpd || c.spd || c.cspd));
     if (allZero && !window.confirm('The offset matrix is empty. Send anyway? (use “Auto-calculate” to fill it)')) return;
     if (cash.total > 0 && !window.confirm(`Cash ledger is short by ₹${fmtNum(cash.total)}. Create a challan (PMT-06) and pay it first, otherwise the offset will fail. Continue anyway?`)) return;
+    // whole rupees, each head exactly equal to the payable on the portal (paise left over would be rejected)
+    const fit = fitOffsetToPayable(pditc, pdcash, payableFromLedgers(ldgNormal, ldgRc));
+    if (fit.adjusted.length) {
+      setPditc(fit.pditc);
+      setPdcash(fit.pdcash);
+      notifyInfo(`Offset rounded to whole rupees to match the portal liability (${fit.adjusted.join(', ')}).`);
+    }
     if (!window.confirm(`Offset the GSTR-3B liability for ${fp} on the GST portal? Ledgers are debited and this cannot be undone.`)) return;
     run('Offsetting liability (RETOFFSET)', async () => {
-      const res = await gstApi('/gstr3b/offset', { fp, pditc, pdcash: pdcash.map((c) => { const { label, ...rest } = c; void label; return rest; }) });
+      const res = await gstApi('/gstr3b/offset', { fp, pditc: fit.pditc, pdcash: fit.pdcash.map((c) => { const { label, ...rest } = c; void label; return rest; }) });
       setResponse({ title: 'Offset — portal response', body: res.data });
       const [l, s] = await Promise.all([gstApi('/gstr3b/ledger', { fp }), gstApi('/gstr3b/summary', { fp, fresh: true })]);
       setBal(l);

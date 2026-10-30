@@ -3,8 +3,10 @@ import {
   Banknote,
   Boxes,
   CalendarClock,
+  Check,
   EyeOff,
   GripVertical,
+  HandCoins,
   Landmark,
   LayoutDashboard,
   Maximize2,
@@ -13,9 +15,14 @@ import {
   PieChart,
   RefreshCw,
   RotateCcw,
+  ShoppingBag,
   ShoppingCart,
+  SlidersHorizontal,
   TrendingUp,
   Truck,
+  UserX,
+  Wallet,
+  type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import BalanceUddhari from '../BalanceUddhari';
@@ -39,54 +46,54 @@ interface KpiDef {
   label: string;
   color: string;
   defaultWidth: Width;
+  Icon: LucideIcon;
   // Existing widgets render their own card, so the board adds a floating control pill for them
   legacy?: boolean;
-  render: () => React.ReactNode;
+  // Receives the card icon built from `Icon`; legacy widgets draw their own
+  render: (icon: React.ReactNode) => React.ReactNode;
 }
 
-const icon = (C: React.FC<{ className?: string }>) => <C className="h-5 w-5" />;
-
 const KPIS: KpiDef[] = [
-  { id: 'balance-uddhari', label: 'Balance Uddhari', color: '#ea580c', defaultWidth: 'full', legacy: true, render: () => <BalanceUddhari /> },
+  { id: 'balance-uddhari', label: 'Balance Uddhari', color: '#ea580c', defaultWidth: 'full', Icon: Wallet, legacy: true, render: () => <BalanceUddhari /> },
   {
-    id: 'sales', label: 'Sales', color: '#3498db', defaultWidth: 'half',
-    render: () => <TransactionsKpi id="sales" title="Sales" color="#3498db" icon={icon(ShoppingCart)} />,
+    id: 'sales', label: 'Sales', color: '#3498db', defaultWidth: 'half', Icon: ShoppingCart,
+    render: (icon) => <TransactionsKpi id="sales" title="Sales" color="#3498db" icon={icon} />,
   },
   {
-    id: 'cash', label: 'Cash Receipts', color: '#27ae60', defaultWidth: 'half',
-    render: () => <TransactionsKpi id="cash" title="Cash Receipts" color="#27ae60" icon={icon(Banknote)} />,
+    id: 'cash', label: 'Cash Receipts', color: '#27ae60', defaultWidth: 'half', Icon: Banknote,
+    render: (icon) => <TransactionsKpi id="cash" title="Cash Receipts" color="#27ae60" icon={icon} />,
   },
   {
-    id: 'cheque', label: 'Cheque Receipts', color: '#f39c12', defaultWidth: 'half',
-    render: () => <TransactionsKpi id="cheque" title="Cheque / Bank Receipts" color="#f39c12" icon={icon(Landmark)} />,
+    id: 'cheque', label: 'Cheque Receipts', color: '#f39c12', defaultWidth: 'half', Icon: Landmark,
+    render: (icon) => <TransactionsKpi id="cheque" title="Cheque / Bank Receipts" color="#f39c12" icon={icon} />,
   },
   {
-    id: 'due', label: 'Today Due', color: '#e74c3c', defaultWidth: 'half',
-    render: () => <TransactionsKpi id="due" title="Bills Due" color="#e74c3c" icon={icon(CalendarClock)} />,
+    id: 'due', label: 'Today Due', color: '#e74c3c', defaultWidth: 'half', Icon: CalendarClock,
+    render: (icon) => <TransactionsKpi id="due" title="Bills Due" color="#e74c3c" icon={icon} />,
   },
   {
-    id: 'company-sales', label: 'Company Sales', color: '#8e44ad', defaultWidth: 'half',
-    render: () => <CompanyPieKpi id="company-sales" title="Company-wise Sales" color="#8e44ad" icon={icon(PieChart)} />,
+    id: 'company-sales', label: 'Company Sales', color: '#8e44ad', defaultWidth: 'half', Icon: PieChart,
+    render: (icon) => <CompanyPieKpi id="company-sales" title="Company-wise Sales" color="#8e44ad" icon={icon} />,
   },
   {
-    id: 'company-purchase', label: 'Company Purchase', color: '#16a085', defaultWidth: 'half',
-    render: () => <CompanyPieKpi id="company-purchase" title="Company-wise Purchase" color="#16a085" icon={icon(Truck)} />,
+    id: 'company-purchase', label: 'Company Purchase', color: '#16a085', defaultWidth: 'half', Icon: Truck,
+    render: (icon) => <CompanyPieKpi id="company-purchase" title="Company-wise Purchase" color="#16a085" icon={icon} />,
   },
   {
-    id: 'trend', label: 'Sales Trend', color: '#3b5bdb', defaultWidth: 'full',
-    render: () => <TrendKpi title="Sales Trend" color="#3b5bdb" icon={icon(TrendingUp)} />,
+    id: 'trend', label: 'Sales Trend', color: '#3b5bdb', defaultWidth: 'full', Icon: TrendingUp,
+    render: (icon) => <TrendKpi title="Sales Trend" color="#3b5bdb" icon={icon} />,
   },
   {
-    id: 'sales-recovery', label: 'Sales Recovery %', color: '#c0392b', defaultWidth: 'full',
-    render: () => <SalesRecoveryKpi title="Sales Recovery %" color="#c0392b" icon={icon(Percent)} />,
+    id: 'sales-recovery', label: 'Sales Recovery %', color: '#c0392b', defaultWidth: 'full', Icon: Percent,
+    render: (icon) => <SalesRecoveryKpi title="Sales Recovery %" color="#c0392b" icon={icon} />,
   },
   {
-    id: 'stock', label: 'Stock Analysis', color: '#2c3e50', defaultWidth: 'full',
-    render: () => <StockKpi title="Stock Analysis" color="#2c3e50" icon={icon(Boxes)} />,
+    id: 'stock', label: 'Stock Analysis', color: '#2c3e50', defaultWidth: 'full', Icon: Boxes,
+    render: (icon) => <StockKpi title="Stock Analysis" color="#2c3e50" icon={icon} />,
   },
-  { id: 'todays-sales', label: "Today's Sales (summary)", color: '#22c55e', defaultWidth: 'half', legacy: true, render: () => <TodaysSales /> },
-  { id: 'todays-collections', label: "Today's Collections (summary)", color: '#2563eb', defaultWidth: 'half', legacy: true, render: () => <TodaysCollections /> },
-  { id: 'unbilled', label: 'Unbilled Customers', color: '#64748b', defaultWidth: 'full', legacy: true, render: () => <UnbilledCustomersKPI /> },
+  { id: 'todays-sales', label: "Today's Sales (summary)", color: '#22c55e', defaultWidth: 'half', Icon: ShoppingBag, legacy: true, render: () => <TodaysSales /> },
+  { id: 'todays-collections', label: "Today's Collections (summary)", color: '#2563eb', defaultWidth: 'half', Icon: HandCoins, legacy: true, render: () => <TodaysCollections /> },
+  { id: 'unbilled', label: 'Unbilled Customers', color: '#64748b', defaultWidth: 'full', Icon: UserX, legacy: true, render: () => <UnbilledCustomersKPI /> },
 ];
 const KPI_MAP = new Map(KPIS.map((k) => [k.id, k]));
 
@@ -269,55 +276,78 @@ const KpiBoard: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 px-5 py-3">
-          <span className="mr-1 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">Show KPIs</span>
-          {layout.order.map((id) => {
-            const k = KPI_MAP.get(id)!;
-            const on = !hiddenSet.has(id);
-            return (
-              <label
-                key={id}
-                className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition select-none ${
-                  on
-                    ? 'border-transparent text-gray-800 dark:text-white/90'
-                    : 'border-gray-200 text-gray-400 dark:border-gray-700'
-                }`}
-                style={on ? { background: `${k.color}1a`, borderColor: `${k.color}55` } : undefined}
+        <div className="px-5 py-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-gray-400" />
+            <span className="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">Select KPIs</span>
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              {visibleIds.length}/{layout.order.length}
+            </span>
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setAllVisible(true)}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
-                <input
-                  type="checkbox"
-                  checked={on}
-                  onChange={(e) => setVisible(id, e.target.checked)}
-                  className="h-3.5 w-3.5 rounded"
-                  style={{ accentColor: k.color }}
-                />
-                {k.label}
-              </label>
-            );
-          })}
-          <div className="ml-auto flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setAllVisible(true)}
-              className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllVisible(false)}
-              className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              None
-            </button>
-            <button
-              type="button"
-              onClick={() => setLayout(defaultLayout())}
-              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-              title="Restore default order, sizes and visibility"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Reset layout
-            </button>
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setAllVisible(false)}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                None
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayout(defaultLayout())}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                title="Restore default order, sizes and visibility"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Reset layout
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            {layout.order.map((id) => {
+              const k = KPI_MAP.get(id)!;
+              const on = !hiddenSet.has(id);
+              return (
+                <label
+                  key={id}
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-all duration-200 select-none hover:-translate-y-0.5 hover:shadow-md ${
+                    on ? 'shadow-sm' : 'border-gray-200 opacity-60 hover:opacity-100 dark:border-gray-700'
+                  }`}
+                  style={on ? { background: `${k.color}14`, borderColor: `${k.color}66` } : undefined}
+                >
+                  <input type="checkbox" checked={on} onChange={(e) => setVisible(id, e.target.checked)} className="sr-only" />
+                  <span
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                      on ? 'text-white' : 'bg-gray-100 text-gray-400 dark:bg-gray-800'
+                    }`}
+                    style={on ? { background: `linear-gradient(135deg, ${k.color}, ${k.color}cc)` } : undefined}
+                  >
+                    <k.Icon className="h-4 w-4" />
+                  </span>
+                  <span
+                    className={`min-w-0 flex-1 truncate text-xs font-medium ${on ? 'text-gray-800 dark:text-white/90' : 'text-gray-500'}`}
+                    title={k.label}
+                  >
+                    {k.label}
+                  </span>
+                  {/* Keyed on state so the pop animation replays on each tick */}
+                  <span
+                    key={String(on)}
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      on ? 'kpi-pop border-transparent text-white' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    style={on ? { background: k.color } : undefined}
+                  >
+                    {on && <Check className="h-3 w-3" strokeWidth={3} />}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </div>
         <div className="hidden border-t border-gray-100 px-5 py-2 text-[11px] text-gray-400 sm:block dark:border-gray-800">
@@ -331,7 +361,7 @@ const KpiBoard: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {visibleIds.map((id) => {
+          {visibleIds.map((id, index) => {
             const k = KPI_MAP.get(id)!;
             const isFull = layout.widths[id] === 'full';
             const controls: KpiItemControls = {
@@ -357,7 +387,8 @@ const KpiBoard: React.FC = () => {
                 onDragOver={(e) => handleDragOver(e, id)}
                 onDrop={handleDrop}
                 onDragEnd={endDrag}
-                className={`group/item relative min-w-0 transition-all duration-200 ${isFull ? 'lg:col-span-2' : ''} ${
+                style={{ animationDelay: `${index * 70}ms` }}
+                className={`kpi-enter group/item relative min-w-0 transition-all duration-200 ${isFull ? 'lg:col-span-2' : ''} ${
                   dragId === id ? 'scale-[0.98] opacity-40' : ''
                 }`}
               >
@@ -403,7 +434,7 @@ const KpiBoard: React.FC = () => {
                 <KpiItemContext.Provider value={controls}>
                   {/* Existing widgets don't listen to refreshKey, so remount them on refresh */}
                   <div key={k.legacy ? refreshKey : undefined} className="h-full">
-                    {k.render()}
+                    {k.render(<k.Icon className="h-5 w-5" />)}
                   </div>
                 </KpiItemContext.Provider>
               </div>

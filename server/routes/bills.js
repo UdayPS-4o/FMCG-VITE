@@ -517,15 +517,20 @@ router.post('/van-loading-saves', async (req, res) => {
             if (error.code !== 'ENOENT') throw error;
         }
 
-        // Post loading expense once per distinct bill set (re-saving the same loading must not double-charge)
-        const normBills = String(billNumbers).replace(/\s+/g, '').replace(/,$/, '').toUpperCase();
-        const alreadyPosted = saves.some(s =>
-            s.cashVr && String(s.billNumbers).replace(/\s+/g, '').replace(/,$/, '').toUpperCase() === normBills);
+        // Saves made on the same day are treated as the same loading being modified:
+        // only boxes beyond what was already posted today are charged; a reduction posts nothing.
+        const today = formatDateToDDMMYYYY(new Date());
+        const postedToday = saves
+            .filter(s => s.date === today && s.cashVr)
+            .reduce((sum, s) => sum + (Number(s.cashBoxes ?? s.totalBoxes) || 0), 0);
+        const extraBoxes = Math.round(Number(totalBoxes) || 0) - postedToday;
         let cashVr = null;
+        let cashBoxes = 0;
         let cashError = null;
-        if (!alreadyPosted) {
+        if (extraBoxes > 0) {
             try {
-                cashVr = await postLoadingExpense(totalBoxes, String(billNumbers).replace(/\s+/g, ''));
+                cashVr = await postLoadingExpense(extraBoxes, String(billNumbers).replace(/\s+/g, ''));
+                if (cashVr) cashBoxes = extraBoxes;
             } catch (err) {
                 console.error('Failed to post loading expense to CASH.DBF:', err);
                 cashError = err.message;
@@ -535,7 +540,8 @@ router.post('/van-loading-saves', async (req, res) => {
         const entry = {
             id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
             cashVr,
-            date: formatDateToDDMMYYYY(new Date()),
+            cashBoxes,
+            date: today,
             timestamp: new Date().toISOString(),
             billNumbers: String(billNumbers),
             unitFilter: unitFilter || 'Box',

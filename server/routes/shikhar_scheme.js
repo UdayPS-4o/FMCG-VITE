@@ -34,7 +34,8 @@ async function getActiveSchemesFromDBF() {
                 slab1: parseFloat(record.SLAB1) || 0,
                 slab2: parseFloat(record.SLAB2) || 999999999,
                 discount: parseFloat(record.DISCOUNT) || 0,
-                activityCode: record.ACTIVITY_C
+                activityCode: record.ACTIVITY_C,
+                custCat: (record.CUST_CAT || '').trim().toUpperCase()
             });
         }
 
@@ -45,6 +46,38 @@ async function getActiveSchemesFromDBF() {
         console.error('Error caching SCHDTL.dbf:', error);
         return {};
     }
+}
+
+// Party code -> 'W' (wholesale) or 'R' (retail), from CMPL.CUST_CAT. Only CUST_CAT "W" is wholesale.
+let partySideCache = null;
+let partySideCacheTime = 0;
+
+async function getPartySide(partyCode) {
+    if (!partyCode) return 'R';
+    if (!partySideCache || Date.now() - partySideCacheTime >= CACHE_TTL) {
+        const sides = {};
+        try {
+            const dbfPath = path.join(process.env.DBF_FOLDER_PATH || path.join(__dirname, '../../d01-2324'), 'data', 'CMPL.DBF');
+            const dbf = await DBFFile.open(dbfPath);
+            const records = await dbf.readRecords();
+            await dbf.close();
+            for (const record of records) {
+                const code = record.C_CODE?.trim();
+                if (code) sides[code] = (record.CUST_CAT || '').trim().toUpperCase() === 'W' ? 'W' : 'R';
+            }
+        } catch (error) {
+            console.error('Error reading CMPL.dbf for customer categories:', error);
+        }
+        partySideCache = sides;
+        partySideCacheTime = Date.now();
+    }
+    return partySideCache[partyCode.trim()] || 'R';
+}
+
+// Scheme rows tagged R / W apply to that side only; blank or anything else (e.g. legacy "A") applies to all
+function schemeAppliesToSide(custCat, side) {
+    if (custCat === 'R' || custCat === 'W') return custCat === side;
+    return true;
 }
 
 // Helper function to read PMPL.dbf and create a mapping
@@ -98,7 +131,8 @@ router.get('/schemes/for-item', async (req, res) => {
         }
 
         const schemesMap = await getActiveSchemesFromDBF();
-        const itemSchemes = schemesMap[itemCode] || [];
+        const partySide = await getPartySide(req.query.partyCode);
+        const itemSchemes = (schemesMap[itemCode] || []).filter(sch => schemeAppliesToSide(sch.custCat, partySide));
         
         console.log(`Checking schemes for ${itemCode} on ${invoiceDateNum}`);
         const validSchemes = itemSchemes.filter(sch => {

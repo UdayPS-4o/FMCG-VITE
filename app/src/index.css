@@ -61,3 +61,23 @@ html {
 button, a {
     touch-action: manipulation;
 }
+/* ── Premium moments ───────────────────────────────── */
+@keyframes cta-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(79, 70, 229, .5); }
+    70%  { box-shadow: 0 0 0 14px rgba(79, 70, 229, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+}
+/* light sweep across the offer banner */
+@keyframes offer-shine {
+    0%, 70% { transform: translateX(-120%) skewX(-20deg); }
+    100%    { transform: translateX(420%) skewX(-20deg); }
+}
+.offer-shine {
+    position: absolute; top: 0; left: 0; width: 25%; height: 100%; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent);
+    animation: offer-shine 4s ease-in-out infinite;
+}
+@keyframes phone-shake {
+    20% { transform: translateX(-5px); } 40% { transform: translateX(5px); }
+    60% { transform: translateX(-3px); } 80% { transform: translateX(2px); }
+}

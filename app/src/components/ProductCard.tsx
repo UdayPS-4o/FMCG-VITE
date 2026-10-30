@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../context/StoreContext';
 import type { Product } from '../context/StoreContext';
 import { Plus, Minus, ShoppingCart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AdminImageModal } from './AdminImageModal';
 import { getImageUrl } from '../lib/api';
+import { notifyCartChange } from '../lib/cartFx';
+import SchemeProgress from './SchemeProgress';
+import FadeImg from './FadeImg';
 
 interface ProductCardProps {
     product: Product;
@@ -58,9 +61,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
 
     const isInCart = cartItem && (cartItem.qtyPcs > 0 || cartItem.qtyBoxes > 0);
 
+    const cardRef = useRef<HTMLDivElement>(null);
+
     const handleAddToCart = () => {
         if (!hasMultipleUnits) {
             addToCart(product, 1, 0);
+            notifyCartChange({ product, prevQty: totalQty, newQty: 1, anchor: cardRef.current });
         } else {
             onExpand();
         }
@@ -70,6 +76,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
         setPcs(newPcs);
         setBoxes(newBoxes);
         addToCart(product, newPcs, newBoxes);
+        notifyCartChange({ product, prevQty: totalQty, newQty: newPcs + newBoxes * conversion, anchor: cardRef.current });
         if (newPcs === 0 && newBoxes === 0) {
             onCollapse();
         }
@@ -84,6 +91,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
 
     return (
         <motion.div
+            ref={cardRef}
             layout
             className={`bg-white rounded-2xl overflow-hidden ${isExpanded && hasMultipleUnits ? 'col-span-2' : ''
                 }`}
@@ -99,7 +107,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                     <motion.div layout className="relative mb-3">
                         <motion.div layout className="aspect-square bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden relative">
                             {product.image_url ? (
-                                <img src={getImageUrl(product.image_url)} alt={product.PRODUCT} className="w-full h-full object-contain p-2" />
+                                <FadeImg src={getImageUrl(product.image_url)} alt={product.PRODUCT} className="w-full h-full object-contain p-2" />
                             ) : isAdmin ? (
                                 <button onClick={() => setShowAdminImageModal(true)} className="w-12 h-12 bg-white shadow-sm rounded-full flex items-center justify-center text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 transition-colors border border-gray-100">
                                     <Plus size={24} />
@@ -146,6 +154,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                         })}
                     </div>
                 )}
+
+                    {isInCart && <SchemeProgress product={product} totalQty={totalQty} language={language} />}
 
                     {/* Price Row */}
                     <motion.div layout className={`flex items-baseline gap-1.5 ${isExpanded && hasMultipleUnits ? 'mb-0' : 'mb-3'}`}>

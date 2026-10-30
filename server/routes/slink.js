@@ -1139,7 +1139,7 @@ async function printGodown(req, res) {
 }
 
 const EditUser = async (req, res) => {
-  const { id, name, number, routeAccess, password, powers, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries, requireMandatoryDocs, mandatoryDocsFromDate, reportsAccess } = req.body; // Updated to use subgroups
+  const { id, name, number, routeAccess, password, powers, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries, requireMandatoryDocs, mandatoryDocsFromDate, reportsAccess, notificationAccess } = req.body; // Updated to use subgroups
   console.log('Editing user', id, name, number, routeAccess, powers, password, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries, requireMandatoryDocs, mandatoryDocsFromDate);
 
   try {
@@ -1165,6 +1165,7 @@ const EditUser = async (req, res) => {
       user.requireMandatoryDocs = requireMandatoryDocs;
       user.mandatoryDocsFromDate = mandatoryDocsFromDate;
       user.reportsAccess = reportsAccess;
+      user.notificationAccess = notificationAccess;
 
       // For backward compatibility, also set the legacy subgroup field
       // Set it to the first subgroup in the array or null
@@ -1196,7 +1197,7 @@ app.get('/json/users', async (req, res) => {
 });
 
 app.post('/addUser', async (req, res) => {
-  const { name, number, password, routeAccess, powers, username, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries, requireMandatoryDocs, mandatoryDocsFromDate, reportsAccess } = req.body; // Updated to use subgroups
+  const { name, number, password, routeAccess, powers, username, subgroups, smCode, defaultSeries, canSelectSeries, godownAccess, allowPastDateEntries, requireMandatoryDocs, mandatoryDocsFromDate, reportsAccess, notificationAccess } = req.body; // Updated to use subgroups
 
   try {
     let users = await fs.readFile('./db/users.json');
@@ -1230,7 +1231,8 @@ app.post('/addUser', async (req, res) => {
       allowPastDateEntries: allowPastDateEntries,
       requireMandatoryDocs: requireMandatoryDocs,
       mandatoryDocsFromDate: mandatoryDocsFromDate,
-      reportsAccess: reportsAccess
+      reportsAccess: reportsAccess,
+      notificationAccess: notificationAccess
     };
 
     // Add new user to users array

@@ -5,6 +5,8 @@ import { Loader2 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { fetchWithAuth } from '@/lib/api';
 import {
+  CHART_ANIMATIONS,
+  CountUp,
   EmptyState,
   KpiCard,
   DaysInput,
@@ -53,7 +55,7 @@ const CompanyPieKpi: React.FC<Props> = ({ id, title, color, icon }) => {
 
   const options: ApexOptions = useMemo(
     () => ({
-      chart: { type: 'donut', fontFamily: 'Outfit, sans-serif', animations: { speed: 400 } },
+      chart: { type: 'donut', fontFamily: 'Outfit, sans-serif', animations: CHART_ANIMATIONS },
       labels: rows.map((r) => r.company),
       colors: rows.map((_, i) => PALETTE[i % PALETTE.length]),
       legend: { show: false },
@@ -148,19 +150,19 @@ const CompanyPieKpi: React.FC<Props> = ({ id, title, color, icon }) => {
                       {r.company}
                     </span>
                     <span className="mt-1 block h-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-                      <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: c }} />
+                      <span className="kpi-bar-grow block h-full rounded-full" style={{ width: `${pct}%`, background: c, animationDelay: `${i * 60}ms` }} />
                     </span>
                   </span>
                   <span className="text-right">
-                    <span className="block text-sm font-semibold text-gray-800 dark:text-white/90">{inr(r.amount)}</span>
-                    <span className="block text-[11px] text-gray-400">{pct.toFixed(1)}%</span>
+                    <span className="block text-sm font-semibold text-gray-800 dark:text-white/90"><CountUp value={r.amount} format={inr} /></span>
+                    <span className="block text-[11px] text-gray-400"><CountUp value={pct} format={(n) => `${n.toFixed(1)}%`} /></span>
                   </span>
                 </button>
               );
             })}
             <div className="flex justify-between border-t border-gray-100 px-2 pt-2 text-sm font-semibold dark:border-gray-800">
               <span className="text-gray-500">Total</span>
-              <span className="text-gray-800 dark:text-white/90">{inr(total, true)}</span>
+              <span className="text-gray-800 dark:text-white/90"><CountUp value={total} format={(n) => inr(n, true)} /></span>
             </div>
           </div>
         </div>

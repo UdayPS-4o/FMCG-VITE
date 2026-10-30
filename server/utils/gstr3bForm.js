@@ -295,6 +295,28 @@ function buildOffsetPayload({ gstin, fp, pditc, pdcash }) {
   };
 }
 
+// GSTN VALID response: { isValid, error_message, <section>: { <table>: { error_fields: [...] } } } -> readable list
+const TABLE_LABELS = {
+  osup_det: '3.1(a) Outward taxable supplies', osup_zero: '3.1(b) Zero rated', osup_nil_exmp: '3.1(c) Nil / exempt',
+  isup_rev: '3.1(d) Inward supplies (reverse charge)', osup_nongst: '3.1(e) Non-GST', eco_sup: '3.1.1(i) ECO supplies u/s 9(5)', eco_reg_sup: '3.1.1(ii) ECO registered',
+  itc4a1: '4A(1) Import of goods', itc4a2: '4A(2) Import of services', itc4a3: '4A(3) Inward reverse charge', itc4a4: '4A(4) Inward from ISD',
+  itc4a5: '4A(5) All other ITC', itc4b1: '4B(1) Reversal - rules 38/42/43', itc4b2: '4B(2) Reversal - others', itc4d1: '4D(1) ITC reclaimed', itc4d2: '4D(2) Ineligible ITC',
+  unreg_details: '3.2 Unregistered', comp_details: '3.2 Composition', uin_details: '3.2 UIN holders',
+};
+const FIELD_LABELS = { txval: 'taxable value', iamt: 'IGST', camt: 'CGST', samt: 'SGST', csamt: 'Cess' };
+function validationFields(resp) {
+  const out = [];
+  const walk = (o, key) => {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o.error_fields) && o.error_fields.length) {
+      out.push({ table: key, fields: o.error_fields, label: `${TABLE_LABELS[key] || key}: ${o.error_fields.map((f) => FIELD_LABELS[f] || f).join(', ')}` });
+    }
+    Object.entries(o).forEach(([k, v]) => { if (k !== 'error_fields') walk(v, k); });
+  };
+  walk(resp, '');
+  return out;
+}
+
 // compares an offset payload with the payable amounts of the saved return; returns readable differences
 function offsetProblems(payload, ledgers) {
   const out = [];
@@ -337,5 +359,5 @@ function parseLedgerBal(json) {
 
 module.exports = {
   emptyForm, normalizeForm, buildPayload, formFromAutoLiab, formFromRetsum, systemFromCsv, systemFromCash,
-  diffPayload, buildOffsetPayload, parseLedgerBal, itcNet, offsetProblems,
+  diffPayload, buildOffsetPayload, parseLedgerBal, itcNet, offsetProblems, validationFields,
 };

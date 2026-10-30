@@ -310,7 +310,7 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
         }
       };
       
-      sendNotificationToAdmins(notificationPayload);
+      sendNotificationToAdmins(notificationPayload, 'attendance-marked', { ownerUserId: userId });
       console.log('✅ Push notification sent to admins successfully');
     } catch (notificationError) {
       console.log('⚠️ Failed to send push notification to admins:', notificationError.message);

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import Chart from 'react-apexcharts';
 import { ApexOptions } from 'apexcharts';
 import { BarChart3, LineChart } from 'lucide-react';
-import { EmptyState, KpiCard, Segmented, escapeHtml, inr, inrAxis, inrCompact, useKpiData } from './shared';
+import { CHART_ANIMATIONS, CountUp, EmptyState, KpiCard, Segmented, escapeHtml, inr, inrAxis, inrCompact, useKpiData } from './shared';
 
 interface CompanyAmount {
   company: string;
@@ -48,7 +48,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
   const monthlyOptions: ApexOptions | null = useMemo(() => {
     if (!data) return null;
     return {
-      chart: { type: 'bar', fontFamily: 'Outfit, sans-serif', toolbar: { show: false } },
+      chart: { type: 'bar', fontFamily: 'Outfit, sans-serif', toolbar: { show: false }, animations: CHART_ANIMATIONS },
       colors: [color],
       plotOptions: { bar: { columnWidth: '55%', borderRadius: 6, borderRadiusApplication: 'end', dataLabels: { position: 'top' } } },
       dataLabels: {
@@ -76,7 +76,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
   const yearlyOptions: ApexOptions | null = useMemo(() => {
     if (!data) return null;
     return {
-      chart: { type: yearlyType, fontFamily: 'Outfit, sans-serif', toolbar: { show: false } },
+      chart: { type: yearlyType, fontFamily: 'Outfit, sans-serif', toolbar: { show: false }, animations: CHART_ANIMATIONS },
       colors: YEAR_COLORS,
       plotOptions: { bar: { columnWidth: '70%', borderRadius: 4, borderRadiusApplication: 'end' } },
       stroke: yearlyType === 'line' ? { width: 3, curve: 'smooth' } : { width: 0 },
@@ -102,6 +102,14 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
     };
   }, [data, yearlyType]);
 
+  // Stable series references: react-apexcharts redraws the chart (closing any open tooltip)
+  // whenever it receives a new series array, so only rebuild these when the data changes.
+  const monthlySeries = useMemo(() => (data ? [{ name: 'Sales', data: data.monthly.values }] : []), [data]);
+  const yearlySeries = useMemo(
+    () => (data ? data.yearly.map((y) => ({ name: `FY ${y.fy}`, data: y.values })) : []),
+    [data]
+  );
+
   const cur = data?.yearly[data.yearly.length - 1];
   const prev = data?.yearly[data.yearly.length - 2];
   // Compare completed months of the current FY against the same months of the previous FY
@@ -125,10 +133,10 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
       headerRight={
         data && (
           <div className="text-right">
-            <div className="text-lg font-bold text-gray-800 dark:text-white/90">{inrCompact(data.monthly.total)}</div>
+            <div className="text-lg font-bold text-gray-800 dark:text-white/90"><CountUp value={data.monthly.total} format={inrCompact} /></div>
             {growth !== null && (
               <div className={`text-[11px] font-semibold ${growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                {growth >= 0 ? '▲' : '▼'} {Math.abs(growth).toFixed(1)}% vs last FY ({growthPeriod})
+                {growth >= 0 ? '▲' : '▼'} <CountUp value={Math.abs(growth)} format={(n) => n.toFixed(1)} />% vs last FY ({growthPeriod})
               </div>
             )}
           </div>
@@ -170,7 +178,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
         <EmptyState />
       ) : tab === 'monthly' && monthlyOptions ? (
         <div className="mt-2 -mx-2">
-          <Chart options={monthlyOptions} series={[{ name: 'Sales', data: data.monthly.values }]} type="bar" height={320} />
+          <Chart options={monthlyOptions} series={monthlySeries} type="bar" height={320} />
         </div>
       ) : yearlyOptions ? (
         <>
@@ -180,7 +188,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
                 <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
                   <span className="h-2 w-2 rounded-sm" style={{ background: YEAR_COLORS[i] }} /> FY {y.fy}
                 </div>
-                <div className="text-sm font-bold text-gray-800 dark:text-white/90">{inrCompact(y.total)}</div>
+                <div className="text-sm font-bold text-gray-800 dark:text-white/90"><CountUp value={y.total} format={inrCompact} /></div>
               </div>
             ))}
           </div>
@@ -188,7 +196,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
             <Chart
               key={yearlyType}
               options={yearlyOptions}
-              series={data.yearly.map((y) => ({ name: `FY ${y.fy}`, data: y.values }))}
+              series={yearlySeries}
               type={yearlyType}
               height={300}
             />

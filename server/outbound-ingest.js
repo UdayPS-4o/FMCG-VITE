@@ -303,6 +303,9 @@ function recordOutgoing(evt) {
         interactiveHeader: evt.interactiveHeader || null,
         documentUrl: evt.documentUrl || null,
         documentFilename: evt.documentFilename || null,
+        interactiveType: evt.interactiveType || null,
+        interactiveButtons: evt.interactiveButtons || null,
+        ctaUrl: evt.ctaUrl || null,
         status: evt.status || 'sent',
         timestamp: ts,
     });
@@ -616,6 +619,11 @@ function handlePm2Line(line, logName, { rescan = false } = {}) {
                     body: d.body || d.interactiveBody || d.templateName || 'Sent',
                     interactiveBody: d.interactiveBody || null,
                     interactiveHeader: d.interactiveHeader || null,
+                    documentUrl: d.documentUrl || null,
+                    documentFilename: d.documentFilename || null,
+                    interactiveType: d.interactiveType || null,
+                    interactiveButtons: d.interactiveButtons || null,
+                    ctaUrl: d.ctaUrl || null,
                     timestamp: ts,
                 });
             }

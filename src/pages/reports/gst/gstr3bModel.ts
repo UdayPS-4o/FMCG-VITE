@@ -235,6 +235,47 @@ export function computeOffset(
   return { pditc: p, pdcash: [normalCash, rcCash], credit, liab: L, leftCredit: { igst: r2(iI), cgst: r2(cI), sgst: r2(sI), cess: r2(csI) } };
 }
 
+// GSTN accepts an offset only when every head equals the payable amount exactly, in whole rupees (RT-3BAS1070).
+// Rounds every cell to rupees and puts any remaining difference (paise from editing / rounding) into the cash
+// cell of that head, or takes it off cash first and then the largest ITC cell. Returns the fitted matrix and
+// the heads that had to be adjusted.
+export function fitOffsetToPayable(pditc: PdItc, pdcash: PdCash[], payable: ReturnType<typeof payableFromLedgers>) {
+  const p: PdItc = { ...pditc };
+  const cash = pdcash.map((c) => ({ ...c }));
+  const rup = (n: number) => Math.round(Number(n) || 0);
+  (['i_pdi', 'i_pdc', 'i_pds', 'c_pdi', 'c_pdc', 's_pdi', 's_pds', 'cs_pdcs'] as const).forEach((k) => { p[k] = rup(p[k]); });
+  const normal = cash.find((c) => c.trans_typ === 30002);
+  const rc = cash.find((c) => c.trans_typ === 30003);
+  const adjusted: string[] = [];
+  if (normal) {
+    (['ipd', 'cpd', 'spd', 'cspd', 'i_intrpd', 'c_intrpd', 's_intrpd', 'cs_intrpd', 'i_lfeepd', 'c_lfeepd', 's_lfeepd', 'cs_lfeepd'] as const)
+      .forEach((k) => { normal[k] = rup(normal[k]); });
+    const heads: { name: string; due: number; itc: (keyof PdItc)[]; cash: 'ipd' | 'cpd' | 'spd' | 'cspd' }[] = [
+      { name: 'IGST', due: payable.normal.igst, itc: ['i_pdi', 'i_pdc', 'i_pds'], cash: 'ipd' },
+      { name: 'CGST', due: payable.normal.cgst, itc: ['c_pdi', 'c_pdc'], cash: 'cpd' },
+      { name: 'SGST', due: payable.normal.sgst, itc: ['s_pdi', 's_pds'], cash: 'spd' },
+      { name: 'Cess', due: payable.normal.cess, itc: ['cs_pdcs'], cash: 'cspd' },
+    ];
+    for (const h of heads) {
+      let diff = rup(h.due) - (h.itc.reduce((a, k) => a + p[k], 0) + normal[h.cash]);
+      if (!diff) continue;
+      adjusted.push(`${h.name} ${diff > 0 ? '+' : ''}${diff}`);
+      if (diff > 0) { normal[h.cash] += diff; continue; }
+      const fromCash = Math.min(-diff, normal[h.cash]);
+      normal[h.cash] -= fromCash; diff += fromCash;
+      for (const k of [...h.itc].sort((a, b) => p[b] - p[a])) {
+        if (!diff) break;
+        const t = Math.min(-diff, p[k]);
+        p[k] -= t; diff += t;
+      }
+    }
+  }
+  if (rc) {
+    rc.ipd = rup(payable.rc.igst); rc.cpd = rup(payable.rc.cgst); rc.spd = rup(payable.rc.sgst); rc.cspd = rup(payable.rc.cess);
+  }
+  return { pditc: p, pdcash: cash, adjusted };
+}
+
 // cash required per head across all pdcash rows vs the cash ledger
 export function cashNeed(pdcash: PdCash[], bal: LedgerBal | null) {
   const need = zHeads();

@@ -46,3 +46,6 @@ server/whatsapp-files/
 # Claude AI project files
 .claude/
 config.bat
+
+# Bizom auto-download browser profile (keeps login session)
+server/.bizom-profile

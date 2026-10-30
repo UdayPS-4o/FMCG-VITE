@@ -4,7 +4,24 @@ import { createPortal } from "react-dom";
 interface Option {
   value: string;
   label: string;
+  // When the key is present (even as ''), a thumbnail slot is shown; '' / broken URL → placeholder icon
+  image?: string;
 }
+
+const OptionThumb = ({ src }: { src?: string }) => {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className="flex-shrink-0 w-9 h-9 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+      {src && !failed ? (
+        <img src={src} alt="" loading="lazy" className="w-full h-full object-contain bg-white" onError={() => setFailed(true)} />
+      ) : (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="text-gray-400">
+          <path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" />
+        </svg>
+      )}
+    </span>
+  );
+};
 
 interface AutocompleteProps {
   id: string;
@@ -534,7 +551,12 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
                       onClick={() => handleOptionSelect(option)}
                       onMouseEnter={() => setHighlightedIndex(index)}
                     >
-                      {formatOptionLabel(option.label)}
+                      {'image' in option ? (
+                        <div className="flex items-center gap-3">
+                          <OptionThumb src={option.image} />
+                          <div className="min-w-0 flex-1">{formatOptionLabel(option.label)}</div>
+                        </div>
+                      ) : formatOptionLabel(option.label)}
                     </div>
                   </div>
                 );
