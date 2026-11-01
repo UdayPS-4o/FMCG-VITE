@@ -71,7 +71,8 @@ const sumArrays = (arrays: number[][]) => Array.from({ length: 12 }, (_, i) => a
 
 // ---------- Company picker (searchable multi-select) ----------
 const CompanyPicker: React.FC<{
-  companies: CompanyInfo[];
+  // undefined when the server is still running code from before company comparison was added
+  companies: CompanyInfo[] | undefined;
   selected: string[];
   onChange: (codes: string[]) => void;
   colorOf: (code: string) => string;
@@ -90,7 +91,8 @@ const CompanyPicker: React.FC<{
   }, [open]);
 
   const q = query.trim().toLowerCase();
-  const list = q ? companies.filter((c) => c.company.toLowerCase().includes(q)) : companies;
+  const all = companies ?? [];
+  const list = q ? all.filter((c) => c.company.toLowerCase().includes(q)) : all;
   const toggle = (code: string) =>
     onChange(selected.includes(code) ? selected.filter((c) => c !== code) : [...selected, code].slice(0, MAX_COMPARE));
 
@@ -149,7 +151,13 @@ const CompanyPicker: React.FC<{
                 </button>
               );
             })}
-            {list.length === 0 && <div className="py-6 text-center text-xs text-gray-400">No companies</div>}
+            {!companies ? (
+              <div className="px-3 py-6 text-center text-xs text-amber-600">
+                Company data isn&apos;t available yet. The server is running older code; restart it to enable comparison.
+              </div>
+            ) : (
+              list.length === 0 && <div className="py-6 text-center text-xs text-gray-400">No companies</div>
+            )}
           </div>
         </div>
       )}
@@ -386,7 +394,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
           />
         </div>
         {data && (
-          <CompanyPicker companies={data.companyList ?? []} selected={activeCodes} onChange={setSelected} colorOf={colorOf} />
+          <CompanyPicker companies={data.companyList} selected={activeCodes} onChange={setSelected} colorOf={colorOf} />
         )}
         <ChartTypeToggle value={chartType} onChange={setChartType} />
       </div>

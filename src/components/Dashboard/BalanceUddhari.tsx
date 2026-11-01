@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { useAuth, hasMultipleSubgroups } from '../../contexts/AuthContext';
 import PartyLedgerDialog from './PartyLedgerDialog';
+import { ReminderButtons, SendAllButtons, useBalanceReminders } from './BalanceReminder';
 import constants from '../../constants';
 
 // Create API_BASE_URL from constants for backward compatibility
@@ -84,6 +85,7 @@ const BalanceUddhari: React.FC = () => {
   const [isLedgerDialogOpen, setIsLedgerDialogOpen] = useState(false);
   const [selectedParty, setSelectedParty] = useState<{ code: string; name: string } | null>(null);
   const { user } = useAuth();
+  const reminders = useBalanceReminders();
 
   // Fetch total balance on component mount
   useEffect(() => {
@@ -483,8 +485,16 @@ const BalanceUddhari: React.FC = () => {
                               <span className="font-medium">{subgroup.subgroupName} ({subgroup.subgroupCode})</span>
                               <span className="text-sm text-gray-500">({subgroup.parties.length} parties)</span>
                             </div>
-                            <div className="font-bold text-orange-600">
-                              {formatCurrency(subgroup.totalBalance)}
+                            <div className="flex items-center gap-3">
+                              <SendAllButtons
+                                groupKey={subgroup.subgroupCode}
+                                groupName={subgroup.subgroupName}
+                                parties={subgroup.parties}
+                                reminders={reminders}
+                              />
+                              <div className="font-bold text-orange-600">
+                                {formatCurrency(subgroup.totalBalance)}
+                              </div>
                             </div>
                           </div>
                           
@@ -496,6 +506,7 @@ const BalanceUddhari: React.FC = () => {
                                   <TableRow>
                                     <TableHead>Party Code</TableHead>
                                     <TableHead>Party Name</TableHead>
+                                    <TableHead>Reminder</TableHead>
                                     <TableHead className="text-right">Outstanding Amount</TableHead>
                                   </TableRow>
                                 </TableHeader>
@@ -513,6 +524,9 @@ const BalanceUddhari: React.FC = () => {
                                           {party.partyName}
                                         </button>
                                       </TableCell>
+                                      <TableCell>
+                                        <ReminderButtons party={party} reminders={reminders} />
+                                      </TableCell>
                                       <TableCell className="text-right font-medium text-orange-600">
                                         {formatCurrency(party.balance)}
                                       </TableCell>
@@ -527,11 +541,16 @@ const BalanceUddhari: React.FC = () => {
                     </div>
                   ) : (
                     // Render regular table view for single subgroup users
+                    <>
+                    <div className="flex justify-end p-2">
+                      <SendAllButtons groupKey="all" groupName="all parties" parties={partyBalances} reminders={reminders} />
+                    </div>
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Party Code</TableHead>
                           <TableHead>Party Name</TableHead>
+                                    <TableHead>Reminder</TableHead>
                           <TableHead className="text-right">Outstanding Amount</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -549,6 +568,9 @@ const BalanceUddhari: React.FC = () => {
                                 {party.partyName}
                               </button>
                             </TableCell>
+                            <TableCell>
+                              <ReminderButtons party={party} reminders={reminders} />
+                            </TableCell>
                             <TableCell className="text-right font-medium text-orange-600">
                               {formatCurrency(party.balance)}
                             </TableCell>
@@ -556,6 +578,7 @@ const BalanceUddhari: React.FC = () => {
                         ))}
                       </TableBody>
                     </Table>
+                    </>
                   )}
                 </div>
               </div>

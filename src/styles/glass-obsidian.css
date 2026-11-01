@@ -87,8 +87,10 @@ html.theme-glass-obsidian :is(.bg-white, .bg-white\/90, .bg-white\/95, .dark\:bg
   box-shadow: var(--lg-rim), 0 2px 6px rgba(0, 0, 0, 0.22), 0 16px 44px -12px rgba(0, 0, 0, 0.55);
 }
 html.theme-glass-obsidian .rounded-2xl { border-radius: 26px; }
-/* full-page wrappers (incl. the app layout root) are canvas, not panels */
-html.theme-glass-obsidian :is(.min-h-screen, .h-screen):not(.app-sidebar):is(.bg-white, .bg-brand-950, .dark\:bg-gray-900, .dark\:bg-gray-800, .bg-gray-dark) {
+/* body and full-page wrappers (incl. the app layout root) are canvas, not panels.
+   A backdrop-filter here would also turn every position:fixed child (header,
+   sidebar, bottom nav) into a scroll-along element. */
+html.theme-glass-obsidian :is(body, .min-h-screen, .h-screen):not(.app-sidebar):is(.bg-white, .bg-brand-950, .dark\:bg-gray-900, .dark\:bg-gray-800, .bg-gray-dark) {
   background: transparent !important;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -294,6 +296,48 @@ html.theme-glass-obsidian :is(input, select, textarea):focus {
 html.theme-glass-obsidian ::placeholder { color: rgba(235, 235, 245, 0.32); }
 html.theme-glass-obsidian input[type="checkbox"],
 html.theme-glass-obsidian input[type="radio"] { accent-color: #30d158; }
+
+/* ---------- Autocomplete dropdown (portal with inline white bg — it only knows .dark) ---------- */
+html.theme-glass-obsidian .autocomplete-dropdown {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)), rgba(24, 24, 30, 0.82) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  backdrop-filter: blur(30px) saturate(190%);
+  border: 0 !important;
+  border-radius: 16px !important;
+  box-shadow: var(--lg-rim), 0 20px 50px -10px rgba(0, 0, 0, 0.7) !important;
+  padding: 4px;
+  color: #fff;
+}
+html.theme-glass-obsidian .autocomplete-dropdown > div.sticky {
+  background: rgba(24, 24, 30, 0.92) !important;
+  border-radius: 12px;
+}
+html.theme-glass-obsidian .autocomplete-dropdown [data-index] {
+  border-radius: 12px;
+  margin: 2px 0;
+  color: rgba(255, 255, 255, 0.92);
+  background-color: transparent;
+  box-shadow: none;
+}
+html.theme-glass-obsidian .autocomplete-dropdown [data-index]:hover { background-color: rgba(255, 255, 255, 0.07) !important; }
+/* in-stock rows: keep the green marker, drop the pale wash */
+html.theme-glass-obsidian .autocomplete-dropdown [data-index].border-green-500 {
+  border-left-color: #30d158;
+  background-color: rgba(48, 209, 88, 0.07) !important;
+}
+html.theme-glass-obsidian .autocomplete-dropdown [data-index].bg-brand-100 { background-color: rgba(10, 132, 255, 0.16) !important; }
+/* keyboard-highlighted row: iOS blue selection, white text */
+html.theme-glass-obsidian .autocomplete-dropdown [data-index].bg-brand-200 {
+  background: linear-gradient(180deg, rgba(61, 155, 255, 0.55), rgba(10, 108, 240, 0.45)) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(10, 132, 255, 0.3) !important;
+  --tw-ring-shadow: 0 0 #0000;
+}
+html.theme-glass-obsidian .autocomplete-dropdown [data-index] .text-brand-600 { color: #64b5ff; }
+html.theme-glass-obsidian .autocomplete-dropdown [data-index].bg-brand-200 .text-brand-600 { color: #fff; }
+html.theme-glass-obsidian .autocomplete-dropdown [data-index] .text-gray-600 { color: rgba(235, 235, 245, 0.68); }
+html.theme-glass-obsidian .autocomplete-dropdown [data-index].bg-brand-200 .text-gray-600 { color: rgba(255, 255, 255, 0.88); }
+html.theme-glass-obsidian .autocomplete-dropdown .bg-green-100 { background-color: rgba(48, 209, 88, 0.18); color: #30d158; }
+html.theme-glass-obsidian .autocomplete-dropdown .rounded-md.bg-gray-100 { background-color: rgba(255, 255, 255, 0.08) !important; border-radius: 9px; }
 
 /* ---------- Tables ---------- */
 html.theme-glass-obsidian thead,

@@ -9,7 +9,7 @@ const Tesseract = require('tesseract.js');
 
 
 let config = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'config.json'), 'utf8'));
-const downloadPath = path.resolve(__dirname, '..', 'downloads',"raw");
+const downloadPath = path.resolve(__dirname, '..', 'downloads', "raw");
 
 // create download directory if it doesn't exist
 if (!fs.existsSync(downloadPath)) {
@@ -26,11 +26,11 @@ async function downloadStatement() {
       console.log('Browser is already open.');
     } else {
       const headless = ([true, "true"].includes(config.background) ? "new" : false);
-      browser = await puppeteer.launch({ 
+      browser = await puppeteer.launch({
         headless: false,
         executablePath: config.chromePath,
         args: [
-               ]
+        ]
       });
     }
 
@@ -60,7 +60,7 @@ async function downloadStatement() {
       // Handle other types if necessary
     });
 
-    
+
     // PAGE GOTO PNB
     await page.goto(config.website);
     console.log('Login page...');
@@ -79,7 +79,7 @@ async function downloadStatement() {
     await page.evaluate((password) => {
       document.querySelector('#AuthenticationFG\\.ACCESS_CODE').value = password;
     }, config['password']);
-    
+
     console.log('00');
 
 
@@ -97,7 +97,7 @@ async function downloadStatement() {
 
     // Clean the OCR result (remove spaces and special characters)
     const captchaText = text.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
-    console.log({captchaText})
+    console.log({ captchaText })
 
     await page.type('#AuthenticationFG\\.ENTERED_CAPTCHA_CODE', captchaText);
 
@@ -109,7 +109,7 @@ async function downloadStatement() {
 
     try {
       // DASHBOARD PAGE
-      await page.waitForSelector("#My-ShortCuts_Account-Statement", {timeout: 20000});
+      await page.waitForSelector("#My-ShortCuts_Account-Statement", { timeout: 20000 });
       console.log('Logged in...');
       await page.click("#My-ShortCuts_Account-Statement");
     } catch (error) {
@@ -118,6 +118,35 @@ async function downloadStatement() {
 
     // ACCOUNT STATEMENT PAGE
     await page.waitForSelector("#SEARCH");
+
+    // NEW PNB UI: account dropdown defaults to "Select" and must be chosen first
+    const selectedAccount = await page.evaluate(() => {
+      const selects = Array.from(document.querySelectorAll('select'));
+      for (const sel of selects) {
+        const opts = Array.from(sel.options);
+        // account dropdown: has a real option that is not the "Select" placeholder and looks like "NAME(INR) - 0490..."
+        const acc = opts.find(o => /\(\s*[A-Z]{3}\s*\)\s*-\s*\d{6,}/.test(o.text));
+        if (acc) {
+          sel.value = acc.value;
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          return { id: sel.id, text: acc.text.trim() };
+        }
+      }
+      return null;
+    });
+
+    if (selectedAccount) {
+      console.log('Account selected:', selectedAccount.text);
+      // selection may trigger a postback/re-render; give it time to settle
+      await Promise.race([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => { }),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+      await page.waitForSelector("#SEARCH");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } else {
+      console.log('No account dropdown found, continuing (manual/old layout).');
+    }
 
     const fromDateValue = await page.$eval('#TransactionHistoryFG\\.TO_TXN_DATE', input => input.value);
 
@@ -175,7 +204,7 @@ fs.watch(downloadPath, (eventType, filename) => {
           let currentDate = moment().format('DD-MM-YYYY');
           let currentTime = moment().format('HH-mm');
           let newFilename = `statement-${currentDate}--${currentTime}.csv`;
-          fs.writeFileSync(path.join(path.resolve(__dirname, '..', 'downloads'), newFilename), olddata);
+          fs.writeFileSync(path.resolve(__dirname, '..', 'downloads', newFilename), olddata);
           cleancsv(path.join(downloadPath, filename), filename, olddata);
           lastProcessed.delete(filename);  // Remove the file from the map
         }
@@ -251,93 +280,93 @@ app.get('/check', (req, res) => {
 
 app.listen(port, () => {
   setTimeout(() => {
-  console.log(`App listening at http://localhost:${port}`)
+    console.log(`App listening at http://localhost:${port}`)
   }, 5000);
 });
 
 
 
 
-function cleancsv(filepath,filename,file){
+function cleancsv(filepath, filename, file) {
   const fs = require('fs');
   const Papa = require('papaparse');
   const _ = require('lodash');
-  
+
   // Read the CSV file
   file = fs.readFileSync(filepath, 'utf8');
-  
-  
+
+
   //  convert file to start from  Txn No. onwards
   let top = file.split('Txn No.')[0];
-  
-  let file1 = 'Blank,Txn No.'+file.split('Txn No.')[1];
+
+  let file1 = 'Blank,Txn No.' + file.split('Txn No.')[1];
   // end at ,Unless constituent notifies the bank
   file1 = file1.split(',Unless constituent notifies the bank')[0];
-  let bottom = ',Unless constituent notifies the bank'+file.split(',Unless constituent notifies the bank')[1];
-  
+  let bottom = ',Unless constituent notifies the bank' + file.split(',Unless constituent notifies the bank')[1];
+
   // write it to edited .csv file
-  
-  
+
+
   // Parse the CSV file
   const results = Papa.parse(file1, {
-      header: true,
-      skipEmptyLines: true,
-      dynamicTyping: true,
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: true,
   });
-  
-  
-  
+
+
+
   // from each value of ['Dr Amount', 'Cr Amount', 'Balance'] remove commas and convert to number
   const results1 = results.data.map((row) => {
     const newRow = {};
     Object.keys(row).forEach((key) => {
-        if (key === 'Dr Amount' || key === 'Cr Amount' || key === 'Balance') {
-            if (typeof row[key] == 'string') {
-                // take out numbers from string
-                newRow[key] = (row[key].replace(/[^0-9.-]+/g,""));
-                newRow[key] = (row[key].replace(/,/g, '').replace(' Dr.', '').replace(' Cr.', ''));
-            } else if (typeof row[key] == 'number') {
-                newRow[key] = row[key];
-            } else {
-                newRow[key] = "";
-            }
+      if (key === 'Dr Amount' || key === 'Cr Amount' || key === 'Balance') {
+        if (typeof row[key] == 'string') {
+          // take out numbers from string
+          newRow[key] = (row[key].replace(/[^0-9.-]+/g, ""));
+          newRow[key] = (row[key].replace(/,/g, '').replace(' Dr.', '').replace(' Cr.', ''));
+        } else if (typeof row[key] == 'number') {
+          newRow[key] = row[key];
         } else {
-            newRow[key] = row[key];
+          newRow[key] = "";
         }
-    }); 
+      } else {
+        newRow[key] = row[key];
+      }
+    });
     return newRow;
-});
-  
-  
-  
-  
+  });
+
+
+
+
   // write to csv file /edited/two.csv
   let csv = Papa.unparse(results1);
-  
+
   // remove first 6 chars from csv
   csv = csv.substring(6);
 
 
 
-  
-const { exec } = require('child_process');
 
-let lastExecution = 0;
-let isScheduled = false;  // Flag to check if a function call is already scheduled
+  const { exec } = require('child_process');
 
-function runExe() {
+  let lastExecution = 0;
+  let isScheduled = false;  // Flag to check if a function call is already scheduled
+
+  function runExe() {
     const now = Date.now();
-    
+
     console.log("runExe called at:", now);
 
     if (now - lastExecution < 30000 || isScheduled) {
-        if (now - lastExecution < 30000) {
-            console.log("Execution prevented due to time since last execution:", now - lastExecution, "ms");
-        }
-        if (isScheduled) {
-            console.log("Execution prevented because it's already scheduled.");
-        }
-        return;
+      if (now - lastExecution < 30000) {
+        console.log("Execution prevented due to time since last execution:", now - lastExecution, "ms");
+      }
+      if (isScheduled) {
+        console.log("Execution prevented because it's already scheduled.");
+      }
+      return;
     }
 
     isScheduled = true;
@@ -346,44 +375,38 @@ function runExe() {
     setTimeout(() => {
       const workingDirectory = 'C:/Users/shubham/Desktop/FMCG';
 
-      exec('pnbcr.exe', { cwd: workingDirectory }, (error) => {
-          if (error) {
-              console.error(`exec error: ${error}`);
-          } else {
-              console.log(".exe executed at:", Date.now());
-          }
+      exec(`"${workingDirectory}/pnbcr.exe"`, { cwd: workingDirectory }, (error) => {
+        if (error) {
+          console.error(`exec error: ${error}`);
+        } else {
+          console.log(".exe executed at:", Date.now());
+        }
       });
 
       lastExecution = now;
       isScheduled = false;
       console.log("Last execution time updated to:", lastExecution);
     }, 3000);
-}
-
-
-
-
-  
-try {
-  console.log('1 ->')
-  let currentDate = moment().format('DD-MM-YYYY');
-  let currentTime = moment().format('HH-mm');
-  let newFilename = `statement-${currentDate}--${currentTime}.csv`;
-  
-  const editedPath = path.resolve(__dirname, '..', 'edited');
-  if (!fs.existsSync(editedPath)) {
-    fs.mkdirSync(editedPath, { recursive: true });
   }
-  
-  fs.writeFileSync(path.join(editedPath, `${newFilename}.csv`), top+csv+bottom, 'utf8');
-  console.log('2 ->')
-  fs.writeFileSync(`C:/Users/shubham/Desktop/FMCG/pnbcr.csv`, top+csv+bottom, 'utf8');
-  runExe();
 
-} catch (error) {
-  console.log(error)
-  console.log("File is already open, Can't edit");
-}
+
+
+
+
+  try {
+    console.log('1 ->')
+    let currentDate = moment().format('DD-MM-YYYY');
+    let currentTime = moment().format('HH-mm');
+    let newFilename = `statement-${currentDate}--${currentTime}.csv`;
+    fs.writeFileSync(path.resolve(__dirname, '..', 'edited', `${newFilename}.csv`), top + csv + bottom, 'utf8');
+    console.log('2 ->')
+    fs.writeFileSync(`C:/Users/shubham/Desktop/FMCG/pnbcr.csv`, top + csv + bottom, 'utf8');
+    runExe();
+
+  } catch (error) {
+    console.log(error)
+    console.log("File is already open, Can't edit");
+  }
 
 
 }
