@@ -207,7 +207,36 @@ async function runDownload() {
 
         // Account Statement Page
         await page.waitForSelector("#SEARCH");
-        
+
+        // NEW PNB UI: account dropdown defaults to "Select" and must be chosen first
+        const selectedAccount = await page.evaluate(() => {
+            const selects = Array.from(document.querySelectorAll('select'));
+            for (const sel of selects) {
+                const opts = Array.from(sel.options);
+                // account dropdown option looks like "NAME(INR) - 0490..."
+                const acc = opts.find(o => /\(\s*[A-Z]{3}\s*\)\s*-\s*\d{6,}/.test(o.text));
+                if (acc) {
+                    sel.value = acc.value;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    return { id: sel.id, text: acc.text.trim() };
+                }
+            }
+            return null;
+        });
+
+        if (selectedAccount) {
+            console.log('Account selected:', selectedAccount.text);
+            // selection may trigger a postback/re-render; give it time to settle
+            await Promise.race([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => { }),
+                new Promise(resolve => setTimeout(resolve, 3000))
+            ]);
+            await page.waitForSelector("#SEARCH");
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        } else {
+            console.log('No account dropdown found, continuing (manual/old layout).');
+        }
+
         const fromDateValue = await page.$eval('#TransactionHistoryFG\\.TO_TXN_DATE', input => input.value);
         const fromDate = moment(fromDateValue, 'DD-MM-YYYY');
         const toDate = fromDate.clone().subtract(1, 'day');
@@ -258,6 +287,87 @@ async function runDownload() {
         throw error;
     } finally {
         if (browser) await browser.close();
+    }
+}
+
+
+// --- Cheque / Bank Receipt confirmation (same WA 'bankrec' template + SMS as Cash Receipts) ---
+
+const WHATSAPP_DELAY_MS = 4000; // gap between WhatsApp messages to avoid spam detection
+const SMS_DELAY_MS = 1000;
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function sendBankReceiptConfirmations(receipts) {
+    if (!receipts.length) return;
+
+    let cmplData = [];
+    try {
+        const cmplPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
+        cmplData = JSON.parse(await fs.readFile(cmplPath, 'utf8'));
+    } catch (e) {
+        console.error('[Bank Receipt Notify] Could not read CMPL.json, skipping confirmations:', e.message);
+        return;
+    }
+
+    let sent = 0;
+    for (const r of receipts) {
+        const party = cmplData.find(p => p.C_CODE === r.partyCode);
+        const mobileNumber = String(party?.C_PHONE || party?.C_MOBILE || '').trim();
+        if (!mobileNumber) {
+            console.log(`[Bank Receipt Notify] No mobile for party ${r.partyCode} (txn ${r.txnNo}). Skipping.`);
+            continue;
+        }
+
+        const rawMobile = mobileNumber.replace(/\D/g, '');
+        const tenDigit = (rawMobile.startsWith('91') && rawMobile.length === 12) ? rawMobile.slice(2) : rawMobile;
+        const recipientNumber = `+91${tenDigit}`;
+        const m = moment(r.date, ['DD-MM-YYYY', 'DD/MM/YYYY', 'DD-MMM-YYYY', 'YYYY-MM-DD']);
+        const formattedDate = m.isValid() ? m.format('DD-MM-YYYY') : String(r.date || '');
+        const isCheque = /CHQ|CHEQUE|CLG|CLEARING/i.test(r.narration || '');
+        const ref = `BY ${isCheque ? 'CHQ' : 'BANK'} ${r.txnNo}`;
+
+        if (sent > 0) await sleep(WHATSAPP_DELAY_MS);
+        sent++;
+
+        // WhatsApp — template 'bankrec':
+        // "We Thankfully acknowledge of receipt Rs: {{1}} ,{{2}} on Date {{3}}. Regards, EKTA ENTERPRISES"
+        try {
+            const WA_SEND_URL = `http://127.0.0.1:${process.env.WHATSAPP_PORT || 4292}/send`;
+            const waRes = await axios.post(WA_SEND_URL, {
+                to: recipientNumber,
+                type: 'template',
+                templateName: 'bankrec',
+                language: { code: 'en' },
+                components: { body: { params: [r.amount.toFixed(2), ref, formattedDate] } },
+            }, { headers: { 'Content-Type': 'application/json' }, timeout: 30000 });
+            console.log(`[Bank Receipt Notify] WhatsApp sent for txn ${r.txnNo} to ${recipientNumber} (status ${waRes.status})`);
+        } catch (err) {
+            console.error(`[Bank Receipt Notify] WhatsApp failed for txn ${r.txnNo}: ${err.message}`);
+        }
+
+        // SMS — same DLT template text as Cash Receipts
+        try {
+            await sleep(SMS_DELAY_MS);
+            const smsMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${r.amount.toFixed(2)} on Date ${formattedDate} Regards Ekta Enterprises`;
+            const smsRes = await axios.get('https://control.arihantglobal.in/fe/api/v1/send', {
+                params: {
+                    username: 'ektaenterprises.trans',
+                    password: 'sbe3d',
+                    dltPrincipalEntityId: '1501397800000015092',
+                    from: 'EKTAEN',
+                    to: '91' + tenDigit,
+                    text: smsMessage,
+                    unicode: false,
+                }
+            });
+            if (smsRes.data && smsRes.data.statusCode == 200) {
+                console.log(`[Bank Receipt Notify] SMS sent for txn ${r.txnNo}`);
+            } else {
+                console.warn(`[Bank Receipt Notify] SMS failed for txn ${r.txnNo}: ${JSON.stringify(smsRes.data)}`);
+            }
+        } catch (err) {
+            console.error(`[Bank Receipt Notify] SMS error for txn ${r.txnNo}: ${err.message}`);
+        }
     }
 }
 
@@ -585,6 +695,7 @@ router.post('/pnb-statement/save', async (req, res) => {
         let nextCP = maxCP + 1;
 
         const newRecords = [];
+        const bankReceipts = []; // BR entries -> customer confirmation on WA + SMS
 
         for (const txn of transactions) {
             const { txnNo, date, narration, drAmount, crAmount, partyCode } = txn;
@@ -628,6 +739,10 @@ router.post('/pnb-statement/save', async (req, res) => {
             };
             newRecords.push(partyRecord);
 
+            if (type === 'BR' && partyCode) {
+                bankReceipts.push({ txnNo, date, narration, partyCode, amount });
+            }
+
             // Entry 2: Bank Side (Contra) - Only for BR and BP
             if (type === 'BR' || type === 'BP') {
                 const bankRecord = {
@@ -665,6 +780,10 @@ router.post('/pnb-statement/save', async (req, res) => {
         }
 
         res.json({ message: 'Transactions saved successfully', count: newRecords.length });
+
+        // Fire-and-forget: rate-limited sends can take a while, don't block the response
+        sendBankReceiptConfirmations(bankReceipts)
+            .catch(err => console.error('[Bank Receipt Notify] Unexpected error:', err));
 
     } catch (error) {
         console.error('Error saving transactions:', error);

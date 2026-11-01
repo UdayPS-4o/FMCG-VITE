@@ -142,7 +142,14 @@ const getParties = () =>
   loadProjected('cmpl', undefined, 'CMPL.json', (rows) => {
     const map = new Map();
     rows.forEach((r) => {
-      if (r.C_CODE) map.set(str(r.C_CODE), { name: str(r.C_NAME), group: str(r.M_GROUP) });
+      if (r.C_CODE) {
+        map.set(str(r.C_CODE), {
+          name: str(r.C_NAME),
+          group: str(r.M_GROUP),
+          // Same lookup order as the cash-receipt / invoice message sending
+          mobile: str(r.C_PHONE) || str(r.C_MOBILE),
+        });
+      }
     });
     return map;
   });
@@ -570,6 +577,99 @@ router.get('/:kpi', async (req, res) => {
   } catch (error) {
     console.error(`Error building KPI ${req.params.kpi}:`, error);
     res.status(500).json({ message: `Error building KPI ${req.params.kpi}` });
+  }
+});
+
+// ---------- Balance reminder (Balance Uddhari card) ----------
+// POST /api/dashboard/kpis/balance-reminder  { channel: 'wa' | 'sms', partyCode, partyName, balance }
+// Sends one party's reminder; the UI calls it once per party (also for "Send all") so each
+// button can turn green/red as its result comes back. Uses the same senders as the
+// cash-receipt and invoice merges: WhatsApp via whatsapp.js /send, SMS via the Arihant gateway.
+const axios = require('axios');
+
+// DD.MM.YYYY in IST, as used in the approved templates
+const reminderDate = () => {
+  const d = todayIst();
+  return `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
+};
+
+async function sendBalanceWhatsApp(mobile, partyName, date, amount) {
+  const raw = mobile.replace(/\D/g, '');
+  // Only treat as already prefixed when it is exactly 91 + 10 digits (same guard as cash receipts)
+  const to = raw.startsWith('91') && raw.length === 12 ? `+${raw}` : `+91${raw}`;
+  const res = await axios.post(
+    `http://127.0.0.1:${process.env.WHATSAPP_PORT || 4292}/send`,
+    {
+      to,
+      type: 'template',
+      // Approved CXBot template "balrem":
+      // Dear *{{1}}* Your balance as on *{{2}}* is *Rs. {{3}}* kindly clear balance Regards EKTA ENTERPRISES
+      templateName: 'balrem',
+      language: { code: 'en' },
+      components: { body: { params: [partyName.substring(0, 30), date, amount] } },
+    },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 30000, validateStatus: () => true }
+  );
+  const ok = res.status >= 200 && res.status < 300 && !res.data?.error;
+  return {
+    ok,
+    detail: ok
+      ? res.data?.data?.[0]?.messageId || res.data?.id || 'sent'
+      : res.data?.message || res.data?.error?.message || `WhatsApp service returned HTTP ${res.status}`,
+  };
+}
+
+async function sendBalanceSms(mobile, date, amount) {
+  // Must match the DLT-registered template exactly
+  const text = `Your balance as on ${date} is Rs. ${amount} kindly clear balance Regards EKTA ENTERPRISES`;
+  const res = await axios.get('https://control.arihantglobal.in/fe/api/v1/send', {
+    params: {
+      username: 'ektaenterprises.trans',
+      password: 'sbe3d',
+      dltPrincipalEntityId: '1501397800000015092',
+      from: 'EKTAEN',
+      to: '91' + mobile.replace(/\D/g, '').slice(-10),
+      text,
+      unicode: false,
+    },
+    timeout: 30000,
+    validateStatus: () => true,
+  });
+  const ok = res.data && res.data.statusCode == 200;
+  return { ok, detail: ok ? 'sent' : res.data?.message || res.data?.statusText || `SMS gateway returned HTTP ${res.status}` };
+}
+
+router.post('/balance-reminder', async (req, res) => {
+  const { channel, partyCode, partyName, balance } = req.body || {};
+  const code = str(partyCode);
+  const amountNum = Number(balance);
+  const log = (ok, detail) =>
+    console.log(`[Balance Reminder] ${channel} ${code} by ${req.user?.name || req.user?.id || '?'}: ${ok ? 'OK' : 'FAILED'} ${detail}`);
+
+  if (channel !== 'wa' && channel !== 'sms') return res.status(400).json({ ok: false, error: 'channel must be wa or sms' });
+  if (!code) return res.status(400).json({ ok: false, error: 'partyCode is required' });
+  if (!(amountNum > 0)) return res.status(400).json({ ok: false, error: 'Balance must be greater than zero' });
+
+  try {
+    const party = (await getParties()).get(code);
+    const mobile = party?.mobile || '';
+    const digits = mobile.replace(/\D/g, '');
+    if (digits.length < 10) {
+      log(false, 'no valid mobile');
+      return res.json({ ok: false, error: mobile ? `Invalid mobile number: ${mobile}` : 'No mobile number in party master' });
+    }
+
+    const name = str(partyName) || party.name || code;
+    const date = reminderDate();
+    const amount = amountNum.toFixed(2);
+    const result =
+      channel === 'wa' ? await sendBalanceWhatsApp(mobile, name, date, amount) : await sendBalanceSms(mobile, date, amount);
+
+    log(result.ok, result.detail);
+    res.json({ ok: result.ok, error: result.ok ? undefined : String(result.detail), mobile: `******${digits.slice(-4)}` });
+  } catch (error) {
+    log(false, error.message);
+    res.json({ ok: false, error: error.code === 'ECONNREFUSED' && channel === 'wa' ? 'WhatsApp service is not running' : error.message });
   }
 });
 
