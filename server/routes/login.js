@@ -17,7 +17,7 @@ const { id } = require('date-fns/locale');
 require('dotenv').config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
-console.log('Login JWT_SECRET:', JWT_SECRET);
+console.log('Login JWT_SECRET set:', process.env.JWT_SECRET ? 'yes' : 'NO (using insecure default)');
 const JWT_EXPIRY = '10d'; 
 
 function formatDateToDDMMYYYY(date) {

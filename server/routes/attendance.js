@@ -84,10 +84,10 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
     console.log('Environment Check:', {
       NODE_ENV: process.env.NODE_ENV,
       JWT_SECRET_SET: process.env.JWT_SECRET ? 'YES' : 'NO',
-      JWT_SECRET_VALUE: process.env.JWT_SECRET || 'USING_DEFAULT',
       PORT: process.env.PORT
     });
-    console.log('Request headers:', JSON.stringify(req.headers, null, 2));
+    // Authorization holds the login token, so it is not written to the logs
+    console.log('Request headers:', JSON.stringify({ ...req.headers, authorization: req.headers.authorization ? '[hidden]' : undefined }, null, 2));
     console.log('Request body keys:', Object.keys(req.body));
     console.log('Request body:', JSON.stringify({
       id: id ? 'present' : 'missing',
