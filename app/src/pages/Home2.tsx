@@ -7,6 +7,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { fetchProducts, fetchBrands } from '../lib/api';
 import logoUrl from '../../icons/icon-192.webp';
 import { useStore, type Product } from '../context/StoreContext';
+import { inSlab, slabRange, schemeDiscountFor } from '../lib/cartFx';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ShoppingCart, Plus, Minus, X, Package, ChevronRight, Sparkles, ArrowDownUp } from 'lucide-react';
@@ -34,7 +35,7 @@ const MultiDrawer = ({ product, onClose, pal }: { product: Product; onClose: () 
   const [boxes, setBoxes] = useState(ci?.qtyBoxes ?? 0);
 
   const totalQty = pcs + boxes * conv;
-  const disc = product.schemes?.reduce((sum, s) => totalQty >= s.slab1 ? sum + s.discount : sum, 0) ?? 0;
+  const disc = schemeDiscountFor(product, totalQty);
   const net = totalQty * rate * (1 - disc / 100);
 
   const upd = (p: number, b: number) => { setPcs(p); setBoxes(b); addToCart(product, p, b); };
@@ -66,11 +67,11 @@ const MultiDrawer = ({ product, onClose, pal }: { product: Product; onClose: () 
         {product.schemes && product.schemes.length > 0 && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
             {product.schemes.map((s, i) => {
-              const active = totalQty >= s.slab1;
+              const active = inSlab(s, totalQty);
               return (
                 <button key={i} onClick={() => upd(s.slab1 % conv, Math.floor(s.slab1 / conv))}
                   style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, border: 'none', cursor: 'pointer', background: active ? pal.acc : pal.lt, color: active ? '#fff' : pal.acc }}>
-                  {s.discount}% on purchase of {s.slab1} pcs and more
+                  {s.discount}% on purchase of {slabRange(s)} pcs
                 </button>
               );
             })}
@@ -137,7 +138,7 @@ const MarketCard = ({ product, index, onOpenDrawer }: { product: Product; index:
   const isInCart = pcs > 0 || boxes > 0;
   const hasScheme = (product.schemes?.length ?? 0) > 0;
   const maxDiscount = hasScheme ? Math.max(...product.schemes!.map(s => s.discount)) : 0;
-  const currentDiscount = product.schemes?.reduce((sum, s) => totalQty >= s.slab1 ? sum + s.discount : sum, 0) ?? 0;
+  const currentDiscount = schemeDiscountFor(product, totalQty);
   const effectiveRate = rate * (1 - currentDiscount / 100);
 
   const upd = (p: number, b: number) => {
@@ -160,7 +161,7 @@ const MarketCard = ({ product, index, onOpenDrawer }: { product: Product; index:
         {product.schemes && product.schemes.length > 0 && (
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
             {product.schemes.map((s, i) => {
-              const active = totalQty >= s.slab1;
+              const active = inSlab(s, totalQty);
               return (
                 <button 
                   key={i} 
@@ -170,7 +171,7 @@ const MarketCard = ({ product, index, onOpenDrawer }: { product: Product; index:
                   }}
                   style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: active ? pal.acc : pal.lt, color: active ? '#fff' : pal.acc, border: `1px solid ${active ? pal.acc : pal.lt}`, cursor: 'pointer' }}
                 >
-                  {s.discount}% on purchase of {s.slab1} pcs and more
+                  {s.discount}% on purchase of {slabRange(s)} pcs
                 </button>
               );
             })}

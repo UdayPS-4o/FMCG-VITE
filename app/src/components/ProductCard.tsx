@@ -5,7 +5,7 @@ import { Plus, Minus, ShoppingCart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AdminImageModal } from './AdminImageModal';
 import { getImageUrl } from '../lib/api';
-import { notifyCartChange } from '../lib/cartFx';
+import { notifyCartChange, inSlab, slabRange, schemeDiscountFor } from '../lib/cartFx';
 import SchemeProgress from './SchemeProgress';
 import FadeImg from './FadeImg';
 
@@ -35,14 +35,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
     const rate = parseFloat(product.RATE1 || '0') || 0;
     const mrp = parseFloat(product.MRP1 || '0') || rate;
     
-    let schemeDiscount = 0;
     const totalQty = pcs + (boxes * conversion);
-    if (product.schemes && product.schemes.length > 0) {
-        const applicableSchemes = product.schemes.filter(sch => totalQty >= sch.slab1);
-        if (applicableSchemes.length > 0) {
-            schemeDiscount = applicableSchemes.reduce((sum, sch) => sum + sch.discount, 0);
-        }
-    }
+    const schemeDiscount = schemeDiscountFor(product, totalQty);
     
     const grossAmount = totalQty * rate;
     const schemeSavingsAmount = grossAmount * schemeDiscount / 100;
@@ -132,7 +126,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                 {product.schemes && product.schemes.length > 0 && (
                     <div className="flex gap-1 flex-wrap mb-2">
                         {product.schemes.map((sch, i) => {
-                            const isActive = totalQty >= sch.slab1;
+                            const isActive = inSlab(sch, totalQty);
                             return (
                                 <button
                                     key={i}
@@ -148,7 +142,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product: initialProduct, isEx
                                         : 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100'
                                     }`}
                                 >
-                                    {sch.discount}% {language === 'en' ? 'OFF' : 'छूट'} ({sch.slab1}+ {language === 'en' ? 'pcs' : 'पीस'})
+                                    {sch.discount}% {language === 'en' ? 'OFF' : 'छूट'} ({slabRange(sch)} {language === 'en' ? 'pcs' : 'पीस'})
                                 </button>
                             );
                         })}

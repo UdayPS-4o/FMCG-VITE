@@ -16,13 +16,31 @@ const vibrate = (pattern: number | number[]) => {
     try { navigator.vibrate?.(pattern); } catch { /* not supported */ }
 };
 
-/** Same rule the cards use for the displayed rate: every slab reached adds its discount. */
-export const schemeDiscountFor = (product: Product, qty: number) =>
-    product.schemes?.reduce((sum, s) => (qty >= s.slab1 ? sum + s.discount : sum), 0) ?? 0;
+type Slab = { slab1: number; slab2: number; discount: number };
 
-/** The next slab above qty, if any. */
-export const nextSchemeFor = (product: Product, qty: number) =>
-    [...(product.schemes ?? [])].sort((a, b) => a.slab1 - b.slab1).find(s => s.slab1 > qty);
+// SLAB2 at or above this means "no upper limit"
+const NO_LIMIT = 1_000_000;
+
+/** A slab applies only while qty is inside slab1..slab2. Steps of one ladder (3-5, 6+) don't stack. */
+export const inSlab = (s: Slab, qty: number) => qty >= s.slab1 && qty <= (s.slab2 || Infinity);
+
+/** "3-5" or "6+" for badges */
+export const slabRange = (s: Slab) => (!s.slab2 || s.slab2 >= NO_LIMIT ? `${s.slab1}+` : `${s.slab1}-${s.slab2}`);
+
+/** Total scheme % at this quantity; same rule as billing and the cart (separate schemes, e.g. base + top-up, add up). */
+export const schemeDiscountFor = (product: Product, qty: number) =>
+    product.schemes?.reduce((sum, s) => (inSlab(s, qty) ? sum + s.discount : sum), 0) ?? 0;
+
+/** The smallest quantity above qty that gives a higher total %, and that total. */
+export const nextSchemeFor = (product: Product, qty: number) => {
+    const current = schemeDiscountFor(product, qty);
+    const steps = [...new Set((product.schemes ?? []).map(s => s.slab1))].filter(q => q > qty).sort((a, b) => a - b);
+    for (const step of steps) {
+        const discount = schemeDiscountFor(product, step);
+        if (discount > current) return { slab1: step, discount };
+    }
+    return undefined;
+};
 
 /** Animate a copy of the product photo from the card into the bottom-nav cart icon. */
 export function flyToCart(fromEl: Element | null | undefined, imageUrl?: string) {

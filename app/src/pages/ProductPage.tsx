@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { fetchProducts, getImageUrl, identifyByPhone } from '../lib/api';
 import { useStore, type Product } from '../context/StoreContext';
+import { slabRange } from '../lib/cartFx';
 import {
     ArrowLeft, ShoppingCart, MessageCircle, Package, Tag,
     Loader2, AlertCircle, CheckCircle, Star, User, Sparkles, Phone, X
@@ -306,7 +307,7 @@ const ProductPage = () => {
                         <div className="space-y-2">
                             {product.schemes.map((sch, i) => (
                                 <div key={i} className="flex items-center justify-between px-3 py-2 bg-amber-50 rounded-xl">
-                                    <span className="text-xs text-gray-600">Buy {sch.slab1}{sch.slab2 ? `–${sch.slab2}` : '+'} {product.UNIT_1}</span>
+                                    <span className="text-xs text-gray-600">Buy {slabRange(sch)} {product.UNIT_1}</span>
                                     <span className="text-xs font-bold text-amber-600">{sch.discount}% OFF</span>
                                 </div>
                             ))}

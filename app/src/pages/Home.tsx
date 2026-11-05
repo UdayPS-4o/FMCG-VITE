@@ -15,7 +15,7 @@ import { AdminImageModal } from '../components/AdminImageModal';
 import SchemeProgress from '../components/SchemeProgress';
 import FadeImg from '../components/FadeImg';
 import PullToRefresh from '../components/PullToRefresh';
-import { notifyCartChange } from '../lib/cartFx';
+import { notifyCartChange, inSlab, slabRange, schemeDiscountFor } from '../lib/cartFx';
 import { FestiveThemeButton } from '../components/FestiveBackdrop';
 import RotatingSearchHint from '../components/RotatingSearchHint';
 import { brandHintNames } from '../lib/brandHints';
@@ -65,7 +65,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
   const totalQty = pcs + boxes * conv;
   const hasScheme = (product.schemes?.length ?? 0) > 0;
   const maxDiscount = hasScheme ? Math.max(...product.schemes!.map(s => s.discount)) : 0;
-  const currentDiscount = product.schemes?.reduce((sum, s) => totalQty >= s.slab1 ? sum + s.discount : sum, 0) ?? 0;
+  const currentDiscount = schemeDiscountFor(product, totalQty);
   const effectiveRate = rate * (1 - currentDiscount / 100);
   const isInCart = pcs > 0 || boxes > 0;
 
@@ -104,7 +104,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
           {product.schemes && product.schemes.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
               {product.schemes.map((s, i) => {
-                const active = totalQty >= s.slab1;
+                const active = inSlab(s, totalQty);
                 return (
                   <button
                     key={i}
@@ -114,7 +114,7 @@ const MarketSlidingCard = ({ product: initialProduct, index, isExpanded, toggleE
                     }}
                     style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: active ? pal.acc : pal.lt, color: active ? '#fff' : pal.acc, border: `1px solid ${active ? pal.acc : pal.lt}`, cursor: 'pointer' }}
                   >
-                    {s.discount}% on purchase of {s.slab1} pcs and more
+                    {s.discount}% on purchase of {slabRange(s)} pcs
                   </button>
                 );
               })}
