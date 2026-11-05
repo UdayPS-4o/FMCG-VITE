@@ -1073,7 +1073,23 @@ router.get('/products', async (req, res) => {
 
         // Evaluate schemes before sorting and pagination
         const schemeRouter = require('../shikhar_scheme');
-        const schemesMap = typeof schemeRouter.getActiveSchemesFromDBF === 'function' ? await schemeRouter.getActiveSchemesFromDBF().catch(() => ({})) : {};
+        const allSchemes = typeof schemeRouter.getActiveSchemesFromDBF === 'function' ? await schemeRouter.getActiveSchemesFromDBF().catch(() => ({})) : {};
+
+        // SCHDTL holds separate retail (CUST_CAT R) and wholesale (W) ladders for the same item; summing both
+        // doubles the discount. Show only the logged-in party's side, as billing does. No session = retail.
+        let partySide = 'R';
+        try {
+            const auth = req.headers['authorization'] || '';
+            const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+            const session = token ? await appDb.getSession(token) : null;
+            if (session && schemeRouter.getPartySide) partySide = await schemeRouter.getPartySide(String(session.party_code));
+        } catch (err) {
+            console.error('[app/products] party side lookup failed, showing retail schemes', err.message);
+        }
+        const schemesMap = {};
+        for (const [code, rows] of Object.entries(allSchemes)) {
+            schemesMap[code] = rows.filter(sch => schemeRouter.schemeAppliesToSide(sch.custCat, partySide));
+        }
 
         const d = new Date();
         const y = d.getFullYear();

@@ -473,5 +473,8 @@ router.post('/schemes/update-cookies', async (req, res) => {
 });
 
 router.getActiveSchemesFromDBF = getActiveSchemesFromDBF;
+// Same retail / wholesale filtering as billing, for the customer app
+router.getPartySide = getPartySide;
+router.schemeAppliesToSide = schemeAppliesToSide;
 router.invalidateSchemesCache = () => loadSchdtl.invalidate();
 module.exports = router;
