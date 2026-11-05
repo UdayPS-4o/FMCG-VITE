@@ -4,6 +4,8 @@ import { fetchProducts } from '../lib/api';
 import ProductCard from '../components/ProductCard';
 import { useStore, type Product } from '../context/StoreContext';
 import { Search as SearchIcon, X, Loader2, ArrowLeft, Mic } from 'lucide-react';
+import RotatingSearchHint from '../components/RotatingSearchHint';
+import { useBrandHints } from '../lib/brandHints';
 
 const Search = () => {
     const navigate = useNavigate();
@@ -14,6 +16,7 @@ const Search = () => {
     const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
     const [isListening, setIsListening] = useState(false);
     const { language } = useStore();
+    const brandHints = useBrandHints();
 
     useEffect(() => {
         if (!query.trim()) {
@@ -94,10 +97,16 @@ const Search = () => {
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder={language === 'en' ? 'Search products...' : 'उत्पाद खोजें...'}
+                            // Empty box shows the rotating "Shop for <brand>..." hint below instead
+                            aria-label={language === 'en' ? 'Search products' : 'उत्पाद खोजें'}
                             autoFocus
                             className="w-full h-11 bg-gray-100 rounded-xl pl-10 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         />
+                        {!query && (
+                            <div className="absolute inset-y-0 left-10 right-20 flex items-center pointer-events-none text-sm text-gray-400">
+                                <RotatingSearchHint names={brandHints} en={language === 'en'} />
+                            </div>
+                        )}
                         <div className="absolute inset-y-0 right-2 flex items-center gap-1">
                             {query && (
                                 <button
