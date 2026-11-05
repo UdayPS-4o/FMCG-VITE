@@ -34,6 +34,15 @@ const loadState = (party: string): PromoState => {
 const saveState = (party: string, s: PromoState) => localStorage.setItem(stateKey(party), JSON.stringify(s));
 
 const mediaSrc = (url: string) => (/^https?:\/\//i.test(url) ? url : `${SERVER_BASE}${url}`);
+const RETRY_MS = 60 * 1000; // image failed (offline, server restarting): try again after this
+
+/** Resolves true once the image has downloaded, false if it can't be loaded. */
+const preload = (src: string) => new Promise<boolean>(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = src;
+});
 
 /**
  * Admin-created image / GIF popups (Notification Suite → In-App Promotion).
@@ -55,6 +64,9 @@ const PromotionPopup = () => {
     const forcedId = useRef<string | null>(null);
     // EVERY_PAGE: location.key of the page each promo was last shown on
     const shownOnPage = useRef<Record<string, string>>({});
+    // Image preloading: one at a time, and failed images wait RETRY_MS before another try
+    const loadingImage = useRef(false);
+    const failedAt = useRef<Record<string, number>>({});
 
     const load = useCallback(async () => {
         if (!party) return;
@@ -111,7 +123,8 @@ const PromotionPopup = () => {
         if (!ready || current || !party || promos.length === 0) return;
         const state = loadState(party);
         const now = Date.now();
-        const live = promos.filter(p => isLive(p, now));
+        if (loadingImage.current) return;
+        const live = promos.filter(p => isLive(p, now) && !(now - (failedAt.current[String(p.id)] ?? 0) < RETRY_MS));
         if (live.length === 0) return;
 
         let next: Promotion | undefined;
@@ -131,13 +144,29 @@ const PromotionPopup = () => {
         }
         if (!next) return;
 
-        const id = String(next.id);
-        if (next.frequency === 'HOURLY') {
-            state.lastShown[id] = now;
-            saveState(party, state);
-        }
-        shownOnPage.current[id] = location.key;
-        setCurrent(next);
+        // Only open the popup once the image has loaded, so it never shows a broken image.
+        // A failed load isn't counted as "shown": it is retried after RETRY_MS.
+        const promo = next;
+        const id = String(promo.id);
+        const pageKey = location.key;
+        loadingImage.current = true;
+        preload(mediaSrc(promo.mediaUrl)).then(ok => {
+            loadingImage.current = false;
+            if (!ok) {
+                failedAt.current[id] = Date.now();
+                console.warn('Promotion image failed to load, will retry:', promo.mediaUrl);
+                setTick(t => t + 1); // move straight on to the next eligible promotion
+                return;
+            }
+            delete failedAt.current[id];
+            if (promo.frequency === 'HOURLY') {
+                const st = loadState(party);
+                st.lastShown[id] = Date.now();
+                saveState(party, st);
+            }
+            shownOnPage.current[id] = pageKey;
+            setCurrent(cur => cur ?? promo);
+        });
     }, [ready, current, party, promos, tick, location.key]);
 
     const close = () => {
@@ -189,6 +218,8 @@ const PromotionPopup = () => {
                             src={mediaSrc(current.mediaUrl)}
                             alt={current.title || 'Offer'}
                             onClick={current.actionUrl ? openAction : undefined}
+                            // Rare: loaded during preload but failed here. Close quietly and retry later
+                            onError={() => { failedAt.current[String(current.id)] = Date.now(); setCurrent(null); }}
                             className={`w-full max-h-[70vh] object-contain bg-gray-100 block ${current.actionUrl ? 'cursor-pointer' : ''}`}
                         />
 

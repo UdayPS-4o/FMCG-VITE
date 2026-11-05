@@ -53,6 +53,32 @@ const useHeaderBottom = (enabled: boolean) => {
     return top;
 };
 
+const LIGHTS_SHOW_MS = 3500; // lights + toran hang over the brand row, so they only stay briefly
+
+/** Lights + marigold toran that fade away after LIGHTS_SHOW_MS (the canvas stops once gone). */
+const LIGHTS_FADE_MS = 800;
+
+const TimedLights = ({ top }: { top: number }) => {
+    const [phase, setPhase] = useState<'on' | 'fading' | 'off'>('on');
+    useEffect(() => {
+        const fade = window.setTimeout(() => setPhase('fading'), LIGHTS_SHOW_MS);
+        const off = window.setTimeout(() => setPhase('off'), LIGHTS_SHOW_MS + LIGHTS_FADE_MS);
+        return () => { window.clearTimeout(fade); window.clearTimeout(off); };
+    }, []);
+    if (phase === 'off') return null; // unmounts the canvas, so its animation loop stops
+    return (
+        <div
+            aria-hidden="true"
+            style={{
+                position: 'fixed', left: 0, right: 0, top, height: 230, zIndex: FESTIVE_FX_Z, pointerEvents: 'none',
+                opacity: phase === 'on' ? 0.95 : 0, transition: `opacity ${LIGHTS_FADE_MS}ms ease, top 0.25s`,
+            }}
+        >
+            <FestiveLights />
+        </div>
+    );
+};
+
 export const FestiveBackdrop = () => {
     const { theme, variant, variantIndex, switchCount, effectsOn } = useFestivalTheme();
     const [autoPlay, setAutoPlay] = useState(0);
@@ -91,13 +117,9 @@ export const FestiveBackdrop = () => {
                 to <body> because the home page is its own stacking context. */}
             {createPortal(
                 <>
-                    {effectsOn && variant.effect === 'lights' && (
-                        <div
-                            aria-hidden="true"
-                            style={{ position: 'fixed', left: 0, right: 0, top: lightsTop, height: 230, transition: 'top 0.25s', opacity: 0.95, zIndex: FESTIVE_FX_Z, pointerEvents: 'none' }}
-                        >
-                            <FestiveLights />
-                        </div>
+                    {effectsOn && variant.effect === 'lights' && playKey > 0 && (
+                        // key: a fresh timer every time the lights are replayed
+                        <TimedLights key={playKey} top={lightsTop} />
                     )}
                     {burst && <FestiveBurst effect={burst} playKey={playKey} />}
                 </>,
