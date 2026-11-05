@@ -5,12 +5,15 @@ import CartFxLayer from './CartFxLayer';
 import WelcomeSplash from './WelcomeSplash';
 import LiveOrderBanner from './LiveOrderBanner';
 import PromotionPopup from './PromotionPopup';
+import { FestiveBackdrop } from './FestiveBackdrop';
+import { useFestivalTheme } from '../context/FestivalThemeContext';
 import { fetchActiveSchemes } from '../lib/api';
 import { useStore } from '../context/StoreContext';
 import { FestivalThemeProvider } from '../context/FestivalThemeContext';
 
 const Layout = () => {
     const { language, user } = useStore();
+    const { variant: festive } = useFestivalTheme();
     const [banners, setBanners] = useState<any[]>([]);
 
     const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -37,7 +40,10 @@ const Layout = () => {
 
     return (
         <FestivalThemeProvider>
-        <div className="flex flex-col min-h-screen relative bg-gray-50">
+        // data-festive: index.css makes page backgrounds transparent and text on them light,
+        // so the festival colours from <FestiveBackdrop /> show on every page
+        <div className="flex flex-col min-h-screen relative bg-gray-50" data-festive={festive ? '' : undefined}>
+            <FestiveBackdrop />
 
             {banners.length > 0 && (
                 <div className="sticky top-0 z-50 w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 shadow-md overflow-hidden">

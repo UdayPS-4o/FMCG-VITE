@@ -135,8 +135,12 @@ module.exports = (router, { requireAppAuth, requireAdminJwtAuth }) => {
         try {
             const rows = await all(`SELECT * FROM app_promotions WHERE is_active = 1 ORDER BY id DESC`);
             const users = loadUsers();
-            const now = new Date();
-            res.json(rows.filter(p => isLive(p, now) && matchesParty(p, req.appPartyCode, users)).map(toClient));
+            // Also send promotions starting within the next day, so the app can
+            // show them the minute they start without waiting for a refetch
+            const soon = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            const upcomingOrLive = p => isLive(p) || (p.is_active && p.start_date && new Date(p.start_date) <= soon
+                && !(p.end_date && new Date(p.end_date) < new Date()));
+            res.json(rows.filter(p => upcomingOrLive(p) && matchesParty(p, req.appPartyCode, users)).map(toClient));
         } catch (err) {
             console.error('[promotions/active]', err);
             res.status(500).json({ error: 'Failed to fetch promotions' });

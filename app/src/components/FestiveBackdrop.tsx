@@ -3,7 +3,8 @@ import { Palette } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useFestivalTheme } from '../context/FestivalThemeContext';
 import { useStore } from '../context/StoreContext';
-import { FestiveBurst, FestiveLights } from './FestiveEffects';
+import { createPortal } from 'react-dom';
+import { FestiveBurst, FestiveLights, FESTIVE_FX_Z } from './FestiveEffects';
 
 /**
  * Festival theme pieces for the home page (see context/FestivalThemeContext).
@@ -47,14 +48,24 @@ export const FestiveBackdrop = () => {
                     background: `linear-gradient(180deg, ${variant.bgFrom} 0%, ${variant.bgTo} 100%)`,
                     transition: 'background 0.8s',
                 }}
-            >
-                {effectsOn && variant.effect === 'lights' && (
-                    <div style={{ position: 'absolute', left: 0, right: 0, top: 'calc(58px + env(safe-area-inset-top))', height: 230, opacity: 0.95 }}>
-                        <FestiveLights />
-                    </div>
-                )}
-            </div>
-            {burst && <FestiveBurst effect={burst} playKey={playKey} />}
+            />
+            {/* Lights / rockets / chakri go on a top-level layer in FRONT of the page
+                (cards, header, bottom nav); touches pass straight through. Portalled
+                to <body> because the home page is its own stacking context. */}
+            {createPortal(
+                <>
+                    {effectsOn && variant.effect === 'lights' && (
+                        <div
+                            aria-hidden="true"
+                            style={{ position: 'fixed', left: 0, right: 0, top: 'calc(58px + env(safe-area-inset-top))', height: 230, opacity: 0.95, zIndex: FESTIVE_FX_Z, pointerEvents: 'none' }}
+                        >
+                            <FestiveLights />
+                        </div>
+                    )}
+                    {burst && <FestiveBurst effect={burst} playKey={playKey} />}
+                </>,
+                document.body
+            )}
         </>
     );
 };

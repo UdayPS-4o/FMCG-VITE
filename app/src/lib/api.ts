@@ -99,6 +99,8 @@ export interface Promotion {
     actionUrl: string;
     ctaText: string;
     frequency: 'ONCE' | 'HOURLY' | 'EVERY_PAGE';
+    startDate: string | null;
+    endDate: string | null;
 }
 
 export const fetchActivePromotions = async (): Promise<Promotion[]> => {

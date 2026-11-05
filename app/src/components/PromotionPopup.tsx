@@ -10,7 +10,11 @@ import { WELCOME_FLAG } from './WelcomeSplash';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/app';
 const SERVER_BASE = API_URL.replace(/\/api\/app\/?$/, '');
 const HOUR_MS = 60 * 60 * 1000;
-const REFRESH_MS = 10 * 60 * 1000;
+const REFRESH_MS = 3 * 60 * 1000;
+
+// Server also sends promotions starting soon; only show ones inside their window
+const isLive = (p: Promotion, now: number) =>
+    (!p.startDate || new Date(p.startDate).getTime() <= now) && (!p.endDate || new Date(p.endDate).getTime() > now);
 const SPLASH_DELAY_MS = 2900;
 
 interface PromoState {
@@ -107,15 +111,17 @@ const PromotionPopup = () => {
         if (!ready || current || !party || promos.length === 0) return;
         const state = loadState(party);
         const now = Date.now();
+        const live = promos.filter(p => isLive(p, now));
+        if (live.length === 0) return;
 
         let next: Promotion | undefined;
         if (forcedId.current) {
             // Not in the list yet? Keep waiting for the refetch that's in flight
-            next = promos.find(p => String(p.id) === forcedId.current);
+            next = live.find(p => String(p.id) === forcedId.current);
             if (next) forcedId.current = null;
         }
         if (!next) {
-            next = promos.find(p => {
+            next = live.find(p => {
                 const id = String(p.id);
                 if (p.frequency === 'ONCE') return !state.dismissed[id];
                 if (p.frequency === 'HOURLY') return !state.lastShown[id] || now - state.lastShown[id] >= HOUR_MS;

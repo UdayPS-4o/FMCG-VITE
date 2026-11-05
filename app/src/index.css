@@ -81,3 +81,25 @@ button, a {
     20% { transform: translateX(-5px); } 40% { transform: translateX(5px); }
     60% { transform: translateX(-3px); } 80% { transform: translateX(2px); }
 }
+
+/* ── Festival theme on every page ────────────────────────────────────────────
+   Layout sets data-festive while a festival theme is live and renders
+   <FestiveBackdrop /> (fixed, z-index -1). Page roots use .min-h-screen with a
+   grey background — clear it so the festive colours show through, and turn
+   text that sits straight on that background light. Text inside white / grey
+   cards, headers and sheets keeps its normal colour. */
+[data-festive],
+[data-festive] .min-h-screen {
+    background-color: transparent !important;
+}
+[data-festive] .min-h-screen :is(.text-gray-900, .text-gray-800, .text-gray-700) { color: #fff; }
+[data-festive] .min-h-screen :is(.text-gray-600, .text-gray-500) { color: rgba(255, 255, 255, 0.78); }
+[data-festive] .min-h-screen :is(.text-gray-400, .text-gray-300) { color: rgba(255, 255, 255, 0.58); }
+
+[data-festive] .min-h-screen :is(.bg-white, .bg-gray-50, .bg-gray-100, [class*="bg-white/"], .fixed):not(.min-h-screen) .text-gray-900 { color: var(--color-gray-900); }
+[data-festive] .min-h-screen :is(.bg-white, .bg-gray-50, .bg-gray-100, [class*="bg-white/"], .fixed):not(.min-h-screen) .text-gray-800 { color: var(--color-gray-800); }
+[data-festive] .min-h-screen :is(.bg-white, .bg-gray-50, .bg-gray-100, [class*="bg-white/"], .fixed):not(.min-h-screen) .text-gray-700 { color: var(--color-gray-700); }
+[data-festive] .min-h-screen :is(.bg-white, .bg-gray-50, .bg-gray-100, [class*="bg-white/"], .fixed):not(.min-h-screen) .text-gray-600 { color: var(--color-gray-600); }
+[data-festive] .min-h-screen :is(.bg-white, .bg-gray-50, .bg-gray-100, [class*="bg-white/"], .fixed):not(.min-h-screen) .text-gray-500 { color: var(--color-gray-500); }
+[data-festive] .min-h-screen :is(.bg-white, .bg-gray-50, .bg-gray-100, [class*="bg-white/"], .fixed):not(.min-h-screen) .text-gray-400 { color: var(--color-gray-400); }
+[data-festive] .min-h-screen :is(.bg-white, .bg-gray-50, .bg-gray-100, [class*="bg-white/"], .fixed):not(.min-h-screen) .text-gray-300 { color: var(--color-gray-300); }

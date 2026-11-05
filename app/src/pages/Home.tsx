@@ -16,10 +16,47 @@ import SchemeProgress from '../components/SchemeProgress';
 import FadeImg from '../components/FadeImg';
 import PullToRefresh from '../components/PullToRefresh';
 import { notifyCartChange } from '../lib/cartFx';
-import { FestiveBackdrop, FestiveThemeButton } from '../components/FestiveBackdrop';
+import { FestiveThemeButton } from '../components/FestiveBackdrop';
 import { useFestivalTheme } from '../context/FestivalThemeContext';
 
 interface Brand { brand_code: string; brand_desc: string; image_url: string; }
+
+const HINT_INTERVAL_MS = 1800;
+const titleCase = (s: string) => s.toLowerCase().replace(/(^|[\s-])\S/g, c => c.toUpperCase());
+
+/** Search bar placeholder that cycles "Shop for <brand>..." through the brand list */
+const RotatingSearchHint = ({ names, en }: { names: string[]; en: boolean }) => {
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    if (names.length < 2) return;
+    const t = window.setInterval(() => setIdx(i => (i + 1) % names.length), HINT_INTERVAL_MS);
+    return () => window.clearInterval(t);
+  }, [names.length]);
+
+  if (names.length === 0) return <span>{en ? 'Search products...' : 'उत्पाद खोजें...'}</span>;
+  const name = names[idx % names.length];
+
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+      <span style={{ flexShrink: 0 }}>{en ? 'Shop for' : 'खरीदें'}</span>
+      <span style={{ position: 'relative', height: 18, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        <AnimatePresence initial={false}>
+          <motion.span
+            key={name}
+            initial={{ y: 18, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -18, opacity: 0 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+            style={{ position: 'absolute', left: 0, right: 0, lineHeight: '18px', fontWeight: 600, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
+            {name}...
+          </motion.span>
+        </AnimatePresence>
+      </span>
+    </span>
+  );
+};
 
 const PALS = [
   { bg: '#fff7ed', acc: '#f97316', lt: '#fef3e2' },
@@ -207,6 +244,10 @@ const Home = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [activeBrand, setActiveBrand] = useState('');
+  const brandHints = useMemo(
+    () => Array.from(new Set(brands.map(b => titleCase((b.brand_desc || b.brand_code || '').trim())).filter(Boolean))),
+    [brands]
+  );
   const [expandedCodes, setExpandedCodes] = useState<string[]>([]);
   const [totalProducts, setTotalProducts] = useState(0);
   const [showSort, setShowSort] = useState(false);
@@ -351,13 +392,12 @@ const Home = () => {
   return (
     // isolation: the festive backdrop (z-index -1) paints behind this page's content only
     <div style={{ minHeight: '100vh', background: festive ? 'transparent' : '#f8f9fb', position: 'relative', isolation: 'isolate', fontFamily: "'Inter',sans-serif", paddingBottom: 120 }}>
-      <FestiveBackdrop />
       {/* Header */}
       <div style={{ background: festive ? `${festive.bgFrom}f2` : '#fff', transition: 'background 0.8s', padding: '10px 16px', borderBottom: festive ? 'none' : '1px solid #f1f3f5', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src={logoUrl} alt="App Logo" onClick={() => navigate('/')} style={{ height: 28, cursor: 'pointer', objectFit: 'contain' }} />
           <div onClick={() => navigate('/search')} style={{ flex: 1, height: 38, background: '#f3f4f6', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', color: '#9ca3af', fontSize: 12.5 }}>
-            <Search size={14} /><span>{language === 'en' ? 'Search products...' : 'उत्पाद खोजें...'}</span>
+            <Search size={14} style={{ flexShrink: 0 }} /><RotatingSearchHint names={brandHints} en={language === 'en'} />
           </div>
           <button onClick={() => navigate('/cart')} style={{ width: 38, height: 38, borderRadius: 10, background: '#f0fdf4', border: '1.5px solid #dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
             <ShoppingCart size={18} color="#16a34a" />

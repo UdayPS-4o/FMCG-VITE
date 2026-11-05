@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
 
+/** Festive effects layer: above page content + bottom nav (50), below the promotion popup (90) */
+export const FESTIVE_FX_Z = 60;
+
 /**
  * Canvas effects for festival themes (see context/FestivalThemeContext).
  *
@@ -176,8 +179,9 @@ export const FestiveBurst = ({ effect, playKey }: { effect: 'rockets' | 'chakri'
         <canvas
             ref={ref}
             aria-hidden="true"
-            // Below the bottom nav (z-50) so rockets rise from behind it
-            className="pointer-events-none fixed inset-0 z-[45] h-full w-full"
+            // In front of the page and bottom nav (z-50); below popups like the promotion (z-90)
+            className="pointer-events-none fixed inset-0 h-full w-full"
+            style={{ zIndex: FESTIVE_FX_Z }}
         />
     );
 };
