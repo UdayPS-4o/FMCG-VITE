@@ -44,7 +44,7 @@ const OrderTracker = ({ order, language }: { order: TrackableOrder; language: 'e
     const labels = en ? ['Placed', 'Confirmed', 'Billed'] : ['ऑर्डर हुआ', 'पुष्टि', 'बिल बना'];
     const pct = (step / (labels.length - 1)) * 100;
     const headline = [
-        en ? 'Waiting for Ekta to confirm your order' : 'एकता द्वारा पुष्टि का इंतज़ार',
+        en ? 'Waiting for Ekta Enterprises to confirm your order' : 'एकता एंटरप्राइजेज़ द्वारा पुष्टि का इंतज़ार',
         en ? 'Confirmed! Your bill is being prepared' : 'पुष्टि हो गई! बिल बन रहा है',
         en ? 'Billed and ready for dispatch' : 'बिल बन गया, भेजने के लिए तैयार',
     ][step];

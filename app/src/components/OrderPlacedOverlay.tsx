@@ -6,17 +6,20 @@ interface Props {
     orderId?: string;
     itemCount: number;
     total: number;
-    images: string[];          // up to 3 product photos to drop into the box
+    images: string[];          // up to 3 product photos shown on the phone
     language: 'en' | 'hi';
     onTrack: () => void;
     onContinue: () => void;
 }
 
-// pack → close → tape → van in → load → drive into godown → done
-type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-const TIMELINE: [Step, number][] = [[1, 1300], [2, 1700], [3, 2100], [4, 3100], [5, 3700], [6, 5500]];
+// phone appears → signal pulses to the Ekta Enterprises shop → shop screen lights up → tick
+// (the order is only sent/received here; the van belongs to "billed / on the way")
+type Step = 0 | 1 | 2 | 3;
+const TIMELINE: [Step, number][] = [[1, 700], [2, 2500], [3, 3900]];
+const DONE: Step = 3;
+const PULSES = 4;
 
-/** Full-screen "order placed" moment: items packed into a box and driven to the Ekta godown. */
+/** Full-screen "order placed" moment: the order is beamed from the phone to the Ekta Enterprises shop. */
 const OrderPlacedOverlay = ({ orderId, itemCount, total, images, language, onTrack, onContinue }: Props) => {
     const [step, setStep] = useState<Step>(0);
     const en = language === 'en';
@@ -27,25 +30,22 @@ const OrderPlacedOverlay = ({ orderId, itemCount, total, images, language, onTra
     }, []);
 
     useEffect(() => {
-        if (step === 6) {
+        if (step === 2) {
+            try { navigator.vibrate?.(25); } catch { /* unsupported */ }
+        }
+        if (step === DONE) {
             try { navigator.vibrate?.([30, 50, 30]); } catch { /* unsupported */ }
             confettiAt(window.innerWidth / 2, window.innerHeight * 0.55);
         }
     }, [step]);
 
-    const flapsClosed = step >= 1;
-    const taped = step >= 2;
-    const vanX = step < 3 ? -160 : step < 5 ? -28 : 205;
-    const boxLoaded = step >= 4;
-    const godownOpen = step >= 4;
+    const sending = step === 1;
+    const received = step >= 2;
     const label = orderId ? `#${orderId}` : '#ORDER';
     const message = [
-        en ? 'Packing your order…' : 'आपका ऑर्डर पैक हो रहा है…',
-        en ? 'Packing your order…' : 'आपका ऑर्डर पैक हो रहा है…',
-        en ? 'Sealing the box…' : 'बॉक्स सील हो रहा है…',
-        en ? 'Sending to Ekta godown…' : 'एकता गोदाम भेजा जा रहा है…',
-        en ? 'Sending to Ekta godown…' : 'एकता गोदाम भेजा जा रहा है…',
-        en ? 'Sending to Ekta godown…' : 'एकता गोदाम भेजा जा रहा है…',
+        en ? 'Sending your order…' : 'आपका ऑर्डर भेजा जा रहा है…',
+        en ? 'Sending your order to Ekta Enterprises…' : 'आपका ऑर्डर एकता एंटरप्राइजेज़ को भेजा जा रहा है…',
+        en ? 'Ekta Enterprises received your order' : 'एकता एंटरप्राइजेज़ को आपका ऑर्डर मिल गया',
         '',
     ][step];
 
@@ -58,76 +58,85 @@ const OrderPlacedOverlay = ({ orderId, itemCount, total, images, language, onTra
             aria-modal="true"
         >
             <svg viewBox="0 0 340 300" className="w-full max-w-md h-auto">
-                <defs>
-                    <linearGradient id="op-sky" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0" stopColor="#e0e7ff" /><stop offset="1" stopColor="#ffffff" />
-                    </linearGradient>
-                </defs>
-                <rect width="340" height="300" fill="url(#op-sky)" />
+                <rect width="340" height="300" fill="#eff6ff" />
 
-                {/* Ekta godown */}
-                <g transform="translate(250,118)">
-                    <path d="M0 40 L45 10 L90 40 V110 H0Z" fill="#e5e7eb" />
-                    <path d="M-4 42 L45 6 L94 42" fill="none" stroke="#4f46e5" strokeWidth="7" strokeLinejoin="round" />
-                    <rect x="22" y="58" width="46" height="52" fill="#374151" />
-                    <rect x="22" y="58" width="46" height="52" fill="#6b7280"
-                        style={{ transform: godownOpen ? 'translateY(-46px)' : 'none', transition: 'transform .5s ease' }} />
-                    <rect x="18" y="22" width="54" height="16" rx="3" fill="#111827" />
-                    <text x="45" y="34" textAnchor="middle" fontSize="9" fontWeight="800" fill="#a5b4fc">EKTA</text>
-                </g>
+                {/* customer's phone with the order */}
+                <motion.g
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', damping: 16, stiffness: 160 }}
+                >
+                    <g transform="translate(30,110)">
+                        <rect width="60" height="110" rx="12" fill="#111827" />
+                        <rect x="5" y="10" width="50" height="88" rx="6" fill="#fff" />
+                        {images.slice(0, 3).map((src, i) => (
+                            <image key={src + i} href={src} x={7 + (i % 2) * 24} y={16 + Math.floor(i / 2) * 24} width="22" height="22" />
+                        ))}
+                        <rect x="11" y="70" width="38" height="18" rx="5" fill="#000" />
+                        <text x="30" y="82" textAnchor="middle" fontSize="6.5" fontWeight="800" fill="#fff">
+                            {en ? 'Place Order' : 'ऑर्डर करें'}
+                        </text>
+                    </g>
+                </motion.g>
 
-                {/* road */}
-                <rect y="228" width="340" height="40" fill="#374151" />
-                <line x1="0" y1="248" x2="340" y2="248" stroke="#fde68a" strokeWidth="3" strokeDasharray="18 18">
-                    <animate attributeName="stroke-dashoffset" from="0" to="-36" dur="0.5s" repeatCount="indefinite" />
-                </line>
-                <rect y="268" width="340" height="32" fill="#d1fae5" />
+                {/* signal pulses travelling to the shop */}
+                {sending && Array.from({ length: PULSES }).map((_, i) => (
+                    <motion.path
+                        key={i}
+                        d="M0 -16 A16 16 0 0 1 0 16"
+                        fill="none" stroke="#6366f1" strokeWidth="4" strokeLinecap="round"
+                        initial={{ x: 100, y: 165, scale: 0.6, opacity: 0 }}
+                        animate={{ x: 214, y: 155, scale: 1.4, opacity: [0, 1, 0.15] }}
+                        transition={{ duration: 0.9, delay: i * 0.28, repeat: 1, repeatDelay: PULSES * 0.28 - 0.9 + 0.3, ease: 'easeOut' }}
+                    />
+                ))}
 
-                {/* box */}
-                <g style={{
-                    transform: boxLoaded ? 'translate(-6px,160px) scale(.6)' : 'translate(120px,150px)',
-                    opacity: boxLoaded ? 0 : 1,
-                    transition: 'transform .5s ease, opacity .3s .35s',
-                }}>
-                    <rect x="0" y="20" width="100" height="62" fill="#c08a4a" stroke="#8b5e2b" strokeWidth="2" />
-                    {!taped && images.slice(0, 3).map((src, i) => (
-                        <motion.image
-                            key={src + i}
-                            href={src}
-                            width={40} height={40}
-                            x={4 + i * 32} y={-12}
-                            initial={{ y: -160, opacity: 0 }}
-                            animate={{ y: -12, opacity: 1 }}
-                            transition={{ delay: 0.15 + i * 0.32, type: 'spring', damping: 12, stiffness: 160 }}
+                {/* Ekta Enterprises shop */}
+                <g transform="translate(195,80)">
+                    <rect x="0" y="30" width="120" height="110" rx="6" fill="#fff" stroke="#c7d2fe" strokeWidth="2" />
+                    <path d="M-6 34 L10 6 H110 L126 34Z" fill="#4f46e5" />
+                    {[0, 1, 2, 3, 4].map(i => (
+                        <path key={i} d={`M${-6 + i * 26.4} 34 q13.2 14 26.4 0`} fill={i % 2 ? '#818cf8' : '#c7d2fe'} />
+                    ))}
+                    <rect x="8" y="10" width="104" height="16" rx="3" fill="#111827" />
+                    <text x="60" y="21.5" textAnchor="middle" fontSize="8" fontWeight="800" fill="#a5b4fc">EKTA ENTERPRISES</text>
+                    {/* the shop's order screen */}
+                    <motion.rect
+                        x="20" y="50" width="80" height="50" rx="6"
+                        initial={false}
+                        animate={{ fill: received ? '#065f46' : '#1f2937' }}
+                        transition={{ duration: 0.4 }}
+                    />
+                    <motion.text
+                        x="60" y="73" textAnchor="middle" fontSize="8" fontWeight="800" fill="#34d399"
+                        initial={false}
+                        animate={{ opacity: received ? [0, 1, 0.4, 1] : 0 }}
+                        transition={{ duration: 0.9 }}
+                    >
+                        {en ? 'NEW ORDER' : 'नया ऑर्डर'}
+                    </motion.text>
+                    <motion.text
+                        x="60" y="88" textAnchor="middle" fontSize="8" fontWeight="800" fill="#a7f3d0"
+                        initial={false}
+                        animate={{ opacity: received ? 1 : 0 }}
+                        transition={{ delay: 0.3 }}
+                    >
+                        {label}
+                    </motion.text>
+                    {/* glow when it arrives */}
+                    {received && (
+                        <motion.rect
+                            x="20" y="50" width="80" height="50" rx="6" fill="none" stroke="#34d399" strokeWidth="3"
+                            initial={{ opacity: 0.9, scale: 1 }}
+                            animate={{ opacity: 0, scale: 1.35 }}
+                            transition={{ duration: 0.9, ease: 'easeOut' }}
                         />
-                    ))}
-                    <path d="M0 20 L-22 4 L28 4 L50 20Z" fill="#d9a066" stroke="#8b5e2b" strokeWidth="2"
-                        style={{ transformOrigin: '0px 20px', transform: flapsClosed ? 'rotate(0deg)' : 'rotate(-150deg)', transition: 'transform .35s' }} />
-                    <path d="M100 20 L122 4 L72 4 L50 20Z" fill="#d9a066" stroke="#8b5e2b" strokeWidth="2"
-                        style={{ transformOrigin: '100px 20px', transform: flapsClosed ? 'rotate(0deg)' : 'rotate(150deg)', transition: 'transform .35s .15s' }} />
-                    <rect x="44" y="20" width="12" height={taped ? 62 : 0} fill="#fde68a" style={{ transition: 'height .3s' }} />
-                    <text x="50" y="62" textAnchor="middle" fontSize="10" fontWeight="800" fill="#5b3b16" opacity={taped ? 1 : 0}>{label}</text>
-                </g>
-
-                {/* van */}
-                <g style={{ transform: `translateX(${vanX}px)`, transition: step >= 5 ? 'transform 1.6s cubic-bezier(.5,0,.4,1)' : 'transform 1s cubic-bezier(.2,.8,.3,1)' }}>
-                    <rect x="0" y="176" width="92" height="52" rx="5" fill="#4f46e5" />
-                    <text x="46" y="207" textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff">EKTA</text>
-                    <path d="M94 192 H120 L134 210 V228 H94Z" fill="#111827" />
-                    <path d="M100 196 H118 L128 210 H100Z" fill="#93c5fd" />
-                    {[24, 112].map(cx => (
-                        <g key={cx}>
-                            <circle cx={cx} cy="230" r="10" fill="#111" />
-                            <circle cx={cx} cy="230" r="4" fill="#9ca3af" />
-                            <rect x={cx - 1} y="221" width="2" height="5" fill="#9ca3af">
-                                <animateTransform attributeName="transform" type="rotate" from={`0 ${cx} 230`} to={`360 ${cx} 230`} dur="0.4s" repeatCount="indefinite" />
-                            </rect>
-                        </g>
-                    ))}
+                    )}
+                    <rect x="45" y="106" width="30" height="34" fill="#e0e7ff" />
                 </g>
             </svg>
 
-            {step < 6 ? (
+            {step < DONE ? (
                 <p className="text-gray-500 text-[15px] mt-2 h-6" aria-live="polite">{message}</p>
             ) : (
                 <motion.div

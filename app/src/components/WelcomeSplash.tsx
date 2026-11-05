@@ -67,7 +67,7 @@ const WelcomeSplash = ({ name, language }: { name: string; language: 'en' | 'hi'
                         ))}
                         <motion.img
                             src={logoUrl}
-                            alt="Ekta"
+                            alt="Ekta Enterprises"
                             className="relative w-24 h-24 rounded-[28px] bg-white shadow-xl object-contain p-2"
                             initial={{ scale: 0, rotate: -20 }}
                             animate={{ scale: 1, rotate: 0 }}

@@ -8,7 +8,7 @@ type Phase = 'idle' | 'pulling' | 'ready' | 'refreshing' | 'done';
 
 /**
  * Pull down at the top of the page to refresh. The header shows a road; on release
- * the EKTA van drives across while onRefresh() runs. Touch only (phones).
+ * the Ekta Enterprises van drives across while onRefresh() runs. Touch only (phones).
  */
 const PullToRefresh = ({ onRefresh, language, children }: {
     onRefresh: () => Promise<unknown>;
@@ -91,7 +91,7 @@ const PullToRefresh = ({ onRefresh, language, children }: {
                     transition={driving ? { duration: 1.5, ease: [0.5, 0, 0.4, 1] } : { duration: 0 }}
                 >
                     <rect x="0" y="6" width="92" height="44" rx="5" fill="#4f46e5" />
-                    <text x="46" y="34" textAnchor="middle" fontSize="14" fontWeight="800" fill="#fff">EKTA</text>
+                    <text x="46" y="32" textAnchor="middle" fontSize="8.5" fontWeight="800" fill="#fff">EKTA ENTERPRISES</text>
                     <path d="M94 18 H118 L132 34 V50 H94Z" fill="#111827" />
                     <path d="M100 22 H116 L126 34 H100Z" fill="#93c5fd" />
                     <circle cx="24" cy="52" r="10" fill="#111" /><circle cx="24" cy="52" r="4" fill="#9ca3af" />

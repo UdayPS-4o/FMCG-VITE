@@ -109,7 +109,7 @@ const TransferSuccess = ({ fromCode, fromName, toCode, toName, docNo, itemCount,
           <g className="gt-truck" style={{ transform: `translateX(${truckX}px)` }}>
             <g className="gt-truck-body">
               <rect x="0" y="160" width="110" height="62" rx="4" fill="var(--color-brand-500)" />
-              <text x="55" y="196" textAnchor="middle" fontSize="13" fontWeight="800" fill="#fff">EKTA</text>
+              <text x="55" y="195" textAnchor="middle" fontSize="9" fontWeight="800" fill="#fff">EKTA ENTERPRISES</text>
               <g className="gt-crates" style={{ opacity: cratesVisible ? 1 : 0 }}>
                 <rect x="8" y="146" width="22" height="16" fill="#a8742a" stroke="#6e4a17" />
                 <rect x="34" y="146" width="22" height="16" fill="#b9843a" stroke="#6e4a17" />

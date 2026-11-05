@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Order Placed – 7 options</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Inter", "Segoe UI", system-ui, sans-serif; background: #eef0f6; color: #111827; }
+  .wrap { display: flex; gap: 28px; justify-content: center; align-items: flex-start; padding: 24px 16px 40px; flex-wrap: wrap; }
+  .side { width: 340px; max-width: 100%; }
+  .side h1 { font-size: 20px; margin: 0 0 4px; }
+  .side p.sub { color: #6b7280; font-size: 13px; margin: 0 0 12px; }
+  .banner { background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 10px; padding: 8px 12px; font-size: 12px; margin-bottom: 12px; }
+  .opt { display: flex; gap: 10px; width: 100%; text-align: left; background: #fff; border: 2px solid transparent; border-radius: 14px; padding: 12px; margin-bottom: 10px; cursor: pointer; font: inherit; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .opt.active { border-color: #10b981; }
+  .opt .n { flex: 0 0 30px; height: 30px; border-radius: 50%; background: #ecfdf5; color: #059669; display: grid; place-items: center; font-weight: 800; }
+  .opt b { display: block; font-size: 14px; }
+  .opt span { font-size: 12px; color: #6b7280; line-height: 1.35; display: block; margin-top: 2px; }
+  .replay { width: 100%; padding: 10px; border-radius: 10px; border: 0; background: #111827; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+
+  .phone { width: 360px; height: 740px; border-radius: 44px; background: #0b0b10; padding: 12px; box-shadow: 0 30px 60px rgba(0,0,0,.25); flex-shrink: 0; }
+  .screen { position: relative; width: 100%; height: 100%; border-radius: 34px; overflow: hidden; background: #fff; display: flex; flex-direction: column; align-items: center; padding-top: 56px; }
+  .notch { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 92px; height: 24px; background: #0b0b10; border-radius: 14px; z-index: 9; }
+  .stage { width: 100%; height: 300px; position: relative; }
+  .stage svg { width: 100%; height: 100%; display: block; }
+  .msg { color: #6b7280; font-size: 15px; height: 22px; margin-top: 6px; transition: opacity .3s; }
+  .done { display: flex; flex-direction: column; align-items: center; gap: 6px; opacity: 0; transform: translateY(14px); transition: all .45s; width: 100%; padding: 0 16px; }
+  .done.show { opacity: 1; transform: none; }
+  .done h2 { margin: 4px 0 0; font-size: 23px; color: #059669; }
+  .done p { margin: 0; color: #6b7280; font-size: 13px; }
+  .done .btns { display: flex; gap: 10px; margin-top: 14px; width: 100%; }
+  .done .btns div { flex: 1; text-align: center; padding: 12px; border-radius: 12px; font-weight: 700; font-size: 13px; }
+  .tick-c, .tick-m { fill: none; }
+  .tick-c { stroke-dasharray: 300; stroke-dashoffset: 300; }
+  .tick-m { stroke-dasharray: 80; stroke-dashoffset: 80; }
+  .done.show .tick-c { animation: draw .6s ease-out forwards; }
+  .done.show .tick-m { animation: draw .35s .5s ease-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .confetti { position: absolute; width: 8px; height: 12px; border-radius: 2px; pointer-events: none; z-index: 8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="side">
+    <h1>Order Placed: pick one</h1>
+    <p class="sub">The order is sent to Ekta, not shipped yet. Each idea shows "sent and received", then the same green tick.</p>
+    <div class="banner">PREVIEW ONLY: the app code is unchanged.</div>
+    <button class="opt" data-k="0"><div class="n">A</div><div><b>Paper plane to Ekta</b><span>Your items fold into an order slip, it becomes a paper plane and flies into the Ekta shop's inbox, which lights up "Received".</span></div></button>
+    <button class="opt" data-k="1"><div class="n">B</div><div><b>Order slip prints + stamp</b><span>A receipt prints out line by line with your items and total, then a green "ORDER RECEIVED" stamp thumps onto it.</span></div></button>
+    <button class="opt" data-k="2"><div class="n">C</div><div><b>Cart to clipboard checklist</b><span>Product photos drop onto Ekta's order clipboard, each line gets ticked, and the clipboard says "Sent to Ekta".</span></div></button>
+    <button class="opt" data-k="3"><div class="n">D</div><div><b>Envelope into Ekta letterbox</b><span>Items slide into an envelope, an EKTA wax seal presses on, it drops into the letterbox and the flag pops up.</span></div></button>
+    <button class="opt" data-k="4"><div class="n">E</div><div><b>Phone to shop signal</b><span>Signal waves pulse from your phone to the Ekta shop; the shop's screen lights up "New order #T44".</span></div></button>
+    <button class="opt" data-k="5"><div class="n">F</div><div><b>Shop counter bell</b><span>The order card flies into the Ekta shop door and the counter bell rings "ding! Order received".</span></div></button>
+    <button class="opt" data-k="6"><div class="n">G</div><div><b>Billing counter queue</b><span>Your order slip slides into the queue at Ekta's counter and a "You're next in line" badge pops up.</span></div></button>
+    <button class="replay" id="replay">↻ Replay</button>
+  </div>
+  <div class="phone"><div class="screen" id="screen">
+    <div class="notch"></div>
+    <div class="stage" id="stage"></div>
+    <div class="msg" id="msg"></div>
+    <div class="done" id="done">
+      <svg width="84" height="84" viewBox="0 0 100 100"><circle class="tick-c" cx="50" cy="50" r="45" style="fill:#ecfdf5" stroke="#10b981" stroke-width="6" transform="rotate(-90 50 50)"/><path class="tick-m" d="M30 52 L45 66 L71 37" stroke="#10b981" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h2>Order Placed!</h2>
+      <p>#T44 · 2 items · ₹11,520.00</p>
+      <p>We'll confirm it shortly.</p>
+      <div class="btns"><div style="background:#f3f4f6">Continue shopping</div><div style="background:#000;color:#fff">Track order</div></div>
+    </div>
+  </div></div>
+</div>
+
+<script>
+const H = 'https://storage.googleapis.com/hul-shikhar-cms/CMS-PROD-HERO/';
+const IMGS = [H + '2024112115283216020.png', H + '2025052213522444302.png'];
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let run = 0;
+const ns = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, parent) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; };
+const anim = (node, frames, opts) => node.animate(frames, { fill: 'forwards', ...opts }).finished;
+
+function confetti() {
+  const s = $('screen'), colors = ['#f97316', '#10b981', '#6366f1', '#facc15', '#ec4899'];
+  for (let i = 0; i < 24; i++) {
+    const c = document.createElement('div'); c.className = 'confetti'; c.style.background = colors[i % 5];
+    c.style.left = '50%'; c.style.top = '62%'; s.appendChild(c);
+    const a = Math.random() * Math.PI * 2, d = 60 + Math.random() * 90;
+    c.animate([{ transform: 'translate(0,0)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px,${Math.sin(a) * d + 90}px) rotate(${Math.random() * 600}deg)`, opacity: 0 }], { duration: 1300, easing: 'cubic-bezier(.2,.7,.4,1)' }).onfinish = () => c.remove();
+  }
+}
+async function finish(id) {
+  if (id !== run) return;
+  $('msg').style.opacity = 0; await sleep(250); if (id !== run) return;
+  $('done').classList.add('show'); confetti();
+}
+function reset() {
+  $('done').classList.remove('show'); $('msg').style.opacity = 1; $('msg').textContent = '';
+  $('stage').innerHTML = '<svg viewBox="0 0 340 300"></svg>';
+  return $('stage').querySelector('svg');
+}
+
+/* A: paper plane into Ekta inbox */
+async function optionA(id) {
+  const svg = reset();
+  el('rect', { width: 340, height: 300, fill: '#eef2ff' }, svg);
+  // Ekta shop with inbox tray
+  const shop = el('g', { transform: 'translate(220,96)' }, svg);
+  el('path', { d: 'M0 40 L50 8 L100 40 V140 H0Z', fill: '#fff', stroke: '#c7d2fe', 'stroke-width': 2 }, shop);
+  el('path', { d: 'M-4 42 L50 4 L104 42', fill: 'none', stroke: '#4f46e5', 'stroke-width': 7, 'stroke-linejoin': 'round' }, shop);
+  el('rect', { x: 22, y: 22, width: 56, height: 16, rx: 3, fill: '#111827' }, shop);
+  el('text', { x: 50, y: 34, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 800, fill: '#a5b4fc' }, shop).textContent = 'EKTA';
+  const tray = el('rect', { x: 18, y: 72, width: 64, height: 34, rx: 6, fill: '#e0e7ff', stroke: '#6366f1', 'stroke-width': 2 }, shop);
+  el('text', { x: 50, y: 64, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 700, fill: '#6366f1' }, shop).textContent = 'ORDERS INBOX';
+  const recv = el('text', { x: 50, y: 126, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 800, fill: '#059669', opacity: 0 }, shop);
+  recv.textContent = '✓ RECEIVED';
+  // order slip with product photos
+  const slip = el('g', { transform: 'translate(40,110)' }, svg);
+  el('rect', { width: 110, height: 120, rx: 8, fill: '#fff', stroke: '#e5e7eb', 'stroke-width': 2 }, slip);
+  el('text', { x: 55, y: 20, 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 800, fill: '#111827' }, slip).textContent = 'ORDER #T44';
+  IMGS.forEach((src, i) => { el('image', { href: src, x: 10, y: 30 + i * 40, width: 34, height: 34 }, slip); el('rect', { x: 50, y: 42 + i * 40, width: 50, height: 6, rx: 3, fill: '#e5e7eb' }, slip); });
+  $('msg').textContent = 'Preparing your order slip…';
+  await anim(slip, [{ opacity: 0, transform: 'translate(40px,140px)' }, { opacity: 1, transform: 'translate(40px,110px)' }], { duration: 500, easing: 'ease-out' });
+  await sleep(700); if (id !== run) return;
+  // fold into plane
+  $('msg').textContent = 'Sending to Ekta…';
+  await anim(slip, [{ transform: 'translate(40px,110px) scale(1)' }, { transform: 'translate(70px,150px) scale(.35,.15)', opacity: 0 }], { duration: 450, easing: 'ease-in' });
+  const plane = el('path', { d: 'M0 0 L44 14 L0 28 L10 14Z', fill: '#4f46e5' }, svg);
+  el('path', { d: 'M10 14 L44 14', stroke: '#c7d2fe', 'stroke-width': 1.5 }, svg);
+  const trail = el('path', { d: 'M80 165 C 140 60, 200 60, 250 180', fill: 'none', stroke: '#a5b4fc', 'stroke-width': 2.5, 'stroke-dasharray': '6 7', 'stroke-dashoffset': 300, opacity: .8 }, svg);
+  trail.animate([{ strokeDashoffset: 300 }, { strokeDashoffset: 0 }], { duration: 1300, fill: 'forwards' });
+  const pts = [[70, 150, -30], [130, 85, -10], [195, 80, 20], [250, 168, 55]];
+  await plane.animate(pts.map(([x, y, r]) => ({ transform: `translate(${x}px,${y}px) rotate(${r}deg)` })), { duration: 1300, easing: 'ease-in-out', fill: 'forwards' }).finished;
+  if (id !== run) return;
+  plane.animate([{ opacity: 1 }, { opacity: 0, transform: 'translate(258px,186px) rotate(55deg) scale(.4)' }], { duration: 250, fill: 'forwards' });
+  tray.animate([{ fill: '#e0e7ff' }, { fill: '#a7f3d0' }, { fill: '#d1fae5' }], { duration: 600, fill: 'forwards' });
+  recv.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 400, fill: 'forwards' });
+  $('msg').textContent = 'Ekta received your order';
+  await sleep(900); finish(id);
+}
+
+/* B: receipt prints + stamp */
+async function optionB(id) {
+  const svg = reset();
+  el('rect', { width: 340, height: 300, fill: '#f8fafc' }, svg);
+  // printer
+  el('rect', { x: 70, y: 30, width: 200, height: 46, rx: 12, fill: '#1f2937' }, svg);
+  el('rect', { x: 92, y: 66, width: 156, height: 8, rx: 4, fill: '#111827' }, svg);
+  const led = el('circle', { cx: 252, cy: 46, r: 5, fill: '#10b981' }, svg);
+  led.animate([{ opacity: 1 }, { opacity: .3 }], { duration: 400, iterations: 8, direction: 'alternate' });
+  // paper (clipped so it "comes out" of the slot)
+  const clip = el('clipPath', { id: 'pc' }, el('defs', {}, svg)); el('rect', { x: 0, y: 70, width: 340, height: 230 }, clip);
+  const paperG = el('g', { 'clip-path': 'url(#pc)' }, svg);
+  const paper = el('g', {}, paperG);
+  el('rect', { x: 100, y: 0, width: 140, height: 210, fill: '#fff', stroke: '#e5e7eb' }, paper);
+  const lines = [['EKTA ENTERPRISES', 800, 'middle'], ['Order #T44 · 05 Nov', 400, 'middle'], ['', 0], ['Surf Excel 250G  ×24', 500, 'start', '₹547'], ['Dove Cream Bar  ×192', 500, 'start', '₹10,973'], ['', 0], ['TOTAL', 800, 'start', '₹11,520']];
+  lines.forEach(([t, w, a, amt], i) => {
+    if (!t) { el('line', { x1: 110, x2: 230, y1: 26 + i * 22, y2: 26 + i * 22, stroke: '#d1d5db', 'stroke-dasharray': '3 3' }, paper); return; }
+    el('text', { x: a === 'middle' ? 170 : 110, y: 30 + i * 22, 'text-anchor': a, 'font-size': 9.5, 'font-weight': w, fill: '#111827', 'font-family': 'monospace' }, paper).textContent = t;
+    if (amt) el('text', { x: 230, y: 30 + i * 22, 'text-anchor': 'end', 'font-size': 9.5, 'font-weight': w, fill: '#111827', 'font-family': 'monospace' }, paper).textContent = amt;
+  });
+  // zigzag bottom edge
+  el('path', { d: 'M100 210 ' + Array.from({ length: 14 }, (_, i) => `L${105 + i * 10} ${i % 2 ? 210 : 216}`).join(' ') + ' L240 210Z', fill: '#fff' }, paper);
+  $('msg').textContent = 'Printing your order slip…';
+  // print in steps (jerky like a thermal printer)
+  const steps = 7; for (let s = 0; s <= steps; s++) {
+    if (id !== run) return;
+    paper.setAttribute('transform', `translate(0, ${-150 + (s / steps) * 225})`);
+    await sleep(170);
+  }
+  await sleep(250); if (id !== run) return;
+  // stamp
+  $('msg').textContent = 'Received by Ekta';
+  const stamp = el('g', { transform: 'translate(170,190)' }, svg);
+  el('rect', { x: -62, y: -20, width: 124, height: 40, rx: 6, fill: 'none', stroke: '#059669', 'stroke-width': 4 }, stamp);
+  el('text', { x: 0, y: -2, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 900, fill: '#059669', 'letter-spacing': 1 }, stamp).textContent = 'ORDER';
+  el('text', { x: 0, y: 13, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 900, fill: '#059669', 'letter-spacing': 1 }, stamp).textContent = 'RECEIVED';
+  await stamp.animate([{ transform: 'translate(170px,190px) rotate(-14deg) scale(2.4)', opacity: 0 }, { transform: 'translate(170px,190px) rotate(-14deg) scale(.95)', opacity: 1, offset: .75 }, { transform: 'translate(170px,190px) rotate(-14deg) scale(1)', opacity: .9 }], { duration: 450, easing: 'ease-in', fill: 'forwards' }).finished;
+  $('screen').animate([{ transform: 'translateY(0)' }, { transform: 'translateY(3px)' }, { transform: 'translateY(0)' }], { duration: 160 });
+  await sleep(1000); finish(id);
+}
+
+/* C: clipboard checklist */
+async function optionC(id) {
+  const svg = reset();
+  el('rect', { width: 340, height: 300, fill: '#f0fdf4' }, svg);
+  const board = el('g', { transform: 'translate(85,30)' }, svg);
+  el('rect', { width: 170, height: 240, rx: 14, fill: '#c08a4a' }, board);
+  el('rect', { x: 10, y: 22, width: 150, height: 208, rx: 6, fill: '#fff' }, board);
+  el('rect', { x: 55, y: -6, width: 60, height: 22, rx: 6, fill: '#6b7280' }, board);
+  el('text', { x: 85, y: 44, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 800, fill: '#111827' }, board).textContent = 'EKTA · NEW ORDER';
+  const rows = [];
+  IMGS.concat([null]).forEach((src, i) => {
+    const y = 60 + i * 52;
+    const box = el('rect', { x: 20, y: y + 10, width: 18, height: 18, rx: 4, fill: '#fff', stroke: '#9ca3af', 'stroke-width': 2 }, board);
+    const tick = el('path', { d: `M24 ${y + 19} L28 ${y + 24} L35 ${y + 14}`, fill: 'none', stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round', opacity: 0 }, board);
+    const label = el('text', { x: 46, y: y + 23, 'font-size': 10.5, 'font-weight': 600, fill: '#374151' }, board);
+    label.textContent = src ? (i ? 'Dove Cream Bar ×192' : 'Surf Excel 250G ×24') : 'Total ₹11,520';
+    rows.push({ box, tick, src, y });
+  });
+  const sent = el('text', { x: 85, y: 222, 'text-anchor': 'middle', 'font-size': 12, 'font-weight': 900, fill: '#059669', opacity: 0 }, board);
+  sent.textContent = 'SENT TO EKTA ✓';
+  $('msg').textContent = 'Adding items to your order…';
+  for (const r of rows) {
+    if (id !== run) return;
+    if (r.src) {
+      const im = el('image', { href: r.src, width: 40, height: 40 }, svg);
+      await anim(im, [{ transform: 'translate(150px,-60px)', opacity: 0 }, { transform: `translate(${85 + 115}px,${30 + r.y}px)`, opacity: 1 }], { duration: 520, easing: 'cubic-bezier(.3,1.3,.6,1)' });
+    }
+    r.box.animate([{ fill: '#fff' }, { fill: '#10b981' }], { duration: 250, fill: 'forwards' });
+    r.box.setAttribute('stroke', '#10b981');
+    r.tick.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250, fill: 'forwards' });
+    await sleep(320);
+  }
+  if (id !== run) return;
+  $('msg').textContent = 'Sending to Ekta…';
+  await anim(sent, [{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 400, easing: 'cubic-bezier(.3,1.6,.5,1)' });
+  board.animate([{ transform: 'translate(85px,30px)' }, { transform: 'translate(85px,22px)' }, { transform: 'translate(85px,30px)' }], { duration: 350 });
+  await sleep(900); finish(id);
+}
+
+/* shared: small Ekta shop front at (x,y) */
+function shop(svg, x, y, s = 1) {
+  const g = el('g', { transform: `translate(${x},${y}) scale(${s})` }, svg);
+  el('rect', { x: 0, y: 30, width: 120, height: 110, rx: 6, fill: '#fff', stroke: '#c7d2fe', 'stroke-width': 2 }, g);
+  el('path', { d: 'M-6 34 L10 6 H110 L126 34Z', fill: '#4f46e5' }, g);
+  [0, 1, 2, 3, 4].forEach(i => el('path', { d: `M${-6 + i * 26.4} 34 q13.2 14 26.4 0`, fill: i % 2 ? '#818cf8' : '#c7d2fe' }, g));
+  el('rect', { x: 32, y: 10, width: 56, height: 16, rx: 3, fill: '#111827' }, g);
+  el('text', { x: 60, y: 22, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 800, fill: '#a5b4fc' }, g).textContent = 'EKTA';
+  return g;
+}
+
+/* D: envelope + wax seal + letterbox */
+async function optionD(id) {
+  const svg = reset();
+  el('rect', { width: 340, height: 300, fill: '#fdf4ff' }, svg);
+  // letterbox on a post
+  const box = el('g', { transform: 'translate(240,120)' }, svg);
+  el('rect', { x: 26, y: 70, width: 12, height: 100, fill: '#6b7280' }, box);
+  el('path', { d: 'M0 30 Q32 0 64 30 V80 H0Z', fill: '#4f46e5' }, box);
+  el('rect', { x: 14, y: 40, width: 36, height: 7, rx: 3, fill: '#1e1b4b' }, box);
+  el('text', { x: 32, y: 66, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 800, fill: '#e0e7ff' }, box).textContent = 'EKTA';
+  const flag = el('g', { transform: 'translate(64,58)' }, box);
+  el('rect', { x: 0, y: -2, width: 4, height: 26, fill: '#9ca3af' }, flag);
+  el('rect', { x: 0, y: -2, width: 16, height: 10, fill: '#ef4444' }, flag);
+  flag.style.transformBox = 'fill-box'; flag.style.transformOrigin = 'left bottom';
+  flag.style.transform = 'translate(64px,58px) rotate(90deg)'; // lying flat until the letter arrives
+  // envelope
+  const env = el('g', { transform: 'translate(50,130)' }, svg);
+  el('rect', { width: 130, height: 84, rx: 6, fill: '#fff', stroke: '#e5e7eb', 'stroke-width': 2 }, env);
+  el('path', { d: 'M0 84 L65 40 L130 84', fill: 'none', stroke: '#e5e7eb', 'stroke-width': 2 }, env);
+  const items = IMGS.map((src, i) => el('image', { href: src, x: 20 + i * 50, y: -60, width: 40, height: 40 }, env));
+  const lid = el('path', { d: 'M0 2 L65 46 L130 2', fill: '#f3f4f6', stroke: '#d1d5db', 'stroke-width': 2 }, env);
+  lid.style.transformBox = 'fill-box'; lid.style.transformOrigin = 'center top'; lid.style.transform = 'scaleY(-1)';
+  $('msg').textContent = 'Packing your order…';
+  for (const im of items) { await anim(im, [{ transform: 'translateY(-60px)', opacity: 0 }, { transform: 'translateY(70px)', opacity: 1 }], { duration: 500, easing: 'cubic-bezier(.3,1.2,.6,1)' }); if (id !== run) return; }
+  await sleep(200); items.forEach(i => i.remove());
+  await anim(lid, [{ transform: 'scaleY(-1)' }, { transform: 'scaleY(1)' }], { duration: 400 });
+  const seal = el('g', { transform: 'translate(65,46)' }, env);
+  el('circle', { r: 15, fill: '#b91c1c' }, seal);
+  el('text', { y: 4, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 900, fill: '#fecaca' }, seal).textContent = 'EKTA';
+  await anim(seal, [{ transform: 'translate(65px,46px) scale(2.2)', opacity: 0 }, { transform: 'translate(65px,46px) scale(1)', opacity: 1 }], { duration: 350, easing: 'ease-in' });
+  if (id !== run) return;
+  $('msg').textContent = 'Posting it to Ekta…';
+  await sleep(300);
+  await anim(env, [{ transform: 'translate(50px,130px) scale(1) rotate(0)' }, { transform: 'translate(160px,60px) scale(.5) rotate(-12deg)', offset: .6 }, { transform: 'translate(258px,158px) scale(.25) rotate(0)', opacity: 0 }], { duration: 1100, easing: 'ease-in-out' });
+  if (id !== run) return;
+  flag.animate([{ transform: 'translate(64px,58px) rotate(90deg)' }, { transform: 'translate(64px,58px) rotate(0deg)' }], { duration: 450, easing: 'cubic-bezier(.3,1.6,.5,1)', fill: 'forwards' });
+  $('msg').textContent = 'Ekta received your order';
+  await sleep(1000); finish(id);
+}
+
+/* E: phone to shop signal */
+async function optionE(id) {
+  const svg = reset();
+  el('rect', { width: 340, height: 300, fill: '#eff6ff' }, svg);
+  // phone
+  const ph = el('g', { transform: 'translate(30,110)' }, svg);
+  el('rect', { width: 60, height: 110, rx: 12, fill: '#111827' }, ph);
+  el('rect', { x: 5, y: 10, width: 50, height: 88, rx: 6, fill: '#fff' }, ph);
+  el('rect', { x: 11, y: 70, width: 38, height: 18, rx: 5, fill: '#000' }, ph);
+  el('text', { x: 30, y: 82, 'text-anchor': 'middle', 'font-size': 6.5, 'font-weight': 800, fill: '#fff' }, ph).textContent = 'Place Order';
+  IMGS.forEach((src, i) => el('image', { href: src, x: 10 + i * 22, y: 20, width: 20, height: 20 }, ph));
+  // shop with screen
+  const s = shop(svg, 195, 80);
+  const scr = el('rect', { x: 20, y: 50, width: 80, height: 50, rx: 6, fill: '#1f2937' }, s);
+  const scrTxt = el('text', { x: 60, y: 79, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 800, fill: '#34d399', opacity: 0 }, s);
+  scrTxt.textContent = 'NEW ORDER #T44';
+  el('rect', { x: 45, y: 106, width: 30, height: 34, fill: '#e0e7ff' }, s);
+  $('msg').textContent = 'Sending your order…';
+  // pulses travel along the path
+  for (let k = 0; k < 4; k++) {
+    if (id !== run) return;
+    const arc = el('path', { d: 'M0 -16 A16 16 0 0 1 0 16', fill: 'none', stroke: '#6366f1', 'stroke-width': 4, 'stroke-linecap': 'round' }, svg);
+    arc.animate([{ transform: 'translate(100px,160px) scale(.6)', opacity: 1 }, { transform: 'translate(215px,150px) scale(1.4)', opacity: .15 }], { duration: 900, easing: 'ease-out', fill: 'forwards' }).onfinish = () => arc.remove();
+    await sleep(280);
+  }
+  await sleep(700); if (id !== run) return;
+  scr.animate([{ fill: '#1f2937' }, { fill: '#065f46' }, { fill: '#022c22' }], { duration: 700, fill: 'forwards' });
+  scrTxt.animate([{ opacity: 0 }, { opacity: 1 }, { opacity: .4 }, { opacity: 1 }], { duration: 900, fill: 'forwards' });
+  $('msg').textContent = 'Ekta received your order';
+  await sleep(1200); finish(id);
+}
+
+/* F: shop counter bell */
+async function optionF(id) {
+  const svg = reset();
+  el('rect', { width: 340, height: 300, fill: '#fffbeb' }, svg);
+  const s = shop(svg, 110, 40);
+  const door = el('rect', { x: 40, y: 64, width: 40, height: 76, fill: '#c7d2fe' }, s);
+  door.style.transformBox = 'fill-box'; door.style.transformOrigin = 'left center';
+  // counter + bell
+  el('rect', { x: 60, y: 220, width: 220, height: 14, rx: 4, fill: '#92400e' }, svg);
+  const bell = el('g', { transform: 'translate(170,206)' }, svg);
+  el('path', { d: 'M-22 14 A22 22 0 0 1 22 14Z', fill: '#f59e0b' }, bell);
+  el('rect', { x: -26, y: 12, width: 52, height: 5, rx: 2, fill: '#b45309' }, bell);
+  el('circle', { cy: -10, r: 4, fill: '#b45309' }, bell);
+  const ding = el('text', { x: 205, y: 190, 'font-size': 15, 'font-weight': 900, fill: '#d97706', opacity: 0 }, svg);
+  ding.textContent = 'ding!';
+  // order card
+  const card = el('g', {}, svg);
+  el('rect', { width: 70, height: 46, rx: 6, fill: '#fff', stroke: '#e5e7eb', 'stroke-width': 2 }, card);
+  el('text', { x: 35, y: 18, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 800, fill: '#111827' }, card).textContent = 'ORDER #T44';
+  IMGS.forEach((src, i) => el('image', { href: src, x: 10 + i * 26, y: 22, width: 22, height: 22 }, card));
+  $('msg').textContent = 'Sending your order to Ekta…';
+  await anim(card, [{ transform: 'translate(10px,250px) scale(1)' }, { transform: 'translate(40px,120px) scale(.9) rotate(-8deg)', offset: .5 }, { transform: 'translate(150px,110px) scale(.4)', opacity: 0 }], { duration: 1200, easing: 'ease-in-out' });
+  if (id !== run) return;
+  door.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(.15)' }, { transform: 'scaleX(1)' }], { duration: 700 });
+  await sleep(500);
+  bell.animate([{ transform: 'translate(170px,206px) rotate(0)' }, { transform: 'translate(170px,206px) rotate(-14deg)' }, { transform: 'translate(170px,206px) rotate(12deg)' }, { transform: 'translate(170px,206px) rotate(-6deg)' }, { transform: 'translate(170px,206px) rotate(0)' }], { duration: 600 });
+  [0, 1, 2].forEach(i => { const r = el('circle', { cx: 170, cy: 210, r: 26, fill: 'none', stroke: '#fbbf24', 'stroke-width': 3 }, svg); r.animate([{ transform: 'scale(1)', opacity: .8, transformOrigin: '170px 210px' }, { transform: 'scale(2.2)', opacity: 0, transformOrigin: '170px 210px' }], { duration: 900, delay: i * 180, fill: 'forwards' }); });
+  ding.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 300, fill: 'forwards' });
+  $('msg').textContent = 'Order received at the counter';
+  await sleep(1300); finish(id);
+}
+
+/* G: billing counter queue */
+async function optionG(id) {
+  const svg = reset();
+  el('rect', { width: 340, height: 300, fill: '#f0f9ff' }, svg);
+  // counter
+  el('rect', { x: 20, y: 70, width: 300, height: 26, rx: 6, fill: '#4f46e5' }, svg);
+  el('text', { x: 170, y: 88, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 800, fill: '#fff' }, svg).textContent = 'EKTA BILLING COUNTER';
+  // queue of other slips
+  const slip = (x, label, mine) => {
+    const g = el('g', { transform: `translate(${x},120)` }, svg);
+    el('rect', { width: 64, height: 86, rx: 6, fill: mine ? '#fff' : '#e5e7eb', stroke: mine ? '#10b981' : '#cbd5e1', 'stroke-width': mine ? 3 : 2 }, g);
+    el('text', { x: 32, y: 18, 'text-anchor': 'middle', 'font-size': 8.5, 'font-weight': 800, fill: mine ? '#065f46' : '#64748b' }, g).textContent = label;
+    if (mine) IMGS.forEach((src, i) => el('image', { href: src, x: 8 + i * 26, y: 30, width: 24, height: 24 }, g));
+    else [0, 1, 2].forEach(i => el('rect', { x: 10, y: 30 + i * 14, width: 44, height: 6, rx: 3, fill: '#cbd5e1' }, g));
+    return g;
+  };
+  const a = slip(30, '#T42'), b = slip(104, '#T43');
+  const mine = slip(400, '#T44 · YOU', true);
+  $('msg').textContent = 'Adding your order to the queue…';
+  await anim(mine, [{ transform: 'translate(400px,120px)' }, { transform: 'translate(178px,120px)' }], { duration: 900, easing: 'cubic-bezier(.2,.9,.3,1.1)' });
+  if (id !== run) return;
+  await sleep(400);
+  // queue moves forward: first slip goes to counter
+  $('msg').textContent = 'Queue moving…';
+  a.animate([{ transform: 'translate(30px,120px)' }, { transform: 'translate(30px,60px)', opacity: 0 }], { duration: 500, fill: 'forwards' });
+  b.animate([{ transform: 'translate(104px,120px)' }, { transform: 'translate(30px,120px)' }], { duration: 600, delay: 200, fill: 'forwards', easing: 'ease-in-out' });
+  await anim(mine, [{ transform: 'translate(178px,120px)' }, { transform: 'translate(104px,120px)' }], { duration: 600, delay: 300, easing: 'ease-in-out' });
+  if (id !== run) return;
+  const badge = el('g', { transform: 'translate(136,232)' }, svg);
+  el('rect', { x: -62, y: -14, width: 124, height: 28, rx: 14, fill: '#10b981' }, badge);
+  el('text', { y: 5, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 800, fill: '#fff' }, badge).textContent = "You're next in line!";
+  await anim(badge, [{ transform: 'translate(136px,232px) scale(0)' }, { transform: 'translate(136px,232px) scale(1)' }], { duration: 450, easing: 'cubic-bezier(.3,1.7,.5,1)' });
+  $('msg').textContent = 'Ekta received your order';
+  await sleep(1100); finish(id);
+}
+
+const OPTS = [optionA, optionB, optionC, optionD, optionE, optionF, optionG];
+let cur = 0;
+function play(k) { cur = k; run++; document.querySelectorAll('.opt').forEach(b => b.classList.toggle('active', +b.dataset.k === k)); OPTS[k](run); }
+document.querySelectorAll('.opt').forEach(b => b.onclick = () => play(+b.dataset.k));
+$('replay').onclick = () => play(cur);
+play(0);
+</script>
+</body>
+</html>
