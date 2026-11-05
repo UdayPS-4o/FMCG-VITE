@@ -89,6 +89,54 @@ export const fetchActiveSchemes = async () => {
     return res.json();
 };
 
+// ── In-app promotions ────────────────────────────────────────────────────────
+
+export interface Promotion {
+    id: number;
+    title: string;
+    message: string;
+    mediaUrl: string;
+    actionUrl: string;
+    ctaText: string;
+    frequency: 'ONCE' | 'HOURLY' | 'EVERY_PAGE';
+}
+
+export const fetchActivePromotions = async (): Promise<Promotion[]> => {
+    const res = await fetch(`${API_URL}/promotions/active`, { headers: authHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch promotions');
+    return res.json();
+};
+
+// ── Festival themes ──────────────────────────────────────────────────────────
+
+export type FestiveEffect = 'rockets' | 'chakri' | 'lights' | 'none';
+
+export interface FestiveVariant {
+    label: string;
+    bgFrom: string;
+    bgTo: string;
+    accent: string;
+    effect: FestiveEffect;
+}
+
+export interface FestivalTheme {
+    id: number;
+    name: string;
+    festival: string;
+    startAt: string;
+    endAt: string;
+    variants: FestiveVariant[];
+    allowSwitch: boolean;
+    effectsEnabled: boolean;
+}
+
+/** The festival theme live right now, or null (public endpoint). */
+export const fetchActiveFestivalTheme = async (): Promise<FestivalTheme | null> => {
+    const res = await fetch(`${API_URL}/festival-theme/active`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch festival theme');
+    return (await res.json()).theme ?? null;
+};
+
 // ── Products ─────────────────────────────────────────────────────────────────
 
 export const fetchProducts = async (page = 1, limit = 20, query = '', brand = '', sort = '', codes = '') => {

@@ -4,6 +4,7 @@ import PageMeta from "../../components/common/PageMeta";
 import DatabaseTable from "../../components/tables/DatabaseTable";
 import { toast } from 'react-toastify';
 import constants from '../../constants';
+import apiCache from '../../utils/apiCache';
 const baseUrl = constants.baseURL;
 
 interface SyncTransaction {
@@ -29,6 +30,20 @@ const CashReceiptApproved: React.FC = () => {
   const [selectedTransactions, setSelectedTransactions] = useState<SyncTransaction[]>([]);
   const [showTransactions, setShowTransactions] = useState(false);
   const tableRef = useRef<{ refreshData: () => Promise<void> }>(null);
+  const [partyMap, setPartyMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    apiCache.fetchWithCache<any[]>(`${baseUrl}/cmpl`)
+      .then(data => {
+        if (!Array.isArray(data)) return;
+        const map: Record<string, string> = {};
+        data.forEach((p: any) => {
+          if (p.C_CODE) map[p.C_CODE] = p.C_NAME;
+        });
+        setPartyMap(map);
+      })
+      .catch(err => console.error('Error fetching party names:', err));
+  }, []);
 
   useEffect(() => {
     const history = localStorage.getItem('cashReceiptSyncHistory');
@@ -95,8 +110,8 @@ const CashReceiptApproved: React.FC = () => {
     const transactions: SyncTransaction[] = records.map(record => ({
       receiptNo: record.series ? `${record.series}-${record.receiptNo}` : record.receiptNo,
       billDate: record.date,
-      partyName: record.partyDesc || record.partyName || record.party || '',
-      partyCode: record.partyCode || record.party_code || '',
+      partyName: record.partyDesc || record.partyName || partyMap[record.party] || record.party || '',
+      partyCode: record.partyCode || record.party_code || record.party || '',
       totalAmount: parseFloat(record.amount || record.total || '0'),
       salesmanName: record.salesmanName || record.smName || record.sm || ''
     }));
@@ -412,10 +427,13 @@ const CashReceiptApproved: React.FC = () => {
 
                       // Format party name with code
                       const formatPartyName = (name: string, code?: string) => {
-                        if (code && code.trim()) {
-                          return `${name} (${code})`;
+                        // Older history entries stored the party code in partyName
+                        const partyCode = (code && code.trim()) || (name && partyMap[name] ? name : '');
+                        const partyName = (partyCode && partyMap[partyCode]) || (name !== partyCode ? name : '');
+                        if (partyCode && partyName) {
+                          return `${partyName} (${partyCode})`;
                         }
-                        return name;
+                        return partyName || partyCode || name;
                       };
 
                       return (

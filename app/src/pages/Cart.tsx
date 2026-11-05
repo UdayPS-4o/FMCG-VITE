@@ -118,7 +118,7 @@ const Cart = () => {
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: 30, opacity: 0 }}
                     transition={{ type: 'spring', damping: 22, stiffness: 320 }}
-                    className={`fixed left-3 right-3 z-[55] bg-gray-900 text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl overflow-hidden ${cart.length > 0 ? 'bottom-[214px]' : 'bottom-[80px]'}`}
+                    className={`fixed left-3 right-3 z-[55] bg-gray-900 text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl overflow-hidden ${cart.length > 0 ? 'bottom-[calc(234px+env(safe-area-inset-bottom))]' : 'bottom-[calc(96px+env(safe-area-inset-bottom))]'}`}
                 >
                     <span className="flex-1 text-sm truncate text-left">
                         {lastRemoved.item.product.PRODUCT} {language === 'en' ? 'removed' : 'हटाया गया'}
@@ -271,7 +271,8 @@ const Cart = () => {
             </div>
 
             {/* Checkout Footer */}
-            <div className="fixed bottom-[64px] left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40">
+            {/* Sits at the very bottom; extra bottom padding leaves room for the floating nav */}
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 pb-[calc(1rem+84px+env(safe-area-inset-bottom))] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40">
                 <div className="flex justify-between items-center mb-4">
                     <span className="text-gray-500 font-medium text-sm">{language === 'en' ? 'Total Amount' : 'कुल राशि'}</span>
                     <AnimatedAmount value={cartTotal} className="text-xl font-bold text-indigo-600" />

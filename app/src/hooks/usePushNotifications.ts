@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { useStore } from '../context/StoreContext';
-import { APP_NAVIGATE_EVENT, ORDER_PUSH_EVENT, PENDING_NAV_KEY, type OrderPushDetail } from '../lib/orderEvents';
+import { APP_NAVIGATE_EVENT, ORDER_PUSH_EVENT, PENDING_NAV_KEY, PROMO_PUSH_EVENT, type OrderPushDetail } from '../lib/orderEvents';
 
 // The hook is used in App and Profile; in-app listeners must only be added once
 let inAppListenersAdded = false;
@@ -16,6 +16,10 @@ const emitNavigate = (url?: string) => {
   sessionStorage.setItem(PENDING_NAV_KEY, url);
   window.dispatchEvent(new CustomEvent<string>(APP_NAVIGATE_EVENT, { detail: url }));
 };
+// Promotion push received while the app is open: show the popup right away
+const emitPromoPush = (promoId?: string) => {
+  if (promoId) window.dispatchEvent(new CustomEvent<string>(PROMO_PUSH_EVENT, { detail: String(promoId) }));
+};
 
 export const usePushNotifications = () => {
   const [fcmToken, setFcmToken] = useState<string | null>(null);
@@ -27,6 +31,7 @@ export const usePushNotifications = () => {
       swMessageListenerAdded = true;
       navigator.serviceWorker.addEventListener('message', (e: MessageEvent) => {
         const m = e.data || {};
+        if (m.type === 'promo-push') emitPromoPush(m.data?.promoId);
         if (m.type === 'order-push') emitOrderPush({ title: m.title, body: m.body, url: m.url, orderId: m.data?.orderId, status: m.data?.status });
         if (m.type === 'navigate') emitNavigate(m.url);
       });
@@ -87,6 +92,7 @@ export const usePushNotifications = () => {
         // App open: show the animated in-app banner and refresh order screens
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
           const d = (notification.data || {}) as Record<string, string>;
+          if (d.promoId) { emitPromoPush(d.promoId); return; }
           emitOrderPush({ title: notification.title || 'Ekta Enterprises', body: notification.body || '', url: d.url, orderId: d.orderId, status: d.status });
         });
         // Notification tapped (app in background / closed): open the order

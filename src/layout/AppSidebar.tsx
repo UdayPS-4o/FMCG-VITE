@@ -13,6 +13,7 @@ import {
 } from '../components/icons';
 import { useSidebar } from "../context/SidebarContext";
 import constants from '../constants';
+import GlassSurface from '../components/glass/GlassSurface';
 
 // Add missing icon components
 const ChevronDownIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -355,6 +356,28 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
     const interval = setInterval(fetchPending, 60_000); // refresh every minute
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch WhatsApp unread message count (same endpoint the inbox uses for its "Unread" tab)
+  const [whatsappUnreadCount, setWhatsappUnreadCount] = useState(0);
+  const fetchWhatsappUnread = useCallback(async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/whatsapp-ui/stats`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok) setWhatsappUnreadCount(data.totalUnread || 0);
+      }
+    } catch { /* silent */ }
+  }, []);
+  useEffect(() => {
+    fetchWhatsappUnread();
+    const interval = setInterval(fetchWhatsappUnread, 30_000);
+    // The inbox fires this after marking a chat read, so the badge updates immediately
+    window.addEventListener('whatsapp-unread-changed', fetchWhatsappUnread);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('whatsapp-unread-changed', fetchWhatsappUnread);
+    };
+  }, [fetchWhatsappUnread]);
 
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others" | "fmcg";
@@ -705,6 +728,12 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
                     {pendingOrderCount > 99 ? '99+' : pendingOrderCount}
                   </span>
                 )}
+                {/* Unread badge for WhatsApp Inbox */}
+                {nav.name === "WhatsApp Inbox" && whatsappUnreadCount > 0 && (isExpanded || isHovered || isMobileOpen) && (
+                  <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
+                    {whatsappUnreadCount > 99 ? '99+' : whatsappUnreadCount}
+                  </span>
+                )}
               </Link>
             )
           )}
@@ -771,7 +800,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
   return (
     <aside
       ref={ref}
-      className={`app-sidebar fixed flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 dark:border-gray-800 text-gray-900 h-screen transition-all duration-300 ease-in-out z-[999] border-r border-gray-200 
+      className={`app-sidebar has-glisse fixed flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 dark:border-gray-800 text-gray-900 h-screen transition-all duration-300 ease-in-out z-[999] border-r border-gray-200 
         ${
           isExpanded || isMobileOpen
             ? "w-[290px]"
@@ -784,6 +813,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      <GlassSurface />
       <div
         className={`py-4 lg:py-8 flex ${
           !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"

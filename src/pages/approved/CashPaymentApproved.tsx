@@ -4,12 +4,14 @@ import PageMeta from "../../components/common/PageMeta";
 import DatabaseTable from "../../components/tables/DatabaseTable";
 import { toast } from 'react-toastify';
 import constants from '../../constants';
+import apiCache from '../../utils/apiCache';
 const baseUrl = constants.baseURL;
 
 interface SyncTransaction {
   receiptNo: string;
   billDate: string;
   partyName: string;
+  partyCode?: string;
   totalAmount: number;
   salesmanName: string;
 }
@@ -28,6 +30,30 @@ const CashPaymentApproved: React.FC = () => {
   const [selectedTransactions, setSelectedTransactions] = useState<SyncTransaction[]>([]);
   const [showTransactions, setShowTransactions] = useState(false);
   const tableRef = useRef<{ refreshData: () => Promise<void> }>(null);
+  const [partyMap, setPartyMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    apiCache.fetchWithCache<any[]>(`${baseUrl}/cmpl`)
+      .then(data => {
+        if (!Array.isArray(data)) return;
+        const map: Record<string, string> = {};
+        data.forEach((p: any) => {
+          if (p.C_CODE) map[p.C_CODE] = p.C_NAME;
+        });
+        setPartyMap(map);
+      })
+      .catch(err => console.error('Error fetching party names:', err));
+  }, []);
+
+  // Show "PARTY NAME (CODE)"; older history entries stored the party code in partyName
+  const formatPartyName = (name: string, code?: string) => {
+    const partyCode = (code && code.trim()) || (name && partyMap[name] ? name : '');
+    const partyName = (partyCode && partyMap[partyCode]) || (name !== partyCode ? name : '');
+    if (partyCode && partyName) {
+      return `${partyName} (${partyCode})`;
+    }
+    return partyName || partyCode || name;
+  };
 
   useEffect(() => {
     const history = localStorage.getItem('cashPaymentSyncHistory');
@@ -53,6 +79,7 @@ const CashPaymentApproved: React.FC = () => {
               receiptNo: record.receiptNo,
               billDate: record.billDate,
               partyName: record.partyName,
+              partyCode: record.partyCode || '',
               totalAmount: record.totalAmount,
               salesmanName: record.salesmanName
             }))
@@ -93,7 +120,8 @@ const CashPaymentApproved: React.FC = () => {
     const transactions: SyncTransaction[] = records.map(record => ({
       receiptNo: record.series ? `${record.series}-${record.receiptNo}` : record.receiptNo,
       billDate: record.date,
-      partyName: record.partyDesc || record.partyName || record.party || '',
+      partyName: record.partyDesc || record.partyName || partyMap[record.party] || record.party || '',
+      partyCode: record.partyCode || record.party_code || record.party || '',
       totalAmount: parseFloat(record.amount || record.total || '0'),
       salesmanName: record.salesmanName || record.smName || record.sm || ''
     }));
@@ -383,7 +411,7 @@ const CashPaymentApproved: React.FC = () => {
                       <tr key={tIndex} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.receiptNo}</td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.billDate}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.partyName}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatPartyName(transaction.partyName, transaction.partyCode)}</td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.totalAmount}</td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{transaction.salesmanName}</td>
                       </tr>

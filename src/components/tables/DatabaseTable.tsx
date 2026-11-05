@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import './scrollbar.css'; // Import the scrollbar styles
 import DeleteConfirmation from '../ui/DeleteConfirmation';
 import DateFilterCalendar, { toDateKey } from './DateFilterCalendar';
+import SalesmanFilterChips, { SalesmanOption, SalesmanStats } from './SalesmanFilterChips';
 import { useNavigate } from 'react-router-dom';
 import { TableSkeletonLoader } from '../ui/skeleton/SkeletonLoader';
 import useAuth from '../../hooks/useAuth';
@@ -90,7 +91,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   const [rowsPerPage, setRowsPerPage] = useState<number>(100);
   const [search, setSearch] = useState<string>('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [smFilter, setSmFilter] = useState<string>('');
+  const [smFilters, setSmFilters] = useState<string[]>([]); // selected SM codes; empty = all
   const [dateFilter, setDateFilter] = useState<string[]>([]); // YYYY-MM-DD keys
   const [dateCalendarAnchor, setDateCalendarAnchor] = useState<HTMLElement | null>(null);
   // Add tooltip state
@@ -180,7 +181,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   // Add state for table loading
   const [isTableLoading, setIsTableLoading] = useState<boolean>(true);
   // Add state for SM options
-  const [smOptions, setSmOptions] = useState<{value: string, label: string}[]>([]);
+  const [smOptions, setSmOptions] = useState<SalesmanOption[]>([]);
 
   // Get user state from useAuth
   const { user } = useAuth();
@@ -336,16 +337,14 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
           const options = Array.from(uniqueSms).map(sm => {
             // Find a row with this SM to get the name
             const rowWithSm = filteredData.find(row => row[smField] === sm);
-            const smName = smNameField && rowWithSm ? rowWithSm[smNameField] : '';
-            
-            return {
-              value: sm,
-              label: smName ? `${sm} (${smName})` : sm
-            };
-          }).sort((a, b) => a.label.localeCompare(b.label));
-          
-          // Add 'All' option at the beginning
-          setSmOptions([{ value: '', label: 'All SMs' }, ...options]);
+            const smName = smNameField && rowWithSm ? String(rowWithSm[smNameField] || '') : '';
+            // Some names are stored as "KEOLARI SHOP | SM007" — drop the repeated code
+            const cleanName = smName.split('|')[0].trim();
+
+            return { value: sm, name: cleanName };
+          }).sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true }));
+
+          setSmOptions(options);
         }
       }
       
@@ -481,8 +480,8 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     setPage(0);
   };
   
-  const handleSmFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setSmFilter(event.target.value);
+  const handleSmFilterChange = (selected: string[]) => {
+    setSmFilters(selected);
     setPage(0);
   };
 
@@ -521,8 +520,20 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
 
   const closeDateCalendar = React.useCallback(() => setDateCalendarAnchor(null), []);
 
-  const filteredRows = rows.filter((row) => {
-    // First apply search filter
+  const getRowSm = (row: Record<string, any>): string | undefined => {
+    const smField = Object.keys(row).find(key =>
+      key.toLowerCase() === 'sm' || key.toLowerCase() === 'smcode'
+    );
+    return smField ? row[smField] : undefined;
+  };
+
+  const getRowAmount = (row: Record<string, any>): number => {
+    const amount = parseFloat(row.amount ?? row.Amount ?? row.total ?? row.Total ?? 0);
+    return isNaN(amount) ? 0 : amount;
+  };
+
+  // Search and date filters (everything except the salesman filter)
+  const matchesNonSmFilters = (row: Record<string, any>): boolean => {
     if (search) {
       const searchLower = search.toLowerCase();
       const matchesSearch = headers.some((header) => 
@@ -532,17 +543,6 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
       if (!matchesSearch) return false;
     }
     
-    // Then apply SM filter if selected
-    if (smFilter) {
-      const smField = Object.keys(row).find(key => 
-        key.toLowerCase() === 'sm' || key.toLowerCase() === 'smcode'
-      );
-      
-      if (smField && row[smField] !== smFilter) {
-        return false;
-      }
-    }
-
     // Then apply the date filter from the Date header calendar
     if (dateFilter.length > 0 && dateHeader) {
       const key = toDateKey(row[dateHeader]);
@@ -550,7 +550,30 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
     }
     
     return true;
-  });
+  };
+
+  const rowsBeforeSmFilter = rows.filter(matchesNonSmFilters);
+
+  // Entry count and amount per salesman, shown on the salesman buttons
+  const smStats = React.useMemo(() => {
+    const stats: Record<string, SalesmanStats> = {};
+    rowsBeforeSmFilter.forEach(row => {
+      const sm = getRowSm(row);
+      if (!sm) return;
+      if (!stats[sm]) stats[sm] = { count: 0, amount: 0 };
+      stats[sm].count += 1;
+      stats[sm].amount += getRowAmount(row);
+    });
+    return stats;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, search, dateFilter, dateHeader, headers]);
+
+  const filteredRows = smFilters.length > 0
+    ? rowsBeforeSmFilter.filter(row => {
+        const sm = getRowSm(row);
+        return sm === undefined || smFilters.includes(sm);
+      })
+    : rowsBeforeSmFilter;
 
   // Recalculate total amount for cash-receipts when filtered rows change (includes SM filter)
   useEffect(() => {
@@ -1314,7 +1337,7 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm w-full overflow-hidden max-w-[95vw] mx-auto custom-scrollbar">
           {/* Toolbar */}
           <div className="p-4 flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-4 w-full sm:w-auto sm:flex-1">
               <div className="relative w-full sm:w-64">
                 <input
                   type="text"
@@ -1330,6 +1353,12 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                   </svg>
                 </div>
               </div>
+              <SalesmanFilterChips
+                options={smOptions}
+                stats={smStats}
+                selected={smFilters}
+                onChange={handleSmFilterChange}
+              />
             </div>
             
             <div className="flex items-center gap-2">
@@ -1492,29 +1521,6 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
                             </div>
                           )}
                           
-                          {/* SM Filter in header */}
-                          {header.toLowerCase() === 'sm' && smOptions.length > 1 && (
-                            <div className="mt-2 relative">
-                              <select
-                                value={smFilter}
-                                onChange={handleSmFilterChange}
-                                className="w-full text-xs pl-2 pr-6 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 appearance-none"
-                                onClick={(e) => e.stopPropagation()} // Prevent sorting when clicking the dropdown
-                                style={{ colorScheme: 'auto' }} // Ensures dropdown options match the color scheme
-                              >
-                                {smOptions.map((option) => (
-                                  <option key={option.value} value={option.value} className="dark:bg-gray-700 dark:text-gray-100">
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       </TableCell>
                     ))}

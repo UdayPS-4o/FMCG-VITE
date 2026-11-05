@@ -4,6 +4,8 @@ import { subscribeToPush, urlBase64ToUint8Array, getVapidKey } from '../../servi
 import { toast } from 'react-toastify';
 import constants from '../../constants';
 import { Loader2, Plus, X } from 'lucide-react';
+import InAppPromotions from './InAppPromotions';
+import FestivalThemes from './FestivalThemes';
 
 interface PushToken {
     id: number;
@@ -15,6 +17,7 @@ interface PushToken {
 
 const PushNotifications: React.FC = () => {
     const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<'PUSH' | 'PROMO' | 'THEMES'>('PUSH');
     const [isSubscribed, setIsSubscribed] = useState(false);
     const [loading, setLoading] = useState(false);
     const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState<ServiceWorkerRegistration | null>(null);
@@ -322,8 +325,33 @@ const PushNotifications: React.FC = () => {
                 </button>
             </div>
 
+            {/* MODE TABS */}
+            <div className="inline-flex p-1 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
+                {([
+                    { key: 'PUSH', label: 'Push Notification' },
+                    { key: 'PROMO', label: 'In-App Promotion' },
+                    { key: 'THEMES', label: 'Festival Themes' },
+                ] as const).map(t => (
+                    <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setActiveTab(t.key)}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === t.key
+                            ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-300 shadow'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {activeTab === 'THEMES' ? (
+                <FestivalThemes />
+            ) : activeTab === 'PROMO' ? (
+                <InAppPromotions usersMetadata={usersMetadata} tokens={tokens} />
+            ) : (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 h-full">
-                
+
                 {/* COMPOSER PANEL (LEFT SIDE) */}
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 flex flex-col h-full">
                     <h2 className="text-xl font-bold mb-6 text-gray-800 dark:text-gray-100 flex items-center gap-2">
@@ -692,6 +720,7 @@ const PushNotifications: React.FC = () => {
 
                 </div>
             </div>
+            )}
         </div>
     );
 };

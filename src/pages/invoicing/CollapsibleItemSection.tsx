@@ -78,6 +78,9 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
   const [activeTooltipField, setActiveTooltipField] = useState<string | null>(null); // State for active tooltip
   
   const [activeSchemes, setActiveSchemes] = useState<any[]>([]); // State for active schemes
+  const [schemesVersion, setSchemesVersion] = useState(0); // bumps each time a scheme fetch finishes
+  const schemesLoadedRef = useRef(false);
+  const schemePendingRef = useRef(false); // qty entered while schemes were still loading
 
   // State to track if initial focus (on expand) has been handled
   const [initialFocusHandled, setInitialFocusHandled] = useState<boolean>(false);
@@ -124,6 +127,9 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
 
   // Fetch active schemes for the selected item and date
   useEffect(() => {
+    let cancelled = false;
+    schemesLoadedRef.current = false;
+    schemePendingRef.current = false;
     if (item.item && invoiceDate) {
       const fetchSchemes = async () => {
         try {
@@ -131,8 +137,10 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
           const response = await fetch(`${constants.baseURL}/api/schemes/for-item?itemCode=${encodeURIComponent(item.item)}&date=${encodeURIComponent(invoiceDate)}&partyCode=${encodeURIComponent(partyCode || '')}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
           });
+          if (cancelled) return;
           if (response.ok) {
             const data = await response.json();
+            if (cancelled) return;
             if (data.success && data.schemes) {
               setActiveSchemes(data.schemes);
             } else {
@@ -141,16 +149,46 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
           }
         } catch (err) {
           console.error('Failed to fetch active schemes:', err);
-          setActiveSchemes([]);
+          if (!cancelled) setActiveSchemes([]);
+        } finally {
+          if (!cancelled) {
+            schemesLoadedRef.current = true;
+            setSchemesVersion(v => v + 1);
+          }
         }
       };
-      
+
       // Only fetch when exactly expanded to not overload network if many items
       fetchSchemes();
     } else {
       setActiveSchemes([]);
     }
+    return () => { cancelled = true; };
   }, [item.item, invoiceDate, partyCode]);
+
+  // Total scheme % for a quantity, or null when auto scheme doesn't apply (manual rate, no qty)
+  const schemePercentFor = (data: ItemData, qtyStr: string, unit: string): string | null => {
+    const qty = parseInt(qtyStr, 10);
+    if (data.schDisabled || isNaN(qty) || qty <= 0) return null;
+    const multF = parseInt(data.pcBx, 10) || 1;
+    const quantityInPieces = data.selectedItem && unit === data.selectedItem.UNIT_2 ? qty * multF : qty;
+    const total = activeSchemes
+      .filter(sch => quantityInPieces >= sch.slab1 && quantityInPieces <= sch.slab2)
+      .reduce((sum, sch) => sum + sch.discount, 0);
+    return total.toString();
+  };
+
+  // Qty typed before this item's schemes finished loading: apply Sch% once they arrive.
+  // Only for that case, so opening a saved invoice never rewrites its stored scheme.
+  useEffect(() => {
+    if (!schemePendingRef.current) return;
+    schemePendingRef.current = false;
+    const sch = schemePercentFor(item, item.qty, item.unit);
+    if (sch !== null && sch !== (item.sch || '0')) {
+      updateItem(index, calculateAmounts({ ...item, sch }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schemesVersion]);
 
   // Ref to track if swap unit was focused by Enter on Godown
   const swapUnitFocusedByEnter = useRef(false);
@@ -260,16 +298,11 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
         }
 
         // Auto scheme logic when unit swaps
-        if (!dataWithNewUnitAndRate.schDisabled && !isNaN(qtyNum) && qtyNum > 0 && activeSchemes.length > 0) {
-            const multF = parseInt(dataWithNewUnitAndRate.pcBx, 10) || 1;
-            const quantityInPieces = newUnit === currentSelectedItem.UNIT_2 ? qtyNum * multF : qtyNum;
-            const matchingSchemes = activeSchemes.filter(sch => quantityInPieces >= sch.slab1 && quantityInPieces <= sch.slab2);
-            if (matchingSchemes.length > 0) {
-                const totalDiscount = matchingSchemes.reduce((sum, sch) => sum + sch.discount, 0);
-                dataWithNewUnitAndRate.sch = totalDiscount.toString();
-            } else {
-                dataWithNewUnitAndRate.sch = '0';
-            }
+        if (!schemesLoadedRef.current) {
+            schemePendingRef.current = true;
+        } else if (activeSchemes.length > 0) {
+            const sch = schemePercentFor(dataWithNewUnitAndRate, dataWithNewUnitAndRate.qty, newUnit);
+            if (sch !== null) dataWithNewUnitAndRate.sch = sch;
         }
       } else if (!dataWithNewUnitAndRate.qty || dataWithNewUnitAndRate.qty === '0') {
         // If quantity is empty or zero, clear any previous error
@@ -349,20 +382,12 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
             setError('');
           }
 
-          // Apply auto scheme logic
-          if (!updatedData.schDisabled && !isNaN(qty) && qty > 0 && activeSchemes.length > 0) {
-            const multF = parseInt(item.pcBx, 10) || 1;
-            const quantityInPieces = (item.selectedItem && item.unit === item.selectedItem.UNIT_2) 
-                                      ? qty * multF 
-                                      : qty;
-                                      
-            const matchingSchemes = activeSchemes.filter(sch => quantityInPieces >= sch.slab1 && quantityInPieces <= sch.slab2);
-            if (matchingSchemes.length > 0) {
-                const totalDiscount = matchingSchemes.reduce((sum, sch) => sum + sch.discount, 0);
-                updatedData.sch = totalDiscount.toString();
-            } else {
-                updatedData.sch = '0';
-            }
+          // Apply auto scheme logic (deferred until the schemes arrive if they're still loading)
+          if (!schemesLoadedRef.current) {
+            schemePendingRef.current = true;
+          } else if (activeSchemes.length > 0) {
+            const sch = schemePercentFor(updatedData, newValue, item.unit);
+            if (sch !== null) updatedData.sch = sch;
           }
         }
       } else {

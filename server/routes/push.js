@@ -409,6 +409,7 @@ const deliverToTokens = async (rows, payload, label) => {
         title: payload.title,
         message: payload.message,
         url: payload.data ? payload.data.url : '/',
+        image: payload.image || undefined,
         data: payload.data
     });
 
@@ -439,6 +440,7 @@ const deliverToTokens = async (rows, payload, label) => {
                         ) : {})
                     }
                 };
+                if (payload.image) messagePayload.notification.imageUrl = payload.image;
                 return admin.messaging().send(messagePayload)
                     .then((response) => {
                         console.log(`Successfully sent FCM ${label} message:`, response);
@@ -561,6 +563,30 @@ const sendNotificationToParty = async (partyCode, payload) => {
     }
 };
 
+/**
+ * Push an in-app promotion to customer-app devices.
+ * partyCodes: array of party codes, or null for every customer device.
+ * payload: { title, message, image, data: { url, promoId } }
+ */
+const sendPromotionToParties = async (partyCodes, payload) => {
+    try {
+        let tokens;
+        if (partyCodes === null) {
+            // Customer app devices subscribe with their party code; skip web/admin users
+            tokens = await new Promise((resolve, reject) =>
+                db.all(`SELECT * FROM push_tokens`, [], (err, rows) => (err ? reject(err) : resolve(rows))));
+            tokens = tokens.filter(r => !String(r.user_id).startsWith('user:') && !['admin', 'ADMIN'].includes(r.user_id));
+        } else {
+            tokens = await getTokensByUserIds(partyCodes.map(String));
+        }
+        if (tokens.length === 0) return 0;
+        return await deliverToTokens(tokens, payload, 'promotion');
+    } catch (err) {
+        console.error('Error sending promotion push:', err);
+        return 0;
+    }
+};
+
 // Upload image for push notifications
 router.post('/upload-image', async (req, res) => {
     try {
@@ -601,4 +627,4 @@ router.post('/upload-image', async (req, res) => {
     }
 });
 
-module.exports = { router, sendNotificationToAdmins, sendNotificationToUsers, sendNotificationToParty };
+module.exports = { router, sendNotificationToAdmins, sendNotificationToUsers, sendNotificationToParty, sendPromotionToParties };

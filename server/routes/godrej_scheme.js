@@ -304,9 +304,8 @@ router.post('/import', async (req, res) => {
         await dbf.appendRecords(recordsToAppend);
         await dbf.close();
 
-        // Note: Cache invalidation theoretically needed in shikhar_scheme.js,
-        // but it auto-expires nicely via its TTL. For perfect sync, we'd export it, 
-        // but practically the cache TTL handles it cleanly.
+        // Billing reads SCHDTL through shikhar_scheme's cache; make it pick up the new rows now
+        require('./shikhar_scheme').invalidateSchemesCache();
 
         res.json({ success: true, message: `Successfully imported ${recordsToAppend.length} schemes into SCHDTL.dbf` });
 

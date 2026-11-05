@@ -35,6 +35,8 @@ import TrendKpi from './TrendKpi';
 import SalesRecoveryKpi from './SalesRecoveryKpi';
 import StockKpi from './StockKpi';
 import { BoardContext, KpiItemContext, KpiItemControls } from './shared';
+import { Button, Switch } from 'glisse';
+import GlassSurface, { useGlisse } from '@/components/glass/GlassSurface';
 
 const AUTO_REFRESH_SECONDS = 5 * 60;
 const STORAGE_PREFIX = 'dashboard-layout-v1';
@@ -244,11 +246,13 @@ const KpiBoard: React.FC = () => {
   };
 
   const now = new Date();
+  const glisse = useGlisse();
 
   return (
     <BoardContext.Provider value={{ refreshKey }}>
       {/* Header / control bar */}
-      <div className="mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-white/[0.03]">
+      <div className="has-glisse relative mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-white/[0.03]">
+        <GlassSurface />
         <div className="flex flex-wrap items-center gap-4 bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-500 px-5 py-4 text-white">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
             <LayoutDashboard className="h-6 w-6" />
@@ -267,13 +271,19 @@ const KpiBoard: React.FC = () => {
               Auto-refresh in <AutoRefreshCountdown resetKey={refreshKey} onExpire={refreshNow} />
             </div>
           </div>
-          <button
-            type="button"
-            onClick={refreshNow}
-            className="flex items-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/25"
-          >
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </button>
+          {glisse ? (
+            <Button variant="filled" icon={<RefreshCw className="h-4 w-4" />} onClick={refreshNow}>
+              Refresh
+            </Button>
+          ) : (
+            <button
+              type="button"
+              onClick={refreshNow}
+              className="flex items-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/25"
+            >
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </button>
+          )}
         </div>
 
         <div className="px-5 py-4">
@@ -335,7 +345,11 @@ const KpiBoard: React.FC = () => {
                   >
                     {k.label}
                   </span>
-                  {/* Keyed on state so the pop animation replays on each tick */}
+                  {glisse ? (
+                    // A button inside the label doesn't activate it, so the switch alone toggles
+                    <Switch aria-label={`Show ${k.label}`} checked={on} onCheckedChange={(v) => setVisible(id, v)} />
+                  ) : (
+                  /* Keyed on state so the pop animation replays on each tick */
                   <span
                     key={String(on)}
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
@@ -345,6 +359,7 @@ const KpiBoard: React.FC = () => {
                   >
                     {on && <Check className="h-3 w-3" strokeWidth={3} />}
                   </span>
+                  )}
                 </label>
               );
             })}

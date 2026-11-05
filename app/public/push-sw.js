@@ -10,11 +10,14 @@ self.addEventListener('push', (event) => {
     event.waitUntil((async () => {
         // Let an open app show its own animated banner + refresh the tracker
         const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        clientList.forEach(c => c.postMessage({ type: 'order-push', title: payload.title, body: payload.message, url, data }));
+        // In-app promotions open the promo popup instead of the order banner
+        const type = data.promoId ? 'promo-push' : 'order-push';
+        clientList.forEach(c => c.postMessage({ type, title: payload.title, body: payload.message, url, data }));
 
         // Browsers require a visible notification for every push
         await self.registration.showNotification(payload.title || 'Ekta Enterprises', {
             body: payload.message || '',
+            image: payload.image || undefined,
             tag: data.orderId ? `order-${data.orderId}` : undefined,
             renotify: !!data.orderId,
             vibrate: [30, 50, 30],

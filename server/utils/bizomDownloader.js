@@ -353,4 +353,8 @@ function startDownload(opts) {
   return true;
 }
 
-module.exports = { startDownload, downloadReports, getStatus, fetchOtpFromYahoo };
+module.exports = {
+  startDownload, downloadReports, getStatus, fetchOtpFromYahoo,
+  // building blocks reused by src/Bizom/inventory (report 10143 inventory picker)
+  chromePath, openReport, clickUpdateAndWait, downloadReportFile, screenshot,
+};

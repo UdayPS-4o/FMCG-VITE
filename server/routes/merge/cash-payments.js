@@ -18,9 +18,16 @@ function formatUserTime(date) {
 }
 // --- End Helper function ---
 
-// --- Helper function to check if record already exists in CASH.DBF ---
-async function checkRecordExists(dbfOrm, voucherNo, series) {
-  // Normalize and trim inputs
+// --- Helpers for checking existing records in CASH.DBF ---
+// Key matches the old strict-equality check (R_NO === voucherNo && SERIES === series),
+// so the type is part of the key: numeric 12 and string "12" stay distinct.
+function voucherKey(voucherNo, series) {
+  return `${typeof voucherNo}:${voucherNo}|${series}`;
+}
+
+// Normalizes a payment's voucherNo/series the same way R_NO/SERIES are compared.
+// Returns null when either is empty (such records are never treated as duplicates).
+function normalizedVoucherKey(voucherNo, series) {
   let normalizedVoucherNo = typeof voucherNo === 'string' ? voucherNo.trim() : voucherNo;
   const normalizedSeries = typeof series === 'string' ? series.trim().toUpperCase() : series;
 
@@ -29,23 +36,30 @@ async function checkRecordExists(dbfOrm, voucherNo, series) {
     normalizedVoucherNo = parseInt(normalizedVoucherNo, 10);
   }
 
-  // Skip check if voucher number or series is empty after normalization
-  if ((normalizedVoucherNo === null || normalizedVoucherNo === undefined || normalizedVoucherNo === '') || 
+  if ((normalizedVoucherNo === null || normalizedVoucherNo === undefined || normalizedVoucherNo === '') ||
       (normalizedSeries === null || normalizedSeries === undefined || normalizedSeries === '')) {
-    return false;
+    return null;
   }
-  
-  const allRecords = await dbfOrm.findAll();
-  //filter VR that starts with CP-
-  const cpRecords = allRecords.filter(r => r.VR && r.VR.startsWith('CP-'));
-
-  //filter cpRecords where R_NO and SERIES match the normalizedVoucherNo and normalizedSeries
-  const existingRecords = cpRecords.filter(r => r.R_NO === normalizedVoucherNo && r.SERIES === normalizedSeries);
-  console.log(`Found ${existingRecords.length} existing records for voucher number ${normalizedVoucherNo} and series ${normalizedSeries}`); 
-
-  return existingRecords.length > 0;
+  return voucherKey(normalizedVoucherNo, normalizedSeries);
 }
-// --- End Helper function ---
+
+// Reads CASH.DBF once (it is large and a full read takes several seconds) and collects
+// everything the sync needs: existing CP voucher keys and the next CP voucher number.
+async function scanCashDbf(dbfOrm) {
+  const allRecords = await dbfOrm.findAll();
+  const existingCpKeys = new Set();
+  let maxCp = 0;
+
+  for (const r of allRecords) {
+    if (!r.VR || !r.VR.startsWith('CP-')) continue;
+    existingCpKeys.add(voucherKey(r.R_NO, r.SERIES));
+    const num = parseInt(r.VR.split('-')[1], 10);
+    if (num > maxCp) maxCp = num;
+  }
+
+  return { existingCpKeys, nextCpNumber: maxCp + 1 };
+}
+// --- End Helpers ---
 
 // Paths
 const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CASH.dbf');
@@ -53,21 +67,6 @@ const cmplDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CMPL.dbf');
 const approvedJsonPath = path.join(__dirname, '..', '..', 'db', 'approved', 'cash-payments.json');
 const dbJsonPath = path.join(__dirname, '..', '..', 'db', 'database', 'cash-payments.json'); // Path for reverting
 const dbUsersPath = path.join(__dirname, '..', '..', 'db', 'users.json'); // Path to users.json
-
-// Helper function to get the next VR number for Cash Payments (CP)
-async function getNextCpVrNumber(dbfOrm) {
-  const records = await dbfOrm.findAll();
-  const cpRecords = records.filter(r => r.VR && r.VR.startsWith('CP-'));
-  if (cpRecords.length === 0) {
-    return 'CP-000001';
-  }
-  const maxVr = cpRecords.reduce((max, r) => {
-    const num = parseInt(r.VR.split('-')[1], 10);
-    return num > max ? num : max;
-  }, 0);
-  const nextNum = maxVr + 1;
-  return `CP-${String(nextNum).padStart(6, '0')}`;
-}
 
 // Map JSON record to CASH.DBF format for Cash Payment
 async function mapToCashDbfFormat(record, vr, userId, customerData) {
@@ -288,9 +287,12 @@ router.post('/sync', async (req, res) => {
     const duplicateRecords = [];
     const validRecords = [];
 
+    console.log('Scanning CASH.DBF for existing vouchers and next CP number...');
+    const { existingCpKeys, nextCpNumber } = await scanCashDbf(cashDbfOrm);
+
     for (const record of selectedApprovedRecords) {
-      const exists = await checkRecordExists(cashDbfOrm, record.voucherNo, record.series);
-      if (exists) {
+      const key = normalizedVoucherKey(record.voucherNo, record.series);
+      if (key && existingCpKeys.has(key)) {
         duplicateRecords.push(record);
       } else {
         validRecords.push(record);
@@ -308,8 +310,7 @@ router.post('/sync', async (req, res) => {
     }
     // --- End Check for existing records ---
 
-    const nextVrStart = await getNextCpVrNumber(cashDbfOrm);
-    let currentVrCounter = parseInt(nextVrStart.split('-')[1], 10);
+    let currentVrCounter = nextCpNumber;
 
     const dbfRecords = [];
     const customerCache = new Map();

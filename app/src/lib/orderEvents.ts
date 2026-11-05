@@ -2,6 +2,7 @@
 export const ORDER_PUSH_EVENT = 'order:push';       // detail: OrderPushDetail
 export const ORDER_REFRESH_EVENT = 'order:refresh'; // pages showing orders reload silently
 export const APP_NAVIGATE_EVENT = 'app:navigate';   // detail: url (notification tapped)
+export const PROMO_PUSH_EVENT = 'promo:push';       // detail: promoId (promotion push received / tapped)
 
 export interface OrderPushDetail {
     title: string;

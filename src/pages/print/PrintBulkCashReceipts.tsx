@@ -274,6 +274,18 @@ const PrintBulkCashReceipts: React.FC = () => {
                       <td className="text-white print:text-black">{item.party}</td>
                       <td id={`amount-${index}`} className="border-white print:border-black text-white print:text-black">{item.amount}</td>
                     </tr>
+                    {Number(item.discount) > 0 && (
+                      <>
+                        <tr>
+                          <td className="text-white print:text-black" colSpan={2}>Discount</td>
+                          <td className="border-white print:border-black text-white print:text-black">{Number(item.discount).toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                          <td className="text-white print:text-black" colSpan={2}>Total</td>
+                          <td className="border-white print:border-black text-white print:text-black">{(Number(item.amount) + Number(item.discount)).toFixed(2)}</td>
+                        </tr>
+                      </>
+                    )}
                     <tr>
                       <td className="text-white print:text-black" colSpan={2}>
                         {' '}

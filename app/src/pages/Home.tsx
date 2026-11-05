@@ -16,6 +16,8 @@ import SchemeProgress from '../components/SchemeProgress';
 import FadeImg from '../components/FadeImg';
 import PullToRefresh from '../components/PullToRefresh';
 import { notifyCartChange } from '../lib/cartFx';
+import { FestiveBackdrop, FestiveThemeButton } from '../components/FestiveBackdrop';
+import { useFestivalTheme } from '../context/FestivalThemeContext';
 
 interface Brand { brand_code: string; brand_desc: string; image_url: string; }
 
@@ -213,6 +215,9 @@ const Home = () => {
   const [hasMore, setHasMore] = useState(true);
   const [sortOrder, setSortOrder] = useState('');
   const { cart, cartTotal, language, user } = useStore();
+  const { variant: festive } = useFestivalTheme();
+  // Text that sits straight on the page background turns light on festive colours
+  const onBg = festive ? { strong: '#ffffff', soft: 'rgba(255,255,255,0.75)', faint: 'rgba(255,255,255,0.55)' } : { strong: '#111', soft: '#374151', faint: '#9ca3af' };
   const navigate = useNavigate();
   const loadingRef = useRef(false);
   const observer = useRef<IntersectionObserver | null>(null);
@@ -344,9 +349,11 @@ const Home = () => {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8f9fb', fontFamily: "'Inter',sans-serif", paddingBottom: 120 }}>
+    // isolation: the festive backdrop (z-index -1) paints behind this page's content only
+    <div style={{ minHeight: '100vh', background: festive ? 'transparent' : '#f8f9fb', position: 'relative', isolation: 'isolate', fontFamily: "'Inter',sans-serif", paddingBottom: 120 }}>
+      <FestiveBackdrop />
       {/* Header */}
-      <div style={{ background: '#fff', padding: '10px 16px', borderBottom: '1px solid #f1f3f5', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+      <div style={{ background: festive ? `${festive.bgFrom}f2` : '#fff', transition: 'background 0.8s', padding: '10px 16px', borderBottom: festive ? 'none' : '1px solid #f1f3f5', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src={logoUrl} alt="App Logo" onClick={() => navigate('/')} style={{ height: 28, cursor: 'pointer', objectFit: 'contain' }} />
           <div onClick={() => navigate('/search')} style={{ flex: 1, height: 38, background: '#f3f4f6', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', color: '#9ca3af', fontSize: 12.5 }}>
@@ -356,6 +363,7 @@ const Home = () => {
             <ShoppingCart size={18} color="#16a34a" />
             {cartCount > 0 && <span style={{ position: 'absolute', top: -3, right: -3, background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 20 }}>{cartCount}</span>}
           </button>
+          <FestiveThemeButton />
         </div>
       </div>
 
@@ -363,7 +371,7 @@ const Home = () => {
 
       {/* Brands */}
       <div style={{ padding: '12px 0 4px' }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: '#374151', margin: '0 16px 8px' }}>Shop by Brand</p>
+        <p style={{ fontSize: 12, fontWeight: 700, color: onBg.soft, margin: '0 16px 8px' }}>Shop by Brand</p>
         <div style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 4, paddingLeft: 16, paddingRight: 16 }}>
           {[{ brand_code: '', brand_desc: 'All', image_url: '' }, ...brands].map((b, i) => {
             const isActive = activeBrand === b.brand_code;
@@ -380,7 +388,7 @@ const Home = () => {
                     : <span style={{ fontSize: 9, fontWeight: 700, color: isActive ? '#fff' : pal.acc }}>{b.brand_desc.slice(0, 3)}</span>}
                 </motion.div>
                 </div>
-                <span style={{ fontSize: 8.5, fontWeight: 600, color: isActive ? pal.acc : '#6b7280', maxWidth: 50, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.brand_desc || b.brand_code}</span>
+                <span style={{ fontSize: 8.5, fontWeight: 600, color: isActive ? (festive ? '#fff' : pal.acc) : (festive ? onBg.soft : '#6b7280'), maxWidth: 50, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.brand_desc || b.brand_code}</span>
               </button>
             );
           })}
@@ -390,7 +398,7 @@ const Home = () => {
       {/* Grid */}
       <div style={{ padding: '0 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 800, color: '#111', margin: 0 }}>All Products <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500 }}>{totalProducts || ''}</span></h2>
+          <h2 style={{ fontSize: 14, fontWeight: 800, color: onBg.strong, margin: 0 }}>All Products <span style={{ fontSize: 11, color: onBg.faint, fontWeight: 500 }}>{totalProducts || ''}</span></h2>
           <button onClick={() => setShowSort(true)} style={{ background: '#fff', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
             <ArrowDownUp size={12} color="#4b5563" />
             <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>
@@ -424,8 +432,8 @@ const Home = () => {
           {loading && Array.from({ length: 4 }).map((_, i) => <MarketCardSkeleton key={i} />)}
           {!loading && displayProducts.length === 0 && (
             <div style={{ gridColumn: 'span 2', padding: '48px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <Package size={40} color="#d1d5db" />
-              <p style={{ fontSize: 14, color: '#9ca3af', fontWeight: 600, margin: 0 }}>
+              <Package size={40} color={festive ? onBg.faint : '#d1d5db'} />
+              <p style={{ fontSize: 14, color: onBg.faint, fontWeight: 600, margin: 0 }}>
                 {language === 'en' ? 'No products found' : 'कोई उत्पाद नहीं मिला'}
               </p>
             </div>
@@ -435,7 +443,7 @@ const Home = () => {
 
       {/* Pill Cart */}
       {cartCount > 0 && (
-        <button onClick={() => navigate('/cart')} style={{ position: 'fixed', bottom: 76, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#16a34a,#10b981)', border: 'none', borderRadius: 50, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 26px', boxShadow: '0 8px 32px rgba(22,163,74,0.35)', zIndex: 100 }}>
+        <button onClick={() => navigate('/cart')} style={{ position: 'fixed', bottom: 'calc(90px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#16a34a,#10b981)', border: 'none', borderRadius: 50, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 26px', boxShadow: '0 8px 32px rgba(22,163,74,0.35)', zIndex: 100 }}>
           <ShoppingCart size={17} color="#fff" />
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
             {totalB > 0 && `${totalB}B`}{totalB > 0 && totalP > 0 && '+'}{totalP > 0 && `${totalP}P`}{totalB === 0 && totalP === 0 && '0'} · ₹{cartTotal.toFixed(0)}

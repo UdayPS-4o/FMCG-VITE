@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { forwardRef, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   UserIcon, 
@@ -8,6 +8,13 @@ import {
   WarehouseIcon
 } from '../../components/icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { TabBar } from 'glisse';
+import { useGlisse } from '../glass/GlassSurface';
+
+// Glisse renders tab links with `href`; React Router's Link wants `to`
+const RouterLink = forwardRef<HTMLAnchorElement, { href: string } & React.AnchorHTMLAttributes<HTMLAnchorElement>>(
+  ({ href, ...props }, ref) => <Link ref={ref} to={href} {...props} />
+);
 
 interface NavItem {
   icon: React.ReactNode;
@@ -20,6 +27,7 @@ const BottomNav: React.FC = () => {
   const location = useLocation();
   const [isMobile, setIsMobile] = useState(false);
   const { hasAccess } = useAuth();
+  const glisse = useGlisse();
   
   // Check if we're on mobile
   useEffect(() => {
@@ -80,6 +88,25 @@ const BottomNav: React.FC = () => {
 
   // If not mobile, don't render
   if (!isMobile) return null;
+
+  if (glisse) {
+    const current = accessibleNavItems.find((item) => isActive(item.path));
+    return (
+      <div className="glisse-tabbar-dock">
+        <TabBar
+          aria-label="Main navigation"
+          link={RouterLink}
+          value={current ? current.path : null}
+          items={accessibleNavItems.map((item) => ({
+            value: item.path,
+            label: item.name,
+            icon: item.icon,
+            href: item.path,
+          }))}
+        />
+      </div>
+    );
+  }
 
   return (
     <>

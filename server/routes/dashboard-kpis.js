@@ -474,7 +474,9 @@ const handlers = {
     const LOOKBACK_DAYS = 90;
     const today = todayIst();
     const from = addDays(today, -LOOKBACK_DAYS);
-    const [details, products] = await Promise.all([getBillDtl(), getProducts()]);
+    const [details, products, companies] = await Promise.all([getBillDtl(), getProducts(), getCompanies()]);
+    // Company = first two letters of the item code (same rule as the company-wise sales pie)
+    const coOf = (code) => code.slice(0, 2).toUpperCase();
 
     const moved = new Map();
     details.forEach((d) => {
@@ -492,6 +494,7 @@ const handlers = {
       const avgQty = Math.round((totalQty / LOOKBACK_DAYS) * 100) / 100;
       const row = {
         code,
+        co: coOf(code),
         product: p.product,
         avgQty,
         stock: p.stock,
@@ -505,10 +508,19 @@ const handlers = {
 
     const nonMoving = products
       .filter((p) => p.stock > 0 && !moved.has(p.code))
-      .map((p) => ({ code: p.code, product: p.product, avgQty: 0, stock: p.stock, daysLeft: null }))
+      .map((p) => ({ code: p.code, co: coOf(p.code), product: p.product, avgQty: 0, stock: p.stock, daysLeft: null }))
       .sort((a, b) => a.product.localeCompare(b.product));
 
-    return { lookbackDays: LOOKBACK_DAYS, fast, slow, nonMoving };
+    // Companies that appear in any of the three lists, for the company filter
+    const coCounts = {};
+    [...fast, ...slow, ...nonMoving].forEach((r) => {
+      coCounts[r.co] = (coCounts[r.co] || 0) + 1;
+    });
+    const companyList = Object.entries(coCounts)
+      .map(([code, items]) => ({ code, company: companyLabel(code, companies), items }))
+      .sort((a, b) => b.items - a.items || a.company.localeCompare(b.company));
+
+    return { lookbackDays: LOOKBACK_DAYS, companies: companyList, fast, slow, nonMoving };
   },
 };
 

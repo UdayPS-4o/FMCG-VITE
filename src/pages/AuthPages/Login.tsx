@@ -4,6 +4,8 @@ import PageMeta from "../../components/common/PageMeta";
 import AuthLayout from "./AuthPageLayout";
 import constants from '../../constants';
 import useAuth from '../../hooks/useAuth';
+import { Button, Input } from 'glisse';
+import GlassSurface, { useGlisse } from '../../components/glass/GlassSurface';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -11,6 +13,7 @@ const Login: React.FC = () => {
   const [mobile, setMobile] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const glisse = useGlisse();
 
   useEffect(() => {
     // If token is present in localStorage, check if it's valid
@@ -103,7 +106,8 @@ const Login: React.FC = () => {
         description="Login page for Ekta Enterprises FMCG application"
       />
       <AuthLayout>
-        <div className="auth-card bg-white/90 dark:bg-gray-800/90 p-8 rounded-lg shadow-xl backdrop-blur-sm">
+        <div className="auth-card has-glisse relative bg-white/90 dark:bg-gray-800/90 p-8 rounded-lg shadow-xl backdrop-blur-sm">
+          <GlassSurface />
           <div className="mb-5 sm:mb-8 text-center">
             <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
               Welcome to Ekta Enterprises
@@ -118,6 +122,16 @@ const Login: React.FC = () => {
                 <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
                   Mobile <span className="text-error-500">*</span>
                 </label>
+                {glisse ? (
+                  <Input
+                    type="text"
+                    value={mobile}
+                    onValueChange={setMobile}
+                    placeholder="Enter your mobile number"
+                    required
+                    className="w-full"
+                  />
+                ) : (
                 <input
                   type="text"
                   value={mobile}
@@ -126,11 +140,22 @@ const Login: React.FC = () => {
                   placeholder="Enter your mobile number"
                   required
                 />
+                )}
               </div>
               <div>
                 <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
                   Password <span className="text-error-500">*</span>
                 </label>
+                {glisse ? (
+                  <Input
+                    type="password"
+                    value={password}
+                    onValueChange={setPassword}
+                    placeholder="Enter your password"
+                    required
+                    className="w-full"
+                  />
+                ) : (
                 <input
                   type="password"
                   value={password}
@@ -139,6 +164,7 @@ const Login: React.FC = () => {
                   placeholder="Enter your password"
                   required
                 />
+                )}
               </div>
               {error && (
                 <div className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded">
@@ -146,12 +172,18 @@ const Login: React.FC = () => {
                 </div>
               )}
               <div>
+                {glisse ? (
+                  <Button type="submit" variant="filled" className="w-full">
+                    Sign in
+                  </Button>
+                ) : (
                 <button
                   type="submit"
                   className="w-full text-white bg-brand-600 hover:bg-brand-700 focus:ring-4 focus:outline-none focus:ring-brand-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-brand-600 dark:hover:bg-brand-700 dark:focus:ring-brand-800"
                 >
                   Sign in
                 </button>
+                )}
               </div>
             </div>
           </form>

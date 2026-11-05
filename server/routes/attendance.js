@@ -1447,4 +1447,50 @@ app.post('/api/docs/get', verifyToken, async (req, res) => {
   }
 });
 
+// Latest attendance selfie per salesman code, used as avatars in the database tables.
+// records.json is large, so the map is cached and only rebuilt when the attendance or users file changes.
+let smAvatarCache = { key: null, avatars: {} };
+
+app.get('/api/attendance/sm-avatars', verifyToken, async (req, res) => {
+  try {
+    const recordsPath = path.join(__dirname, '..', 'db', 'attendance', 'records.json');
+    const usersPath = path.join(__dirname, '..', 'db', 'users.json');
+    const [recordsStat, usersStat] = await Promise.all([
+      fs.stat(recordsPath).catch(() => null),
+      fs.stat(usersPath).catch(() => null),
+    ]);
+    if (!recordsStat || !usersStat) {
+      return res.status(200).json({ success: true, avatars: {} });
+    }
+
+    const cacheKey = `${recordsStat.mtimeMs}-${usersStat.mtimeMs}`;
+    if (smAvatarCache.key !== cacheKey) {
+      const users = JSON.parse(await fs.readFile(usersPath, 'utf8'));
+      const smCodeByUserId = new Map();
+      users.forEach(u => { if (u.smCode) smCodeByUserId.set(String(u.id), String(u.smCode)); });
+
+      const records = JSON.parse(await fs.readFile(recordsPath, 'utf8'));
+      // Record ids look like `${userId}_${timestamp}` — use the timestamp to find the latest selfie
+      const latestByUser = new Map();
+      (Array.isArray(records) ? records : []).forEach(r => {
+        if (!r || !r.selfieData || !smCodeByUserId.has(String(r.userId))) return;
+        const ts = Number(String(r.id || '').split('_')[1]) || Date.parse(r.date) || 0;
+        const current = latestByUser.get(String(r.userId));
+        if (!current || ts > current.ts) latestByUser.set(String(r.userId), { ts, selfie: r.selfieData });
+      });
+
+      const avatars = {};
+      latestByUser.forEach((value, userId) => {
+        avatars[smCodeByUserId.get(userId)] = value.selfie;
+      });
+      smAvatarCache = { key: cacheKey, avatars };
+    }
+
+    res.status(200).json({ success: true, avatars: smAvatarCache.avatars });
+  } catch (error) {
+    console.error('Error loading salesman avatars:', error);
+    res.status(500).json({ success: false, message: 'Failed to load salesman avatars' });
+  }
+});
+
 module.exports = app;

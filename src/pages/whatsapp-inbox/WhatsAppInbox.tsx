@@ -869,7 +869,7 @@ export default function WhatsAppInbox() {
     fetch(`${API_BASE}/read`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone })
-    }).catch(() => { });
+    }).then(() => window.dispatchEvent(new Event('whatsapp-unread-changed'))).catch(() => { });
     setConversations(prev => prev.map(c => String(c.phone) === String(phone) ? { ...c, unreadCount: 0 } : c));
     setMsgLoading(true);
     try {

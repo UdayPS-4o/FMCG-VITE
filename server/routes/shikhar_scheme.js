@@ -3,45 +3,77 @@ const router = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
 const { DBFFile } = require('../dbf-orm/dbffile.js');
-const { exec } = require('child_process');
+const { downloadSchemes, sessionStatus, saveSession, OUTPUT_FILE: SHIKHAR_ALL_JSON } = require('../utils/shikharSchemes');
 
-// Cache for SCHDTL database
-let schdtlCache = null;
-let schdtlCacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-async function getActiveSchemesFromDBF() {
-    if (schdtlCache && Date.now() - schdtlCacheTime < CACHE_TTL) {
-        return schdtlCache;
-    }
-    try {
-        const dbfPath = path.join(process.env.DBF_FOLDER_PATH || path.join(__dirname, '../../d01-2324'), 'data', 'SCHDTL.DBF');
-        const dbf = await DBFFile.open(dbfPath);
-        const records = await dbf.readRecords();
-        await dbf.close();
-
-        const activeSchemesMap = {};
-        for (const record of records) {
-            const code = record.CODE?.trim();
-            if (!code) continue;
-
-            if (!activeSchemesMap[code]) {
-                activeSchemesMap[code] = [];
-            }
-            activeSchemesMap[code].push({
-                schFrom: record.SCH_FROM,
-                schTo: record.SCH_TO,
-                slab1: parseFloat(record.SLAB1) || 0,
-                slab2: parseFloat(record.SLAB2) || 999999999,
-                discount: parseFloat(record.DISCOUNT) || 0,
-                activityCode: record.ACTIVITY_C,
-                custCat: (record.CUST_CAT || '').trim().toUpperCase()
-            });
+// Serve the cached value at once and refresh it in the background when stale, so billing
+// never waits on a DBF read (on the busy server a cold read has taken 7-9 s).
+// Concurrent misses share one read; a failed read is not cached.
+function staleWhileRevalidate(name, loader) {
+    let value = null;
+    let loadedAt = 0;
+    let inflight = null;
+    let generation = 0;
+    const refresh = () => {
+        if (!inflight) {
+            const gen = generation;
+            const read = loader()
+                .then(v => {
+                    // Drop a read that started before invalidate(); it may predate the change
+                    if (gen === generation) { value = v; loadedAt = Date.now(); }
+                    return v;
+                })
+                .finally(() => { if (inflight === read) inflight = null; });
+            inflight = read;
         }
+        return inflight;
+    };
+    const get = async () => {
+        if (value) {
+            if (Date.now() - loadedAt >= CACHE_TTL) {
+                refresh().catch(error => console.error(`Error refreshing ${name}:`, error));
+            }
+            return value;
+        }
+        return refresh();
+    };
+    // Next call reads the file again (use after writing it)
+    get.invalidate = () => { value = null; loadedAt = 0; generation++; inflight = null; };
+    return get;
+}
 
-        schdtlCache = activeSchemesMap;
-        schdtlCacheTime = Date.now();
-        return schdtlCache;
+const dataFile = (name) => path.join(process.env.DBF_FOLDER_PATH || path.join(__dirname, '../../d01-2324'), 'data', name);
+
+const loadSchdtl = staleWhileRevalidate('SCHDTL.dbf', async () => {
+    const dbf = await DBFFile.open(dataFile('SCHDTL.DBF'));
+    const records = await dbf.readRecords();
+    await dbf.close();
+
+    const activeSchemesMap = {};
+    for (const record of records) {
+        const code = record.CODE?.trim();
+        if (!code) continue;
+
+        if (!activeSchemesMap[code]) {
+            activeSchemesMap[code] = [];
+        }
+        activeSchemesMap[code].push({
+            schFrom: record.SCH_FROM,
+            schTo: record.SCH_TO,
+            slab1: parseFloat(record.SLAB1) || 0,
+            slab2: parseFloat(record.SLAB2) || 999999999,
+            discount: parseFloat(record.DISCOUNT) || 0,
+            activityCode: record.ACTIVITY_C,
+            custCat: (record.CUST_CAT || '').trim().toUpperCase()
+        });
+    }
+    return activeSchemesMap;
+});
+
+async function getActiveSchemesFromDBF() {
+    try {
+        return await loadSchdtl();
     } catch (error) {
         console.error('Error caching SCHDTL.dbf:', error);
         return {};
@@ -49,30 +81,33 @@ async function getActiveSchemesFromDBF() {
 }
 
 // Party code -> 'W' (wholesale) or 'R' (retail), from CMPL.CUST_CAT. Only CUST_CAT "W" is wholesale.
-let partySideCache = null;
-let partySideCacheTime = 0;
+const loadPartySides = staleWhileRevalidate('CMPL.dbf', async () => {
+    const dbf = await DBFFile.open(dataFile('CMPL.DBF'));
+    const records = await dbf.readRecords();
+    await dbf.close();
+    const sides = {};
+    for (const record of records) {
+        const code = record.C_CODE?.trim();
+        if (code) sides[code] = (record.CUST_CAT || '').trim().toUpperCase() === 'W' ? 'W' : 'R';
+    }
+    return sides;
+});
 
 async function getPartySide(partyCode) {
     if (!partyCode) return 'R';
-    if (!partySideCache || Date.now() - partySideCacheTime >= CACHE_TTL) {
-        const sides = {};
-        try {
-            const dbfPath = path.join(process.env.DBF_FOLDER_PATH || path.join(__dirname, '../../d01-2324'), 'data', 'CMPL.DBF');
-            const dbf = await DBFFile.open(dbfPath);
-            const records = await dbf.readRecords();
-            await dbf.close();
-            for (const record of records) {
-                const code = record.C_CODE?.trim();
-                if (code) sides[code] = (record.CUST_CAT || '').trim().toUpperCase() === 'W' ? 'W' : 'R';
-            }
-        } catch (error) {
-            console.error('Error reading CMPL.dbf for customer categories:', error);
-        }
-        partySideCache = sides;
-        partySideCacheTime = Date.now();
+    try {
+        return (await loadPartySides())[partyCode.trim()] || 'R';
+    } catch (error) {
+        console.error('Error reading CMPL.dbf for customer categories:', error);
+        return 'R';
     }
-    return partySideCache[partyCode.trim()] || 'R';
 }
+
+// Warm both caches at startup so the first bill doesn't pay for the reads
+setImmediate(() => {
+    getActiveSchemesFromDBF();
+    getPartySide('-');
+});
 
 // Scheme rows tagged R / W apply to that side only; blank or anything else (e.g. legacy "A") applies to all
 function schemeAppliesToSide(custCat, side) {
@@ -193,11 +228,24 @@ router.get('/schemes/next-bill-no', async (req, res) => {
     }
 });
 
+// Shikhar slab types: discount_type 2 / "%" = percent, 1 = rupees per unit; discount_cat 3 = rupee value range.
+// SCHDTL only understands "% off when quantity is in SLAB1..SLAB2", so anything else is listed, not imported.
+function shikharNotImportableReason(s) {
+    const type = String(s.discount_type ?? '');
+    const cat = String(s.discount_cat ?? s.new_discount_cat ?? '');
+    if (type === '1' || /rs|flat/i.test(type)) return 'Flat rupees off per unit';
+    if (cat === '3') return 'Order value slab (Rs range)';
+    return null;
+}
+
+// SCHDTL.CUST_CAT for the Party Type picked on the page: R = retail only, W = wholesale only, A = everyone
+const SHIKHAR_CUST_CAT = { RT: 'R', WS: 'W', BOTH: 'A' };
+
 // GET /api/schemes/preview
 router.get('/schemes/preview', async (req, res) => {
     try {
         const pmplMap = await getPmplMapping();
-        const allJsonPath = path.join(__dirname, '../../public', 'all.json');
+        const allJsonPath = SHIKHAR_ALL_JSON;
 
         const allJsonContent = await fs.readFile(allJsonPath, 'utf8');
         const shikharData = JSON.parse(allJsonContent);
@@ -214,7 +262,9 @@ router.get('/schemes/preview', async (req, res) => {
             scheme_desc: s.scheme_desc ?? s.schemename ?? s.scheme_name ?? '',
             slab_start:  parseFloat(s.scheme_slab_start ?? s.slab_start ?? s.slabstart ?? s.min_qty ?? 1),
             slab_end:    parseFloat(s.scheme_slab_end   ?? s.slab_end   ?? s.slabend   ?? s.max_qty ?? 99999),
+            reason:      shikharNotImportableReason(s),
         });
+        const notImported = new Map();
 
         if (shikharData.brands && Array.isArray(shikharData.brands)) {
             for (const brand of shikharData.brands) {
@@ -245,6 +295,20 @@ router.get('/schemes/preview', async (req, res) => {
                             const s = normaliseScheme(raw);
                             // Skip entries with no actual discount
                             if (!s.discount || s.discount <= 0) continue;
+                            // Rupee-based schemes would be read as % / unit slabs by SCHDTL: list them instead
+                            if (s.reason) {
+                                const key = `${s.activitycode}_${s.slab_start}`;
+                                const entry = notImported.get(key) || {
+                                    activitycode: s.activitycode,
+                                    scheme_desc: s.scheme_desc,
+                                    reason: s.reason,
+                                    discount: s.discount,
+                                    products: new Set()
+                                };
+                                entry.products.add(pmplCode);
+                                notImported.set(key, entry);
+                                continue;
+                            }
                             const id = `${basepackCode}_${pmplCode}_${s.activitycode}_${s.slab_start}_${s.slab_end}`;
                             if (seenIds.has(id)) continue;
                             seenIds.add(id);
@@ -259,6 +323,8 @@ router.get('/schemes/preview', async (req, res) => {
                                 scheme_desc:  s.scheme_desc,
                                 slab_start:   s.slab_start,
                                 slab_end:     s.slab_end,
+                                // Tagged by the two-outlet download; older single-outlet files were retail only
+                                segment:      raw.outlet_segment || 'RT',
                             });
                         }
                     }
@@ -270,7 +336,10 @@ router.get('/schemes/preview', async (req, res) => {
             success: true,
             total_products: totalProcessed,
             matched_products: totalMatched,
-            schemes: matchedSchemes
+            scraped_at: shikharData.scraped_at || null,
+            outlets: shikharData.outlets || null,
+            schemes: matchedSchemes,
+            not_imported: [...notImported.values()].map(({ products, ...rest }) => ({ ...rest, matched_products: products.size }))
         });
 
     } catch (error) {
@@ -337,7 +406,7 @@ router.post('/schemes/import', async (req, res) => {
                 SLAB2: Number(scheme.slab_end),
                 SCH_FROM: new Date(validFrom),
                 SCH_TO: new Date(validTo),
-                CUST_CAT: "A"
+                CUST_CAT: SHIKHAR_CUST_CAT[scheme.segment] ?? 'A'
             };
         });
 
@@ -345,7 +414,7 @@ router.post('/schemes/import', async (req, res) => {
         await dbf.close();
 
         // Invalidate the cache whenever we successfully import
-        schdtlCache = null;
+        loadSchdtl.invalidate();
 
         res.json({ success: true, message: `Successfully imported ${recordsToAppend.length} schemes into SCHDTL.dbf` });
 
@@ -355,93 +424,54 @@ router.post('/schemes/import', async (req, res) => {
     }
 });
 
-// POST /api/schemes/scrape
+// POST /api/schemes/scrape - download from the retail and wholesale Shikhar outlets, tag each slab RT / WS / BOTH
 router.post('/schemes/scrape', async (req, res) => {
     try {
-        const jsPath  = path.join(__dirname, '../../scraper_puppeteer.js');
-        const cjsPath = path.join(__dirname, '../../scraper_puppeteer.cjs');
-        const cwdPath = path.join(__dirname, '../../');
-
-        // Sync .js -> .cjs (package.json has "type":"module" so .js = ESM; .cjs = CommonJS)
-        await fs.copyFile(jsPath, cjsPath);
-        console.log('Synced scraper_puppeteer.js → .cjs');
-
-        exec(`node "${cjsPath}"`, { cwd: cwdPath, timeout: 15 * 60 * 1000 }, (error, stdout, stderr) => {
-            if (error) {
-                console.error('Scraper error:', error.message);
-                console.error('Scraper stderr:', stderr);
-                return res.status(500).json({ success: false, message: 'Scraping failed', error: error.message, stderr });
-            }
-            console.log('Scraper output:', stdout);
-            res.json({ success: true, message: 'Successfully scraped latest schemes and updated all.json' });
+        const result = await downloadSchemes();
+        const names = Object.entries(result.outlets).map(([side, o]) => `${side}: ${o.name}`).join(', ');
+        const warning = result.missing.length
+            ? ` No ${result.missing.join(' / ')} cookie saved, so those schemes are missing.`
+            : '';
+        res.json({
+            success: true,
+            message: `Downloaded ${result.products} products (${names}). Slabs: ${result.slabs.RT} retail, ${result.slabs.WS} wholesale, ${result.slabs.BOTH} both.${warning}`,
+            ...result
         });
     } catch (error) {
-        console.error('Error triggering scrape:', error);
-        res.status(500).json({ success: false, message: 'Server error during scrape initiation', error: error.message });
+        console.error('Error downloading Shikhar schemes:', error);
+        res.status(502).json({ success: false, message: error.message });
+    }
+});
+
+// GET /api/schemes/sessions - which outlet each saved cookie logs in as (never returns the cookie)
+router.get('/schemes/sessions', async (req, res) => {
+    try {
+        res.json({ success: true, sessions: await sessionStatus() });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
 // POST /api/schemes/update-cookies
-// Body: { cookieValue: "<URL-encoded base64 'data' cookie value>", hulid: "HUL-..." (optional) }
+// Body: { side: "retail" | "wholesale", cookieValue: "<'data' cookie value from shikhar.hulcd.com>" }
 router.post('/schemes/update-cookies', async (req, res) => {
     try {
-        const { cookieValue, hulid } = req.body;
-
+        const { side = 'retail', cookieValue } = req.body || {};
         if (!cookieValue || typeof cookieValue !== 'string' || cookieValue.trim().length < 20) {
-            return res.status(400).json({ success: false, message: 'cookieValue is required and must be a valid non-empty string.' });
+            return res.status(400).json({ success: false, message: 'Paste the "data" cookie value.' });
         }
-
-        const scraperPath = path.join(__dirname, '../../scraper_puppeteer.js');
-        let scraperContent = await fs.readFile(scraperPath, 'utf8');
-
-        // Replace the "value" field of the 'data' cookie
-        // Matches: "name": "data", ... "value": "<old value>"
-        const dataValueRegex = /(\/\/ *data cookie[\s\S]*?)?("name"\s*:\s*"data"[\s\S]*?"value"\s*:\s*")([^"]+)(")/;
-        
-        // Simpler pattern: replace value of the object that has "name": "data"
-        // We'll use a targeted replace of the first occurrence of:
-        //   "name": "data", ...next lines... "value": "<old>"
-        // Strategy: split on the section, replace just the value string
-        const newValue = cookieValue.trim();
-
-        // Replace the data cookie value by pattern: look for 'name": "data"' block and then replace its value
-        const updated = scraperContent.replace(
-            /("name"\s*:\s*"data"[^}]*?"value"\s*:\s*")([^"]+)(")/s,
-            `$1${newValue}$3`
-        );
-
-        if (updated === scraperContent) {
-            return res.status(500).json({ success: false, message: 'Could not find the data cookie value in scraper file to replace. Check the scraper file format.' });
-        }
-
-        // Also update hulid header if provided
-        let finalContent = updated;
-        if (hulid && typeof hulid === 'string' && hulid.trim().length > 0) {
-            finalContent = finalContent.replace(
-                /("hulid"\s*:\s*")([^"]+)(")/,
-                `$1${hulid.trim()}$3`
-            );
-        }
-
-        await fs.writeFile(scraperPath, finalContent, 'utf8');
-
-        // Clear the scraper cache so next run fetches fresh data
-        const cacheDir = path.join(__dirname, '../../cache');
-        try {
-            const cacheFiles = await fs.readdir(cacheDir);
-            await Promise.all(cacheFiles.map(f => fs.unlink(path.join(cacheDir, f))));
-            console.log(`Cleared ${cacheFiles.length} cache files after cookie update.`);
-        } catch (cacheErr) {
-            // Cache dir might not exist yet — not a fatal error
-            console.warn('Could not clear cache dir:', cacheErr.message);
-        }
-
-        res.json({ success: true, message: 'Cookie updated successfully. Cache cleared. You can now run Download Schemes.' });
+        const saved = await saveSession(side, cookieValue);
+        res.json({
+            success: true,
+            message: `${side === 'wholesale' ? 'Wholesale' : 'Retail'} cookie saved: logged in as ${saved.outlet} (${saved.hulid}).`,
+            ...saved
+        });
     } catch (error) {
-        console.error('Error updating cookies:', error);
-        res.status(500).json({ success: false, message: 'Failed to update cookies', error: error.message });
+        console.error('Error saving Shikhar cookie:', error.message);
+        res.status(400).json({ success: false, message: error.message });
     }
 });
 
 router.getActiveSchemesFromDBF = getActiveSchemesFromDBF;
+router.invalidateSchemesCache = () => loadSchdtl.invalidate();
 module.exports = router;

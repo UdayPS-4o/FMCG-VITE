@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, EyeOff, GripVertical, Loader2, Maximize2, Minimize2, Search } from 'lucide-react';
 import { fetchWithAuth } from '@/lib/api';
+import GlassSurface from '@/components/glass/GlassSurface';
 
 // ---------- Formatting ----------
 const inrFormatter = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
@@ -197,7 +198,8 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   const controls = useContext(KpiItemContext);
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-gray-800 dark:bg-white/[0.03]">
+    <div className="has-glisse relative flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-gray-800 dark:bg-white/[0.03]">
+      <GlassSurface />
       <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${color}, ${color}55)` }} />
       <div className="flex flex-wrap items-center gap-3 px-4 pt-4 pb-3 sm:px-5">
         {controls && (

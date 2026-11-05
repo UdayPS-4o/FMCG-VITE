@@ -29,21 +29,63 @@ html.theme-glass-obsidian {
   --color-gray-600: rgba(235, 235, 245, 0.86);
   --color-gray-dark: rgba(22, 22, 28, 0.30);
 
-  --lg-ease: cubic-bezier(.2, .9, .25, 1.15);
-  --lg-rim:
+  --go-ease: cubic-bezier(.2, .9, .25, 1.15);
+  --go-rim:
     inset 0 1px 1px rgba(255, 255, 255, 0.45),
     inset 0 -1px 1px rgba(255, 255, 255, 0.12),
     inset 1px 0 1px rgba(255, 255, 255, 0.10),
     inset -1px 0 1px rgba(255, 255, 255, 0.10),
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
-  --lg-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.02)), rgba(22, 22, 28, 0.32);
-  --lg-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 28%, transparent 55%);
+  --go-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.02)), rgba(22, 22, 28, 0.32);
+  --go-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 28%, transparent 55%);
+
+  /* Glisse glass settings (the package owns the --lg-* names; ours are --go-*) */
+  --lg-glass-bend: 0.45;
+  --lg-glass-dispersion: 0.4;
+  --lg-blur: 4px;
+  --lg-rim-shine: 0.13;
+  --lg-fill: #0a84ff;
 
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Outfit, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   background: #030305;
   background-image: radial-gradient(120% 90% at 50% 0%, #0d0d16 0%, #040406 55%, #000 100%);
 }
+
+/* ---------- Glisse panels ----------
+   Containers marked .has-glisse get a real Glisse <Glass> layer (GlassSurface)
+   as their first child; it does the blur, refraction and rim, so the container
+   itself drops our CSS imitation. Doubled class to outrank the surface rules below. */
+html.theme-glass-obsidian .has-glisse.has-glisse {
+  isolation: isolate;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-color: transparent !important;
+  box-shadow: 0 16px 44px -12px rgba(0, 0, 0, 0.55) !important;
+}
+html.theme-glass-obsidian .glisse-surface {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Glisse tab bar, floating above the bottom edge like iOS 26 */
+html.theme-glass-obsidian .glisse-tabbar-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99999;
+  display: flex;
+  justify-content: center;
+  padding: 0 12px calc(10px + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+html.theme-glass-obsidian .glisse-tabbar-dock > * { pointer-events: auto; max-width: 100%; }
+html.theme-glass-obsidian .glisse-tabbar-dock svg { width: 22px; height: 22px; }
 
 /* ---------- Wallpaper: slow-drifting aurora behind the glass ---------- */
 html.theme-glass-obsidian body::before,
@@ -80,11 +122,11 @@ html.theme-glass-obsidian body::after {
 
 /* ---------- Liquid glass surfaces (same targets as the shared glass base) ---------- */
 html.theme-glass-obsidian :is(.bg-white, .bg-white\/90, .bg-white\/95, .dark\:bg-gray-900, .dark\:bg-gray-800, .bg-gray-dark, .rounded-2xl, .rounded-xl) {
-  background: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.09), transparent 45%), var(--lg-sheen), var(--lg-fill) !important;
+  background: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.09), transparent 45%), var(--go-sheen), var(--go-fill) !important;
   -webkit-backdrop-filter: blur(22px) saturate(190%) brightness(1.06);
   backdrop-filter: blur(22px) saturate(190%) brightness(1.06);
   border: 0 !important;
-  box-shadow: var(--lg-rim), 0 2px 6px rgba(0, 0, 0, 0.22), 0 16px 44px -12px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--go-rim), 0 2px 6px rgba(0, 0, 0, 0.22), 0 16px 44px -12px rgba(0, 0, 0, 0.55);
 }
 html.theme-glass-obsidian .rounded-2xl { border-radius: 26px; }
 /* body and full-page wrappers (incl. the app layout root) are canvas, not panels.
@@ -101,7 +143,7 @@ html.theme-glass-obsidian :is(.rounded-2xl, .rounded-xl) :is(.rounded-2xl, .roun
   background: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.09), transparent 45%), linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)) !important;
   -webkit-backdrop-filter: blur(12px) saturate(170%);
   backdrop-filter: blur(12px) saturate(170%);
-  box-shadow: var(--lg-rim), 0 4px 14px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--go-rim), 0 4px 14px rgba(0, 0, 0, 0.22);
 }
 
 /* lens refraction on the big outer panels */
@@ -143,9 +185,9 @@ html.theme-glass-obsidian .app-sidebar {
   border-radius: 30px;
   padding-left: 14px;
   padding-right: 14px;
-  background: var(--lg-sheen), var(--lg-fill) !important;
+  background: var(--go-sheen), var(--go-fill) !important;
   border: 0 !important;
-  box-shadow: var(--lg-rim), 0 18px 50px -10px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--go-rim), 0 18px 50px -10px rgba(0, 0, 0, 0.6);
 }
 html.theme-glass-obsidian .app-sidebar.w-\[290px\] { width: 272px; }
 html.theme-glass-obsidian .app-sidebar.w-\[90px\]  { width: 78px; }
@@ -160,7 +202,7 @@ html.theme-glass-obsidian .menu-item {
   padding-bottom: 6px;
   font-size: 15px;
   letter-spacing: -0.01em;
-  transition: background-color .2s, box-shadow .3s, transform .35s var(--lg-ease);
+  transition: background-color .2s, box-shadow .3s, transform .35s var(--go-ease);
 }
 html.theme-glass-obsidian .menu-item-inactive { color: rgba(255, 255, 255, 0.86); }
 html.theme-glass-obsidian .menu-item-inactive:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
@@ -168,8 +210,8 @@ html.theme-glass-obsidian .menu-item-active,
 html.theme-glass-obsidian .menu-dropdown-item-active {
   color: #fff;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
-  box-shadow: var(--lg-rim), 0 4px 14px rgba(0, 0, 0, 0.3);
-  animation: lg-pop .5s var(--lg-ease);
+  box-shadow: var(--go-rim), 0 4px 14px rgba(0, 0, 0, 0.3);
+  animation: lg-pop .5s var(--go-ease);
 }
 @keyframes lg-pop { from { transform: scale(.94); opacity: .6; } }
 html.theme-glass-obsidian .menu-dropdown-item { border-radius: 12px; }
@@ -214,7 +256,7 @@ html.theme-glass-obsidian .auth-card {
     linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03)), rgba(18, 18, 24, 0.45) !important;
   -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
   backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
-  box-shadow: var(--lg-rim), 0 30px 80px -20px rgba(0, 0, 0, 0.75), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  box-shadow: var(--go-rim), 0 30px 80px -20px rgba(0, 0, 0, 0.75), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
 }
 @supports (backdrop-filter: url("#lg-lens")) {
   html.theme-glass-obsidian .auth-card { backdrop-filter: url("#lg-lens") blur(22px) saturate(200%) brightness(1.05); }
@@ -231,8 +273,8 @@ html.theme-glass-obsidian .auth-card h1 {
 }
 html.theme-glass-obsidian .auth-card p { color: rgba(235, 235, 245, 0.62); }
 html.theme-glass-obsidian .auth-card label { color: rgba(235, 235, 245, 0.8); font-weight: 600; }
-html.theme-glass-obsidian .auth-card :is(input) { height: 48px; border-radius: 14px; font-size: 15px; }
-html.theme-glass-obsidian .auth-card button[type="submit"] { height: 50px; border-radius: 999px; font-size: 16px; font-weight: 600; }
+html.theme-glass-obsidian .auth-card input:not(.lg-input *) { height: 48px; border-radius: 14px; font-size: 15px; }
+html.theme-glass-obsidian .auth-card button[type="submit"]:not(.lg-glass) { height: 50px; border-radius: 999px; font-size: 16px; font-weight: 600; }
 
 /* ---------- Header: glass bar ---------- */
 html.theme-glass-obsidian .app-header {
@@ -263,7 +305,7 @@ html.theme-glass-obsidian [class*="from-indigo-600"][class*="via-blue-600"] > di
   background: linear-gradient(180deg, #4da3ff, #0a6cf0) !important;
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.45), 0 6px 16px rgba(10, 132, 255, 0.35) !important;
 }
-html.theme-glass-obsidian [class*="from-indigo-600"][class*="via-blue-600"] button {
+html.theme-glass-obsidian [class*="from-indigo-600"][class*="via-blue-600"] button:not(.lg-glass) {
   border-radius: 999px;
   padding: 10px 20px;
   background: linear-gradient(180deg, #3d9bff, #0a6cf0) !important;
@@ -275,10 +317,10 @@ html.theme-glass-obsidian :is(button, a):is(.bg-brand-500, .bg-brand-600, .bg-bl
   background: linear-gradient(180deg, #3d9bff, #0a6cf0) !important;
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.16), 0 6px 18px rgba(10, 132, 255, 0.35);
 }
-html.theme-glass-obsidian button:not(:disabled) { transition: transform .35s var(--lg-ease), background-color .2s, box-shadow .2s; }
-html.theme-glass-obsidian button:not(:disabled):active { transform: scale(.96); }
+html.theme-glass-obsidian button:not(:disabled):not(.lg-glass):not(.lg-switch) { transition: transform .35s var(--go-ease), background-color .2s, box-shadow .2s; }
+html.theme-glass-obsidian button:not(:disabled):not(.lg-glass):not(.lg-switch):active { transform: scale(.96); }
 
-html.theme-glass-obsidian :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea) {
+html.theme-glass-obsidian :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea):not(.lg-input *) {
   background: rgba(120, 120, 128, 0.16) !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -287,7 +329,7 @@ html.theme-glass-obsidian :is(input:not([type="checkbox"]):not([type="radio"]):n
   color: #fff;
   transition: box-shadow .2s, background-color .2s;
 }
-html.theme-glass-obsidian :is(input, select, textarea):focus {
+html.theme-glass-obsidian :is(input, select, textarea):not(.lg-input *):focus {
   outline: none;
   background: rgba(120, 120, 128, 0.22) !important;
   border-color: rgba(10, 132, 255, 0.9) !important;
@@ -304,7 +346,7 @@ html.theme-glass-obsidian .autocomplete-dropdown {
   backdrop-filter: blur(30px) saturate(190%);
   border: 0 !important;
   border-radius: 16px !important;
-  box-shadow: var(--lg-rim), 0 20px 50px -10px rgba(0, 0, 0, 0.7) !important;
+  box-shadow: var(--go-rim), 0 20px 50px -10px rgba(0, 0, 0, 0.7) !important;
   padding: 4px;
   color: #fff;
 }

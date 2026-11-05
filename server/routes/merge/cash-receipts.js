@@ -17,8 +17,24 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Tracks how many WhatsApp messages have been sent in this sync run (reset per request)
-let whatsappMessageCount = 0;
+// Time the last WhatsApp message was sent; the next one waits until WHATSAPP_DELAY_MS has passed
+let lastWhatsappSentAt = 0;
+
+// Notifications run in the background after the sync responds. They are chained on one
+// queue so concurrent syncs still send one message at a time with the rate-limit gap.
+let notificationQueue = Promise.resolve();
+
+function queueReceiptNotifications(jobs) {
+  if (jobs.length === 0) return;
+  console.log(`[Cash Receipts Sync] Queued ${jobs.length} receipt notification(s) for background sending.`);
+  notificationQueue = notificationQueue.then(async () => {
+    for (const { record, customerData } of jobs) {
+      await sendReceiptNotification(record, customerData);
+    }
+  }).catch((err) => {
+    console.error('[Cash Receipts Sync] Background notification queue error:', err);
+  });
+}
 // --- End WhatsApp Rate Limiter ---
 
 // --- Helper function to format date and time ---
@@ -34,9 +50,16 @@ function formatUserTime(date) {
 }
 // --- End Helper function ---
 
-// --- Helper function to check if record already exists in CASH.DBF ---
-async function checkRecordExists(dbfOrm, receiptNo, series) {
-  // Normalize and trim inputs
+// --- Helpers for checking existing records in CASH.DBF ---
+// Key matches the old strict-equality check (R_NO === receiptNo && SERIES === series),
+// so the type is part of the key: numeric 12 and string "12" stay distinct.
+function receiptKey(receiptNo, series) {
+  return `${typeof receiptNo}:${receiptNo}|${series}`;
+}
+
+// Normalizes a receipt's receiptNo/series the same way R_NO/SERIES are compared.
+// Returns null when either is empty (such records are never treated as duplicates).
+function normalizedReceiptKey(receiptNo, series) {
   let normalizedReceiptNo = typeof receiptNo === 'string' ? receiptNo.trim() : receiptNo;
   const normalizedSeries = typeof series === 'string' ? series.trim().toUpperCase() : series;
 
@@ -45,25 +68,36 @@ async function checkRecordExists(dbfOrm, receiptNo, series) {
     normalizedReceiptNo = parseInt(normalizedReceiptNo, 10);
   }
 
-  // Skip check if receipt number or series is empty after normalization
-  if ((normalizedReceiptNo === null || normalizedReceiptNo === undefined || normalizedReceiptNo === '') || 
+  if ((normalizedReceiptNo === null || normalizedReceiptNo === undefined || normalizedReceiptNo === '') ||
       (normalizedSeries === null || normalizedSeries === undefined || normalizedSeries === '')) {
-    return false;
+    return null;
   }
-  
-
-  const allRecords = await dbfOrm.findAll();
-
-  //filter VR that starts with CR-
-  const crRecords = allRecords.filter(r => r.VR && r.VR.startsWith('CR-'));
-
-  //filter crRecords where R_NO and SERIES match the normalizedReceiptNo and normalizedSeries
-  const existingRecords = crRecords.filter(r => r.R_NO === normalizedReceiptNo && r.SERIES === normalizedSeries);
-  console.log(`Found ${existingRecords.length} existing records for receipt number ${normalizedReceiptNo} and series ${normalizedSeries}`); 
-
-  return existingRecords.length > 0;
+  return receiptKey(normalizedReceiptNo, normalizedSeries);
 }
-// --- End Helper function ---
+
+// Reads CASH.DBF once (it is large and a full read takes several seconds) and collects
+// everything the sync needs: existing CR receipt keys and the next CR / JB voucher numbers.
+async function scanCashDbf(dbfOrm) {
+  const allRecords = await dbfOrm.findAll();
+  const existingCrKeys = new Set();
+  let maxCr = 0;
+  let maxJb = 0;
+
+  for (const r of allRecords) {
+    if (!r.VR) continue;
+    if (r.VR.startsWith('CR-')) {
+      existingCrKeys.add(receiptKey(r.R_NO, r.SERIES));
+      const num = parseInt(r.VR.split('-')[1], 10);
+      if (num > maxCr) maxCr = num;
+    } else if (r.VR.startsWith('JB-')) {
+      const num = parseInt(r.VR.split('-')[1], 10);
+      if (num > maxJb) maxJb = num;
+    }
+  }
+
+  return { existingCrKeys, nextCrNumber: maxCr + 1, nextJbNumber: maxJb + 1 };
+}
+// --- End Helpers ---
 
 // Paths
 const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CASH.dbf');
@@ -71,36 +105,6 @@ const cmplDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CMPL.dbf');
 const approvedJsonPath = path.join(__dirname, '..', '..', 'db', 'approved', 'cash-receipts.json');
 const dbJsonPath = path.join(__dirname, '..', '..', 'db', 'cash-receipts.json'); // Path for reverting
 const dbUsersPath = path.join(__dirname, '..', '..', 'db', 'users.json');
-
-// Helper function to get the next VR number for Cash Receipts (CR)
-async function getNextCrVrNumber(dbfOrm) {
-  const records = await dbfOrm.findAll();
-  const crRecords = records.filter(r => r.VR && r.VR.startsWith('CR-'));
-  if (crRecords.length === 0) {
-    return 'CR-000001';
-  }
-  const maxVr = crRecords.reduce((max, r) => {
-    const num = parseInt(r.VR.split('-')[1], 10);
-    return num > max ? num : max;
-  }, 0);
-  const nextNum = maxVr + 1;
-  return `CR-${String(nextNum).padStart(6, '0')}`;
-}
-
-// Helper function to get the next VR number for Journal Vouchers (JB)
-async function getNextJbVrNumber(dbfOrm) {
-  const records = await dbfOrm.findAll();
-  const jbRecords = records.filter(r => r.VR && r.VR.startsWith('JB-'));
-  if (jbRecords.length === 0) {
-    return 'JB-000001';
-  }
-  const maxVr = jbRecords.reduce((max, r) => {
-    const num = parseInt(r.VR.split('-')[1], 10);
-    return num > max ? num : max;
-  }, 0);
-  const nextNum = maxVr + 1;
-  return `JB-${String(nextNum).padStart(6, '0')}`;
-}
 
 // Map JSON record to CASH.DBF format for Cash Receipt
 async function mapToCashDbfFormat(record, vr, userId, customerData) {
@@ -460,6 +464,131 @@ async function mapToPartyCreditDbfFormat(record, jbVr, crVr, userId, customerDat
   };
 }
 
+// Sends the WhatsApp + SMS acknowledgement for one synced receipt.
+async function sendReceiptNotification(record, customerData) {
+  try {
+    const mobileNumber = customerData?.C_PHONE || customerData?.C_MOBILE; // Using AC_MOBILE from customerData
+
+    // Declare these variables here so they are in scope for both if/else blocks
+    const amount = parseFloat(record.amount) || 0;
+    const receiptNo = record.receiptNo || ""; // This 'receiptNo' is now in scope for the else block
+    const receiptDate = record.date || "Date N/A"; // Use record date
+
+    if (mobileNumber && mobileNumber.trim() !== "") {
+      // --- Rate limit: wait before sending to avoid WhatsApp spam detection ---
+      const waitMs = lastWhatsappSentAt + WHATSAPP_DELAY_MS - Date.now();
+      if (waitMs > 0) {
+        console.log(`[Cash Receipts Sync] Rate limiter: waiting ${waitMs}ms before next WhatsApp message...`);
+        await sleep(waitMs);
+      }
+      lastWhatsappSentAt = Date.now();
+      // --- End Rate limit ---
+
+      console.log(`[Cash Receipts Sync] Attempting to send WhatsApp via AOC API for Receipt: ${receiptNo}, Mobile: ${mobileNumber}`);
+
+      try {
+        // ── Format recipient number ─────────────────────────────────────
+        // AOC API expects E.164 format with country code (e.g. +919377888899)
+        const rawMobile = mobileNumber.replace(/\D/g, ''); // strip non-digits
+        // Guard: only treat as already-prefixed if it is exactly 12 digits (91 + 10).
+        // A 10-digit number that happens to start with "91" (e.g. 9179174888) would
+        // otherwise be forwarded as +919179174888 → AOC "No Valid Numbers Found".
+        const recipientNumber = (rawMobile.startsWith('91') && rawMobile.length === 12) ? `+${rawMobile}` : `+91${rawMobile}`;
+
+        // ── Format date for display ─────────────────────────────────────
+        let formattedDate = receiptDate;
+        try { formattedDate = format(new Date(receiptDate), 'dd-MM-yyyy'); } catch (_) {}
+
+        // ── AOC WhatsApp API payload ────────────────────────────────────
+        // Template 'bankrec':
+        // "We Thankfully Acknowledge Receipt of Rs Amount : {{1}} Receipt No.{{2}} on Date {{3}} Regards Ekta Enterprises"
+        const aocPayload = {
+          from: process.env.AOC_WA_FROM || '+15554884507',
+          campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
+          to: recipientNumber,
+          type: 'template',
+          templateName: 'bankrec',
+          language: { code: 'en' }, // Required by AOC API
+          components: {
+            body: {
+              // {{2}} = "BY K-2632" (series + receiptNo with BY prefix)
+              params: [
+                amount.toFixed(2),
+                'BY ' + (record.series ? record.series + '-' : '') + String(receiptNo),
+                formattedDate,
+              ],
+            },
+          },
+        };
+
+        console.log(`[Cash Receipts Sync] Calling WhatsApp for Receipt: ${receiptNo}. Recipient: ${recipientNumber}`);
+
+        // Route through whatsapp.js /send (port 4292) — the same path the
+        // inbox UI uses.  whatsapp.js writes the message_outgoing JSONL entry
+        // and calls outbound-ingest.registerAlreadyLogged, so a new inbox
+        // thread is created immediately without any pm2 log tailing.
+        const WA_SEND_URL = `http://127.0.0.1:${process.env.WHATSAPP_PORT || 4292}/send`;
+
+        const sendMessageResponse = await axios.post(
+          WA_SEND_URL,
+          {
+            to: recipientNumber,
+            type: 'template',
+            templateName: 'bankrec',
+            language: { code: 'en' },
+            components: aocPayload.components,
+          },
+          { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+        );
+
+        if (sendMessageResponse.status === 200 || sendMessageResponse.status === 201) {
+          console.log(`[Cash Receipts Sync] WhatsApp sent successfully for Receipt: ${receiptNo}. MessageId: ${sendMessageResponse.data?.data?.[0]?.messageId || sendMessageResponse.data?.id || ''}`);
+        } else {
+          console.warn(`[Cash Receipts Sync] WhatsApp send for Receipt: ${receiptNo} returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+        }
+
+        // Send SMS using TextLocal API
+        try {
+          // --- Rate limit: short pause before SMS ---
+          console.log(`[Cash Receipts Sync] Rate limiter: waiting ${SMS_DELAY_MS}ms before SMS for Receipt: ${receiptNo}...`);
+          await sleep(SMS_DELAY_MS);
+          // --- End Rate limit ---
+
+          const smsMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${amount.toFixed(2)} on Date ${formattedDate} Regards Ekta Enterprises`;
+
+          const textLocalResponse = await axios.get('https://control.arihantglobal.in/fe/api/v1/send', {
+            params: {
+              username: 'ektaenterprises.trans',
+              password: 'sbe3d',
+              dltPrincipalEntityId: '1501397800000015092',
+              from: 'EKTAEN',
+              to: "91" + mobileNumber.replace(/\D/g, ''),
+              text: smsMessage,
+              unicode: false,
+            }
+          });
+
+          if (textLocalResponse.data && textLocalResponse.data.statusCode == 200) {
+            console.log(`[Cash Receipts Sync] TextLocal SMS sent successfully for Receipt: ${receiptNo}. Response: ${JSON.stringify(textLocalResponse.data)}`);
+          } else {
+            console.warn(`[Cash Receipts Sync] TextLocal SMS API call for Receipt: ${receiptNo} failed. Response: ${JSON.stringify(textLocalResponse.data)}`);
+          }
+        } catch (smsError) {
+          console.error(`[Cash Receipts Sync] Error sending SMS via TextLocal for Receipt: ${receiptNo}: ${smsError.message}`, smsError);
+        }
+      } catch (apiError) {
+        console.error(`[Cash Receipts Sync] Error calling AOC WhatsApp API for Receipt: ${receiptNo}: ${apiError.message}`, apiError);
+      }
+    } else {
+      // 'receiptNo' is now correctly in scope here
+      console.log(`[Cash Receipts Sync] Mobile number not found or empty for party ${record.party} in receipt ${receiptNo}. Skipping message send.`);
+    }
+  } catch (messageError) {
+    // Log the full error object for better diagnostics (includes stack trace)
+    console.error(`[Cash Receipts Sync] Error during message processing for receipt ${record.receiptNo}: ${messageError.message}`, messageError);
+  }
+}
+
 // POST endpoint to merge selected records to CASH.DBF
 router.post('/sync', async (req, res) => {
   try {
@@ -555,9 +684,12 @@ router.post('/sync', async (req, res) => {
     const duplicateRecords = [];
     const validRecords = [];
 
+    console.log('Scanning CASH.DBF for existing receipts and voucher numbers...');
+    const { existingCrKeys, nextCrNumber, nextJbNumber } = await scanCashDbf(cashDbfOrm);
+
     for (const record of selectedApprovedRecords) {
-      const exists = await checkRecordExists(cashDbfOrm, record.receiptNo, record.series);
-      if (exists) {
+      const key = normalizedReceiptKey(record.receiptNo, record.series);
+      if (key && existingCrKeys.has(key)) {
         duplicateRecords.push(record);
       } else {
         validRecords.push(record);
@@ -575,14 +707,12 @@ router.post('/sync', async (req, res) => {
     }
     // --- End Check for existing records ---
 
-    const nextVrStart = await getNextCrVrNumber(cashDbfOrm);
-    let currentVrCounter = parseInt(nextVrStart.split('-')[1], 10);
-
-    // Get next JB voucher number for discount entries
-    const nextJbStart = await getNextJbVrNumber(cashDbfOrm);
-    let currentJbCounter = parseInt(nextJbStart.split('-')[1], 10);
+    let currentVrCounter = nextCrNumber;
+    // Next JB voucher number for discount entries
+    let currentJbCounter = nextJbNumber;
 
     const dbfRecords = [];
+    const notificationJobs = []; // WhatsApp/SMS to send after the DBF write succeeds
     const customerCache = new Map(); // Cache for customer data
     console.log('Reading all customers from CMPL.DBF...');
     const allCustomers = await cmplDbfOrm.findAll(); // Read all customers once
@@ -604,128 +734,8 @@ router.post('/sync', async (req, res) => {
         }
       }
 
-      // --- Message Sending Logic (WhatsApp and TextLocal) ---
-      try {
-        const mobileNumber = customerData?.C_PHONE || customerData?.C_MOBILE; // Using AC_MOBILE from customerData
-
-        // Declare these variables here so they are in scope for both if/else blocks
-        const amount = parseFloat(record.amount) || 0;
-        const receiptNo = record.receiptNo || ""; // This 'receiptNo' is now in scope for the else block
-        const receiptDate = record.date || "Date N/A"; // Use record date
-
-        if (mobileNumber && mobileNumber.trim() !== "") {
-          // --- Rate limit: wait before sending to avoid WhatsApp spam detection ---
-          if (whatsappMessageCount > 0) {
-            console.log(`[Cash Receipts Sync] Rate limiter: waiting ${WHATSAPP_DELAY_MS}ms before next WhatsApp message (message #${whatsappMessageCount + 1})...`);
-            await sleep(WHATSAPP_DELAY_MS);
-          }
-          whatsappMessageCount++;
-          // --- End Rate limit ---
-
-          console.log(`[Cash Receipts Sync] Attempting to send WhatsApp via AOC API for Receipt: ${receiptNo}, Mobile: ${mobileNumber}`);
-
-          try {
-            // ── Format recipient number ─────────────────────────────────────
-            // AOC API expects E.164 format with country code (e.g. +919377888899)
-            const rawMobile = mobileNumber.replace(/\D/g, ''); // strip non-digits
-            // Guard: only treat as already-prefixed if it is exactly 12 digits (91 + 10).
-            // A 10-digit number that happens to start with "91" (e.g. 9179174888) would
-            // otherwise be forwarded as +919179174888 → AOC "No Valid Numbers Found".
-            const recipientNumber = (rawMobile.startsWith('91') && rawMobile.length === 12) ? `+${rawMobile}` : `+91${rawMobile}`;
-
-            // ── Format date for display ─────────────────────────────────────
-            let formattedDate = receiptDate;
-            try { formattedDate = format(new Date(receiptDate), 'dd-MM-yyyy'); } catch (_) {}
-
-            // ── AOC WhatsApp API payload ────────────────────────────────────
-            // Template 'bankrec':
-            // "We Thankfully Acknowledge Receipt of Rs Amount : {{1}} Receipt No.{{2}} on Date {{3}} Regards Ekta Enterprises"
-            const aocPayload = {
-              from: process.env.AOC_WA_FROM || '+15554884507',
-              campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
-              to: recipientNumber,
-              type: 'template',
-              templateName: 'bankrec',
-              language: { code: 'en' }, // Required by AOC API
-              components: {
-                body: {
-                  // {{2}} = "BY K-2632" (series + receiptNo with BY prefix)
-                  params: [
-                    amount.toFixed(2),
-                    'BY ' + (record.series ? record.series + '-' : '') + String(receiptNo),
-                    formattedDate,
-                  ],
-                },
-              },
-            };
-
-            console.log(`[Cash Receipts Sync] Calling WhatsApp for Receipt: ${receiptNo}. Recipient: ${recipientNumber}`);
-
-            // Route through whatsapp.js /send (port 4292) — the same path the
-            // inbox UI uses.  whatsapp.js writes the message_outgoing JSONL entry
-            // and calls outbound-ingest.registerAlreadyLogged, so a new inbox
-            // thread is created immediately without any pm2 log tailing.
-            const WA_SEND_URL = `http://127.0.0.1:${process.env.WHATSAPP_PORT || 4292}/send`;
-
-            const sendMessageResponse = await axios.post(
-              WA_SEND_URL,
-              {
-                to: recipientNumber,
-                type: 'template',
-                templateName: 'bankrec',
-                language: { code: 'en' },
-                components: aocPayload.components,
-              },
-              { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
-            );
-
-            if (sendMessageResponse.status === 200 || sendMessageResponse.status === 201) {
-              console.log(`[Cash Receipts Sync] WhatsApp sent successfully for Receipt: ${receiptNo}. MessageId: ${sendMessageResponse.data?.data?.[0]?.messageId || sendMessageResponse.data?.id || ''}`);
-            } else {
-              console.warn(`[Cash Receipts Sync] WhatsApp send for Receipt: ${receiptNo} returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
-            }
-
-            // Send SMS using TextLocal API
-            try {
-              // --- Rate limit: short pause before SMS ---
-              console.log(`[Cash Receipts Sync] Rate limiter: waiting ${SMS_DELAY_MS}ms before SMS for Receipt: ${receiptNo}...`);
-              await sleep(SMS_DELAY_MS);
-              // --- End Rate limit ---
-
-              const smsMessage = `We Thankfully Acknowledge Receipt of Rs Amount : ${amount.toFixed(2)} on Date ${formattedDate} Regards Ekta Enterprises`;
-
-              const textLocalResponse = await axios.get('https://control.arihantglobal.in/fe/api/v1/send', {
-                params: {
-                  username: 'ektaenterprises.trans',
-                  password: 'sbe3d',
-                  dltPrincipalEntityId: '1501397800000015092',
-                  from: 'EKTAEN',
-                  to: "91" + mobileNumber.replace(/\D/g, ''),
-                  text: smsMessage,
-                  unicode: false,
-                }
-              });
-
-              if (textLocalResponse.data && textLocalResponse.data.statusCode == 200) {
-                console.log(`[Cash Receipts Sync] TextLocal SMS sent successfully for Receipt: ${receiptNo}. Response: ${JSON.stringify(textLocalResponse.data)}`);
-              } else {
-                console.warn(`[Cash Receipts Sync] TextLocal SMS API call for Receipt: ${receiptNo} failed. Response: ${JSON.stringify(textLocalResponse.data)}`);
-              }
-            } catch (smsError) {
-              console.error(`[Cash Receipts Sync] Error sending SMS via TextLocal for Receipt: ${receiptNo}: ${smsError.message}`, smsError);
-            }
-          } catch (apiError) {
-            console.error(`[Cash Receipts Sync] Error calling AOC WhatsApp API for Receipt: ${receiptNo}: ${apiError.message}`, apiError);
-          }
-        } else {
-          // 'receiptNo' is now correctly in scope here
-          console.log(`[Cash Receipts Sync] Mobile number not found or empty for party ${record.party} in receipt ${receiptNo}. Skipping message send.`);
-        }
-      } catch (messageError) {
-        // Log the full error object for better diagnostics (includes stack trace)
-        console.error(`[Cash Receipts Sync] Error during message processing for receipt ${record.receiptNo}: ${messageError.message}`, messageError);
-      }
-      // --- End Message Sending Logic ---
+      // WhatsApp/SMS are sent in the background after the response (see queueReceiptNotifications)
+      notificationJobs.push({ record, customerData });
 
       const vr = `CR-${String(currentVrCounter++).padStart(6, '0')}`;
       
@@ -777,6 +787,9 @@ router.post('/sync', async (req, res) => {
     });
     
     await fs.writeFile(approvedJsonPath, JSON.stringify(remainingApprovedRecords, null, 2));
+
+    // Send WhatsApp/SMS in the background so the sync response doesn't wait on rate-limit delays
+    queueReceiptNotifications(notificationJobs);
 
     // Return success with info about duplicates if any
     if (duplicateRecords.length > 0) {

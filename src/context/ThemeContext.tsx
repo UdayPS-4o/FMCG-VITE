@@ -47,6 +47,9 @@ function applyTheme(theme: Theme) {
   if (theme === "glass")          root.classList.add("theme-glass");
   if (theme === "glass-sunset")   root.classList.add("theme-glass", "theme-glass-sunset");
   if (theme === "glass-obsidian") root.classList.add("theme-glass", "theme-glass-obsidian");
+  // Glisse components pick their light/dark palette from data-theme
+  if (theme === "glass-obsidian") root.setAttribute("data-theme", "dark");
+  else root.removeAttribute("data-theme");
   // "light" → no extra class
 }
 

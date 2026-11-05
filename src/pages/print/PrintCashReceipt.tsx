@@ -241,6 +241,18 @@ const PrintBulkCashReceipts: React.FC = () => {
                       <td>{item.party}</td>
                       <td id={`amount-${index}`} className="td-amount">{item.amount}</td>
                     </tr>
+                    {Number(item.discount) > 0 && (
+                      <>
+                        <tr>
+                          <td colSpan={2} className="td-name">Discount</td>
+                          <td className="td-amount">{Number(item.discount).toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={2} className="td-name">Total</td>
+                          <td className="td-amount">{(Number(item.amount) + Number(item.discount)).toFixed(2)}</td>
+                        </tr>
+                      </>
+                    )}
                     <tr>
                       <td colSpan={2} className="td-narration">By {isReceipt ? 'R/no' : 'V/no'}: {item.narration}</td>
                       <td id={`amount-narration-${index}`}>&nbsp;</td>

@@ -4,8 +4,10 @@ import BottomNav from './BottomNav';
 import CartFxLayer from './CartFxLayer';
 import WelcomeSplash from './WelcomeSplash';
 import LiveOrderBanner from './LiveOrderBanner';
+import PromotionPopup from './PromotionPopup';
 import { fetchActiveSchemes } from '../lib/api';
 import { useStore } from '../context/StoreContext';
+import { FestivalThemeProvider } from '../context/FestivalThemeContext';
 
 const Layout = () => {
     const { language, user } = useStore();
@@ -34,6 +36,7 @@ const Layout = () => {
     }, [banners.length]);
 
     return (
+        <FestivalThemeProvider>
         <div className="flex flex-col min-h-screen relative bg-gray-50">
 
             {banners.length > 0 && (
@@ -62,14 +65,16 @@ const Layout = () => {
                     </div>
                 </div>
             )}
-            <main className="flex-1 pb-20"> {/* Add padding bottom to avoid overlap with nav */}
+            <main className="flex-1 pb-[calc(96px+env(safe-area-inset-bottom))]"> {/* Add padding bottom to avoid overlap with nav */}
                 <Outlet />
             </main>
             <CartFxLayer />
             <LiveOrderBanner />
             {user && <WelcomeSplash name={user.name} language={language} />}
+            {user && <PromotionPopup />}
             <BottomNav />
         </div>
+        </FestivalThemeProvider>
     );
 };
 

@@ -2589,4 +2589,10 @@ router.get('/facebook-feed/status', async (req, res) => {
     }
 });
 
+// In-app promotion popups (admin Notification Suite -> customer app)
+require('./promotions')(router, { requireAppAuth, requireAdminJwtAuth });
+
+// Scheduled festival themes (admin Notification Suite -> customer app home page)
+require('./festivalThemes')(router, { requireAdminJwtAuth });
+
 module.exports = router;
