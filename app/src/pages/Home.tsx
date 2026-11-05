@@ -38,7 +38,7 @@ const RotatingSearchHint = ({ names, en }: { names: string[]; en: boolean }) => 
   const name = names[idx % names.length];
 
   return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
       <span style={{ flexShrink: 0 }}>{en ? 'Shop for' : 'खरीदें'}</span>
       <span style={{ position: 'relative', height: 18, flex: 1, minWidth: 0, overflow: 'hidden' }}>
         <AnimatePresence initial={false}>
@@ -393,7 +393,7 @@ const Home = () => {
     // isolation: the festive backdrop (z-index -1) paints behind this page's content only
     <div style={{ minHeight: '100vh', background: festive ? 'transparent' : '#f8f9fb', position: 'relative', isolation: 'isolate', fontFamily: "'Inter',sans-serif", paddingBottom: 120 }}>
       {/* Header */}
-      <div style={{ background: festive ? `${festive.bgFrom}f2` : '#fff', transition: 'background 0.8s', padding: '10px 16px', borderBottom: festive ? 'none' : '1px solid #f1f3f5', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+      <div data-festive-anchor style={{ background: festive ? `${festive.bgFrom}f2` : '#fff', transition: 'background 0.8s', padding: '10px 16px', borderBottom: festive ? 'none' : '1px solid #f1f3f5', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src={logoUrl} alt="App Logo" onClick={() => navigate('/')} style={{ height: 28, cursor: 'pointer', objectFit: 'contain' }} />
           <div onClick={() => navigate('/search')} style={{ flex: 1, height: 38, background: '#f3f4f6', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', color: '#9ca3af', fontSize: 12.5 }}>

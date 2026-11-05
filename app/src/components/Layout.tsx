@@ -11,7 +11,7 @@ import { fetchActiveSchemes } from '../lib/api';
 import { useStore } from '../context/StoreContext';
 import { FestivalThemeProvider } from '../context/FestivalThemeContext';
 
-const Layout = () => {
+const LayoutShell = () => {
     const { language, user } = useStore();
     const { variant: festive } = useFestivalTheme();
     const [banners, setBanners] = useState<any[]>([]);
@@ -39,7 +39,6 @@ const Layout = () => {
     }, [banners.length]);
 
     return (
-        <FestivalThemeProvider>
         // data-festive: index.css makes page backgrounds transparent and text on them light,
         // so the festival colours from <FestiveBackdrop /> show on every page
         <div className="flex flex-col min-h-screen relative bg-gray-50" data-festive={festive ? '' : undefined}>
@@ -80,8 +79,14 @@ const Layout = () => {
             {user && <PromotionPopup />}
             <BottomNav />
         </div>
-        </FestivalThemeProvider>
     );
 };
+
+// The provider sits above the shell so the shell itself can read the festival theme
+const Layout = () => (
+    <FestivalThemeProvider>
+        <LayoutShell />
+    </FestivalThemeProvider>
+);
 
 export default Layout;

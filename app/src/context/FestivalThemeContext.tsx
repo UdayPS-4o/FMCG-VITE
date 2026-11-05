@@ -22,7 +22,8 @@ interface FestivalThemeValue {
     nextVariant: () => void;
     /** Goes up by one on every switch, so effects can replay. */
     switchCount: number;
-    /** Effects are off when the admin disabled them or the phone asks for reduced motion. */
+    /** Effects follow the admin's switch only. The OS "reduce motion" setting is not used:
+     *  Windows / many phones turn it on by default, which hid the effects for most users. */
     effectsOn: boolean;
 }
 
@@ -30,15 +31,11 @@ const FestivalThemeContext = createContext<FestivalThemeValue>({
     theme: null, variant: null, variantIndex: 0, nextVariant: () => { }, switchCount: 0, effectsOn: false,
 });
 
-const prefersReducedMotion = () =>
-    typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
 export const FestivalThemeProvider = ({ children }: { children: ReactNode }) => {
     const [theme, setTheme] = useState<FestivalTheme | null>(null);
     // Colour set picked in this session, per theme id (falls back to the saved one)
     const [picked, setPicked] = useState<Record<number, number>>({});
     const [switchCount, setSwitchCount] = useState(0);
-    const [reducedMotion, setReducedMotion] = useState(prefersReducedMotion);
 
     const refresh = useCallback(async () => {
         try {
@@ -73,14 +70,6 @@ export const FestivalThemeProvider = ({ children }: { children: ReactNode }) => 
         return i >= 0 && i < theme.variants.length ? i : 0;
     }, [theme, picked]);
 
-    useEffect(() => {
-        const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-        if (!mq) return;
-        const onChange = () => setReducedMotion(mq.matches);
-        mq.addEventListener?.('change', onChange);
-        return () => mq.removeEventListener?.('change', onChange);
-    }, []);
-
     const nextVariant = useCallback(() => {
         if (!theme) return;
         const n = (variantIndex + 1) % theme.variants.length;
@@ -95,8 +84,8 @@ export const FestivalThemeProvider = ({ children }: { children: ReactNode }) => 
         variantIndex,
         nextVariant,
         switchCount,
-        effectsOn: !!theme?.effectsEnabled && !reducedMotion,
-    }), [theme, variantIndex, nextVariant, switchCount, reducedMotion]);
+        effectsOn: !!theme?.effectsEnabled,
+    }), [theme, variantIndex, nextVariant, switchCount]);
 
     return <FestivalThemeContext.Provider value={value}>{children}</FestivalThemeContext.Provider>;
 };

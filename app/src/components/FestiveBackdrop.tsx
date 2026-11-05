@@ -7,7 +7,8 @@ import { createPortal } from 'react-dom';
 import { FestiveBurst, FestiveLights, FESTIVE_FX_Z } from './FestiveEffects';
 
 /**
- * Festival theme pieces for the home page (see context/FestivalThemeContext).
+ * Festival theme pieces (see context/FestivalThemeContext). The backdrop is
+ * rendered once by Layout, so it covers every page.
  * Both render nothing when no festival is live, so the normal page returns as
  * soon as the theme ends.
  *
@@ -17,11 +18,47 @@ import { FestiveBurst, FestiveLights, FESTIVE_FX_Z } from './FestiveEffects';
  *                           between the admin's colour sets
  */
 
+// Page headers the lights hang from: the offer banner, sticky / fixed page headers,
+// or anything marked data-festive-anchor (the home header)
+const ANCHOR_SELECTOR = '[data-festive-anchor], .sticky.top-0, header.fixed.top-0';
+
+/** Bottom edge (px) of the header stack at the top of the screen; 0 when there is none. */
+const headerBottom = () => {
+    let bottom = 0;
+    document.querySelectorAll<HTMLElement>(ANCHOR_SELECTOR).forEach(el => {
+        const r = el.getBoundingClientRect();
+        // Only headers pinned to the top of the screen, not ones scrolled past or further down
+        if (r.height > 0 && r.top <= bottom + 2 && r.top > -2) bottom = Math.max(bottom, r.bottom);
+    });
+    return Math.round(bottom);
+};
+
+/** Keeps the lights just under the page header, whichever page is open. */
+const useHeaderBottom = (enabled: boolean) => {
+    const [top, setTop] = useState(0);
+    useEffect(() => {
+        if (!enabled) return;
+        const update = () => setTop(headerBottom());
+        update();
+        // Headers change with the page and the offer banner can appear later
+        const id = window.setInterval(update, 400);
+        window.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update);
+        return () => {
+            window.clearInterval(id);
+            window.removeEventListener('scroll', update);
+            window.removeEventListener('resize', update);
+        };
+    }, [enabled]);
+    return top;
+};
+
 export const FestiveBackdrop = () => {
     const { theme, variant, variantIndex, switchCount, effectsOn } = useFestivalTheme();
     const [autoPlay, setAutoPlay] = useState(0);
+    const lightsTop = useHeaderBottom(!!(theme && variant && effectsOn && variant.effect === 'lights'));
 
-    // Play rockets / chakri once per app session when the home page opens
+    // Play rockets / chakri once per app session, on whichever page opens first
     useEffect(() => {
         if (!theme) return;
         const key = `festive_played_${theme.id}_${variantIndex}`;
@@ -57,7 +94,7 @@ export const FestiveBackdrop = () => {
                     {effectsOn && variant.effect === 'lights' && (
                         <div
                             aria-hidden="true"
-                            style={{ position: 'fixed', left: 0, right: 0, top: 'calc(58px + env(safe-area-inset-top))', height: 230, opacity: 0.95, zIndex: FESTIVE_FX_Z, pointerEvents: 'none' }}
+                            style={{ position: 'fixed', left: 0, right: 0, top: lightsTop, height: 230, transition: 'top 0.25s', opacity: 0.95, zIndex: FESTIVE_FX_Z, pointerEvents: 'none' }}
                         >
                             <FestiveLights />
                         </div>
