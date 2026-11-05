@@ -399,6 +399,25 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
     if (name === 'qty') setInitialInteraction(false);
   };
 
+  // Items prefilled from an app order (or loaded before stock arrived) can come in with an empty
+  // or out-of-stock godown. Once stock is known, if exactly one accessible godown has stock, use it.
+  // Runs once per item code, so a godown the user changes afterwards is left alone.
+  const autoGodownDoneFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!item.item || autoGodownDoneFor.current === item.item) return;
+    const itemStock = stockList[item.item];
+    if (!itemStock || godownOptions.length === 0) return; // wait for stock / godowns to load
+    autoGodownDoneFor.current = item.item;
+
+    const withStock = Object.entries(itemStock)
+      .filter(([gdnCode, stock]) => gdnCode && godownOptions.some(g => g.value === gdnCode) && parseInt(stock as string, 10) > 0);
+    const currentIsValid = withStock.some(([gdnCode]) => gdnCode === item.godown);
+    if (withStock.length === 1 && !currentIsValid) {
+      const [gdnCode, stock] = withStock[0];
+      updateItem(index, { ...item, godown: gdnCode, stockLimit: parseInt(stock as string, 10) || 0 });
+    }
+  }, [item, stockList, godownOptions, index, updateItem]);
+
   // useEffect for focusing godown field (remains largely the same, ensure it doesn't conflict)
   useEffect(() => {
     if (shouldFocusGodownDOM && expanded && item.item) {
