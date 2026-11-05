@@ -32,6 +32,7 @@ export interface ItemData {
   itemName?: string;    // BILLDTL.PRODUCT - Item Name from original bill
   billdtlUnit?: string; // Original UNIT from BILLDTL for reference
   schDisabled?: boolean; // Flag to prevent auto-scheme if manually overridden
+  capToStock?: boolean;  // App-order line: once stock is known, cut qty down to the godown's stock (one time)
 }
 
 export interface InvoiceContextType {

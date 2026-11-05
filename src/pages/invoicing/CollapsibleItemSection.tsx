@@ -418,6 +418,57 @@ const CollapsibleItemSection = forwardRef<CollapsibleItemSectionRefHandle, Colla
     }
   }, [item, stockList, godownOptions, index, updateItem]);
 
+  // App-order lines: if the customer ordered more than the godown has, bill what is in stock.
+  // e.g. 1 Box (216 pcs) ordered, 60 pcs in stock -> 60 PCS at the PCS rate. Stays in boxes when the
+  // stock is whole boxes. Runs once per line (capToStock is cleared), so later edits are left alone.
+  useEffect(() => {
+    if (!item.capToStock || !item.item || !item.selectedItem) return;
+    const itemStock = stockList[item.item];
+    if (!itemStock || godownOptions.length === 0) return; // wait for stock / godowns to load
+
+    const stockIn = (gdn: string) => parseInt(String(itemStock[gdn] ?? '0'), 10) || 0;
+    let godown = item.godown;
+    if (stockIn(godown) <= 0) {
+      // The prefill ran before stock loaded: take the accessible godown with the most stock
+      const best = godownOptions
+        .map(g => ({ gdn: String(g.value), stock: stockIn(String(g.value)) }))
+        .filter(g => g.stock > 0)
+        .sort((a, b) => b.stock - a.stock)[0];
+      if (!best) {
+        // Nothing in stock anywhere: leave the ordered qty for the user to deal with
+        updateItem(index, { ...item, capToStock: false });
+        return;
+      }
+      godown = best.gdn;
+    }
+    const stock = stockIn(godown);
+
+    const sel = item.selectedItem;
+    const multF = parseInt(sel.MULT_F || item.pcBx || '1', 10) || 1;
+    const isBox = !!sel.UNIT_2 && item.unit === sel.UNIT_2;
+    const orderedQty = parseInt(item.qty || '0', 10) || 0;
+    const orderedPcs = isBox ? orderedQty * multF : orderedQty;
+
+    let next: ItemData = { ...item, godown, stockLimit: stock, capToStock: false };
+    if (orderedPcs > stock) {
+      const pcsRate = parseFloat(sel.RATE1 || '0') || 0;
+      if (isBox && multF > 1 && stock >= multF && stock % multF === 0) {
+        next = { ...next, qty: String(stock / multF) };
+      } else {
+        next = { ...next, unit: sel.UNIT_1 || 'PCS', qty: String(stock), rate: pcsRate.toFixed(2) };
+      }
+      // The scheme slab may change with the smaller qty
+      if (!schemesLoadedRef.current) {
+        schemePendingRef.current = true;
+      } else if (activeSchemes.length > 0) {
+        const sch = schemePercentFor(next, next.qty, next.unit);
+        if (sch !== null) next.sch = sch;
+      }
+      next = calculateAmounts(next);
+    }
+    updateItem(index, next);
+  }, [item, stockList, godownOptions, index, updateItem]);
+
   // useEffect for focusing godown field (remains largely the same, ensure it doesn't conflict)
   useEffect(() => {
     if (shouldFocusGodownDOM && expanded && item.item) {

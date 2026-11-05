@@ -405,8 +405,14 @@ const InvoicingContent: React.FC = () => {
         const isBoxOnly = (orderItem.qtyBoxes || 0) > 0 && (orderItem.qtyPcs || 0) === 0;
         const displayUnit = isBoxOnly ? (pmplItem?.UNIT_2 || 'BOX') : (pmplItem?.UNIT_1 || 'PCS');
         const displayQty = isBoxOnly ? (orderItem.qtyBoxes || 0) : ((orderItem.qtyBoxes || 0) * multF + (orderItem.qtyPcs || 0));
-        const displayRate = orderItem.rate || pmplItem?.RATE1 || '0';
-        const amount = displayQty * parseFloat(String(displayRate));
+        // App orders carry raw floats (a box rate of 13.39 x 240 arrives as 3213.6000000001); round to
+        // 2 decimals like manual entry does (calculateAmounts / box rate toFixed(2))
+        const to2 = (v: unknown) => {
+          const n = parseFloat(String(v));
+          return isNaN(n) ? '0.00' : n.toFixed(2);
+        };
+        const displayRate = to2(orderItem.rate || pmplItem?.RATE1 || '0');
+        const amount = displayQty * parseFloat(displayRate);
 
         return {
           item: itemCode,
@@ -417,18 +423,20 @@ const InvoicingContent: React.FC = () => {
           gst: pmplItem?.TAXPAID === 'Y' ? '0' : String(pmplItem?.IGST || '0'),
           pcBx: String(multF),
           mrp: String(orderItem.mrp || pmplItem?.MRP1 || '0'),
-          rate: String(displayRate),
+          rate: displayRate,
           qty: String(displayQty),
           cess: '0',
           schRs: idx === 0 && prefilledOrder.customDiscount ? String(prefilledOrder.customDiscount) : '0',
           sch: orderItem.sch !== undefined ? String(orderItem.sch) : '0',
           cd: '0',
-          amount: String(amount),
-          netAmount: String(orderItem.netAmount || 0),
+          amount: to2(amount),
+          netAmount: to2(orderItem.netAmount || 0),
           selectedItem: pmplItem,
           stockLimit: stockLimit,
           itemCode: itemCode,
           itemName: pmplItem?.PRODUCT || orderItem.productName,
+          // Ordered qty may exceed stock; CollapsibleItemSection caps it once stock has loaded
+          capToStock: true,
         };
       });
       console.log("Prefilled items mapped:", newItems);
