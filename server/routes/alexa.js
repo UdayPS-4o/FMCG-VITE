@@ -301,7 +301,9 @@ router.post('/webhook', async (req, res) => {
     }
 
     if (requestType === 'SessionEndedRequest') {
-      return res.json({ version: '1.0', response: { shouldEndSession: true } });
+      // Amazon reports why the session ended here (reason ERROR + error.type/message on failures)
+      console.log('[Alexa] Session ended:', JSON.stringify({ reason: body.request.reason, error: body.request.error, locale: body.request.locale }));
+      return res.json({ version: '1.0', response: {} });
     }
 
     if (requestType !== 'IntentRequest') {

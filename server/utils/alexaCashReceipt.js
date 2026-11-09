@@ -5,7 +5,7 @@
  * with the same numbering (/slink/cashReceiptId) and the same over-20,000 split, so they show up on
  * DB → Cash Receipts and go through the normal approval / DBF sync.
  *
- * Printing renders the normal bulk receipt print page in headless Chrome and sends the PDF to this
+ * Printing renders the receipt print page (/print, as the printer icon on DB → Cash Receipts) in headless Chrome and sends the PDF to this
  * machine's default Windows printer.
  */
 const fs = require('fs').promises;
@@ -160,7 +160,7 @@ const printReceipts = async (receiptNos) => {
   try {
     const page = await browser.newPage();
     await page.evaluateOnNewDocument((t) => { localStorage.setItem('token', t); }, token);
-    const url = `${PRINT_PAGE_BASE}/print/bulk-cash-receipts?receiptNo=${receiptNos.join(',')}`;
+    const url = `${PRINT_PAGE_BASE}/print?ReceiptNo=${receiptNos.join(',')}`; // same layout as the printer icon on DB → Cash Receipts
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
     // Wait until the receipt data has rendered (the party code appears on the page)
     await page.waitForFunction(() => !document.querySelector('.animate-spin') && document.body.innerText.length > 200, { timeout: 30000 });
