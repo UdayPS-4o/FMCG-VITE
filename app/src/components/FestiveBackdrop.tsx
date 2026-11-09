@@ -5,6 +5,7 @@ import { useFestivalTheme } from '../context/FestivalThemeContext';
 import { useStore } from '../context/StoreContext';
 import { createPortal } from 'react-dom';
 import { FestiveBurst, FestiveLights, FESTIVE_FX_Z } from './FestiveEffects';
+import { WELCOME_FLAG } from './WelcomeSplash';
 
 /**
  * Festival theme pieces (see context/FestivalThemeContext). The backdrop is
@@ -79,27 +80,30 @@ const TimedLights = ({ top }: { top: number }) => {
     );
 };
 
-export const FestiveBackdrop = () => {
-    const { theme, variant, variantIndex, switchCount, effectsOn } = useFestivalTheme();
-    const [autoPlay, setAutoPlay] = useState(0);
-    const lightsTop = useHeaderBottom(!!(theme && variant && effectsOn && variant.effect === 'lights'));
+const STARTUP_DELAY_MS = 600;          // let the first page paint first
+const STARTUP_AFTER_SPLASH_MS = 2900;  // right after login: after the welcome splash
 
-    // Play rockets / chakri once per app session, on whichever page opens first
+export const FestiveBackdrop = () => {
+    const { theme, variant, switchCount, effectsOn } = useFestivalTheme();
+    const [startup, setStartup] = useState(0);
+    const lightsTop = useHeaderBottom(!!(theme && variant && effectsOn && variant.effect === 'lights'));
+    // Waits for the post-login welcome splash, so the show isn't hidden behind it
+    const [startDelay] = useState(() => (sessionStorage.getItem(WELCOME_FLAG) === '1' ? STARTUP_AFTER_SPLASH_MS : STARTUP_DELAY_MS));
+
+    // Every time the app opens: play the chakri once the festival theme has loaded
+    const themeId = theme?.id;
     useEffect(() => {
-        if (!theme) return;
-        const key = `festive_played_${theme.id}_${variantIndex}`;
-        if (!sessionStorage.getItem(key)) {
-            sessionStorage.setItem(key, '1');
-            // Syncing from sessionStorage (external); runs once per theme + colour set
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setAutoPlay(n => n + 1);
-        }
-    }, [theme?.id, variantIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+        if (themeId == null || startup > 0) return;
+        const t = window.setTimeout(() => setStartup(1), startDelay);
+        return () => window.clearTimeout(t);
+    }, [themeId, startup, startDelay]);
 
     if (!theme || !variant) return null;
 
-    const playKey = autoPlay + switchCount; // switching always replays
-    const burst = effectsOn && playKey > 0 && (variant.effect === 'rockets' || variant.effect === 'chakri') ? variant.effect : null;
+    // Startup plays the chakri; the theme button plays the chosen colour set's own effect
+    const playKey = startup + switchCount;
+    const ownBurst = variant.effect === 'rockets' || variant.effect === 'chakri' ? variant.effect : null;
+    const burst = !effectsOn || playKey === 0 ? null : switchCount > 0 ? ownBurst : 'chakri';
 
     return (
         <>
@@ -144,7 +148,6 @@ export const FestiveThemeButton = () => {
 
     const onSwitch = () => {
         const nextIndex = (variantIndex + 1) % theme.variants.length;
-        sessionStorage.setItem(`festive_played_${theme.id}_${nextIndex}`, '1'); // the switch itself replays it
         nextVariant();
         setToast(theme.variants[nextIndex].label);
     };
