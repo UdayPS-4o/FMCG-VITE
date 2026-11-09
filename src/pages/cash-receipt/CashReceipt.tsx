@@ -9,6 +9,7 @@ import FormComponent from "../../components/form/Form";
 import constants from "../../constants";
 import Toast from '../../components/ui/toast/Toast';
 import SarthakAssistant from '../../components/ai/SarthakAssistant';
+import { useAlexaCommands } from '../../hooks/useAlexaCommands';
 import apiCache from '../../utils/apiCache';
 import useAuth, { getUserSubgroups } from "../../hooks/useAuth";
 
@@ -1027,6 +1028,62 @@ const CashReceipt: React.FC = () => {
     }
   };
 
+  // Shared by the typed Sarthak assistant and Alexa voice commands
+  const handleAiSuggestion = (field: string, value: string) => {
+    // Handle AI suggestions for form fields
+    if (field === 'narration') {
+      setFormValues(prev => ({ ...prev, narration: value }));
+    } else if (field === 'party') {
+      // Find existing party option
+      const existingParty = partyOptions.find(p => 
+        p.label.toLowerCase().includes(value.toLowerCase()) ||
+        value.toLowerCase().includes(p.label.toLowerCase())
+      );
+      if (existingParty) {
+        setParty(existingParty);
+      } else {
+        // Show toast message that party was not found
+        setToastMessage(`Party "${value}" not found in existing parties. Please select from the dropdown or add manually.`);
+        setToastType('error'); // Changed from 'warning' to 'error' since only 'success' | 'error' are valid types
+        setShowToast(true);
+        
+        // Still create a temporary party option for user convenience
+        const newParty = { value: value, label: value };
+        setParty(newParty);
+      }
+    } else if (field === 'amount') {
+      // Use handleInputChange to trigger split calculation logic
+      const syntheticEvent = {
+        target: {
+          name: 'amount',
+          value: value
+        }
+      } as React.ChangeEvent<HTMLInputElement>;
+      handleInputChange(syntheticEvent);
+    } else if (field === 'discount') {
+      setFormValues(prev => ({ ...prev, discount: value }));
+    } else if (field === 'series') {
+      setFormValues(prev => ({ ...prev, series: value.toUpperCase() }));
+    }
+  };
+
+  // Alexa: print runs after the field updates from the same command have rendered,
+  // so handleSubmit sees the new party/amount instead of stale state.
+  const [alexaPrintRequested, setAlexaPrintRequested] = useState(false);
+  useEffect(() => {
+    if (!alexaPrintRequested) return;
+    setAlexaPrintRequested(false);
+    handleSubmit(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alexaPrintRequested]);
+
+  useAlexaCommands({
+    onSuggestion: handleAiSuggestion,
+    partyOptions,
+    onPrint: () => setAlexaPrintRequested(true),
+    enabled: !isEditMode,
+  });
+
   return (
     <div className="bg-gray-50 dark:bg-gray-900">
       <PageMeta title="Cash Receipts" description="Cash Receipts Form" />
@@ -1259,41 +1316,7 @@ const CashReceipt: React.FC = () => {
         sm={sm}
         partyOptions={partyOptions}
         formValues={formValues}
-        onSuggestion={(field, value) => {
-          // Handle AI suggestions for form fields
-          if (field === 'narration') {
-            setFormValues(prev => ({ ...prev, narration: value }));
-          } else if (field === 'party') {
-            // Find existing party option
-            const existingParty = partyOptions.find(p => 
-              p.label.toLowerCase().includes(value.toLowerCase()) ||
-              value.toLowerCase().includes(p.label.toLowerCase())
-            );
-            if (existingParty) {
-              setParty(existingParty);
-            } else {
-              // Show toast message that party was not found
-              setToastMessage(`Party "${value}" not found in existing parties. Please select from the dropdown or add manually.`);
-              setToastType('error'); // Changed from 'warning' to 'error' since only 'success' | 'error' are valid types
-              setShowToast(true);
-              
-              // Still create a temporary party option for user convenience
-              const newParty = { value: value, label: value };
-              setParty(newParty);
-            }
-          } else if (field === 'amount') {
-            // Use handleInputChange to trigger split calculation logic
-            const syntheticEvent = {
-              target: {
-                name: 'amount',
-                value: value
-              }
-            } as React.ChangeEvent<HTMLInputElement>;
-            handleInputChange(syntheticEvent);
-          } else if (field === 'series') {
-            setFormValues(prev => ({ ...prev, series: value.toUpperCase() }));
-          }
-        }}
+        onSuggestion={handleAiSuggestion}
         onSubmitAndPrint={() => {
           // This function will be called when AI processes "Submit and Print" command
           handleSubmit(true);

@@ -3,10 +3,11 @@ import { toast } from 'react-toastify';
 import constants from '../constants';
 
 interface AlexaAction {
-  type: 'update_field' | 'search_party' | 'print_receipt';
+  type: 'update_field' | 'search_party' | 'print_receipt' | 'show_toast';
   field?: string;
   value?: string;
   searchTerm?: string;
+  message?: string;
 }
 
 interface AlexaCommand {
@@ -38,6 +39,16 @@ export const useAlexaCommands = ({
   enabled = true,
 }: UseAlexaCommandsProps) => {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inFlightRef = useRef(false);
+
+  // Keep the latest callbacks in refs so polling isn't restarted on every render
+  // of the host page (its handlers are recreated each render).
+  const onSuggestionRef = useRef(onSuggestion);
+  const onPrintRef = useRef(onPrint);
+  const partyOptionsRef = useRef(partyOptions);
+  onSuggestionRef.current = onSuggestion;
+  onPrintRef.current = onPrint;
+  partyOptionsRef.current = partyOptions;
 
   const markComplete = useCallback(async (id: string) => {
     try {
@@ -53,6 +64,7 @@ export const useAlexaCommands = ({
 
   const fuzzyFindParty = useCallback(
     (searchTerm: string): { label: string; value: string } | null => {
+      const partyOptions = partyOptionsRef.current;
       if (!partyOptions || partyOptions.length === 0) return null;
       const term = searchTerm.toLowerCase();
       // Exact match first
@@ -65,7 +77,7 @@ export const useAlexaCommands = ({
       found = partyOptions.find(p => p.label.toLowerCase().includes(term));
       return found || null;
     },
-    [partyOptions]
+    []
   );
 
   const executeCommand = useCallback(
@@ -77,7 +89,7 @@ export const useAlexaCommands = ({
         switch (action.type) {
           case 'update_field':
             if (action.field && action.value !== undefined) {
-              onSuggestion?.(action.field, action.value);
+              onSuggestionRef.current?.(action.field, action.value);
               console.log(`[Alexa] Updated field "${action.field}" = "${action.value}"`);
             }
             break;
@@ -86,7 +98,7 @@ export const useAlexaCommands = ({
             if (action.searchTerm) {
               const party = fuzzyFindParty(action.searchTerm);
               if (party) {
-                onSuggestion?.('party', party.label);
+                onSuggestionRef.current?.('party', party.label);
                 toast.success(`✅ Party selected: ${party.label}`);
                 console.log('[Alexa] Party found:', party.label);
               } else {
@@ -97,9 +109,13 @@ export const useAlexaCommands = ({
             break;
 
           case 'print_receipt':
-            onPrint?.();
+            onPrintRef.current?.();
             toast.success('🖨️ Alexa triggered print');
             console.log('[Alexa] Print triggered');
+            break;
+
+          case 'show_toast':
+            if (action.message) toast.info(action.message);
             break;
 
           default:
@@ -109,10 +125,12 @@ export const useAlexaCommands = ({
 
       await markComplete(command.id);
     },
-    [onSuggestion, fuzzyFindParty, onPrint, markComplete]
+    [fuzzyFindParty, markComplete]
   );
 
   const pollForCommands = useCallback(async () => {
+    if (inFlightRef.current) return; // previous poll still executing — avoid running a command twice
+    inFlightRef.current = true;
     try {
       const token = localStorage.getItem('token');
       if (!token) return; // Not logged in
@@ -128,6 +146,8 @@ export const useAlexaCommands = ({
       }
     } catch (err) {
       // Silently ignore network errors during polling
+    } finally {
+      inFlightRef.current = false;
     }
   }, [executeCommand]);
 

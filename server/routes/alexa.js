@@ -132,9 +132,12 @@ router.post('/webhook', async (req, res) => {
       const slots = body.request.intent?.slots || {};
       voiceText = slots.command?.value || slots.query?.value || '';
 
-      // For FallbackIntent, try to get whatever Alexa heard
+      // FallbackIntent carries no text, so there is nothing to parse — tell the user how to phrase it
       if (!voiceText && intentName === 'AMAZON.FallbackIntent') {
-        voiceText = 'general help';
+        return res.json(alexaResponse(
+          'Yeh command samajh nahi aayi. Aise boliye: Suresh ki das hazaar ki raseed banao.',
+          'Party ka naam aur amount bolkar raseed banao kahiye.'
+        ));
       }
 
       if (!voiceText) {
@@ -169,6 +172,7 @@ router.post('/webhook', async (req, res) => {
           await queueCommand([{ type: 'show_toast', message: 'Voice command received: ' + voiceText }], voiceText).catch(() => {});
         }
       });
+      return; // response already sent above
     }
 
     // Unknown request type
