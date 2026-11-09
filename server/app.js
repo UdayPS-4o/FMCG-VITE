@@ -91,7 +91,21 @@ const spawn = require('child_process').spawn;// app.use(express.static(80/public
 app.use(bodyParser.json({ limit: '200mb' })); // for parsing application/json with increased limit for images
 app.use(bodyParser.urlencoded({ extended: true, limit: '200mb' })); // for parsing application/x-www-form-urlencoded
 
-app.use(express.static(path.join(__dirname, 'public')));
+// This host is the API only — the web app is served by Vercel. Send the UI entry points there.
+// Static files (uploads, images, PDFs…) below are still served.
+const WEB_APP_URL = 'https://test.ekta-enterprises.com';
+app.get(['/', '/index.html'], (req, res) => res.redirect(WEB_APP_URL));
+// Browsers that cached the old web app here keep loading it via its service worker;
+// replace that worker with one that unregisters itself and reloads into the redirect.
+app.get('/sw.js', (req, res) => {
+  res.type('application/javascript').set('Cache-Control', 'no-store').send(
+    "self.addEventListener('install',()=>self.skipWaiting());" +
+    "self.addEventListener('activate',e=>e.waitUntil(self.registration.unregister()" +
+    ".then(()=>self.clients.matchAll({type:'window'})).then(cs=>cs.forEach(c=>c.navigate(c.url)))));"
+  );
+});
+
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // Serve PDFs statically from the db/pdfs directory (internal legacy path)
 app.use('/db/pdfs', express.static(path.join(__dirname, 'db', 'pdfs')));
@@ -515,7 +529,7 @@ app.use('/api/godrej-import', godrejImportRoutes);
 
 const slinkRoutes = require('./routes/slink');
 const orcusRoutes = require('./routes/orcusRoutes');
-app.use(express.static(path.join(__dirname, '.', 'dist')));
+app.use(express.static(path.join(__dirname, '.', 'dist'), { index: false }));
 app.use('/slink', slinkRoutes);
 app.use('/', orcusRoutes);
 
