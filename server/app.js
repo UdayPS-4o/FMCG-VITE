@@ -671,6 +671,12 @@ const initServer = () => {
       cert: fsSync.readFileSync(SSL_CERT_PATH),
     };
     const httpsServer = https.createServer(sslOptions, app);
+    // Node closes idle keep-alive connections after 5s by default. Clients that pool connections
+    // (Alexa reuses one between turns of a conversation) then send on a socket the server has
+    // already closed, and the request is lost before it reaches Express. Keep idle sockets open
+    // longer than such clients do.
+    httpsServer.keepAliveTimeout = 65 * 1000;
+    httpsServer.headersTimeout = 66 * 1000; // must exceed keepAliveTimeout
     httpsServer.listen(443, '0.0.0.0', () => {
       console.log('HTTPS server running on port 443');
       // Initialize automated background SSL renewal (checks every 12h, hot-reloads TLS context)
