@@ -197,6 +197,11 @@ const turn = async (voiceText, state) => {
   const notes = [];     // things to say before the next question
   let partyAsk = null;  // a "which party?" question; asked after the rest of this turn is applied
   if (ex.print) state.wantPrint = true; // "... print karo" said before the party was settled
+  // A bare name before any party is chosen is the party, unless we just asked for the salesman
+  if (!state.party && !ex.party && ex.salesman && state.awaiting !== 'salesman') {
+    ex.party = ex.salesman;
+    ex.salesman = null;
+  }
 
   // ── Party: pick from the list read out, narrow it down, or search afresh
   if (state.candidates && ex.choice && state.candidates[ex.choice - 1]) {
@@ -205,6 +210,9 @@ const turn = async (voiceText, state) => {
   } else if (ex.party) {
     let matches = state.candidates ? findMatches(ex.party, state.candidates) : [];
     if (!matches.length) matches = findMatches(ex.party, parties);
+    // A party whose whole name is exactly what was said wins outright
+    const exact = matches.filter(m => norm(m.name) === norm(ex.party));
+    if (exact.length === 1) matches = exact;
     if (matches.length === 1) {
       state.party = matches[0];
       state.candidates = null;
@@ -218,7 +226,10 @@ const turn = async (voiceText, state) => {
         const list = matches.map((m, i) => `${i + 1}, ${spokenParty(m)}`).join('. ');
         partyAsk = { text: `${matches.length} party mili: ${list}. Kaunsi wali?`, awaiting: 'choice' };
       } else {
-        partyAsk = { text: `${titleCase(ex.party)} naam ki ${matches.length} party hain. Jagah ya poora naam boliye, jaise ${spokenParty(matches[0])}.`, awaiting: 'choice' };
+        // Read the best few as a numbered list (so "pehli wali" works) and offer narrowing down
+        state.candidates = matches.slice(0, MAX_LISTED);
+        const list = state.candidates.map((m, i) => `${i + 1}, ${spokenParty(m)}`).join('. ');
+        partyAsk = { text: `${titleCase(ex.party)} naam ki ${matches.length} party hain. Jaise: ${list}. Number boliye, ya jagah ke saath poora naam boliye.`, awaiting: 'choice' };
       }
     }
   }
