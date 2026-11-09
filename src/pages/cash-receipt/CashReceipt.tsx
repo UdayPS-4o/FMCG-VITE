@@ -308,7 +308,7 @@ const CashReceipt: React.FC = () => {
               receiptNo: seriesNextNumber.toString()
             };
             
-            setFormValues(updatedValues);
+            setFormValues(prev => ({ ...prev, series: updatedValues.series, receiptNo: updatedValues.receiptNo }));
             
             // Generate narration based on receipt number and series
             setTimeout(() => updateNarration(updatedValues), 0);
@@ -318,7 +318,7 @@ const CashReceipt: React.FC = () => {
               receiptNo: data.nextReceiptNo.toString()
             };
             
-            setFormValues(updatedValues);
+            setFormValues(prev => ({ ...prev, receiptNo: updatedValues.receiptNo }));
             
             // Generate narration based on receipt number
             setTimeout(() => updateNarration(updatedValues), 0);
@@ -418,7 +418,7 @@ const CashReceipt: React.FC = () => {
           series: user.defaultSeries.cashReceipt,
           receiptNo: data.nextReceiptNo.toString()
         };
-        setFormValues(updatedValues);
+        setFormValues(prev => ({ ...prev, series: updatedValues.series, receiptNo: updatedValues.receiptNo }));
         
         // Generate narration based on receipt number and series
         setTimeout(() => updateNarration(updatedValues), 0);
@@ -427,7 +427,7 @@ const CashReceipt: React.FC = () => {
           ...formValues,
           receiptNo: data.nextReceiptNo.toString()
         };
-        setFormValues(updatedValues);
+        setFormValues(prev => ({ ...prev, receiptNo: updatedValues.receiptNo }));
         
         // Generate narration based on receipt number
         setTimeout(() => updateNarration(updatedValues), 0);
@@ -1077,11 +1077,14 @@ const CashReceipt: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alexaPrintRequested]);
 
+  // Only take Alexa commands once the page has finished loading: the party list is needed to
+  // match the spoken party, and the startup receipt-number fill must not race the command.
+  const alexaReady = !isEditMode && partyOptions.length > 0 && !!formValues.receiptNo;
   useAlexaCommands({
     onSuggestion: handleAiSuggestion,
     partyOptions,
     onPrint: () => setAlexaPrintRequested(true),
-    enabled: !isEditMode,
+    enabled: alexaReady,
   });
 
   return (
