@@ -22,6 +22,8 @@ interface UseAlexaCommandsProps {
   onSuggestion?: (field: string, value: string) => void;
   partyOptions?: { label: string; value: string }[];
   onPrint?: () => void;
+  /** Current page state sent with each poll, so Alexa only asks for what is missing */
+  getStatus?: () => Record<string, string>;
   /** How often to poll in ms. Default: 3000 */
   pollInterval?: number;
   enabled?: boolean;
@@ -35,6 +37,7 @@ export const useAlexaCommands = ({
   onSuggestion,
   partyOptions,
   onPrint,
+  getStatus,
   pollInterval = 3000,
   enabled = true,
 }: UseAlexaCommandsProps) => {
@@ -46,6 +49,8 @@ export const useAlexaCommands = ({
   const onSuggestionRef = useRef(onSuggestion);
   const onPrintRef = useRef(onPrint);
   const partyOptionsRef = useRef(partyOptions);
+  const getStatusRef = useRef(getStatus);
+  getStatusRef.current = getStatus;
   onSuggestionRef.current = onSuggestion;
   onPrintRef.current = onPrint;
   partyOptionsRef.current = partyOptions;
@@ -135,7 +140,8 @@ export const useAlexaCommands = ({
       const token = localStorage.getItem('token');
       if (!token) return; // Not logged in
 
-      const res = await fetch(`${constants.baseURL}/api/alexa/commands/pending`, {
+      const query = new URLSearchParams(getStatusRef.current?.() || {}).toString();
+      const res = await fetch(`${constants.baseURL}/api/alexa/commands/pending${query ? `?${query}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;

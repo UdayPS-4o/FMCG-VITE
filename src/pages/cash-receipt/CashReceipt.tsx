@@ -1034,8 +1034,8 @@ const CashReceipt: React.FC = () => {
     if (field === 'narration') {
       setFormValues(prev => ({ ...prev, narration: value }));
     } else if (field === 'party') {
-      // Find existing party option
-      const existingParty = partyOptions.find(p => 
+      // Exact party code first (Alexa sends codes), then a name match
+      const existingParty = partyOptions.find(p => p.value === value) || partyOptions.find(p => 
         p.label.toLowerCase().includes(value.toLowerCase()) ||
         value.toLowerCase().includes(p.label.toLowerCase())
       );
@@ -1060,6 +1060,9 @@ const CashReceipt: React.FC = () => {
         }
       } as React.ChangeEvent<HTMLInputElement>;
       handleInputChange(syntheticEvent);
+    } else if (field === 'sm') {
+      const match = smOptions.find(o => o.value === value);
+      if (match && !isSmDisabled) setSm(match);
     } else if (field === 'discount') {
       setFormValues(prev => ({ ...prev, discount: value }));
     } else if (field === 'series') {
@@ -1084,6 +1087,11 @@ const CashReceipt: React.FC = () => {
     onSuggestion: handleAiSuggestion,
     partyOptions,
     onPrint: () => setAlexaPrintRequested(true),
+    getStatus: () => ({
+      series: formValues.series || '',
+      sm: sm?.value || '',
+      smLocked: isSmDisabled ? '1' : '0',
+    }),
     enabled: alexaReady,
   });
 
