@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { useNavigate } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -26,6 +27,7 @@ interface AttendanceRecord {
   location: LocationData;
   selfieData: string;
   status: 'present' | 'absent';
+  source: 'app' | 'web';
 }
 
 const Attendance: React.FC = () => {
@@ -328,7 +330,9 @@ const Attendance: React.FC = () => {
         time: new Date().toLocaleTimeString(),
         location: location,
         selfieData: capturedImage,
-        status: 'present'
+        status: 'present',
+        // Android app wraps this same site, so ask Capacitor where we are running
+        source: Capacitor.isNativePlatform() ? 'app' : 'web'
       };
 
       const token = localStorage.getItem('token');

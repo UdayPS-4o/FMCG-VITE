@@ -21,6 +21,7 @@ interface AttendanceRecord {
   };
   selfieData: string;
   status: 'present' | 'absent' | 'half_day';
+  source?: 'app' | 'web';
 }
 
 interface UserLocation {
@@ -1653,6 +1654,14 @@ const AdminAttendance: React.FC = () => {
                                   </td>
                                   <td className="px-6 py-4">
                                     {record.time}
+                                    {record.source && (
+                                      <span
+                                        className={`mt-1 block w-fit px-2 py-0.5 rounded-full text-[11px] font-medium ${record.source === 'app' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}
+                                        title={record.source === 'app' ? 'Marked from the mobile app' : 'Marked from the website'}
+                                      >
+                                        {record.source === 'app' ? '📱 App' : '🌐 Web'}
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="px-6 py-4">
                                     <span

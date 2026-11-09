@@ -74,6 +74,15 @@ const ensureAttendanceDirectories = async () => {
 ensureAttendanceDirectories();
 
 // Mark attendance
+// Where attendance was marked from. The page sends 'app' or 'web'; older app builds
+// that don't send it are still recognisable by the Android WebView marker "; wv)".
+const detectAttendanceSource = (req) => {
+  const sent = req.body?.source;
+  if (sent === 'app' || sent === 'web') return sent;
+  const ua = req.headers['user-agent'] || '';
+  return /; wv\)/.test(ua) ? 'app' : 'web';
+};
+
 app.post('/api/attendance/mark', verifyToken, async (req, res) => {
   try {
     const { id, userId, userName, date, time, location, selfieData, status } = req.body;
@@ -240,6 +249,8 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
       location,
       selfieData,
       status,
+      source: detectAttendanceSource(req),
+      userAgent: req.headers['user-agent'] || '',
       timestamp: new Date().toISOString()
     };
 
