@@ -1406,6 +1406,16 @@ router.get('/orders', requireAppAuth, async (req, res) => {
         const userOrders = orders
             .filter(o => o.partyCode === req.appPartyCode)
             .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Orders invoiced before invoiceAmount was stored: look the billed amount up (read-only)
+        const missing = userOrders.filter(o => o.status === 'Invoiced' && o.invoiceBillNo && o.invoiceAmount == null);
+        if (missing.length > 0) {
+            const lookup = await loadBilledAmounts();
+            for (const o of missing) {
+                const amt = lookup(o.invoiceSeries, o.invoiceBillNo);
+                if (amt != null) o.invoiceAmount = amt;
+            }
+        }
         res.json(userOrders);
     } catch (err) {
         console.error('[app/orders GET]', err);
@@ -1702,13 +1712,38 @@ router.patch('/admin/orders/:id/status', async (req, res) => {
 });
 
 /**
+ * Billed amount (rounded to the rupee, as printed) per series + bill no. Web invoices live in
+ * server/db/invoicing.json until synced to the DBF; synced bills are in bill.json, where
+ * N_B_AMT can be 0 and ORG_AMT holds the amount.
+ */
+async function loadBilledAmounts() {
+    const amounts = new Map();
+    const key = (series, bill) => `${String(series || '').trim().toUpperCase()}-${parseInt(bill, 10)}`;
+    try {
+        const raw = await fs.readFile(path.join(process.env.DBF_FOLDER_PATH, 'data', 'json', 'bill.json'), 'utf8');
+        for (const b of JSON.parse(raw)) {
+            const amt = Number(b && (b.N_B_AMT || b.ORG_AMT));
+            if (b && amt > 0) amounts.set(key(b.SERIES, b.BILL), Math.round(amt));
+        }
+    } catch { /* not converted yet */ }
+    try {
+        const raw = await fs.readFile(path.join(__dirname, '..', '..', 'db', 'invoicing.json'), 'utf8');
+        for (const inv of JSON.parse(raw)) {
+            const amt = Number(inv && inv.total);
+            if (inv && amt > 0) amounts.set(key(inv.series, inv.billNo), Math.round(amt));
+        }
+    } catch { /* none pending */ }
+    return (series, bill) => (amounts.has(key(series, bill)) ? amounts.get(key(series, bill)) : null);
+}
+
+/**
  * PATCH /api/app/admin/orders/:id/mark-invoiced
  * Body: { billNo: string, series: string }
  * Marks an app order as Invoiced and stores the bill reference.
  */
 router.patch('/admin/orders/:id/mark-invoiced', async (req, res) => {
     const { id } = req.params;
-    const { billNo, series } = req.body;
+    const { billNo, series, invoiceAmount } = req.body;
 
     if (!billNo || !series) {
         return res.status(400).json({ error: 'billNo and series are required' });
@@ -1724,6 +1759,12 @@ router.patch('/admin/orders/:id/mark-invoiced', async (req, res) => {
         orders[idx].invoiceBillNo = billNo;
         orders[idx].invoiceSeries = series;
         orders[idx].invoiceRef = `${series}-${billNo}`;
+        // What the customer was actually billed (qty can be cut to stock, schemes recalculated)
+        const amount = Number(invoiceAmount);
+        const billed = Number.isFinite(amount) && amount > 0
+            ? Math.round(amount)
+            : (await loadBilledAmounts())(series, billNo);
+        if (billed != null) orders[idx].invoiceAmount = billed;
         orders[idx].updatedAt = new Date().toISOString();
 
         await writeOrdersWithFlag(orders);

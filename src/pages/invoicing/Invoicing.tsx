@@ -839,7 +839,8 @@ const InvoicingContent: React.FC = () => {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${localStorage.getItem('token')}`,
             },
-            body: JSON.stringify({ billNo, series }),
+            // Billed net amount, rounded to the rupee like the printed bill; the app shows it on the order
+            body: JSON.stringify({ billNo, series, invoiceAmount: Math.round(parseFloat(calculateTotal()) || 0) }),
           });
           console.log(`[Invoicing] Marked app order ${appOrderId} as invoiced with bill ${series}-${billNo}`);
         } catch (markErr) {

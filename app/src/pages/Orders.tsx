@@ -28,6 +28,7 @@ interface Order {
     invoiceBillNo?: string;
     invoiceSeries?: string;
     invoiceRef?: string;
+    invoiceAmount?: number; // billed net amount, set when the order is invoiced
 }
 
 const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
@@ -141,9 +142,23 @@ const Orders = () => {
                                             <span className={`px-2.5 py-1 ${s.bg} ${s.text} text-[10px] font-bold rounded-full uppercase tracking-wide`}>
                                                 {language === 'en' ? s.label : (s.label === 'Pending' ? 'लंबित' : s.label === 'Approved' ? 'स्वीकृत' : s.label === 'Invoiced' ? 'बिल हो गया' : 'अस्वीकृत')}
                                             </span>
-                                            <div className="font-bold text-gray-900 text-sm mt-1">
-                                                ₹{(Number(order.totalAmount) || 0).toFixed(2)}
-                                            </div>
+                                            {order.status === 'Invoiced' && order.invoiceAmount != null ? (
+                                                // Billed amount replaces the order value (qty may be cut to stock, schemes recalculated)
+                                                <>
+                                                    <div className="font-bold text-gray-900 text-sm mt-1">
+                                                        ₹{Number(order.invoiceAmount).toFixed(2)}
+                                                    </div>
+                                                    {Math.round(Number(order.totalAmount) || 0) !== Math.round(Number(order.invoiceAmount)) && (
+                                                        <div className="text-[10px] text-gray-400 line-through">
+                                                            {language === 'en' ? 'Ordered' : 'ऑर्डर'} ₹{(Number(order.totalAmount) || 0).toFixed(2)}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="font-bold text-gray-900 text-sm mt-1">
+                                                    ₹{(Number(order.totalAmount) || 0).toFixed(2)}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -153,7 +168,8 @@ const Orders = () => {
                             const rawDate = inv.DATE || inv.date || inv.DT_BILL;
                             const d = rawDate ? new Date(rawDate) : null;
                             const dateStr = d ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : (language === 'en' ? 'Unknown Date' : 'अज्ञात तिथि');
-                            const amt = Number(inv.N_B_AMT || 0).toFixed(2);
+                            // Some bills keep the amount in ORG_AMT with N_B_AMT left at 0
+                            const amt = Number(inv.N_B_AMT || inv.ORG_AMT || 0).toFixed(2);
                             
                             return (
                                 <div 
