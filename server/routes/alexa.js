@@ -3,6 +3,7 @@ const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
 const router = express.Router();
+const { saveReceipt, printReceipts, splitAmounts, DEFAULT_SERIES, DEFAULT_SM } = require('../utils/alexaCashReceipt');
 
 /*
  * Alexa "Sarthak bhai" skill — voice cash receipts.
@@ -121,7 +122,7 @@ ${options ? `Options read out to the user:\n${options}\n` : ''}
 User said: "${voiceText}"
 
 Return ONLY JSON:
-{"party": string|null, "choice": number|null, "amount": number|null, "series": string|null, "salesman": string|null, "yes": boolean, "no": boolean, "print": boolean, "cancel": boolean}
+{"party": string|null, "choice": number|null, "amount": number|null, "series": string|null, "salesman": string|null, "yes": boolean, "no": boolean, "print": boolean, "saveOnly": boolean, "cancel": boolean}
 
 Rules:
 - party: the customer/shop name words exactly as spoken, transliterated to English letters (सुरेश किराना → "suresh kirana"). Do not include words like raseed/receipt/banao/rupaye/ki/ka. If the user is answering "which one" with a place or extra name words, put those words here. null if no party mentioned.
@@ -130,7 +131,8 @@ Rules:
 - series: a single letter/short letters if the user names a series ("series A", "A series"). If the last question was about series and the user says a letter, use it. Uppercase. null otherwise.
 - salesman: salesman name words if mentioned, or the answer when the last question was about salesman. null otherwise.
 - yes: user agrees / says haan, ha, theek hai, kar do, ok, yes. no: user says nahi, mat karo, no.
-- print: user asks to save, print, "save karo", "print karo", "save aur print".
+- print: user asks to print, "print karo", "save aur print", "save karke print".
+- saveOnly: user wants it saved but NOT printed ("sirf save karo", "print mat karo", "bina print ke save").
 - cancel: user wants to cancel/stop/start over ("cancel", "rehne do", "band karo").`;
 
   const res = await axios.post(`${GEMINI_URL}?key=${key}`, {
@@ -168,14 +170,18 @@ const extractFallback = (voiceText) => {
 const nextQuestion = (state) => {
   if (!state.party) return { awaiting: 'party', text: 'Kis party ki raseed banani hai?' };
   if (!state.amount) return { awaiting: 'amount', text: `${spokenParty(state.party)}. Kitne rupaye ki raseed?` };
-  const page = pageOpen() ? pageStatus : null;
-  if (page && !page.series && !state.series) return { awaiting: 'series', text: 'Series kya rakhein? Jaise A ya B.' };
-  if (page && !page.sm && !page.smLocked && !state.sm) {
-    const names = cmplCache.salesmen.slice(0, 3).map(s => titleCase(s.name)).join(', ');
-    return { awaiting: 'salesman', text: `Salesman kaun hai? Jaise ${names}.` };
-  }
   return null;
 };
+
+const smSpoken = async (state) => {
+  if (state.sm) return titleCase(state.sm.name);
+  const { salesmen } = await loadCmpl();
+  const sm = salesmen.find(s => s.code === DEFAULT_SM);
+  return sm ? titleCase(sm.name) : DEFAULT_SM;
+};
+
+/** "O 245" or "O 245 se O 247" */
+const spokenNos = (series, nos) => (nos.length === 1 ? `${series} ${nos[0]}` : `${series} ${nos[0]} se ${series} ${nos[nos.length - 1]}`);
 
 const turn = async (voiceText, state) => {
   const { parties, salesmen } = await loadCmpl();
@@ -190,15 +196,14 @@ const turn = async (voiceText, state) => {
   console.log('[Alexa] Understood:', JSON.stringify(ex));
 
   if (ex.cancel) {
-    return { reply: 'Theek hai, raseed cancel kar di.', state: {}, end: true };
+    return { reply: 'Theek hai, raseed cancel kar di. Kuch save nahi hua.', state: {}, end: true };
   }
 
-  const fill = [];      // actions to send to the page this turn
   const notes = [];     // things to say before the next question
   let partyAsk = null;  // a "which party?" question; asked after the rest of this turn is applied
-  if (ex.print) state.wantPrint = true; // "... print karo" said before the party was settled
-  // A bare name before any party is chosen is the party, unless we just asked for the salesman
-  if (!state.party && !ex.party && ex.salesman && state.awaiting !== 'salesman') {
+  if (ex.print) state.wantPrint = true; // "... print karo" said before everything was collected
+  // A bare name before any party is chosen is the party, not a salesman
+  if (!state.party && !ex.party && ex.salesman) {
     ex.party = ex.salesman;
     ex.salesman = null;
   }
@@ -221,89 +226,63 @@ const turn = async (voiceText, state) => {
       partyAsk = { text: `${titleCase(ex.party)} naam ki koi party nahi mili. Party ka naam dobara boliye.`, awaiting: 'party' };
     } else {
       state.party = null;
-      state.candidates = matches.slice(0, 20);
-      if (matches.length <= MAX_LISTED) {
-        const list = matches.map((m, i) => `${i + 1}, ${spokenParty(m)}`).join('. ');
-        partyAsk = { text: `${matches.length} party mili: ${list}. Kaunsi wali?`, awaiting: 'choice' };
-      } else {
-        // Read the best few as a numbered list (so "pehli wali" works) and offer narrowing down
-        state.candidates = matches.slice(0, MAX_LISTED);
-        const list = state.candidates.map((m, i) => `${i + 1}, ${spokenParty(m)}`).join('. ');
-        partyAsk = { text: `${titleCase(ex.party)} naam ki ${matches.length} party hain. Jaise: ${list}. Number boliye, ya jagah ke saath poora naam boliye.`, awaiting: 'choice' };
-      }
+      // Read the best few as a numbered list (so "pehli wali" works)
+      state.candidates = matches.slice(0, MAX_LISTED);
+      const list = state.candidates.map((m, i) => `${i + 1}, ${spokenParty(m)}`).join('. ');
+      partyAsk = matches.length <= MAX_LISTED
+        ? { text: `${matches.length} party mili: ${list}. Kaunsi wali?`, awaiting: 'choice' }
+        : { text: `${titleCase(ex.party)} naam ki ${matches.length} party hain. Jaise: ${list}. Number boliye, ya jagah ke saath poora naam boliye.`, awaiting: 'choice' };
     }
-  }
-  if (state.party && state.party.code !== state.filledParty) {
-    fill.push({ type: 'update_field', field: 'party', value: state.party.code });
-    state.filledParty = state.party.code;
   }
 
   // ── Amount
   if (ex.amount != null) {
     const amt = Math.round(Number(ex.amount) * 100) / 100;
-    if (!(amt > 0)) {
-      notes.push('Amount samajh nahi aaya.');
-    } else if (amt > MAX_AMOUNT) {
-      notes.push(`Ek raseed do lakh se zyada ki nahi ban sakti.`);
-    } else if (amt !== state.amount) {
-      state.amount = amt;
-      fill.push({ type: 'update_field', field: 'amount', value: String(amt) });
-    }
+    if (!(amt > 0)) notes.push('Amount samajh nahi aaya.');
+    else if (amt > MAX_AMOUNT) notes.push('Ek raseed do lakh se zyada ki nahi ban sakti.');
+    else state.amount = amt;
   }
 
-  // ── Series
+  // ── Optional overrides of the defaults (series O, salesman SM003)
   if (ex.series) {
     const s = String(ex.series).replace(/[^A-Za-z]/g, '').toUpperCase();
-    if (s && s !== state.series) {
-      state.series = s;
-      fill.push({ type: 'update_field', field: 'series', value: s });
-    }
+    if (s) state.series = s;
   }
-
-  // ── Salesman
   if (ex.salesman) {
     const sms = findMatches(ex.salesman, salesmen);
-    if (sms.length >= 1 && sms[0].code !== state.sm?.code) {
-      state.sm = sms[0];
-      fill.push({ type: 'update_field', field: 'sm', value: sms[0].code });
-    } else if (!sms.length) {
-      notes.push(`${titleCase(ex.salesman)} naam ka salesman nahi mila.`);
-    }
+    if (sms.length) state.sm = sms[0];
+    else notes.push(`${titleCase(ex.salesman)} naam ka salesman nahi mila.`);
   }
-
-  if (fill.length) await queueCommand(fill, voiceText);
 
   const q = partyAsk || nextQuestion(state);
-  if (q) {
-    return { reply: [...notes, q.text].join(' '), state: { ...state, awaiting: q.awaiting } };
-  }
+  if (q) return { reply: [...notes, q.text].join(' '), state: { ...state, awaiting: q.awaiting } };
 
   // Everything collected
+  const series = state.series || DEFAULT_SERIES;
   const summary = `${spokenParty(state.party)}, ${state.amount} rupaye`;
-  if (!pageOpen()) {
-    return {
-      reply: `${summary}. Lekin Cash Receipt page khula nahi hai. Website par Cash Receipt kholiye, do minute ke andar main wahan bhar dungi. Phir boliye print karo.`,
-      state: { ...state, awaiting: 'confirm' },
-    };
-  }
+  const confirmed = state.wantPrint || (state.awaiting === 'confirm' && (ex.yes || ex.saveOnly));
 
-  if (state.wantPrint || (state.awaiting === 'confirm' && ex.yes)) {
-    // Re-send every field with the print so the page prints exactly what was confirmed
-    const all = [{ type: 'update_field', field: 'party', value: state.party.code },
-      { type: 'update_field', field: 'amount', value: String(state.amount) }];
-    if (state.series) all.push({ type: 'update_field', field: 'series', value: state.series });
-    if (state.sm) all.push({ type: 'update_field', field: 'sm', value: state.sm.code });
-    all.push({ type: 'print_receipt' });
-    await queueCommand(all, voiceText);
-    return { reply: `${summary} ki raseed save karke print kar rahi hoon.`, state: {}, end: true };
+  if (confirmed) {
+    const saved = await saveReceipt({ party: state.party, amount: state.amount, series, sm: state.sm });
+    const what = saved.receiptNos.length === 1
+      ? `Raseed ${spokenNos(saved.series, saved.receiptNos)} save ho gayi`
+      : `${saved.receiptNos.length} raseed ${spokenNos(saved.series, saved.receiptNos)} save ho gayi`;
+    if (ex.saveOnly && !state.wantPrint) {
+      return { reply: `${what}.`, state: {}, end: true };
+    }
+    // Printing takes several seconds (render + spool) — don't keep Alexa waiting
+    printReceipts(saved.receiptNos).catch(err => console.error('[Alexa] Print failed:', err.message));
+    return { reply: `${what}, print ho rahi hai.`, state: {}, end: true };
   }
 
   if (state.awaiting === 'confirm' && ex.no) {
-    return { reply: 'Theek hai. Raseed screen par bhari hui hai, aap check karke save kar lijiye.', state: {}, end: true };
+    return { reply: 'Theek hai, kuch save nahi kiya.', state: {}, end: true };
   }
 
+  const pieces = splitAmounts(state.amount).length;
+  const split = pieces > 1 ? ` Bees hazaar se zyada hai, isliye ${pieces} raseed banengi.` : '';
   return {
-    reply: [...notes, `${summary} ki raseed screen par bhar di hai. Save aur print karun?`].join(' '),
+    reply: [...notes, `${summary}. Series ${series}, salesman ${await smSpoken(state)}.${split} Save karke print karun?`].join(' '),
     state: { ...state, awaiting: 'confirm' },
   };
 };
@@ -317,8 +296,7 @@ router.post('/webhook', async (req, res) => {
     console.log('[Alexa] Request type:', requestType);
 
     if (requestType === 'LaunchRequest') {
-      const hint = pageOpen() ? '' : ' Pehle website par Cash Receipt page khol lijiye.';
-      return res.json(say(`Namaste! Main Sarthak hoon.${hint} Kis party ki raseed banani hai?`, { awaiting: 'party' },
+      return res.json(say('Namaste! Main Sarthak hoon. Kis party ki raseed banani hai?', { awaiting: 'party' },
         { reprompt: 'Party ka naam aur amount boliye, jaise Suresh Kirana ki chaudah hazaar ki raseed.' }));
     }
 
@@ -334,7 +312,7 @@ router.post('/webhook', async (req, res) => {
     console.log('[Alexa] Intent:', intentName);
 
     if (intentName === 'AMAZON.HelpIntent') {
-      return res.json(say('Party ka naam aur amount boliye, jaise: Suresh Kirana ki chaudah hazaar ki raseed banao. Main screen par bhar dungi, phir print karo boliye.', state));
+      return res.json(say('Party ka naam aur amount boliye, jaise: Suresh Kirana ki chaudah hazaar ki raseed banao. Main save karke default printer par print kar dungi.', state));
     }
     if (intentName === 'AMAZON.StopIntent' || intentName === 'AMAZON.CancelIntent') {
       return res.json(say('Theek hai, alvida!', {}, { end: true }));
