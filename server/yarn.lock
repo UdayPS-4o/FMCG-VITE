@@ -4585,6 +4585,11 @@ pdf-parse@^1.1.1:
     debug "^3.1.0"
     node-ensure "^0.0.0"
 
+pdf-to-printer@^5.8.1:
+  version "5.8.1"
+  resolved "https://registry.npmjs.org/pdf-to-printer/-/pdf-to-printer-5.8.1.tgz"
+  integrity sha512-bVMrGbBiVw8G/z0b28DhMguoJa8rqbVcbfLtpQzGUJ7eaq188JA2AxsFeuFQwWxAvMCa1Hyh8vXc2QybQVrPrw==
+
 peberminta@^0.10.0:
   version "0.10.0"
   resolved "https://registry.npmjs.org/peberminta/-/peberminta-0.10.0.tgz"
