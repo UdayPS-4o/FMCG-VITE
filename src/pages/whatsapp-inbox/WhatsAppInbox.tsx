@@ -307,11 +307,12 @@ function ConversationItem({
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 function MessageBubble({
-  msg, onImageClick, onContextMenu
+  msg, onImageClick, onContextMenu, onReply
 }: {
   msg: Message;
   onImageClick: (url: string) => void;
   onContextMenu: (msg: Message, x: number, y: number) => void;
+  onReply: (msg: Message) => void;
 }) {
   const isOut = msg.direction === 'outbound';
   const [hover, setHover] = useState(false);
@@ -344,6 +345,13 @@ function MessageBubble({
       className={`wa-bubble-row ${isOut ? 'wa-bubble-row--out' : 'wa-bubble-row--in'}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onDoubleClick={(e) => {
+        // Like WhatsApp: double-click a message to start replying to it
+        if (msg.type === 'deleted') return;
+        if ((e.target as HTMLElement).closest('button, a, audio')) return;
+        window.getSelection()?.removeAllRanges();
+        onReply(msg);
+      }}
     >
       {/* Dropdown arrow — left side for outbound, right side for inbound */}
       {isOut && hover && (
@@ -1369,6 +1377,7 @@ export default function WhatsAppInbox() {
                             setContextMenu({ msg: m, x, y });
                             setShowEmojiPicker(false);
                           }}
+                          onReply={(m) => { setReplyTo(m); inputRef.current?.focus(); }}
                         />
                       ))}
                     </div>
