@@ -1169,3 +1169,38 @@ span.flatpickr-weekday,
   .kpi-enter, .kpi-bar-grow, .kpi-pop { animation: none; }
   .kpi-width-anim { transition: none; }
 }
+
+/* =====================================================
+   Account master (new account) animations
+   ===================================================== */
+@keyframes am-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes am-pop {
+  0%   { transform: scale(0.5); opacity: 0; }
+  70%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes am-flash {
+  from { background-color: color-mix(in srgb, var(--color-brand-500) 18%, transparent); }
+  to   { background-color: transparent; }
+}
+@keyframes am-ping {
+  0%   { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes am-shutter {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+/* `backwards` so no transform is left on the section (keeps dropdown portals positioned right) */
+.am-enter   { animation: am-fade-up 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.am-pop     { animation: am-pop 0.35s ease-out; }
+.am-flash   { animation: am-flash 1.2s ease-out; }
+.am-ping    { animation: am-ping 1.4s ease-out infinite; }
+.am-shutter { animation: am-shutter 0.5s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .am-enter, .am-pop, .am-flash, .am-ping, .am-shutter { animation: none; }
+}

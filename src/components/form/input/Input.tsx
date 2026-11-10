@@ -1,4 +1,5 @@
 import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import { CircleCheck } from 'lucide-react';
 
 interface InputProps {
   id?: string;
@@ -22,6 +23,8 @@ interface InputProps {
   inputMode?: 'search' | 'text' | 'email' | 'tel' | 'numeric' | 'url' | 'none' | 'decimal';
   fieldType?: 'pan' | 'gstin' | 'default';
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  /** Leading icon. Also turns on the focus ring and the success check (outlined variant). */
+  icon?: React.ReactNode;
 }
 
 // Define handle types for the ref
@@ -53,6 +56,7 @@ const Input = forwardRef<InputRefHandle, InputProps>((
     inputMode,
     fieldType = 'default',
     onKeyDown,
+    icon,
   }, 
   ref
 ) => {
@@ -116,6 +120,9 @@ const Input = forwardRef<InputRefHandle, InputProps>((
     
     if (variant === 'outlined') {
       baseClasses += ' border rounded-lg';
+      if (icon) {
+        baseClasses += ' focus-within:ring-3 focus-within:ring-brand-500/15';
+      }
       
       if (error) {
         baseClasses += ' border-red-500 dark:border-red-400';
@@ -161,7 +168,7 @@ const Input = forwardRef<InputRefHandle, InputProps>((
       return `${baseClasses} ${
         isActive 
           ? `text-xs -top-2 left-2 px-1 ${colorClasses} bg-white dark:bg-gray-900` 
-          : `${colorClasses} top-1/2 -translate-y-1/2 left-4`
+          : `${colorClasses} top-1/2 -translate-y-1/2 ${icon ? 'left-10' : 'left-4'}`
       }`;
     } else {
       return `${baseClasses} ${
@@ -180,7 +187,7 @@ const Input = forwardRef<InputRefHandle, InputProps>((
     }
     
     if (variant === 'outlined') {
-      baseClasses += ' px-4 py-2.5 text-sm';
+      baseClasses += icon ? ' pl-10 pr-9 py-3 text-sm' : ' px-4 py-2.5 text-sm';
     } else {
       baseClasses += ' pb-2 pt-1 text-sm';
     }
@@ -209,6 +216,22 @@ const Input = forwardRef<InputRefHandle, InputProps>((
           inputMode={getInputMode()}
           onKeyDown={onKeyDown}
         />
+        {icon && (
+          <span
+            aria-hidden="true"
+            className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none transition-colors duration-200 [&>svg]:w-[18px] [&>svg]:h-[18px] ${
+              error ? 'text-red-500 dark:text-red-400' : isFocused ? 'text-brand-500 dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+            }`}
+          >
+            {icon}
+          </span>
+        )}
+        {icon && success && !error && (
+          <CircleCheck
+            aria-hidden="true"
+            className="am-pop absolute right-3 top-1/2 -mt-[9px] w-[18px] h-[18px] text-green-500 dark:text-green-400 pointer-events-none"
+          />
+        )}
         {label && (
           <label 
             htmlFor={id} 

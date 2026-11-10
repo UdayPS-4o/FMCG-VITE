@@ -11,6 +11,12 @@ import apiCache from '../../utils/apiCache';
 import { FormSkeletonLoader } from "../../components/ui/skeleton/SkeletonLoader";
 import Toast from '../../components/ui/toast/Toast';
 import { validateGSTIN, validatePAN, validateFSSAI, fetchGSTINDetails, validatePANFormat, validateGSTINFormat } from '../../utils/validators';
+import GpsCapture, { GpsValue } from '../../components/account-master/GpsCapture';
+import ShopPhotoCapture from '../../components/account-master/ShopPhotoCapture';
+import {
+  Store, ReceiptText, IdCard, MapPin, Map as MapIcon, Building2, Mailbox, Phone, Mail,
+  Fingerprint, FileBadge, Leaf, BadgeCheck, LoaderCircle, Check,
+} from 'lucide-react';
 
 interface Option {
   label: string;
@@ -87,6 +93,24 @@ interface StateEntry {
   ST_NAME: string;
 }
 
+const Section: React.FC<{ n: number; title: string; hint?: string; delay: number; children: React.ReactNode }> = ({
+  n, title, hint, delay, children,
+}) => (
+  <section className="am-enter mb-8" style={{ animationDelay: `${delay}ms` }}>
+    <div className="flex items-center gap-2 mb-4">
+      <span className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400 text-xs font-medium flex items-center justify-center">
+        {n}
+      </span>
+      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-200">{title}</h3>
+      {hint && <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500">{hint}</span>}
+      <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700 ml-2" />
+    </div>
+    {children}
+  </section>
+);
+
+const REQUIRED_FIELDS = ['achead', 'addressline1', 'place', 'pincode', 'mobile'] as const;
+
 const AccountMaster: React.FC = () => {
   const [group, setGroup] = useState<Option[]>([]);
   const [subgroup, setSubgroup] = useState<Option[]>([]);
@@ -115,6 +139,12 @@ const AccountMaster: React.FC = () => {
     subgroup: '',
     businessName: '',
   });
+  const [gps, setGps] = useState<GpsValue | null>(null);
+  const [shopPhoto, setShopPhoto] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [gstChecking, setGstChecking] = useState(false);
+  const [flashAchead, setFlashAchead] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const [toast, setToast] = useState<{ 
@@ -131,21 +161,22 @@ const AccountMaster: React.FC = () => {
   const isAdmin = user && user.routeAccess && user.routeAccess.includes('Admin');
 
   // Configure field order for Enter key navigation
+  // Same order as the fields appear on screen
   const fieldOrder = [
     'subgroup',
     'achead',
+    'gstin',
+    'pan',
     'addressline1',
-    'addressline2', 
+    'addressline2',
     'place',
     'pincode',
+    'statecode',
     'mobile',
-    'pan',
+    'email',
     'aadhar',
-    'gstin',
     'dlno',
     'fssaino',
-    'email',
-    'statecode'
   ];
 
   // Handle Enter key for field navigation
@@ -350,6 +381,7 @@ const AccountMaster: React.FC = () => {
   // Fetch GSTIN details when valid GSTIN is entered
   const fetchGSTINData = async (gstin: string) => {
     if (gstin.length === 15) {
+      setGstChecking(true);
       try {
         const gstinData = await fetchGSTINDetails(gstin);
         
@@ -368,10 +400,16 @@ const AccountMaster: React.FC = () => {
             legalName: gstinData["Legal Name"] || ""
           });
 
+          if (gstinData["Business Name"]) {
+            setFlashAchead(true);
+            setTimeout(() => setFlashAchead(false), 1200);
+          }
         }
       } catch (error) {
         console.error("Error fetching GSTIN data:", error);
-      } 
+      } finally {
+        setGstChecking(false);
+      }
     }
   };
 
@@ -666,8 +704,9 @@ const AccountMaster: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (saving) return;
     try {
-      setIsLoading(true);
+      setSaving(true);
       setError(null);
 
       if (!subgroup || subgroup.length === 0) {
@@ -709,11 +748,16 @@ const AccountMaster: React.FC = () => {
       const values = {
         ...formValues,
         subgroup: subgroup[0].value,
+        latitude: gps?.latitude ?? '',
+        longitude: gps?.longitude ?? '',
+        gpsAccuracy: gps?.accuracy ?? '',
+        gpsCapturedAt: gps?.capturedAt ?? '',
+        shopPhoto: shopPhoto ?? '',
       };
 
       const route = isEDIT ? `/edit/account-master` : `/account-master`;
       console.log('Submitting form to:', `${constants.baseURL}${route}`);
-      console.log('Form values:', values);
+      console.log('Form values:', { ...values, shopPhoto: values.shopPhoto ? `[${values.shopPhoto.length} chars]` : '' });
 
       const response = await fetch(`${constants.baseURL}${route}`, {
         method: 'POST',
@@ -739,6 +783,7 @@ const AccountMaster: React.FC = () => {
 
       if (response.ok) {
         console.log('Form submitted successfully');
+        setSaved(true);
         // Show success toast
         setToast({
           visible: true,
@@ -762,7 +807,7 @@ const AccountMaster: React.FC = () => {
         type: 'error'
       });
     } finally {
-      setIsLoading(false);
+      setSaving(false);
     }
   };
 
@@ -811,6 +856,29 @@ const AccountMaster: React.FC = () => {
     );
   }
 
+  const isValid: Record<string, boolean> = {
+    achead: formValues.achead.trim().length > 1,
+    addressline1: formValues.addressline1.trim().length > 1,
+    place: formValues.place.trim().length > 1,
+    pincode: /^\d{6}$/.test(formValues.pincode),
+    mobile: /^\d{10}$/.test(formValues.mobile),
+    gstin: formValues.gstin.length === 15 && !validationErrors.gstin && !!gstDetails.legalName,
+    pan: /^[A-Z]{5}\d{4}[A-Z]$/.test(formValues.pan) && !validationErrors.pan,
+    aadhar: /^\d{12}$/.test(formValues.aadhar),
+    fssaino: /^\d{14}$/.test(formValues.fssaino) && !validationErrors.fssaino,
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formValues.email.trim()),
+  };
+  const requiredDone = REQUIRED_FIELDS.filter((k) => isValid[k]).length;
+  const progress = Math.round((requiredDone / REQUIRED_FIELDS.length) * 100);
+  const initials = formValues.achead
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+
   return (
     <div>
       <PageMeta
@@ -818,125 +886,106 @@ const AccountMaster: React.FC = () => {
         description="Account Master page in FMCG Vite Admin Template"
       />
       <PageBreadcrumb pageTitle="Account Master" />
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-        {error && (
-          <div className="text-red-500 text-center p-4 mb-4">{error}</div>
-        )}
-        <FormComponent onSubmit={handleSubmit}>
-          {/* First section - full width fields on mobile */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <Autocomplete
-                id="subgroup"
-                label="Sub Group"
-                options={group}
-                onChange={handlePartyChange}
-                defaultValue={getSubgroupValue()?.value ?? ''}
-                disabled={Boolean(!isAdmin && user && hasSingleSubgroup(user))}
-                autoComplete="off"
-              />
-              {!isAdmin && user && hasSingleSubgroup(user) && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Subgroup is locked to your assigned subgroup
-                </p>
-              )}
-              {!isAdmin && user && hasMultipleSubgroups(user) && (
-                <p className="text-xs text-gray-500 mt-1">
-                  You can only select from your assigned subgroups
-                </p>
-              )}
+      <div className="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        {/* Header: live initials + required-field progress */}
+        <div className="am-enter flex items-center gap-4 mb-7">
+          <div
+            key={initials}
+            className="am-pop shrink-0 w-12 h-12 rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400 flex items-center justify-center text-base font-medium"
+          >
+            {initials || <Store className="w-5 h-5" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-medium text-gray-800 dark:text-white/90 truncate">
+              {isEDIT ? 'Edit account' : formValues.achead.trim() || 'Open new account'}
+            </h2>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-brand-500 transition-[width] duration-500 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                {requiredDone} of {REQUIRED_FIELDS.length} required
+              </span>
             </div>
-            <div>
-              <Input 
-                id="achead" 
-                label="A/C Head *" 
+          </div>
+        </div>
+
+        {error && (
+          <div className="am-pop text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-4 py-3 mb-6">
+            {error}
+          </div>
+        )}
+
+        <FormComponent onSubmit={handleSubmit}>
+          <Section n={1} title="Business details" delay={60}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <Autocomplete
+                  id="subgroup"
+                  label="Sub Group"
+                  options={group}
+                  onChange={handlePartyChange}
+                  defaultValue={getSubgroupValue()?.value ?? ''}
+                  disabled={Boolean(!isAdmin && user && hasSingleSubgroup(user))}
+                  autoComplete="off"
+                />
+                {!isAdmin && user && hasSingleSubgroup(user) && (
+                  <p className="text-xs text-gray-500 mt-1">Subgroup is locked to your assigned subgroup</p>
+                )}
+                {!isAdmin && user && hasMultipleSubgroups(user) && (
+                  <p className="text-xs text-gray-500 mt-1">You can only select from your assigned subgroups</p>
+                )}
+              </div>
+              <Input
+                id="achead"
+                label="A/C Head *"
+                icon={<Store />}
                 value={formValues.achead}
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
                 required
+                success={isValid.achead}
+                className={flashAchead ? 'am-flash' : ''}
               />
-            </div>
-            <div>
-              <Input 
-                id="addressline1" 
-                label="Address Line 1 *" 
-                value={formValues.addressline1}
-                onChange={handleInputChange}
-                variant="outlined"
-                autoComplete="off"
-                required
-              />
-            </div>
-            <div>
-              <Input 
-                id="addressline2" 
-                label="Address Line 2" 
-                value={formValues.addressline2}
-                onChange={handleInputChange}
-                variant="outlined"
-                autoComplete="off"
-              />
-            </div>
-
-          </div>
-
-          {/* Second section - 2 columns on all devices for better use of space */}
-          <div className="grid grid-cols-2 gap-6 mt-6">
-          <div>
-              <Input 
-                id="place" 
-                label="Place *" 
-                value={formValues.place}
-                onChange={handleInputChange}
-                variant="outlined"
-                autoComplete="off"
-                required
-              />
-            </div>
-            <div className="relative">
-              <Input 
-                id="gstin" 
-                label="GSTN" 
-                value={formValues.gstin}
-                onChange={handleInputChange}
-                onBlur={() => handleFieldBlur('gstin')}
-                onFocus={() => handleFieldFocus('gstin')}
-                variant="outlined"
-                autoComplete="off"
-                maxLength={15}
-                fieldType="gstin"
-                error={validationErrors.gstin}
-              />
-              {gstDetails.entityType && gstDetails.legalName && (
-                <p className="text-xs text-green-500 mt-1">
-                  {gstDetails.entityType === "Proprietorship" ? "Proprietor" : 
-                   gstDetails.entityType}: {gstDetails.legalName}
-                </p>
-              )}
-            </div>
-            <div>
-              <Input 
-                id="pincode" 
-                label="Pin Code *" 
-                value={formValues.pincode}
-                onChange={handleInputChange}
-                onBlur={() => handleFieldBlur('pincode')}
-                onFocus={() => handleFieldFocus('pincode')}
-                variant="outlined"
-                autoComplete="off"
-                required
-                type="tel"
-                inputMode="numeric"
-                maxLength={6}
-                error={validationErrors.pincode}
-              />
-            </div>
-            
-            <div className="relative">
-              <Input 
-                id="pan" 
-                label="PAN" 
+              <div>
+                <Input
+                  id="gstin"
+                  label="GSTIN"
+                  icon={<ReceiptText />}
+                  value={formValues.gstin}
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('gstin')}
+                  onFocus={() => handleFieldFocus('gstin')}
+                  variant="outlined"
+                  autoComplete="off"
+                  maxLength={15}
+                  fieldType="gstin"
+                  error={validationErrors.gstin}
+                  success={isValid.gstin}
+                />
+                <div aria-live="polite">
+                  {gstChecking && (
+                    <span className="am-pop inline-flex items-center gap-1.5 mt-2 text-xs px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                      <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> Checking GST portal
+                    </span>
+                  )}
+                  {!gstChecking && gstDetails.entityType && gstDetails.legalName && (
+                    <span className="am-pop inline-flex items-center gap-1.5 mt-2 text-xs px-2.5 py-1 rounded-md bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400">
+                      <BadgeCheck className="w-3.5 h-3.5" />
+                      Verified · {gstDetails.entityType === 'Proprietorship' ? 'Proprietor' : gstDetails.entityType}:{' '}
+                      {gstDetails.legalName}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <Input
+                id="pan"
+                label="PAN"
+                icon={<IdCard />}
                 value={formValues.pan}
                 onChange={handleInputChange}
                 onBlur={() => handleFieldBlur('pan')}
@@ -946,12 +995,75 @@ const AccountMaster: React.FC = () => {
                 maxLength={10}
                 fieldType="pan"
                 error={validationErrors.pan}
+                success={isValid.pan}
               />
             </div>
-            <div className="relative">
-              <Input 
-                id="mobile" 
-                label="Mobile *" 
+          </Section>
+
+          <Section n={2} title="Address and contact" delay={160}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <Input
+                id="addressline1"
+                label="Address Line 1 *"
+                icon={<MapPin />}
+                value={formValues.addressline1}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+                required
+                success={isValid.addressline1}
+              />
+              <Input
+                id="addressline2"
+                label="Address Line 2"
+                icon={<MapIcon />}
+                value={formValues.addressline2}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+              />
+              <div className="grid grid-cols-2 gap-5">
+                <Input
+                  id="place"
+                  label="Place *"
+                  icon={<Building2 />}
+                  value={formValues.place}
+                  onChange={handleInputChange}
+                  variant="outlined"
+                  autoComplete="off"
+                  required
+                  success={isValid.place}
+                />
+                <Input
+                  id="pincode"
+                  label="Pin Code *"
+                  icon={<Mailbox />}
+                  value={formValues.pincode}
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('pincode')}
+                  onFocus={() => handleFieldFocus('pincode')}
+                  variant="outlined"
+                  autoComplete="off"
+                  required
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={6}
+                  error={validationErrors.pincode}
+                  success={isValid.pincode}
+                />
+              </div>
+              <Autocomplete
+                id="statecode"
+                label="State"
+                options={city}
+                onChange={handleStateChange}
+                defaultValue={formValues.statecode}
+                autoComplete="off"
+              />
+              <Input
+                id="mobile"
+                label="Mobile *"
+                icon={<Phone />}
                 value={formValues.mobile}
                 onChange={handleInputChange}
                 onBlur={() => handleFieldBlur('mobile')}
@@ -963,12 +1075,35 @@ const AccountMaster: React.FC = () => {
                 inputMode="numeric"
                 required
                 error={validationErrors.mobile}
+                success={isValid.mobile}
+              />
+              <Input
+                id="email"
+                label="Email"
+                icon={<Mail />}
+                value={formValues.email}
+                onChange={handleInputChange}
+                variant="outlined"
+                autoComplete="off"
+                inputMode="email"
+                success={isValid.email}
               />
             </div>
-            <div className="relative">
-              <Input 
-                id="aadhar" 
-                label="AADHAR" 
+          </Section>
+
+          <Section n={3} title="Location and shop photo" hint="Take these at the shop" delay={260}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <GpsCapture value={gps} onChange={setGps} />
+              <ShopPhotoCapture value={shopPhoto} onChange={setShopPhoto} gps={gps} />
+            </div>
+          </Section>
+
+          <Section n={4} title="Licences and IDs" delay={360}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <Input
+                id="aadhar"
+                label="Aadhaar"
+                icon={<Fingerprint />}
                 value={formValues.aadhar}
                 onChange={handleInputChange}
                 onBlur={() => handleFieldBlur('aadhar')}
@@ -979,23 +1114,21 @@ const AccountMaster: React.FC = () => {
                 type="tel"
                 inputMode="numeric"
                 error={validationErrors.aadhar}
+                success={isValid.aadhar}
               />
-            </div>
-            
-            <div>
-              <Input 
-                id="dlno" 
-                label="DL No." 
+              <Input
+                id="dlno"
+                label="DL No."
+                icon={<FileBadge />}
                 value={formValues.dlno}
                 onChange={handleInputChange}
                 variant="outlined"
                 autoComplete="off"
               />
-            </div>
-            <div className="relative">
-              <Input 
-                id="fssaino" 
-                label="FSSAI No." 
+              <Input
+                id="fssaino"
+                label="FSSAI No."
+                icon={<Leaf />}
                 value={formValues.fssaino}
                 onChange={handleInputChange}
                 onBlur={() => handleFieldBlur('fssaino')}
@@ -1006,44 +1139,36 @@ const AccountMaster: React.FC = () => {
                 type="tel"
                 inputMode="numeric"
                 error={validationErrors.fssaino}
+                success={isValid.fssaino}
               />
             </div>
-            <div>
-              <Input 
-                id="email" 
-                label="Email" 
-                value={formValues.email}
-                onChange={handleInputChange}
-                variant="outlined"
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <Autocomplete
-                id="statecode"
-                label="State"
-                options={city}
-                onChange={handleStateChange}
-                defaultValue={formValues.statecode}
-                autoComplete="off"
-              />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end gap-3">
+          </Section>
+
+          <div className="am-enter flex justify-end gap-3 pt-2" style={{ animationDelay: '440ms' }}>
             <button
               type="button"
               onClick={() => navigate('/db/account-master')}
-              className="px-4 py-2 text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-              disabled={isLoading}
+              className="px-5 py-2.5 text-sm text-gray-600 rounded-lg hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+              disabled={saving}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700"
-              disabled={isLoading}
+              className="min-w-[120px] inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm bg-brand-500 text-white rounded-lg hover:bg-brand-600 active:scale-[0.97] transition-all disabled:opacity-80 dark:bg-brand-600 dark:hover:bg-brand-700"
+              disabled={saving || saved}
             >
-              {isLoading ? 'Saving...' : 'Save'}
+              {saving ? (
+                <>
+                  <LoaderCircle className="w-4 h-4 animate-spin" /> Saving
+                </>
+              ) : saved ? (
+                <>
+                  <Check className="am-pop w-4 h-4" /> Saved
+                </>
+              ) : (
+                'Save'
+              )}
             </button>
           </div>
         </FormComponent>

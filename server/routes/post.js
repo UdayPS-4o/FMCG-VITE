@@ -58,9 +58,45 @@ async function getPartyName(partyCode) {
     }
 }
 
+// Shop photos for account-master are stored as files, not inline in the JSON,
+// so the account list (fetched often) doesn't carry every image.
+const SHOP_PHOTO_DIR = path.join(__dirname, '..', 'db', 'shop-photos');
+const SHOP_PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,/;
+
+async function storeShopPhoto(formData) {
+  const photo = formData.shopPhoto;
+  if (typeof photo !== 'string' || !SHOP_PHOTO_RE.test(photo)) return;
+  const ext = photo.match(SHOP_PHOTO_RE)[1] === 'jpeg' ? 'jpg' : photo.match(SHOP_PHOTO_RE)[1];
+  const buf = Buffer.from(photo.replace(SHOP_PHOTO_RE, ''), 'base64');
+  if (buf.length > 8 * 1024 * 1024) throw new Error('Shop photo is too large');
+  const safeId = String(formData.subgroup || 'account').replace(/[^a-zA-Z0-9_-]/g, '');
+  const fileName = `${safeId}-${Date.now()}.${ext}`;
+  await fs.promises.mkdir(SHOP_PHOTO_DIR, { recursive: true });
+  await fs.promises.writeFile(path.join(SHOP_PHOTO_DIR, fileName), buf);
+  formData.shopPhoto = fileName;
+}
+
+// Authenticated (mounted after the auth middleware): fetch with the Bearer token
+app.get('/api/shop-photos/:file', (req, res) => {
+  const file = path.basename(req.params.file);
+  if (!/^[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(file)) return res.status(400).send('Bad file name');
+  res.sendFile(path.join(SHOP_PHOTO_DIR, file), (err) => {
+    if (err && !res.headersSent) res.status(404).send('Not found');
+  });
+});
+
 app.post('/:formType', async (req, res) => {
   const { formType } = req.params;
   const formData = req.body;
+
+  if (formType === 'account-master') {
+    try {
+      await storeShopPhoto(formData);
+    } catch (err) {
+      console.error('Error saving shop photo:', err);
+      return res.status(400).json({ message: err.message || 'Could not save shop photo.' });
+    }
+  }
   const { email, mobile, aadhar } = req.body;
   
   const filePath = path.join(__dirname, '..', 'db', `${formType}.json`);
@@ -235,6 +271,15 @@ app.post('/:formType', async (req, res) => {
 app.post('/edit/:formType', async (req, res) => {
   const { formType } = req.params;
   const formData = req.body;
+
+  if (formType === 'account-master') {
+    try {
+      await storeShopPhoto(formData);
+    } catch (err) {
+      console.error('Error saving shop photo:', err);
+      return res.status(400).json({ message: err.message || 'Could not save shop photo.' });
+    }
+  }
   
   if (formData.items && typeof formData.items === 'string') {
     try {
