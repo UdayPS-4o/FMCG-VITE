@@ -349,6 +349,16 @@ async function sendWhatsAppMessage(to, rest) {
     timestamp: _outTs
   }));
 
+  // Register the dedup key BEFORE the API call. The ingest module tails this
+  // process's console output and can read the [WA_OUTGOING] line above while
+  // we are still waiting on AOC — it then wrote a second, id-less copy of the
+  // message, which the inbox showed as a duplicate bubble.
+  try {
+    outboundIngest.registerAlreadyLogged({
+      to: body.to, timestamp: _outTs, body: _outBody, messageId: null,
+    });
+  } catch (e) { /* ingest not started (CLI mode) — nothing to register */ }
+
   const res = await axios.post(AOC_WA_API_URL, body, {
     headers: {
       apikey: AOC_WA_API_KEY,
