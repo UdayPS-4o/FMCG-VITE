@@ -393,6 +393,7 @@ function buildConversations() {
         error: p.error || null,
         resendPayload: p.resendPayload || null,
         resendOf: p.resendOf || null,
+        replyTo: p.replyTo || undefined,
       };
       thread.messages.push(msgObj);
       thread.outboundCount++;
@@ -646,6 +647,16 @@ router.post('/send', async (req, res) => {
     } else {
       payload.type = 'text';
       payload.text = { body: String(msgBody) };
+      // Quoted message the user replied to — stored with the send record so the
+      // inbox keeps showing it after a refresh. Not forwarded to WhatsApp.
+      const rt = body.replyTo;
+      if (rt && typeof rt.body === 'string') {
+        payload.replyTo = {
+          id: rt.id ? String(rt.id) : null,
+          body: rt.body.slice(0, 300),
+          direction: rt.direction === 'outbound' ? 'outbound' : 'inbound',
+        };
+      }
     }
 
     const result = await axios.post(

@@ -286,7 +286,9 @@ function renderTemplateBody(templateName, params) {
  */
 async function sendWhatsAppMessage(to, rest) {
   // `resendOf` is our own marker (inbox Resend button) — never forwarded to AOC
-  const { resendOf, ...aocRest } = rest || {};
+  // `replyTo` is also ours: the message the inbox user was replying to, kept so
+  // the inbox can show the quoted message above the reply.
+  const { resendOf, replyTo, ...aocRest } = rest || {};
   rest = aocRest;
   const body = {
     from: AOC_WA_FROM,
@@ -398,6 +400,7 @@ async function sendWhatsAppMessage(to, rest) {
     ).slice(0, 300),
     resendPayload: _outOk ? null : rest,
     resendOf: resendOf || null,
+    replyTo: replyTo || null,
     timestamp: _outTs,
   });
 

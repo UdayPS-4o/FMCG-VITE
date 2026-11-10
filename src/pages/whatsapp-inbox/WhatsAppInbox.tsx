@@ -961,7 +961,12 @@ export default function WhatsAppInbox() {
     try {
       const res = await fetch(`${API_BASE}/send`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: activePhone, body: text }),
+        body: JSON.stringify({
+          to: activePhone, body: text,
+          replyTo: currentReplyTo
+            ? { id: currentReplyTo.id, body: currentReplyTo.body, direction: currentReplyTo.direction }
+            : undefined,
+        }),
       });
       const data = await res.json();
       if (!data.ok) {
