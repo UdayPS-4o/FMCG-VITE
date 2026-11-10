@@ -137,6 +137,11 @@ const AppRoutes = () => {
             <AccountMaster />
           </ProtectedRoute>
         } />
+        <Route path="/account-master/update" element={
+          <ProtectedRoute requiredAccess="Account Master">
+            <AccountMaster key="update" mode="update" />
+          </ProtectedRoute>
+        } />
         <Route path="/invoicing" element={
           <ProtectedRoute requiredAccess="Invoicing">
             <Invoicing />

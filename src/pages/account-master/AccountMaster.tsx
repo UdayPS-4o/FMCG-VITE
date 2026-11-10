@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
@@ -111,7 +111,30 @@ const Section: React.FC<{ n: number; title: string; hint?: string; delay: number
 
 const REQUIRED_FIELDS = ['achead', 'addressline1', 'place', 'pincode', 'mobile'] as const;
 
-const AccountMaster: React.FC = () => {
+interface UpdateParty {
+  code: string;
+  name: string;
+  place: string;
+  prefix: string;
+  updatedAt: string | null;
+}
+
+interface AccountMasterProps {
+  /** 'update' edits existing parties (CMPL) and saves them in the web app only */
+  mode?: 'create' | 'update';
+}
+
+const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
+
+const AccountMaster: React.FC<AccountMasterProps> = ({ mode = 'create' }) => {
+  const isUpdate = mode === 'update';
+  const [updSubgroups, setUpdSubgroups] = useState<Option[]>([]);
+  const [updParties, setUpdParties] = useState<UpdateParty[]>([]);
+  const [updSubgroup, setUpdSubgroup] = useState('');
+  const [partyCode, setPartyCode] = useState('');
+  const [partyLoading, setPartyLoading] = useState(false);
+  const [existingPhoto, setExistingPhoto] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<{ at: string; by: string | null } | null>(null);
   const [group, setGroup] = useState<Option[]>([]);
   const [subgroup, setSubgroup] = useState<Option[]>([]);
   const [city, setCity] = useState<Option[]>([]);
@@ -164,6 +187,7 @@ const AccountMaster: React.FC = () => {
   // Same order as the fields appear on screen
   const fieldOrder = [
     'subgroup',
+    'party',
     'achead',
     'gstin',
     'pan',
@@ -236,7 +260,14 @@ const AccountMaster: React.FC = () => {
         setError(null);
         const currentUrl = window.location.href;
         
-        if (currentUrl.includes('edit')) {
+        if (isUpdate) {
+          const res = await fetch(`${constants.baseURL}/api/account-updates/parties`, { headers: authHeaders() });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.message || 'Could not load parties');
+          setUpdSubgroups(data.subgroups || []);
+          setUpdParties(data.parties || []);
+          if ((data.subgroups || []).length === 1) setUpdSubgroup(data.subgroups[0].value);
+        } else if (currentUrl.includes('edit')) {
           setIsEDIT(true);
           const subgroup = currentUrl.split('?sub=').pop() || '';
           console.log('Fetching account data for subgroup:', subgroup);
@@ -353,7 +384,79 @@ const AccountMaster: React.FC = () => {
     };
 
     fetchData();
-  }, [user, isAdmin]);
+  }, [user, isAdmin, isUpdate]);
+
+  // Parties for the chosen sub group (the server already limits them to the user's sub groups)
+  const partyOptions = useMemo(
+    () =>
+      updParties
+        .filter((p) => !updSubgroup || p.prefix === updSubgroup)
+        .map((p) => ({
+          value: p.code,
+          label: `${p.name}${p.place ? ` · ${p.place}` : ''} (${p.code})${p.updatedAt ? ' ✓' : ''}`,
+        })),
+    [updParties, updSubgroup]
+  );
+
+  const handleUpdSubgroupChange = (value: string) => {
+    setUpdSubgroup(value);
+    if (partyCode && !partyCode.toUpperCase().startsWith(value)) setPartyCode('');
+  };
+
+  const loadParty = async (code: string) => {
+    if (!code || code === partyCode) return;
+    setPartyLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${constants.baseURL}/api/account-updates/party/${encodeURIComponent(code)}`, {
+        headers: authHeaders(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || 'Could not load party');
+      const v = data.values || {};
+      setFormValues({
+        subgroup: code,
+        achead: v.achead || '',
+        addressline1: v.addressline1 || '',
+        addressline2: v.addressline2 || '',
+        place: v.place || '',
+        pincode: v.pincode || '',
+        mobile: v.mobile || '',
+        pan: v.pan || '',
+        aadhar: v.aadhar || '',
+        gstin: v.gst || '',
+        dlno: v.dlno || '',
+        fssaino: v.fssaino || '',
+        email: v.email || '',
+        statecode: v.statecode || '',
+        businessName: '',
+      });
+      setValidationErrors({});
+      setFieldBlurred({});
+      setGSTDetails({ entityType: '', legalName: '' });
+      setSaved(false);
+      setGps(
+        typeof v.latitude === 'number' && typeof v.longitude === 'number'
+          ? { latitude: v.latitude, longitude: v.longitude, accuracy: Number(v.gpsAccuracy) || 0, capturedAt: v.gpsCapturedAt || '' }
+          : null
+      );
+      setLastUpdate(data.updatedAt ? { at: data.updatedAt, by: data.updatedByName } : null);
+      setExistingPhoto(v.shopPhoto || null);
+      setShopPhoto(null);
+      if (v.shopPhoto) {
+        // Photos are behind auth, so fetch with the token and show a blob URL
+        const img = await fetch(`${constants.baseURL}/api/shop-photos/${encodeURIComponent(v.shopPhoto)}`, { headers: authHeaders() });
+        if (img.ok) setShopPhoto(URL.createObjectURL(await img.blob()));
+      }
+      setPartyCode(code);
+      const sub = code.substring(0, 2).toUpperCase();
+      if (updSubgroups.some((sg) => sg.value === sub)) setUpdSubgroup(sub);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load party');
+    } finally {
+      setPartyLoading(false);
+    }
+  };
 
   useEffect(() => {
     const subg = localStorage.getItem('subgroup');
@@ -709,7 +812,10 @@ const AccountMaster: React.FC = () => {
       setSaving(true);
       setError(null);
 
-      if (!subgroup || subgroup.length === 0) {
+      if (isUpdate && !partyCode) {
+        throw new Error('Choose a party first');
+      }
+      if (!isUpdate && (!subgroup || subgroup.length === 0)) {
         throw new Error('Please select a subgroup');
       }
       
@@ -743,6 +849,44 @@ const AccountMaster: React.FC = () => {
       
       if (!isValid) {
         throw new Error('Please correct the validation errors');
+      }
+
+      if (isUpdate) {
+        const res = await fetch(`${constants.baseURL}/api/account-updates/party/${encodeURIComponent(partyCode)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({
+            achead: formValues.achead,
+            addressline1: formValues.addressline1,
+            addressline2: formValues.addressline2,
+            place: formValues.place,
+            pincode: formValues.pincode,
+            mobile: formValues.mobile,
+            pan: formValues.pan,
+            aadhar: formValues.aadhar,
+            gst: formValues.gstin,
+            dlno: formValues.dlno,
+            fssaino: formValues.fssaino,
+            email: formValues.email,
+            statecode: formValues.statecode,
+            latitude: gps?.latitude ?? '',
+            longitude: gps?.longitude ?? '',
+            gpsAccuracy: gps?.accuracy ?? '',
+            gpsCapturedAt: gps?.capturedAt ?? '',
+            // New photo -> data URL; unchanged -> keep the stored file name
+            shopPhoto: shopPhoto?.startsWith('data:') ? shopPhoto : existingPhoto ?? '',
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.message || `Error ${res.status}`);
+        setSaved(true);
+        setLastUpdate({ at: data.updatedAt, by: user?.name || null });
+        setUpdParties((list) =>
+          list.map((p) => (p.code === partyCode ? { ...p, name: formValues.achead, place: formValues.place, updatedAt: data.updatedAt } : p))
+        );
+        setToast({ visible: true, message: 'Account updated', type: 'success' });
+        setTimeout(() => setSaved(false), 1800);
+        return;
       }
 
       const values = {
@@ -850,7 +994,7 @@ const AccountMaster: React.FC = () => {
           title="Account Master | FMCG Vite Admin Template"
           description="Create Account in FMCG Vite Admin Template"
         />
-        <PageBreadcrumb pageTitle="Account Master" />
+        <PageBreadcrumb pageTitle={isUpdate ? 'Update Account Master' : 'Account Master'} />
         <FormSkeletonLoader />
       </div>
     );
@@ -885,7 +1029,7 @@ const AccountMaster: React.FC = () => {
         title="Account Master | FMCG Vite Admin Template"
         description="Account Master page in FMCG Vite Admin Template"
       />
-      <PageBreadcrumb pageTitle="Account Master" />
+      <PageBreadcrumb pageTitle={isUpdate ? 'Update Account Master' : 'Account Master'} />
       <div className="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         {/* Header: live initials + required-field progress */}
         <div className="am-enter flex items-center gap-4 mb-7">
@@ -897,8 +1041,22 @@ const AccountMaster: React.FC = () => {
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-medium text-gray-800 dark:text-white/90 truncate">
-              {isEDIT ? 'Edit account' : formValues.achead.trim() || 'Open new account'}
+              {isUpdate
+                ? partyCode
+                  ? formValues.achead.trim() || partyCode
+                  : 'Update account master'
+                : isEDIT
+                ? 'Edit account'
+                : formValues.achead.trim() || 'Open new account'}
             </h2>
+            {isUpdate && partyCode && (
+              <p className="am-pop text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {partyCode}
+                {lastUpdate
+                  ? ` · Last updated ${new Date(lastUpdate.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}${lastUpdate.by ? ` by ${lastUpdate.by}` : ''}`
+                  : ' · Not updated yet'}
+              </p>
+            )}
             <div className="flex items-center gap-3 mt-2">
               <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
                 <div
@@ -920,8 +1078,59 @@ const AccountMaster: React.FC = () => {
         )}
 
         <FormComponent onSubmit={handleSubmit}>
-          <Section n={1} title="Business details" delay={60}>
+          {isUpdate && (
+            <Section n={1} title="Choose party" delay={60}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <Autocomplete
+                    id="subgroup"
+                    label="Sub Group"
+                    options={updSubgroups}
+                    onChange={handleUpdSubgroupChange}
+                    value={updSubgroup}
+                    disabled={updSubgroups.length === 1}
+                    autoComplete="off"
+                  />
+                  {!isAdmin && (
+                    <p className="text-xs text-gray-500 mt-1">Showing only your assigned sub groups</p>
+                  )}
+                </div>
+                <div>
+                  <Autocomplete
+                    id="party"
+                    label={updSubgroup ? 'Party' : 'Party (all sub groups)'}
+                    options={partyOptions}
+                    onChange={loadParty}
+                    value={partyCode}
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {partyLoading ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> Loading party details
+                      </span>
+                    ) : (
+                      `${partyOptions.length} parties · ✓ already updated`
+                    )}
+                  </p>
+                </div>
+              </div>
+            </Section>
+          )}
+
+          {isUpdate && !partyCode ? (
+            <div className="am-enter flex flex-col items-center text-center gap-2 py-12 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700" style={{ animationDelay: '160ms' }}>
+              <Store className="w-8 h-8 text-brand-500" aria-hidden="true" />
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Pick a party to load its details</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 max-w-sm">
+                Changes are saved in the web app only. The accounting software's party master isn't changed.
+              </p>
+            </div>
+          ) : (
+          <div key={partyCode || 'new'}>
+          <Section n={isUpdate ? 2 : 1} title="Business details" delay={60}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {!isUpdate && (
               <div>
                 <Autocomplete
                   id="subgroup"
@@ -939,6 +1148,8 @@ const AccountMaster: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-1">You can only select from your assigned subgroups</p>
                 )}
               </div>
+              )}
+              <div className={isUpdate ? 'md:col-span-2' : ''}>
               <Input
                 id="achead"
                 label="A/C Head *"
@@ -951,6 +1162,7 @@ const AccountMaster: React.FC = () => {
                 success={isValid.achead}
                 className={flashAchead ? 'am-flash' : ''}
               />
+              </div>
               <div>
                 <Input
                   id="gstin"
@@ -1000,7 +1212,7 @@ const AccountMaster: React.FC = () => {
             </div>
           </Section>
 
-          <Section n={2} title="Address and contact" delay={160}>
+          <Section n={isUpdate ? 3 : 2} title="Address and contact" delay={160}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <Input
                 id="addressline1"
@@ -1091,14 +1303,14 @@ const AccountMaster: React.FC = () => {
             </div>
           </Section>
 
-          <Section n={3} title="Location and shop photo" hint="Take these at the shop" delay={260}>
+          <Section n={isUpdate ? 4 : 3} title="Location and shop photo" hint="Take these at the shop" delay={260}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <GpsCapture value={gps} onChange={setGps} />
               <ShopPhotoCapture value={shopPhoto} onChange={setShopPhoto} gps={gps} />
             </div>
           </Section>
 
-          <Section n={4} title="Licences and IDs" delay={360}>
+          <Section n={isUpdate ? 5 : 4} title="Licences and IDs" delay={360}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <Input
                 id="aadhar"
@@ -1143,6 +1355,8 @@ const AccountMaster: React.FC = () => {
               />
             </div>
           </Section>
+          </div>
+          )}
 
           <div className="am-enter flex justify-end gap-3 pt-2" style={{ animationDelay: '440ms' }}>
             <button
@@ -1156,7 +1370,7 @@ const AccountMaster: React.FC = () => {
             <button
               type="submit"
               className="min-w-[120px] inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm bg-brand-500 text-white rounded-lg hover:bg-brand-600 active:scale-[0.97] transition-all disabled:opacity-80 dark:bg-brand-600 dark:hover:bg-brand-700"
-              disabled={saving || saved}
+              disabled={saving || saved || (isUpdate && !partyCode)}
             >
               {saving ? (
                 <>

@@ -192,7 +192,10 @@ const fmcgItems: NavItem[] = [
   {
     icon: <UserIcon />,
     name: "Account Master",
-    path: "/account-master",
+    subItems: [
+      { name: "New Account", path: "/account-master", pro: false },
+      { name: "Update Account Master", path: "/account-master/update", pro: false },
+    ],
   },
   {
     icon: <InvoiceIcon />,
@@ -509,6 +512,11 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
           }
           
           return item.subItems.length > 0;
+        }
+
+        // Account Master section (New Account / Update Account Master)
+        if (item.name === "Account Master") {
+          return user.routeAccess.includes('Account Master');
         }
 
         // Purchases section (New Purchase / Godrej Purchase Import)

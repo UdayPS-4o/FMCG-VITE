@@ -644,6 +644,10 @@ app.use(editRoutes);
 const formRoutes = require('./routes/get/form');
 app.use(formRoutes);
 
+// Update Account Master (existing parties; web app only, never writes CMPL.dbf).
+// Before postRoutes so its catch-all POST /:formType doesn't see these paths.
+app.use(require('./routes/accountUpdates'));
+
 const postRoutes = require('./routes/post');
 app.use(postRoutes);
 
