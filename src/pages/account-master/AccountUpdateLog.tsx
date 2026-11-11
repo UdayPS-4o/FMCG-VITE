@@ -6,6 +6,7 @@ import constants from '../../constants';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   Camera, MapPin, Search, RefreshCw, LoaderCircle, ExternalLink, X, Users, History, ArrowRight, ImageOff,
+  Trash2, TriangleAlert, CircleCheck,
 } from 'lucide-react';
 
 interface Change {
@@ -105,6 +106,50 @@ const AccountUpdateLog: React.FC = () => {
   const [userFilter, setUserFilter] = useState('');
   const [range, setRange] = useState('7');
   const [preview, setPreview] = useState<string | null>(null);
+  // Admin-only deletion
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const toggleSelected = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const deleteEntries = async (ids: string[]) => {
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${constants.baseURL}/api/account-updates/log/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || 'Could not delete the entries');
+      setConfirmIds(null);
+      // Slide the cards out, then drop them from the list
+      setLeaving(new Set(ids));
+      setTimeout(() => {
+        const gone = new Set(ids);
+        setEntries((list) => list.filter((e) => !gone.has(e.id)));
+        setSelected((prev) => new Set([...prev].filter((id) => !gone.has(id))));
+        setLeaving(new Set());
+      }, 300);
+      setNotice(`Deleted ${data.deleted} entr${data.deleted === 1 ? 'y' : 'ies'}`);
+      setTimeout(() => setNotice(null), 3000);
+    } catch (e) {
+      setConfirmIds(null);
+      setError(e instanceof Error ? e.message : 'Could not delete the entries');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -222,6 +267,58 @@ const AccountUpdateLog: React.FC = () => {
         </div>
 
         {error && <div className="am-pop text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-4 py-3 mb-5">{error}</div>}
+        {notice && (
+          <div className="am-pop inline-flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 rounded-lg px-4 py-2.5 mb-5" role="status">
+            <CircleCheck className="w-4 h-4" /> {notice}
+          </div>
+        )}
+
+        {isAdmin && filtered.length > 0 && (
+          <div
+            className={`flex flex-wrap items-center gap-3 mb-5 px-4 py-2.5 rounded-xl transition-colors ${
+              selected.size ? 'bg-red-50/70 dark:bg-red-500/10' : 'bg-gray-50 dark:bg-gray-900/40'
+            }`}
+          >
+            <label className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand-500"
+                checked={filtered.every((e) => selected.has(e.id))}
+                ref={(el) => {
+                  if (el) el.indeterminate = filtered.some((e) => selected.has(e.id)) && !filtered.every((e) => selected.has(e.id));
+                }}
+                onChange={(ev) =>
+                  setSelected((prev) => {
+                    const next = new Set(prev);
+                    filtered.forEach((e) => (ev.target.checked ? next.add(e.id) : next.delete(e.id)));
+                    return next;
+                  })
+                }
+              />
+              Select all shown ({filtered.length})
+            </label>
+            {selected.size > 0 && (
+              <>
+                <span key={selected.size} className="am-pop text-sm font-medium text-red-700 dark:text-red-400">{selected.size} selected</span>
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set())}
+                  className="h-9 px-3 text-sm rounded-lg text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-700"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmIds([...selected])}
+                  className="am-pop h-9 inline-flex items-center gap-2 px-3.5 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 active:scale-[0.97] transition"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete selected
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {loading && !entries.length ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-500">
@@ -240,7 +337,7 @@ const AccountUpdateLog: React.FC = () => {
             {filtered.map((e, i) => (
               <li
                 key={e.id}
-                className="am-enter relative pl-8 pb-6 last:pb-0"
+                className={`${leaving.has(e.id) ? 'am-leave' : 'am-enter'} relative pl-8 pb-6 last:pb-0`}
                 style={{ animationDelay: `${Math.min(i, 12) * 50}ms` }}
               >
                 <span
@@ -249,8 +346,23 @@ const AccountUpdateLog: React.FC = () => {
                 >
                   {initials(e.userName)}
                 </span>
-                <div className="rounded-xl border border-gray-100 dark:border-gray-700 p-4 hover:border-brand-200 dark:hover:border-brand-700 transition-colors">
+                <div
+                  className={`rounded-xl border p-4 transition-colors ${
+                    selected.has(e.id)
+                      ? 'border-red-300 bg-red-50/40 dark:border-red-500/50 dark:bg-red-500/5'
+                      : 'border-gray-100 dark:border-gray-700 hover:border-brand-200 dark:hover:border-brand-700'
+                  }`}
+                >
                   <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+                    {isAdmin && (
+                      <input
+                        type="checkbox"
+                        className="mt-1 w-4 h-4 accent-red-600 cursor-pointer"
+                        checked={selected.has(e.id)}
+                        onChange={() => toggleSelected(e.id)}
+                        aria-label={`Select ${e.partyName} update`}
+                      />
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-800 dark:text-white/90">
                         <span className="font-medium">{isAdmin ? e.userName || 'Unknown' : 'You'}</span>
@@ -279,6 +391,17 @@ const AccountUpdateLog: React.FC = () => {
                         </a>
                       )}
                       {e.shopPhoto && <PhotoThumb file={e.shopPhoto} onOpen={setPreview} />}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmIds([e.id])}
+                          className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                          aria-label={`Delete ${e.partyName} update`}
+                          title="Delete this entry"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -313,6 +436,58 @@ const AccountUpdateLog: React.FC = () => {
           <Link to="/account-master/update" className="text-brand-500 hover:underline">Update Account Master</Link>.
         </p>
       </div>
+
+      {confirmIds && (
+        <div
+          className="fixed inset-0 z-[99999] bg-black/50 flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => !deleting && setConfirmIds(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="del-title"
+        >
+          <div className="am-pop w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 p-6 shadow-xl" onClick={(ev) => ev.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <span className="shrink-0 w-10 h-10 rounded-full bg-red-50 dark:bg-red-500/15 text-red-600 dark:text-red-400 flex items-center justify-center">
+                <TriangleAlert className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 id="del-title" className="text-base font-medium text-gray-800 dark:text-white/90">
+                  {confirmIds.length === 1
+                    ? (() => {
+                        const one = entries.find((x) => x.id === confirmIds[0]);
+                        return one ? `Delete ${one.userName || 'this'}'s update to ${one.partyName}?` : 'Delete this entry?';
+                      })()
+                    : `Delete ${confirmIds.length} log entries?`}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5">
+                  {confirmIds.length === 1 ? 'It' : 'They'}'ll be removed from the log permanently. This can't be undone.
+                  The parties' saved details, GPS and current photos stay as they are.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setConfirmIds(null)}
+                disabled={deleting}
+                className="h-10 px-4 text-sm rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteEntries(confirmIds)}
+                disabled={deleting}
+                autoFocus
+                className="h-10 min-w-[110px] inline-flex items-center justify-center gap-2 px-4 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-80 active:scale-[0.97] transition"
+              >
+                {deleting ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {deleting ? 'Deleting' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {preview && (
         <div

@@ -1201,6 +1201,10 @@ span.flatpickr-weekday,
 .am-flash   { animation: am-flash 1.2s ease-out; }
 .am-ping    { animation: am-ping 1.4s ease-out infinite; }
 .am-shutter { animation: am-shutter 0.5s ease-out; }
+@keyframes am-leave {
+  to { opacity: 0; transform: translateX(28px) scale(0.98); }
+}
+.am-leave { animation: am-leave 0.3s ease-in forwards; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .am-enter, .am-pop, .am-flash, .am-ping, .am-shutter { animation: none; }
+  .am-enter, .am-pop, .am-flash, .am-ping, .am-shutter, .am-leave { animation: none; }
 }

@@ -4,7 +4,7 @@
 const express = require('express');
 const fs = require('fs').promises;
 const path = require('path');
-const { storeShopPhoto } = require('../utils/shopPhotos');
+const { storeShopPhoto, SHOP_PHOTO_DIR, SHOP_PHOTO_FILE_RE } = require('../utils/shopPhotos');
 
 const router = express.Router();
 const UPDATES_PATH = path.join(__dirname, '..', 'db', 'account-master-updates.json');
@@ -253,6 +253,38 @@ router.get('/api/account-updates/log', requireAccess, async (req, res) => {
   } catch (err) {
     console.error('account-updates/log failed:', err);
     res.status(500).json({ message: 'Could not load the update log.' });
+  }
+});
+
+// Admin only: permanently remove log entries. The parties' saved details are not changed.
+router.post('/api/account-updates/log/delete', async (req, res) => {
+  if (!isAdmin(req.user)) return res.status(403).json({ message: 'Only admins can delete log entries.' });
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+  if (!ids.length) return res.status(400).json({ message: 'No entries selected.' });
+  try {
+    const log = await readLog();
+    const remove = new Set(ids);
+    const removed = log.filter((e) => remove.has(String(e.id)));
+    const kept = log.filter((e) => !remove.has(String(e.id)));
+    await fs.mkdir(path.dirname(LOG_PATH), { recursive: true });
+    await fs.writeFile(LOG_PATH, JSON.stringify(kept, null, 2), 'utf8');
+
+    // Delete photo files nothing else points to (not the party's current photo, not another entry)
+    const updates = await readUpdates();
+    const inUse = new Set([
+      ...kept.map((e) => e.shopPhoto).filter(Boolean),
+      ...Object.values(updates).map((u) => u.shopPhoto).filter(Boolean),
+    ]);
+    for (const file of new Set(removed.map((e) => e.shopPhoto).filter(Boolean))) {
+      if (inUse.has(file) || !SHOP_PHOTO_FILE_RE.test(file)) continue;
+      await fs.unlink(path.join(SHOP_PHOTO_DIR, file)).catch(() => {});
+    }
+
+    console.log(`account-updates log: ${req.user?.name || req.user?.id} deleted ${removed.length} entr${removed.length === 1 ? 'y' : 'ies'}`);
+    res.json({ deleted: removed.length, remaining: kept.length });
+  } catch (err) {
+    console.error('account-updates/log/delete failed:', err);
+    res.status(500).json({ message: 'Could not delete the entries.' });
   }
 });
 
