@@ -579,6 +579,9 @@ const sendPromotionToParties = async (partyCodes, payload) => {
         } else {
             tokens = await getTokensByUserIds(partyCodes.map(String));
         }
+        // Customer app: Profile > Notifications > "Scheme alerts" switched off
+        const optedOut = await require('../db/app/appDb').getPartiesWithPrefOff('schemeAlerts').catch(() => []);
+        if (optedOut.length > 0) tokens = tokens.filter(r => !optedOut.includes(String(r.user_id)));
         if (tokens.length === 0) return 0;
         return await deliverToTokens(tokens, payload, 'promotion');
     } catch (err) {

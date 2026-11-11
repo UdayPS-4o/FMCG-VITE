@@ -178,6 +178,93 @@ export const fetchLedger = async () => {
     return res.json();
 };
 
+// ── Profile page ─────────────────────────────────────────────────────────────
+
+export interface UnpaidBill {
+    date: string;
+    series: string;
+    billNo: string;
+    label: string;
+    amount: number;
+    pending: number;
+    ageDays: number;
+    dueDays: number;
+    /** null when no credit days are set on the bill or the party */
+    overdueDays: number | null;
+}
+
+export interface ProfileContact {
+    name: string;
+    mobile: string;
+    role: string;
+}
+
+export interface ProfilePrefs {
+    orderUpdates: boolean;
+    paymentReminders: boolean;
+    schemeAlerts: boolean;
+    contacts: ProfileContact[];
+}
+
+export interface ProfileSummary {
+    details: { gst: string; fssai: string; pan: string; email: string; address: string; pincode: string };
+    credit: { limit: number; days: number };
+    balance: { amount: number; type: string };
+    outstanding: { bills: UnpaidBill[]; total: number };
+    location: { latitude: number; longitude: number; capturedAt: string | null } | null;
+    prefs: ProfilePrefs;
+}
+
+export interface LedgerEntry {
+    date: string;
+    narration: string;
+    book: string;
+    cr: number;
+    dr: number;
+    amount: number;
+    type: 'CR' | 'DR';
+    series: string;
+    billNo: string;
+}
+
+export interface DeviceSession {
+    id: number;
+    device: string;
+    createdAt: string;
+    lastSeen: string | null;
+    current: boolean;
+}
+
+const profileCall = async (path: string, init?: RequestInit) => {
+    const res = await fetch(`${API_URL}/profile/${path}`, { ...init, headers: authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+};
+
+export const fetchProfileSummary = (): Promise<ProfileSummary> => profileCall('summary');
+
+/** Ledger of one financial year ("2627"); the current year when fy is omitted. */
+export const fetchProfileLedger = (fy = ''): Promise<{ fy: string; years: string[]; data: LedgerEntry[] }> =>
+    profileCall(`ledger${fy ? `?fy=${encodeURIComponent(fy)}` : ''}`);
+
+export const saveProfilePrefs = (patch: Partial<ProfilePrefs>): Promise<{ prefs: ProfilePrefs }> =>
+    profileCall('prefs', { method: 'PUT', body: JSON.stringify(patch) });
+
+export const fetchSessions = (): Promise<DeviceSession[]> => profileCall('sessions');
+
+export const logoutOtherDevices = (): Promise<{ removed: number }> =>
+    profileCall('sessions/logout-others', { method: 'POST' });
+
+/** Issue / detail-change / location request; lands in the admin's messages. */
+export const sendProfileRequest = (body: {
+    type: 'issue' | 'change' | 'location';
+    subject?: string;
+    details: string;
+    invoice?: string;
+    photo?: string | null;
+}) => profileCall('request', { method: 'POST', body: JSON.stringify(body) });
+
 // ── Orders ───────────────────────────────────────────────────────────────────
 
 export const getOrders = async () => {

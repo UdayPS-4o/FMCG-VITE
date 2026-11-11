@@ -109,7 +109,22 @@ function initDb() {
                                 )
                             `, (err5) => {
                                 if (err5) return reject(err5);
-                                resolve();
+
+                                // app_prefs: per-party profile settings (notification choices, extra contacts)
+                                db.run(`
+                                    CREATE TABLE IF NOT EXISTS app_prefs (
+                                        party_code TEXT PRIMARY KEY,
+                                        prefs_json TEXT NOT NULL,
+                                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                                    )
+                                `, (err6) => {
+                                    if (err6) return reject(err6);
+                                    // Device label + last use for "Logged-in devices".
+                                    // An error here only means the column is already there.
+                                    db.run(`ALTER TABLE app_sessions ADD COLUMN user_agent TEXT`, () => {
+                                        db.run(`ALTER TABLE app_sessions ADD COLUMN last_seen TEXT`, () => resolve());
+                                    });
+                                });
                             });
                         });
                     });
@@ -192,6 +207,79 @@ function deleteSession(token) {
                 if (err) return reject(err);
                 resolve(this.changes > 0);
             }
+        );
+    });
+}
+
+// Remember which device a session belongs to and when it was last used
+function touchSession(token, userAgent) {
+    return new Promise((resolve) => {
+        getDb().run(
+            `UPDATE app_sessions SET user_agent = ?, last_seen = datetime('now') WHERE token = ?`,
+            [String(userAgent || '').slice(0, 300), token],
+            () => resolve()
+        );
+    });
+}
+
+function getSessionsByParty(partyCode) {
+    return new Promise((resolve, reject) => {
+        getDb().all(
+            `SELECT id, token, created_at, last_seen, user_agent FROM app_sessions
+             WHERE party_code = ? AND expires_at > datetime('now') ORDER BY id DESC`,
+            [partyCode],
+            (err, rows) => err ? reject(err) : resolve(rows || [])
+        );
+    });
+}
+
+function deleteOtherSessions(partyCode, keepToken) {
+    return new Promise((resolve, reject) => {
+        getDb().run(
+            `DELETE FROM app_sessions WHERE party_code = ? AND token != ?`,
+            [partyCode, keepToken],
+            function (err) {
+                if (err) return reject(err);
+                resolve(this.changes);
+            }
+        );
+    });
+}
+
+// ── Profile prefs ───────────────────────────────────────────────────────────
+
+function getPrefs(partyCode) {
+    return new Promise((resolve) => {
+        getDb().get(
+            `SELECT prefs_json FROM app_prefs WHERE party_code = ?`,
+            [partyCode],
+            (err, row) => {
+                if (err || !row) return resolve({});
+                try { resolve(JSON.parse(row.prefs_json) || {}); } catch { resolve({}); }
+            }
+        );
+    });
+}
+
+// Party codes that switched one notification choice off (e.g. 'schemeAlerts')
+function getPartiesWithPrefOff(key) {
+    return new Promise((resolve) => {
+        getDb().all(`SELECT party_code, prefs_json FROM app_prefs`, [], (err, rows) => {
+            if (err || !rows) return resolve([]);
+            resolve(rows.filter((r) => {
+                try { return JSON.parse(r.prefs_json)[key] === false; } catch { return false; }
+            }).map((r) => r.party_code));
+        });
+    });
+}
+
+function setPrefs(partyCode, prefs) {
+    return new Promise((resolve, reject) => {
+        getDb().run(
+            `INSERT INTO app_prefs (party_code, prefs_json, updated_at) VALUES (?, ?, datetime('now'))
+             ON CONFLICT(party_code) DO UPDATE SET prefs_json = excluded.prefs_json, updated_at = excluded.updated_at`,
+            [partyCode, JSON.stringify(prefs)],
+            (err) => err ? reject(err) : resolve()
         );
     });
 }
@@ -537,6 +625,12 @@ module.exports = {
     getSession,
     deleteSession,
     deleteExpiredSessions,
+    touchSession,
+    getSessionsByParty,
+    deleteOtherSessions,
+    getPrefs,
+    getPartiesWithPrefOff,
+    setPrefs,
     getAllProductImages,
     updateProductImage,
     getAllBrands,

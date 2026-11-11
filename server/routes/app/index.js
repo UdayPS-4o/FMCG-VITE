@@ -1668,15 +1668,19 @@ const ORDER_PUSH_TEXT = {
 const notifyOrderStatus = (order, prevStatus) => {
     const text = ORDER_PUSH_TEXT[order.status];
     if (!text || order.status === prevStatus || !order.partyCode) return;
-    try {
-        const { sendNotificationToParty } = require('../push');
-        sendNotificationToParty(order.partyCode, {
-            ...text(order),
-            data: { url: `/order/${order.id}`, type: 'order-status', orderId: String(order.id), status: order.status },
-        }).catch(err => console.error('[app/orders] push failed:', err.message));
-    } catch (err) {
-        console.error('[app/orders] push unavailable:', err.message);
-    }
+    // Profile > Notifications > "Order updates" switched off: stay quiet
+    appDb.getPrefs(order.partyCode).catch(() => ({})).then(prefs => {
+        if (prefs.orderUpdates === false) return;
+        try {
+            const { sendNotificationToParty } = require('../push');
+            sendNotificationToParty(order.partyCode, {
+                ...text(order),
+                data: { url: `/order/${order.id}`, type: 'order-status', orderId: String(order.id), status: order.status },
+            }).catch(err => console.error('[app/orders] push failed:', err.message));
+        } catch (err) {
+            console.error('[app/orders] push unavailable:', err.message);
+        }
+    });
 };
 
 /**
@@ -2648,6 +2652,9 @@ router.get('/facebook-feed/status', async (req, res) => {
 
 // In-app promotion popups (admin Notification Suite -> customer app)
 require('./promotions')(router, { requireAppAuth, requireAdminJwtAuth });
+
+// Profile page: unpaid bills, year-wise ledger, settings, devices, requests
+require('./profile')(router, { requireAppAuth });
 
 // Scheduled festival themes (admin Notification Suite -> customer app home page)
 require('./festivalThemes')(router, { requireAdminJwtAuth });
