@@ -2,13 +2,13 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { useStore } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
 import {
-    logoutUser, fetchLedger, fetchMe, fetchActiveSchemes, getOrders,
+    logoutUser, fetchLedger, fetchMe, fetchActiveSchemes,
     fetchProfileSummary, fetchProfileLedger, saveProfilePrefs, sendProfileRequest,
     type LedgerEntry, type ProfileContact, type ProfilePrefs, type ProfileSummary, type UnpaidBill,
 } from '../lib/api';
 import {
     User, MapPin, Phone, FileText, Lock, LogOut, ChevronRight, Wallet, History, ChevronDown, ChevronUp, Receipt,
-    ChevronLeft, Globe, Building2, Bell, Languages, FileDown, RotateCcw, LifeBuoy, Share2, BadgePercent, Pencil,
+    ChevronLeft, Globe, Building2, Bell, Languages, FileDown, Share2, BadgePercent, Pencil,
     Users, Smartphone, AlertTriangle, Mail, ShieldCheck, CreditCard, Hash,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -197,15 +197,6 @@ const Profile = () => {
         shareStatement(statementInput());
     };
 
-    const handleReorder = async () => {
-        try {
-            const orders = await getOrders();
-            navigate(orders.length > 0 ? `/order/${orders[0].id}` : '/orders');
-        } catch {
-            navigate('/orders');
-        }
-    };
-
     const handleShareLocation = () => {
         if (!navigator.geolocation) { setToast(tr('Location is not available on this device', 'इस डिवाइस पर लोकेशन उपलब्ध नहीं है')); return; }
         if (!window.confirm(tr('Send your current location as your shop location? Do this while you are at the shop.', 'क्या आप अपनी वर्तमान लोकेशन दुकान की लोकेशन के रूप में भेजना चाहते हैं? यह दुकान पर रहते हुए करें।'))) return;
@@ -258,13 +249,6 @@ const Profile = () => {
         { icon: ShieldCheck, label: tr('FSSAI Number', 'FSSAI नंबर'), value: details?.fssai },
         { icon: CreditCard, label: 'PAN', value: details?.pan },
         { icon: Mail, label: tr('Email', 'ईमेल'), value: details?.email },
-    ];
-
-    const quickActions = [
-        { icon: FileDown, label: tr('Statement', 'स्टेटमेंट'), onClick: handleStatementPdf },
-        { icon: Receipt, label: tr('Payments', 'भुगतान'), onClick: () => setSheet('payments') },
-        { icon: RotateCcw, label: tr('Reorder', 'दोबारा ऑर्डर'), onClick: handleReorder },
-        { icon: LifeBuoy, label: tr('Help', 'सहायता'), onClick: () => setSheet('issue') },
     ];
 
     const prefRows: Array<{ key: PrefFlag; label: string; hint: string }> = [
@@ -332,18 +316,6 @@ const Profile = () => {
                             {tr(`Credit period: ${credit.days} days`, `क्रेडिट अवधि: ${credit.days} दिन`)}
                         </div>
                     )}
-                </div>
-
-                {/* Quick actions */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 grid grid-cols-4 p-2">
-                    {quickActions.map(a => (
-                        <button key={a.label} onClick={a.onClick} className="flex flex-col items-center gap-1.5 py-2 rounded-xl hover:bg-gray-50 active:scale-95 transition">
-                            <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                                <a.icon size={18} />
-                            </div>
-                            <span className="text-[11px] font-semibold text-gray-700">{a.label}</span>
-                        </button>
-                    ))}
                 </div>
 
                 {/* Outstanding bills */}

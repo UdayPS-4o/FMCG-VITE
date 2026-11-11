@@ -108,7 +108,12 @@ const GlobalMessageNotification: React.FC = () => {
             </div>
             {!isExpanded && visibleMessages.length > 0 && (
               <div className="flex items-center space-x-2">
-                <div className="text-sm opacity-90 truncate max-w-md">
+                {/* One-line preview; click it (or the arrow) to read the whole message */}
+                <div
+                  onClick={() => setIsExpanded(true)}
+                  className="text-sm opacity-90 truncate max-w-md cursor-pointer hover:opacity-100"
+                  title="Click to read the full message"
+                >
                   {visibleMessages[0].message}
                 </div>
                 {visibleMessages[0].photoAttachment && (
@@ -136,11 +141,11 @@ const GlobalMessageNotification: React.FC = () => {
           </div>
           
           <div className="flex items-center space-x-2">
-            {visibleMessages.length > 1 && (
+            {visibleMessages.length > 0 && (
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="text-white hover:text-blue-200 transition-colors"
-                title={isExpanded ? 'Collapse' : 'Expand all messages'}
+                title={isExpanded ? 'Collapse' : 'Read full message'}
               >
                 <svg 
                   className={`h-4 w-4 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
@@ -165,8 +170,8 @@ const GlobalMessageNotification: React.FC = () => {
         </div>
         
         {/* Expanded messages view */}
-        {isExpanded && visibleMessages.length > 1 && (
-          <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+        {isExpanded && (
+          <div className="mt-3 space-y-2 max-h-[70vh] overflow-y-auto">
             {visibleMessages.map((message) => (
               <div key={message.id} className="bg-blue-700 rounded-lg p-3">
                 <div className="flex justify-between items-start mb-2">
@@ -188,7 +193,7 @@ const GlobalMessageNotification: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                <p className="text-sm text-white mb-2">
+                <p className="text-sm text-white mb-2 whitespace-pre-line break-words">
                   {message.message}
                 </p>
                 {message.photoAttachment && (
@@ -216,36 +221,6 @@ const GlobalMessageNotification: React.FC = () => {
                 )}
               </div>
             ))}
-          </div>
-        )}
-        
-        {/* Single message expanded view */}
-        {isExpanded && visibleMessages.length === 1 && (
-          <div className="mt-3">
-            <div className="flex justify-between items-start mb-2">
-              <span className="text-xs text-blue-200 font-medium">
-                Admin Message
-              </span>
-              <span className="text-xs text-blue-200">
-                {new Date(visibleMessages[0].sentAt).toLocaleString()}
-              </span>
-            </div>
-            {visibleMessages[0].photoAttachment && (
-              <div className="mt-2">
-                <div 
-                  onClick={() => setSelectedAttachment(visibleMessages[0].photoAttachment!)}
-                  className="block cursor-pointer hover:opacity-80 transition-opacity"
-                  title="Click to view attachment"
-                >
-                  <img 
-                    src={visibleMessages[0].photoAttachment} 
-                    alt="Attachment" 
-                    className="max-w-full h-auto rounded border border-blue-500"
-                    style={{ maxHeight: '150px' }}
-                  />
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>

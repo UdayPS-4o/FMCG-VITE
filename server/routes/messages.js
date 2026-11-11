@@ -77,6 +77,25 @@ router.put('/:id/read', async (req, res) => {
     }
 });
 
+// PUT to mark as unread again (header bell > "Mark unread")
+router.put('/:id/unread', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const data = await fs.readFile(messagesFilePath, 'utf8');
+        const messages = JSON.parse(data || '[]');
+        const target = messages.find(msg => msg.id === id);
+        if (!target) {
+            return res.status(404).json({ success: false, message: 'Message not found' });
+        }
+        target.isRead = false;
+        await fs.writeFile(messagesFilePath, JSON.stringify(messages, null, 2));
+        res.json({ success: true, message: 'Message marked as unread' });
+    } catch (error) {
+        console.error('Error marking message as unread:', error);
+        res.status(500).json({ success: false, message: 'Failed to update message' });
+    }
+});
+
 // PUT to mark all as read
 router.put('/read-all', async (req, res) => {
     try {

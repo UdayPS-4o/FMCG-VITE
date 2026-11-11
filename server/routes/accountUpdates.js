@@ -6,6 +6,9 @@ const fs = require('fs').promises;
 const path = require('path');
 const { storeShopPhoto, SHOP_PHOTO_DIR, SHOP_PHOTO_FILE_RE } = require('../utils/shopPhotos');
 
+const appDb = require('../db/app/appDb');
+const { cleanPrefs } = require('./app/profile');
+
 const router = express.Router();
 const UPDATES_PATH = path.join(__dirname, '..', 'db', 'account-master-updates.json');
 // Every save, with what changed: shown to admins on the Account Update Log page
@@ -160,8 +163,11 @@ router.get('/api/account-updates/party/:code', requireAccess, async (req, res) =
     const party = cmpl.find((p) => p.C_CODE === code && isDebtor(p));
     if (!party) return res.status(404).json({ message: 'Party not found.' });
     const saved = updates[code] || null;
+    // Extra contacts the customer added in the ordering app (Profile > Other contacts); read-only here
+    const appContacts = cleanPrefs(await appDb.getPrefs(code)).contacts;
     res.json({
       code,
+      appContacts,
       original: fromCmpl(party),
       values: { ...fromCmpl(party), ...(saved || {}) },
       updatedAt: saved?.updatedAt || null,

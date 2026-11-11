@@ -31,7 +31,18 @@ const db = new sqlite3.Database(dbPath, (err) => {
             type TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, token)
-        )`);
+        )`, () => {
+            // One device = one owner. Older subscribe calls could store the same
+            // token under two ids (e.g. a retailer phone under both "ADMIN" and
+            // its party code), which leaked staff alerts into the retailer app.
+            // Keep only the newest owner of each token.
+            db.run(`DELETE FROM push_tokens WHERE id NOT IN (
+                        SELECT MAX(id) FROM push_tokens GROUP BY token
+                    )`, function(err) {
+                if (err) console.error('Failed to de-duplicate push tokens', err.message);
+                else if (this.changes) console.log(`Removed ${this.changes} duplicate push token owner(s).`);
+            });
+        });
     }
 });
 
@@ -129,13 +140,10 @@ router.post('/subscribe', async (req, res) => {
     }
 
     try {
-        // A device belongs to whoever logged in on it last: when a web user
-        // subscribes as "user:<id>", drop any other owner of the same token
-        // (including the legacy shared "admin" id) so it isn't notified twice
-        // or for the wrong user.
-        if (String(userId).startsWith('user:')) {
-            await removeTokenFromOtherUsers(subscription, userId);
-        }
+        // A device belongs to whoever logged in on it last (staff "user:<id>"
+        // or a retailer party code): drop any other owner of the same token so
+        // it isn't notified twice or for the wrong user/app.
+        await removeTokenFromOtherUsers(subscription, userId);
         await saveToken(userId, subscription, type || 'webpush');
         res.status(201).json({ message: 'Subscription saved.' });
     } catch (err) {
@@ -393,6 +401,19 @@ const loadUsers = () => {
     }
 };
 
+const isStaffId = (id) => id === 'admin' || id === 'ADMIN' || String(id).startsWith('user:');
+
+// Tokens registered by the retailer app (party codes). Staff-only alerts
+// (WhatsApp, vouchers, attendance) must never be delivered to these.
+const getRetailerTokenSet = () => {
+    return new Promise((resolve, reject) => {
+        db.all(`SELECT user_id, token FROM push_tokens`, [], (err, rows) => {
+            if (err) reject(err);
+            else resolve(new Set(rows.filter(r => !isStaffId(r.user_id)).map(r => r.token)));
+        });
+    });
+};
+
 const isAdminUser = (u) => Array.isArray(u.routeAccess) && u.routeAccess.includes('Admin');
 
 // Send one payload ({ title, message, data }) to a list of push_tokens rows.
@@ -506,7 +527,9 @@ const sendNotificationToAdmins = async (payload, notificationType, ownership) =>
         const users = loadUsers();
         const adminIds = users.filter(isAdminUser).map(u => `user:${u.id}`);
         // 'admin' / 'ADMIN' are legacy ids from before per-user subscriptions
-        const adminTokens = await getTokensByUserIds(['admin', 'ADMIN', ...adminIds]);
+        const retailerTokens = await getRetailerTokenSet();
+        const adminTokens = (await getTokensByUserIds(['admin', 'ADMIN', ...adminIds]))
+            .filter(r => !retailerTokens.has(r.token));
 
         let userTokens = [];
         if (notificationType) {
@@ -515,7 +538,8 @@ const sendNotificationToAdmins = async (payload, notificationType, ownership) =>
                 .filter(u => isOwner(u, ownership))
                 .map(u => `user:${u.id}`);
             const adminTokenSet = new Set(adminTokens.map(r => r.token));
-            userTokens = (await getTokensByUserIds(permittedIds)).filter(r => !adminTokenSet.has(r.token));
+            userTokens = (await getTokensByUserIds(permittedIds))
+                .filter(r => !adminTokenSet.has(r.token) && !retailerTokens.has(r.token));
         }
 
         if (adminTokens.length === 0 && userTokens.length === 0) {
@@ -538,7 +562,9 @@ const sendNotificationToAdmins = async (payload, notificationType, ownership) =>
  */
 const sendNotificationToUsers = async (userIds, payload, notificationType) => {
     try {
-        const tokens = await getTokensByUserIds(userIds.map(id => `user:${id}`));
+        const retailerTokens = await getRetailerTokenSet();
+        const tokens = (await getTokensByUserIds(userIds.map(id => `user:${id}`)))
+            .filter(r => !retailerTokens.has(r.token));
         if (tokens.length === 0) return 0;
         return await deliverToTokens(tokens, toUserPayload(payload, notificationType), 'user');
     } catch (err) {

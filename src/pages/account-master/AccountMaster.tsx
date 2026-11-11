@@ -138,6 +138,8 @@ const AccountMaster: React.FC<AccountMasterProps> = ({ mode = 'create' }) => {
   const [partyLoading, setPartyLoading] = useState(false);
   const [existingPhoto, setExistingPhoto] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<{ at: string; by: string | null } | null>(null);
+  // Contacts the customer added in the ordering app; shown read-only
+  const [appContacts, setAppContacts] = useState<{ name: string; mobile: string; role: string }[]>([]);
   const [group, setGroup] = useState<Option[]>([]);
   const [subgroup, setSubgroup] = useState<Option[]>([]);
   const [city, setCity] = useState<Option[]>([]);
@@ -465,6 +467,7 @@ const AccountMaster: React.FC<AccountMasterProps> = ({ mode = 'create' }) => {
       );
       setLastUpdate(data.updatedAt ? { at: data.updatedAt, by: data.updatedByName } : null);
       setExistingPhoto(v.shopPhoto || null);
+      setAppContacts(Array.isArray(data.appContacts) ? data.appContacts : []);
       setShopPhoto(null);
       if (v.shopPhoto) {
         // Photos are behind auth, so fetch with the token and show a blob URL
@@ -1333,6 +1336,23 @@ const AccountMaster: React.FC<AccountMasterProps> = ({ mode = 'create' }) => {
                 success={isValid.email}
               />
             </div>
+            {isUpdate && appContacts.length > 0 && (
+              <div className="mt-5">
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Contacts from the customer app</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Added by the customer in their app profile. They can only be changed there.</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {appContacts.map((c, i) => (
+                    <div key={`${c.mobile}-${i}`} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{c.name}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{c.role || 'Contact'}</div>
+                      </div>
+                      <a href={`tel:${c.mobile}`} className="text-sm font-medium text-brand-500 shrink-0">{c.mobile}</a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Section>
 
           <Section n={isUpdate ? 4 : 3} title="Location and shop photo" hint="Take these at the shop" delay={260}>

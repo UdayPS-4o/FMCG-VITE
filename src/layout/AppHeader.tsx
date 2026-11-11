@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeToggleButton } from "../components/common/ThemeToggleButton";
 import UserDropdown from "../components/header/UserDropdown";
+import MessagesBell from "../components/header/MessagesBell";
 import constants from "../constants";
 import GlassSurface from "../components/glass/GlassSurface";
 
@@ -274,6 +275,11 @@ const AppHeader: React.FC = () => {
             />
           </Link>
 
+          {/* Notifications bell (mobile) */}
+          <div className="lg:hidden ml-auto">
+            <MessagesBell />
+          </div>
+
           {/* Mobile Application Menu Trigger (Triple Dots) */}
           <div className="relative lg:hidden"> {/* Container for positioning */} 
             <button
@@ -349,6 +355,7 @@ const AppHeader: React.FC = () => {
           {/* Desktop Buttons */}
           <div className="hidden lg:flex items-center gap-3 2xsm:gap-4 relative z-10">
             <ThemeToggleButton />
+            <MessagesBell />
             
             {user ? (
               <div className="flex items-center space-x-4">
