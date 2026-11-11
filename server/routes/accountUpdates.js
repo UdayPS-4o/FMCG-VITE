@@ -8,6 +8,15 @@ const { storeShopPhoto } = require('../utils/shopPhotos');
 
 const router = express.Router();
 const UPDATES_PATH = path.join(__dirname, '..', 'db', 'account-master-updates.json');
+// Every save, with what changed: shown to admins on the Account Update Log page
+const LOG_PATH = path.join(__dirname, '..', 'db', 'account-master-update-log.json');
+const LOG_LIMIT = 20000;
+
+const FIELD_LABELS = {
+  achead: 'A/C Head', addressline1: 'Address line 1', addressline2: 'Address line 2', place: 'Place',
+  pincode: 'Pin code', mobile: 'Mobile', pan: 'PAN', aadhar: 'Aadhaar', gst: 'GSTIN', dlno: 'DL no.',
+  fssaino: 'FSSAI no.', email: 'Email', statecode: 'State',
+};
 
 const EDITABLE_FIELDS = [
   'achead', 'addressline1', 'addressline2', 'place', 'pincode', 'mobile', 'pan', 'aadhar',
@@ -30,6 +39,44 @@ async function readUpdates() {
     throw err;
   }
 }
+
+async function readLog() {
+  try {
+    return JSON.parse(await fs.readFile(LOG_PATH, 'utf8'));
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  // First run: seed one entry per party saved before the log existed (its differences from CMPL)
+  const updates = await readUpdates();
+  if (!Object.keys(updates).length) return [];
+  const cmpl = await readCmpl();
+  return Object.values(updates)
+    .map((u) => {
+      const party = cmpl.find((p) => p.C_CODE === u.code) || {};
+      const base = fromCmpl(party);
+      return {
+        id: `seed-${u.code}`,
+        at: u.updatedAt,
+        code: u.code,
+        partyName: str(u.achead) || str(party.C_NAME),
+        place: str(u.place) || str(party.C_PLACE),
+        userId: u.updatedBy ?? null,
+        userName: u.updatedByName || null,
+        changes: Object.keys(FIELD_LABELS)
+          .filter((f) => u[f] !== undefined && str(base[f]) !== str(u[f]))
+          .map((f) => ({ field: f, label: FIELD_LABELS[f], from: str(base[f]), to: str(u[f]) })),
+        gps: hasGps(u) ? { latitude: u.latitude, longitude: u.longitude, accuracy: u.gpsAccuracy } : null,
+        gpsRemoved: false,
+        shopPhoto: u.shopPhoto || null,
+        photoRemoved: false,
+        seeded: true,
+      };
+    })
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+
+const hasGps = (u) => u && u.latitude !== '' && u.latitude != null && u.longitude !== '' && u.longitude != null;
+const hasPhoto = (u) => Boolean(u && u.shopPhoto);
 
 const isAdmin = (user) => Array.isArray(user?.routeAccess) && user.routeAccess.includes('Admin');
 
@@ -91,6 +138,8 @@ router.get('/api/account-updates/parties', requireAccess, async (req, res) => {
         place: str(updates[p.C_CODE]?.place) || str(p.C_PLACE),
         prefix: p.C_CODE.substring(0, 2).toUpperCase(),
         updatedAt: updates[p.C_CODE]?.updatedAt || null,
+        hasGps: hasGps(updates[p.C_CODE]),
+        hasPhoto: hasPhoto(updates[p.C_CODE]),
       }));
 
     res.json({ subgroups, parties });
@@ -131,7 +180,8 @@ router.post('/api/account-updates/party/:code', requireAccess, async (req, res) 
       return res.status(403).json({ message: 'This party is outside your sub groups.' });
     }
     const cmpl = await readCmpl();
-    if (!cmpl.some((p) => p.C_CODE === code && isDebtor(p))) {
+    const party = cmpl.find((p) => p.C_CODE === code && isDebtor(p));
+    if (!party) {
       return res.status(404).json({ message: 'Party not found.' });
     }
 
@@ -142,6 +192,7 @@ router.post('/api/account-updates/party/:code', requireAccess, async (req, res) 
     await storeShopPhoto(record, code);
 
     const updates = await readUpdates();
+    const before = { ...fromCmpl(party), ...(updates[code] || {}) };
     updates[code] = {
       ...(updates[code] || {}),
       ...record,
@@ -152,10 +203,56 @@ router.post('/api/account-updates/party/:code', requireAccess, async (req, res) 
     };
     await fs.mkdir(path.dirname(UPDATES_PATH), { recursive: true });
     await fs.writeFile(UPDATES_PATH, JSON.stringify(updates, null, 2), 'utf8');
-    res.json({ message: 'Account updated.', updatedAt: updates[code].updatedAt });
+
+    // History entry: which fields changed, and whether GPS / photo were added or replaced
+    const after = updates[code];
+    const changes = Object.keys(FIELD_LABELS)
+      .filter((f) => str(before[f]) !== str(after[f]))
+      .map((f) => ({ field: f, label: FIELD_LABELS[f], from: str(before[f]), to: str(after[f]) }));
+    const gpsChanged = str(before.latitude) !== str(after.latitude) || str(before.longitude) !== str(after.longitude);
+    const photoChanged = str(before.shopPhoto) !== str(after.shopPhoto);
+    try {
+      const log = await readLog();
+      log.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        at: after.updatedAt,
+        code,
+        partyName: str(after.achead) || str(party.C_NAME),
+        place: str(after.place) || str(party.C_PLACE),
+        userId: after.updatedBy,
+        userName: after.updatedByName,
+        changes,
+        gps: gpsChanged && hasGps(after)
+          ? { latitude: after.latitude, longitude: after.longitude, accuracy: after.gpsAccuracy }
+          : null,
+        gpsRemoved: gpsChanged && !hasGps(after),
+        shopPhoto: photoChanged && after.shopPhoto ? after.shopPhoto : null,
+        photoRemoved: photoChanged && !after.shopPhoto,
+      });
+      if (log.length > LOG_LIMIT) log.splice(0, log.length - LOG_LIMIT);
+      await fs.writeFile(LOG_PATH, JSON.stringify(log, null, 2), 'utf8');
+    } catch (logErr) {
+      // The update itself is saved; don't fail the request over the history entry
+      console.error('account-updates log write failed:', logErr);
+    }
+
+    res.json({ message: 'Account updated.', updatedAt: after.updatedAt });
   } catch (err) {
     console.error('account-updates save failed:', err);
     res.status(err.message === 'Shop photo is too large' ? 400 : 500).json({ message: err.message || 'Could not save.' });
+  }
+});
+
+// History of saves, newest first. Admins see everyone's; staff see only their own.
+router.get('/api/account-updates/log', requireAccess, async (req, res) => {
+  try {
+    const log = await readLog();
+    const admin = isAdmin(req.user);
+    const mine = admin ? log : log.filter((e) => e.userId != null && String(e.userId) === String(req.user?.id));
+    res.json({ entries: mine.slice().reverse(), scope: admin ? 'all' : 'own' });
+  } catch (err) {
+    console.error('account-updates/log failed:', err);
+    res.status(500).json({ message: 'Could not load the update log.' });
   }
 });
 

@@ -17,6 +17,7 @@ import DatabaseInvoicing from "./pages/database/Invoicing";
 import PrintInvoicing from "./pages/print/PrintInvoicing";
 import PrintAccount from "./pages/print/PrintAccount";
 import EditAccountMaster from "./pages/account-master/EditAccountMaster";
+import AccountUpdateLog from "./pages/account-master/AccountUpdateLog";
 import EditInvoicing from "./pages/invoicing/EditInvoicing";
 import AccountMasterApproved from "./pages/approved/AccountMasterApproved";
 import InvoicingApproved from "./pages/approved/InvoicingApproved";
@@ -140,6 +141,11 @@ const AppRoutes = () => {
         <Route path="/account-master/update" element={
           <ProtectedRoute requiredAccess="Account Master">
             <AccountMaster key="update" mode="update" />
+          </ProtectedRoute>
+        } />
+        <Route path="/account-master/log" element={
+          <ProtectedRoute requiredAccess="Account Master">
+            <AccountUpdateLog />
           </ProtectedRoute>
         } />
         <Route path="/invoicing" element={

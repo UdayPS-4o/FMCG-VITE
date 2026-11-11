@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { createPortal } from "react-dom";
 
 interface Option {
@@ -6,6 +6,8 @@ interface Option {
   label: string;
   // When the key is present (even as ''), a thumbnail slot is shown; '' / broken URL → placeholder icon
   image?: string;
+  /** Small icons shown at the right of the option row (not part of the searchable label) */
+  badges?: React.ReactNode;
 }
 
 const OptionThumb = ({ src }: { src?: string }) => {
@@ -555,6 +557,12 @@ const Autocomplete = forwardRef<AutocompleteRefHandle, AutocompleteProps>(({
                         <div className="flex items-center gap-3">
                           <OptionThumb src={option.image} />
                           <div className="min-w-0 flex-1">{formatOptionLabel(option.label)}</div>
+                          {option.badges && <span className="flex-shrink-0 flex items-center gap-1.5">{option.badges}</span>}
+                        </div>
+                      ) : option.badges ? (
+                        <div className="flex items-center gap-3">
+                          <div className="min-w-0 flex-1">{formatOptionLabel(option.label)}</div>
+                          <span className="flex-shrink-0 flex items-center gap-1.5">{option.badges}</span>
                         </div>
                       ) : formatOptionLabel(option.label)}
                     </div>

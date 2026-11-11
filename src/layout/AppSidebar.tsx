@@ -131,6 +131,8 @@ interface SubNavItem {
   path: string;
   pro?: boolean;
   new?: boolean;
+  /** Label shown to non-admin users instead of `name` */
+  staffName?: string;
 }
 
 interface NavItem {
@@ -195,6 +197,7 @@ const fmcgItems: NavItem[] = [
     subItems: [
       { name: "New Account", path: "/account-master", pro: false },
       { name: "Update Account Master", path: "/account-master/update", pro: false },
+      { name: "Account Update Log", staffName: "My Update Activity", path: "/account-master/log", pro: false },
     ],
   },
   {
@@ -769,7 +772,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
                           : "menu-dropdown-item-inactive"
                       }`}
                     >
-                      {subItem.name}
+                      {subItem.staffName && !user?.routeAccess?.includes('Admin') ? subItem.staffName : subItem.name}
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
                           <span

@@ -15,12 +15,13 @@ import GpsCapture, { GpsValue } from '../../components/account-master/GpsCapture
 import ShopPhotoCapture from '../../components/account-master/ShopPhotoCapture';
 import {
   Store, ReceiptText, IdCard, MapPin, Map as MapIcon, Building2, Mailbox, Phone, Mail,
-  Fingerprint, FileBadge, Leaf, BadgeCheck, LoaderCircle, Check,
+  Fingerprint, FileBadge, Leaf, BadgeCheck, LoaderCircle, Check, Camera,
 } from 'lucide-react';
 
 interface Option {
   label: string;
   value: string;
+  badges?: React.ReactNode;
 }
 
 interface FormValues {
@@ -117,6 +118,8 @@ interface UpdateParty {
   place: string;
   prefix: string;
   updatedAt: string | null;
+  hasGps?: boolean;
+  hasPhoto?: boolean;
 }
 
 interface AccountMasterProps {
@@ -393,7 +396,27 @@ const AccountMaster: React.FC<AccountMasterProps> = ({ mode = 'create' }) => {
         .filter((p) => !updSubgroup || p.prefix === updSubgroup)
         .map((p) => ({
           value: p.code,
-          label: `${p.name}${p.place ? ` · ${p.place}` : ''} (${p.code})${p.updatedAt ? ' ✓' : ''}`,
+          label: `${p.name}${p.place ? ` · ${p.place}` : ''} (${p.code})`,
+          badges:
+            p.updatedAt || p.hasGps || p.hasPhoto ? (
+              <>
+                {p.hasGps && (
+                  <span title="GPS captured" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400">
+                    <MapPin className="w-3.5 h-3.5" aria-label="GPS captured" />
+                  </span>
+                )}
+                {p.hasPhoto && (
+                  <span title="Shop photo taken" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400">
+                    <Camera className="w-3.5 h-3.5" aria-label="Shop photo taken" />
+                  </span>
+                )}
+                {p.updatedAt && (
+                  <span title="Details updated" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-400">
+                    <Check className="w-3.5 h-3.5" aria-label="Details updated" />
+                  </span>
+                )}
+              </>
+            ) : undefined,
         })),
     [updParties, updSubgroup]
   );
@@ -882,7 +905,11 @@ const AccountMaster: React.FC<AccountMasterProps> = ({ mode = 'create' }) => {
         setSaved(true);
         setLastUpdate({ at: data.updatedAt, by: user?.name || null });
         setUpdParties((list) =>
-          list.map((p) => (p.code === partyCode ? { ...p, name: formValues.achead, place: formValues.place, updatedAt: data.updatedAt } : p))
+          list.map((p) =>
+            p.code === partyCode
+              ? { ...p, name: formValues.achead, place: formValues.place, updatedAt: data.updatedAt, hasGps: Boolean(gps), hasPhoto: Boolean(shopPhoto) }
+              : p
+          )
         );
         setToast({ visible: true, message: 'Account updated', type: 'success' });
         setTimeout(() => setSaved(false), 1800);
@@ -1110,7 +1137,12 @@ const AccountMaster: React.FC<AccountMasterProps> = ({ mode = 'create' }) => {
                         <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> Loading party details
                       </span>
                     ) : (
-                      `${partyOptions.length} parties · ✓ already updated`
+                      <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span>{partyOptions.length} parties</span>
+                        <span className="inline-flex items-center gap-1"><Check className="w-3.5 h-3.5 text-green-500" /> updated</span>
+                        <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-sky-500" /> GPS</span>
+                        <span className="inline-flex items-center gap-1"><Camera className="w-3.5 h-3.5 text-violet-500" /> photo</span>
+                      </span>
                     )}
                   </p>
                 </div>
