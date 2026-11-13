@@ -90,6 +90,35 @@ const norm = (s) => String(s || '').toLowerCase()
 // Spoken filler that is never part of a party name
 const FILLER = new Set(['ki', 'ka', 'ke', 'ko', 'se', 'party', 'vala', 'vali', 'vale', 'naam', 'name', 'ji', 'm', 's']);
 
+/** Edit distance where swapping two neighbouring letters counts as one edit (bakhari ~ bakahri) */
+const editDistance = (a, b) => {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+};
+
+/** Typos allowed for a spoken word: none for short words, 1 for 4–6 letters, 2 for longer */
+const allowedTypos = (w) => (w.length <= 3 ? 0 : w.length <= 6 ? 1 : 2);
+
+/**
+ * How well one spoken word fits a party name: 2 = whole word, 1 = part of a word,
+ * 0.5 = a name word with a small spelling difference (master typos, mishearing), 0 = no fit.
+ */
+const wordFit = (w, n, nWords) => {
+  if (nWords.includes(w)) return 2;
+  if (n.includes(w)) return 1;
+  const max = allowedTypos(w);
+  if (max && nWords.some(nw => Math.abs(nw.length - w.length) <= max && editDistance(w, nw) <= max)) return 0.5;
+  return 0;
+};
+
 /** Parties whose name contains every word spoken (spelling-tolerant), best first. */
 const findMatches = (text, pool) => {
   const words = norm(text).split(' ').filter(w => w && !FILLER.has(w));
@@ -98,13 +127,16 @@ const findMatches = (text, pool) => {
   for (const p of pool) {
     const n = norm(p.name);
     const nWords = n.split(' ');
-    if (!words.every(w => n.includes(w))) continue;
-    // Prefer whole-word hits, names that start with the spoken words, and shorter names
-    const whole = words.filter(w => nWords.includes(w)).length;
+    const fits = words.map(w => wordFit(w, n, nWords));
+    if (fits.some(f => f === 0)) continue;
+    // Prefer exact word hits, names that start with the spoken words, and shorter names
     const starts = n.startsWith(words[0]) ? 1 : 0;
-    scored.push({ p, score: whole * 10 + starts * 5 - nWords.length });
+    const typos = fits.filter(f => f < 1).length;
+    scored.push({ p, typos, score: fits.reduce((a, f) => a + f * 5, 0) + starts * 5 - nWords.length });
   }
-  return scored.sort((a, b) => b.score - a.score).map(s => s.p);
+  // Typo matches only count when nothing matches with fewer typos
+  const fewest = Math.min(...scored.map(s => s.typos));
+  return scored.filter(s => s.typos === fewest).sort((a, b) => b.score - a.score).map(s => s.p);
 };
 
 const titleCase = (s) => String(s).toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
