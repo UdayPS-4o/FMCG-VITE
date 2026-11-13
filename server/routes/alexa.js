@@ -166,7 +166,7 @@ Rules:
 - salesman: salesman name words if mentioned, or the answer when the last question was about salesman. null otherwise.
 - yes: user agrees / says haan, ha, theek hai, kar do, ok, yes. no: user says nahi, mat karo, no.
 - print: user asks to print, "print karo", "save aur print", "save karke print".
-- saveOnly: user wants it saved but NOT printed ("sirf save karo", "print mat karo", "bina print ke save").
+- saveOnly: user wants it saved but NOT printed ("save", "save karo", "sirf save karo", "print mat karo", "bina print ke save"). Saying "save" without "print" is saveOnly.
 - cancel: user wants to cancel/stop/start over ("cancel", "rehne do", "band karo").`;
 
   const res = await axios.post(`${GEMINI_URL}?key=${key}`, {
@@ -221,10 +221,10 @@ const turn = async (voiceText, state) => {
   const { parties, salesmen } = await loadCmpl();
 
   let ex;
-  // Short yes/no answers to "Save karke print karun?" — no need to ask Gemini
+  // Short yes/no answers to "Save karun, ya print bhi?" — no need to ask Gemini
   const short = String(voiceText).toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
-  const YES = /^(haan|han|ha|haa|yes|ok|okay|theek hai|thik hai|kar do|karo|save|save karo|save kar do|haan save karo|print|print karo|save and print|save aur print|save karke print karo)$/;
-  const SAVE_ONLY = /^(sirf save karo|sirf save|only save|save only|print mat karo|bina print ke save karo)$/;
+  const YES = /^(haan|han|ha|haa|yes|ok|okay|theek hai|thik hai|kar do|karo|print|print karo|print bhi|print bhi karo|save and print|save aur print|save karke print karo|save karke print|print kar do)$/;
+  const SAVE_ONLY = /^(save|save karo|save kar do|haan save karo|sirf save karo|sirf save|only save|save only|print mat karo|print nahi|bina print ke save karo|save karo print nahi)$/;
   const NO = /^(nahi|nahin|na|no|mat karo|rehne do|cancel)$/;
   if (state.awaiting === 'confirm' && (YES.test(short) || SAVE_ONLY.test(short) || NO.test(short))) {
     ex = { yes: YES.test(short), saveOnly: SAVE_ONLY.test(short), no: NO.test(short), cancel: false };
@@ -323,7 +323,7 @@ const turn = async (voiceText, state) => {
   const pieces = splitAmounts(state.amount).length;
   const split = pieces > 1 ? ` Bees hazaar se zyada hai, isliye ${pieces} raseed banengi.` : '';
   return {
-    reply: [...notes, `${summary}. Series ${series}, salesman ${await smSpoken(state)}.${split} Save karke print karun?`].join(' '),
+    reply: [...notes, `${summary}. Series ${series}, salesman ${await smSpoken(state)}.${split} Save karun, ya print bhi?`].join(' '),
     state: { ...state, awaiting: 'confirm' },
   };
 };
@@ -366,7 +366,7 @@ router.post('/webhook', async (req, res) => {
     if (!voiceText) {
       // FallbackIntent carries no text — repeat the pending question
       if (state.awaiting === 'confirm') {
-        return res.json(say('Samajh nahi aaya. Save karne ke liye haan boliye, ya nahi.', state));
+        return res.json(say('Samajh nahi aaya. Sirf save ke liye save boliye, print ke liye print boliye, ya nahi.', state));
       }
       if (state.awaiting === 'choice' && state.candidates?.length) {
         return res.json(say('Samajh nahi aaya. Party ka number boliye, jaise pehli wali, ya poora naam boliye.', state));
