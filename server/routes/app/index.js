@@ -1835,40 +1835,122 @@ router.post('/admin/product-image', requireAdminJwtAuth, async (req, res) => {
 });
 
 /**
- * GET /api/app/admin/amazon-search
- * Query: q=search_term
+ * Product image search for the admin listing tools.
+ * GET /api/app/admin/image-search?q=search_term&source=amazon|google|blinkit
+ * GET /api/app/admin/amazon-search?q=search_term   (legacy alias, source=amazon)
+ *
+ * amazon  - scrapes amazon.in search; if Amazon answers with its bot check,
+ *           falls back to Google image search limited to amazon.in.
+ * google  - Google image search (via Serper.dev).
+ * blinkit - Blinkit blocks server requests, so this is Google image search
+ *           limited to blinkit.com.
+ * Google needs SERPER_API_KEY in the server .env.
  */
-router.get('/admin/amazon-search', requireAdminJwtAuth, async (req, res) => {
-    const q = req.query.q;
-    if (!q) return res.status(400).json({ error: 'Query parameter q required' });
-
-    try {
-        const amazonUrl = `https://www.amazon.in/s?k=${encodeURIComponent(q)}`;
-        const response = await axios.get(amazonUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-            }
-        });
-        const $ = cheerio.load(response.data);
-        const images = [];
-        $('.s-image').each((i, el) => {
-            const src = $(el).attr('src');
-            if (src && src.startsWith('https://m.media-amazon.com/images/I/')) {
-                // remove resize parameters to get high res image
-                const highRes = src.replace(/\._AC_[a-zA-Z0-9_,]*_\./, '.');
-                images.push(highRes);
-            }
-        });
-
-        const uniqueImages = [...new Set(images)].slice(0, 10);
-        res.json({ images: uniqueImages });
-    } catch (err) {
-        console.error('[app/admin/amazon-search]', err);
-        res.status(500).json({ error: 'Failed to search amazon' });
+class ImageSearchError extends Error {
+    constructor(message, status = 502, extra = {}) {
+        super(message);
+        this.status = status;
+        this.extra = extra;
     }
-});
+}
+
+const googleImageSearchConfigured = () => !!process.env.SERPER_API_KEY;
+
+// Google Images results via Serper.dev (Google's own Custom Search JSON API is
+// closed to new customers). `site` limits results to one domain.
+async function searchGoogleImages(q, site) {
+    if (!googleImageSearchConfigured()) {
+        throw new ImageSearchError('Google image search is not set up: add SERPER_API_KEY to the server .env', 503, { notConfigured: true });
+    }
+    const response = await axios.post('https://google.serper.dev/images', {
+        q: site ? `${q} site:${site}` : q,
+        gl: 'in',
+        num: 10,
+    }, {
+        headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' },
+        timeout: 15000,
+        validateStatus: () => true,
+    });
+    if (response.status !== 200) {
+        const reason = response.data && response.data.message;
+        throw new ImageSearchError(`Google image search failed (${response.status})${reason ? ': ' + reason : ''}`);
+    }
+    let items = (response.data && response.data.images) || [];
+    if (site) {
+        // The site: operator is not always honoured; keep on-site results when there are any
+        const onSite = items.filter(it => {
+            const host = String(it.domain || '').toLowerCase();
+            return host === site || host.endsWith('.' + site);
+        });
+        if (onSite.length > 0) items = onSite;
+    }
+    return [...new Set(items.map(it => it.imageUrl).filter(l => typeof l === 'string' && /^https:\/\//.test(l)))];
+}
+
+async function scrapeAmazonImages(q) {
+    const amazonUrl = `https://www.amazon.in/s?k=${encodeURIComponent(q)}`;
+    const response = await axios.get(amazonUrl, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+        },
+        timeout: 15000,
+        validateStatus: () => true,
+    });
+    // Amazon serves a bot-check interstitial (no results) instead of the search page
+    const html = String(response.data || '');
+    const blocked = response.status !== 200
+        || (/bm-verify|_sec\/verify|api-services-support@amazon|captcha/i.test(html) && !html.includes('s-image'));
+    if (blocked) {
+        throw new ImageSearchError('Amazon is blocking automated searches from this server', 502, { blocked: true });
+    }
+    const $ = cheerio.load(html);
+    const images = [];
+    $('.s-image').each((i, el) => {
+        const src = $(el).attr('src');
+        if (src && src.startsWith('https://m.media-amazon.com/images/I/')) {
+            // remove resize parameters to get high res image
+            images.push(src.replace(/\._AC_[a-zA-Z0-9_,]*_\./, '.'));
+        }
+    });
+    return [...new Set(images)];
+}
+
+async function runImageSearch(q, source) {
+    if (source === 'google') return { images: await searchGoogleImages(q), via: 'google' };
+    if (source === 'blinkit') return { images: await searchGoogleImages(q, 'blinkit.com'), via: 'google' };
+    try {
+        return { images: await scrapeAmazonImages(q), via: 'amazon' };
+    } catch (err) {
+        if (!googleImageSearchConfigured()) throw err;
+        console.warn('[app/admin/image-search] amazon scrape failed, using Google site search:', err.message);
+        return { images: await searchGoogleImages(q, 'amazon.in'), via: 'google' };
+    }
+}
+
+const imageSearchHandler = (fixedSource) => async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.status(400).json({ error: 'Query parameter q required' });
+    const source = fixedSource || String(req.query.source || 'amazon').toLowerCase();
+    if (!['amazon', 'google', 'blinkit'].includes(source)) {
+        return res.status(400).json({ error: 'source must be amazon, google or blinkit' });
+    }
+    try {
+        const { images, via } = await runImageSearch(q, source);
+        res.json({ images: images.slice(0, 10), source, via });
+    } catch (err) {
+        if (err instanceof ImageSearchError) {
+            console.warn(`[app/admin/image-search] ${source}:`, err.message);
+            return res.status(err.status).json({ error: err.message, images: [], source, ...err.extra });
+        }
+        console.error('[app/admin/image-search]', err);
+        res.status(500).json({ error: 'Image search failed', images: [], source });
+    }
+};
+
+router.get('/admin/image-search', requireAdminJwtAuth, imageSearchHandler());
+router.get('/admin/amazon-search', requireAdminJwtAuth, imageSearchHandler('amazon'));
 
 /**
  * PATCH /api/app/admin/users/:partyCode/reset-password

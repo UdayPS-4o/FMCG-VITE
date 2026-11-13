@@ -28,6 +28,13 @@ interface CustomBrand {
   product_count?: number;
 }
 
+type ImageSource = 'amazon' | 'google' | 'blinkit';
+const IMAGE_SOURCES: { id: ImageSource; label: string }[] = [
+  { id: 'amazon', label: 'Amazon' },
+  { id: 'google', label: 'Google Images' },
+  { id: 'blinkit', label: 'Blinkit' },
+];
+
 const AppListings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'products'|'brands'>('products');
   const [products, setProducts] = useState<Product[]>([]);
@@ -54,6 +61,7 @@ const AppListings: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [amazonImages, setAmazonImages] = useState<string[]>([]);
   const [amazonSearchQuery, setAmazonSearchQuery] = useState('');
+  const [imageSource, setImageSource] = useState<ImageSource>('amazon');
   
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [editingBrand, setEditingBrand] = useState<CustomBrand | null>(null);
@@ -146,24 +154,28 @@ const AppListings: React.FC = () => {
     setShowProductModal(true);
     // Auto-search after state settles
     setTimeout(() => {
-      triggerAmazonSearch(searchTerm);
+      runImageSearch(searchTerm, imageSource, true);
     }, 50);
   };
 
-  const triggerAmazonSearch = async (query: string) => {
+  // silent = auto-search when the modal opens (no error toasts)
+  const runImageSearch = async (query: string, source: ImageSource, silent = false) => {
     if (!query) return;
     setIsSearching(true);
     try {
       const token = localStorage.getItem('token') || '';
-      const res = await fetch(`${constants.baseURL}/api/app/admin/amazon-search?q=${encodeURIComponent(query)}`, {
+      const res = await fetch(`${constants.baseURL}/api/app/admin/image-search?source=${source}&q=${encodeURIComponent(query)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await res.json();
-      if (data.images) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.images && data.images.length > 0) {
         setAmazonImages(data.images);
+        return;
       }
+      setAmazonImages([]);
+      if (!silent) toast.error(res.ok ? 'No images found' : (data.error || 'Image search failed'));
     } catch {
-      // silent fail on auto-search
+      if (!silent) toast.error('Image search failed');
     } finally {
       setIsSearching(false);
     }
@@ -206,25 +218,9 @@ const AppListings: React.FC = () => {
     }
   };
 
-  const searchAmazon = async () => {
-    if (!amazonSearchQuery) return;
-    setIsSearching(true);
-    try {
-      const token = localStorage.getItem('token') || '';
-      const res = await fetch(`${constants.baseURL}/api/app/admin/amazon-search?q=${encodeURIComponent(amazonSearchQuery)}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.images) {
-        setAmazonImages(data.images);
-      } else {
-        toast.error('No images found');
-      }
-    } catch {
-      toast.error('Amazon search failed');
-    } finally {
-      setIsSearching(false);
-    }
+  const searchImages = (source: ImageSource) => {
+    setImageSource(source);
+    runImageSearch(amazonSearchQuery, source);
   };
 
   const selectAmazonImage = async (imgUrl: string) => {
@@ -240,10 +236,10 @@ const AppListings: React.FC = () => {
       if (!res.ok) throw new Error('Failed to save image');
       const data = await res.json();
       setProductForm(p => ({ ...p, image_url: data.imageUrl, newImageFile: '' }));
-      toast.success('Image updated from Amazon');
+      toast.success('Image updated');
       setAmazonImages([]);
     } catch {
-      toast.error('Failed to import Amazon image');
+      toast.error('Failed to import image');
     }
   };
 
@@ -607,30 +603,36 @@ const AppListings: React.FC = () => {
                   {/* Amazon Search Integration */}
                   <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 mt-2">
                     <p className="text-sm font-bold text-orange-800 mb-2 flex items-center gap-2">
-                      <span>Amazon Auto-Match</span>
+                      <span>Image Auto-Match</span>
                     </p>
                     <div className="flex gap-2">
                       <input 
                         type="text" 
                         value={amazonSearchQuery}
                         onChange={e => setAmazonSearchQuery(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchImages(imageSource); } }}
                         className="flex-1 border border-orange-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-500"
                       />
-                      <button 
-                        type="button" 
-                        onClick={searchAmazon}
-                        disabled={isSearching}
-                        className="bg-orange-500 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-600 disabled:opacity-50 min-w-[100px]"
-                      >
-                        {isSearching ? 'Searching...' : 'Search'}
-                      </button>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      {IMAGE_SOURCES.map(src => (
+                        <button
+                          key={src.id}
+                          type="button"
+                          onClick={() => searchImages(src.id)}
+                          disabled={isSearching}
+                          className={`flex-1 px-3 py-2 rounded-lg font-medium text-sm disabled:opacity-50 border transition-colors ${imageSource === src.id ? 'bg-orange-500 text-white border-orange-500 hover:bg-orange-600' : 'bg-white text-orange-700 border-orange-200 hover:bg-orange-100'}`}
+                        >
+                          {isSearching && imageSource === src.id ? 'Searching...' : src.label}
+                        </button>
+                      ))}
                     </div>
 
                     {amazonImages.length > 0 && (
                       <div className="grid grid-cols-4 gap-3 mt-4">
                         {amazonImages.slice(0, 4).map((img, idx) => (
                           <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200 shadow-sm aspect-square bg-white flex items-center justify-center cursor-pointer hover:border-orange-500 transition-colors" onClick={() => selectAmazonImage(img)}>
-                            <img src={img} alt="Amazon" className="w-full h-full object-contain p-2" />
+                            <img src={img} alt="Search result" className="w-full h-full object-contain p-2" />
                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                               <span className="text-white text-xs font-bold px-2 py-1 bg-orange-500 rounded">Use</span>
                             </div>
