@@ -631,9 +631,15 @@ app.post('/webhook', (req, res) => {
         preview = payload.messages.text.body;
       } else if (msgType === 'interactive') {
         const iv = payload?.messages?.interactive;
-        preview = iv?.button_reply?.title
-          || iv?.list_reply?.title
-          || 'Interactive reply';
+        // Real CXBot shape nests the reply under interactive.text.*; the
+        // flatter interactive.* is the Meta Cloud API shape (fallback).
+        const reply = iv?.text?.button_reply
+          || iv?.text?.list_reply
+          || iv?.button_reply
+          || iv?.list_reply;
+        preview = reply?.title
+          ? `🔘 ${reply.title}`
+          : 'Interactive reply';
       } else if (msgType === 'image') {
         preview = '📷 Image';
       } else if (msgType === 'document') {
