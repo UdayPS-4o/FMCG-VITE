@@ -83,7 +83,9 @@ const norm = (s) => String(s || '').toLowerCase()
   .replace(/[^a-z0-9 ]/g, ' ')
   .replace(/w/g, 'v').replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/aa/g, 'a')
   .replace(/sh/g, 's').replace(/ph/g, 'f').replace(/z/g, 'j')
-  .replace(/\s+/g, ' ').trim();
+  .replace(/\s+/g, ' ').trim()
+  // Initials: "S.S TRADERS" -> "ss traders", so spoken "SS traders" matches
+  .replace(/\b([a-z0-9]) (?=[a-z0-9]\b)/g, '$1');
 
 // Spoken filler that is never part of a party name
 const FILLER = new Set(['ki', 'ka', 'ke', 'ko', 'se', 'party', 'vala', 'vali', 'vale', 'naam', 'name', 'ji', 'm', 's']);
@@ -187,7 +189,14 @@ const turn = async (voiceText, state) => {
   const { parties, salesmen } = await loadCmpl();
 
   let ex;
-  try {
+  // Short yes/no answers to "Save karke print karun?" — no need to ask Gemini
+  const short = String(voiceText).toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const YES = /^(haan|han|ha|haa|yes|ok|okay|theek hai|thik hai|kar do|karo|save|save karo|save kar do|haan save karo|print|print karo|save and print|save aur print|save karke print karo)$/;
+  const SAVE_ONLY = /^(sirf save karo|sirf save|only save|save only|print mat karo|bina print ke save karo)$/;
+  const NO = /^(nahi|nahin|na|no|mat karo|rehne do|cancel)$/;
+  if (state.awaiting === 'confirm' && (YES.test(short) || SAVE_ONLY.test(short) || NO.test(short))) {
+    ex = { yes: YES.test(short), saveOnly: SAVE_ONLY.test(short), no: NO.test(short), cancel: false };
+  } else try {
     ex = await extract(voiceText, state);
   } catch (err) {
     console.error('[Alexa] Gemini failed, using fallback parser:', err.message);
@@ -324,6 +333,12 @@ router.post('/webhook', async (req, res) => {
     const voiceText = slots.command?.value || slots.query?.value || '';
     if (!voiceText) {
       // FallbackIntent carries no text — repeat the pending question
+      if (state.awaiting === 'confirm') {
+        return res.json(say('Samajh nahi aaya. Save karne ke liye haan boliye, ya nahi.', state));
+      }
+      if (state.awaiting === 'choice' && state.candidates?.length) {
+        return res.json(say('Samajh nahi aaya. Party ka number boliye, jaise pehli wali, ya poora naam boliye.', state));
+      }
       const q = nextQuestion(state);
       return res.json(say(`Samajh nahi aaya. ${q ? q.text : 'Party ka naam aur amount boliye.'}`, state));
     }
