@@ -40,7 +40,7 @@ const MessagesBell: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [photo, setPhoto] = useState<string | null>(null);
-  const [position, setPosition] = useState({ top: 0, left: 0, width: PANEL_WIDTH });
+  const [position, setPosition] = useState<{ top?: number; bottom?: number; left: number; width: number }>({ top: 0, left: 0, width: PANEL_WIDTH });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +88,13 @@ const MessagesBell: React.FC = () => {
       const rect = buttonRef.current.getBoundingClientRect();
       const width = Math.min(PANEL_WIDTH, window.innerWidth - EDGE_GAP * 2);
       const left = Math.max(EDGE_GAP, Math.min(rect.left, window.innerWidth - width - EDGE_GAP));
-      setPosition({ top: Math.max(EDGE_GAP, rect.bottom + EDGE_GAP), left, width });
+      // A bell in the lower half of the screen (sidebar dock) opens upward instead
+      const openUp = rect.top > window.innerHeight / 2;
+      setPosition(
+        openUp
+          ? { bottom: Math.max(EDGE_GAP, window.innerHeight - rect.top + EDGE_GAP), left, width }
+          : { top: Math.max(EDGE_GAP, rect.bottom + EDGE_GAP), left, width }
+      );
       load();
     }
     setOpen(!open);
@@ -131,7 +137,7 @@ const MessagesBell: React.FC = () => {
         onClick={toggle}
         title="Notifications"
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
-        className="relative flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+        className="relative flex items-center justify-center w-10 h-10 shrink-0 rounded-full border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
       >
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path
@@ -154,7 +160,7 @@ const MessagesBell: React.FC = () => {
           role="dialog"
           aria-label="Notifications"
           className="fixed flex flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
-          style={{ top: position.top, left: position.left, width: position.width, maxHeight: `calc(100vh - ${position.top + EDGE_GAP}px)`, zIndex: 99990 }}
+          style={{ top: position.top, bottom: position.bottom, left: position.left, width: position.width, maxHeight: `calc(100vh - ${(position.top ?? position.bottom ?? 0) + EDGE_GAP}px)`, zIndex: 99990 }}
         >
           <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-800">
             <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Notifications</h5>

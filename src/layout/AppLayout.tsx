@@ -89,6 +89,8 @@ const LayoutContent: React.FC = () => {
     );
   }
 
+  const showHeader = !isDesktop || shouldHideNavigation;
+
   return (
     <div className="min-h-screen xl:flex bg-gray-50 dark:bg-gray-900">
       {/* Global Message Notification - appears on all pages */}
@@ -109,11 +111,13 @@ const LayoutContent: React.FC = () => {
           !shouldHideNavigation ? "lg:ml-[90px]" : "ml-0"
         } ${isMobileOpen ? "ml-0" : ""}`}
       >
-        <AppHeader />
-        <div className={`mx-auto w-full max-w-(--breakpoint-2xl) flex-1 
+        {/* Desktop: the sidebar dock replaces the header. Keep the header on mobile,
+            and whenever the sidebar is hidden (attendance not marked) so logout stays reachable. */}
+        {showHeader && <AppHeader />}
+        <div className={`mx-auto w-full max-w-(--breakpoint-2xl) flex-1
           ${isDesktop ? "p-4 md:p-6 pb-16 lg:pb-4" : "p-2 pt-0 pb-20"}
           ${!shouldHideNavigation && (isExpanded || isHovered) ? "lg:pt-6" : "lg:pt-4"}`}
-          style={{ paddingTop: '4rem' }}
+          style={showHeader ? { paddingTop: '4rem' } : undefined}
         >
           <Outlet />
         </div>

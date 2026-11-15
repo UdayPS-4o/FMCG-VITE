@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect } from "react";
 import { useTheme, THEMES, type Theme } from "../../context/ThemeContext";
 
-export const ThemeToggleButton: React.FC = () => {
+/** `placement="top"` opens the picker upward, for triggers near the bottom of the screen (sidebar dock). */
+export const ThemeToggleButton: React.FC<{ placement?: "bottom" | "top" }> = ({ placement = "bottom" }) => {
   const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -72,7 +73,11 @@ export const ThemeToggleButton: React.FC = () => {
       {/* Theme Picker Dropdown */}
       {open && (
         <div
-          className="absolute right-0 mt-2 w-52 origin-top-right rounded-2xl border border-gray-100 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 overflow-hidden z-[99999]"
+          className={`absolute w-52 rounded-2xl border border-gray-100 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 z-[99999] ${
+            placement === "top"
+              ? "left-0 bottom-full mb-2 origin-bottom-left max-h-[75vh] overflow-y-auto"
+              : "right-0 mt-2 origin-top-right overflow-hidden"
+          }`}
           style={{ animation: "themePickerIn 0.15s ease" }}
         >
           <div className="px-3 pt-3 pb-1">

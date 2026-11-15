@@ -14,6 +14,8 @@ import {
 import { useSidebar } from "../context/SidebarContext";
 import constants from '../constants';
 import GlassSurface from '../components/glass/GlassSurface';
+import { ThemeToggleButton } from '../components/common/ThemeToggleButton';
+import MessagesBell from '../components/header/MessagesBell';
 
 // Add missing icon components
 const ChevronDownIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -342,6 +344,15 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
   const [user, setUser] = useState<User | null>(null);
   const [filteredItems, setFilteredItems] = useState<NavItem[]>([]);
   const [pendingOrderCount, setPendingOrderCount] = useState(0);
+
+  // On desktop the header is gone, so the dock carries its theme picker and bell.
+  // On mobile the header still shows them, so the dock leaves them out.
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Fetch pending app-order count (Admin only)
   useEffect(() => {
@@ -863,18 +874,38 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
         </nav>
       </div>
       
-      {/* Logout button with adjusted positioning */}
-      <div className="mt-auto mb-4 lg:mb-4">
+      {/* Action dock: user, theme, notifications, logout. Stacks vertically when the sidebar is collapsed. */}
+      <div
+        className={`sidebar-dock relative z-10 mt-auto mb-4 pt-3 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2 ${
+          isExpanded || isHovered || isMobileOpen ? "flex-row justify-between" : "flex-col"
+        }`}
+      >
+        <div
+          title={
+            user
+              ? `${user.name}${!user.routeAccess.includes('Admin') ? ` · ${user.subgroup?.title || 'No subgroup'}` : ''}`
+              : undefined
+          }
+          className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-medium ${
+            user ? "bg-green-100 text-green-700" : "bg-gray-200 dark:bg-gray-700 animate-pulse"
+          }`}
+        >
+          {user ? (user.name ? user.name.charAt(0).toUpperCase() : "U") : null}
+        </div>
+        {!isDesktop && user && (
+          <span className="flex-1 min-w-0 truncate text-sm font-medium text-gray-700 dark:text-gray-200">
+            {user.name}
+          </span>
+        )}
+        {isDesktop && <ThemeToggleButton placement="top" />}
+        {isDesktop && <MessagesBell />}
         <button
           onClick={handleLogout}
-          className="menu-item group menu-item-inactive w-full"
+          title="Logout"
+          aria-label="Logout"
+          className="flex items-center justify-center w-10 h-10 shrink-0 rounded-full border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-red-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
         >
-          <span data-tint={ICON_TINTS.Logout} className="menu-item-icon-size menu-item-icon-inactive">
-            <LogoutIcon />
-          </span>
-          {(isExpanded || isHovered || isMobileOpen) && (
-            <span className="menu-item-text">Logout</span>
-          )}
+          <LogoutIcon className="w-5 h-5" />
         </button>
       </div>
     </aside>
