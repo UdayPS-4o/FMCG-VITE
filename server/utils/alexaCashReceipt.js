@@ -14,6 +14,7 @@ const jwt = require('jsonwebtoken');
 const puppeteer = require('puppeteer');
 const { print: printPdf, getDefaultPrinter } = require('pdf-to-printer');
 const { sendNotificationToAdmins } = require('../routes/push');
+const { approveUrl } = require('./notificationTypes');
 
 const DEFAULT_SERIES = (process.env.ALEXA_RECEIPT_SERIES || 'O').toUpperCase();
 const DEFAULT_SM = process.env.ALEXA_RECEIPT_SM || 'SM003';
@@ -125,7 +126,7 @@ const saveReceipt = (input) => {
         title: 'New Entry in Cash Receipts',
         message: `Alexa has created a Cash Receipts ${series}-${receiptNos[0]} of ₹${input.amount} for ${input.party.name}`,
         data: {
-          url: `https://ekta-enterprises.com/proxy/api/approve-from-notification?endpoint=cash-receipts&id=${receiptNos[0]}`,
+          url: approveUrl('cash-receipts', receiptNos[0]),
           endpoint: 'cash-receipts',
           id: receiptNos[0],
         },

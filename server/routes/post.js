@@ -4,6 +4,7 @@ const fs = require('fs');
 const fss = require('fs/promises');
 const path = require('path');
 const { sendNotificationToAdmins } = require('./push');
+const { approveUrl } = require('../utils/notificationTypes');
 
 require('dotenv').config();
 
@@ -231,7 +232,7 @@ app.post('/:formType', async (req, res) => {
         title: title,
         message: message,
         data: {
-          url: `https://ekta-enterprises.com/proxy/api/approve-from-notification?endpoint=${formType}&id=${uniqueId}`,
+          url: approveUrl(formType, uniqueId),
           endpoint: formType,
           id: uniqueId
         } 
@@ -364,7 +365,7 @@ app.post('/edit/:formType', async (req, res) => {
       title: title,
       message: message,
       data: {
-        url: `https://ekta-enterprises.com/proxy/api/approve-from-notification?endpoint=${formType}&id=${uniqueId}`,
+        url: approveUrl(formType, uniqueId),
         endpoint: formType,
         id: uniqueId
       }

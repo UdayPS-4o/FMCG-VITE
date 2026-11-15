@@ -16,4 +16,12 @@ const NOTIFICATION_TYPES = {
   'whatsapp':            { label: 'WhatsApp Inbox Messages',              userUrl: '/whatsapp-inbox' },
 };
 
-module.exports = { NOTIFICATION_TYPES };
+// Link an admin's notification opens (tap, or the "Approve" action in sw.js).
+// Must point straight at this API host: the old ekta-enterprises.com/proxy
+// relay is gone and only answers "Proxy Error: Failed to connect".
+const approveUrl = (endpoint, id) => {
+  const base = (process.env.PUBLIC_BASE_URL || 'https://server.ekta-enterprises.com').replace(/\/$/, '');
+  return `${base}/api/approve-from-notification?endpoint=${encodeURIComponent(endpoint)}&id=${encodeURIComponent(id)}`;
+};
+
+module.exports = { NOTIFICATION_TYPES, approveUrl };
