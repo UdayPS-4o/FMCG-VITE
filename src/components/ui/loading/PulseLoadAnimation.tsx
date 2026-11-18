@@ -86,12 +86,12 @@ const PulseLoadAnimation: React.FC<PulseLoadAnimationProps> = ({
           {/* Logo with breathing animation */}
           <div className={`relative ${config.logo} animate-pulse-breath`}>
             <img
-              src="./images/logo/logo.svg"
+              src="/images/logo/logo.svg"
               alt="Loading..."
               className="w-full h-full object-contain dark:hidden"
             />
             <img
-              src="./images/logo/logo-dark.svg"
+              src="/images/logo/logo-dark.svg"
               alt="Loading..."
               className="w-full h-full object-contain hidden dark:block"
             />
