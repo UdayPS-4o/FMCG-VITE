@@ -35,7 +35,7 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- BackgroundRunner WorkManager service is auto-registered by the plugin -->
+        <!-- Background location foreground service is merged in from @capacitor-community/background-geolocation -->
 
     </application>
 
@@ -62,5 +62,8 @@
 
     <!-- Receive boot completed to restart background tracking after reboot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Android 13+: needed to show the "sharing location" notification -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
 </manifest>

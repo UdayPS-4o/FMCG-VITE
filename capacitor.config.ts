@@ -11,19 +11,13 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: true,
-    useLegacyBridge: false,
+    // Must be true for @capacitor-community/background-geolocation, otherwise
+    // location updates stop after ~5 minutes in the background.
+    useLegacyBridge: true,
   },
   plugins: {
     Geolocation: {
       // Enables high-accuracy GPS
-    },
-    BackgroundRunner: {
-      label: 'com.ekta.enterprises.check.location',
-      src: 'background.js',        // We'll create this file
-      event: 'locationUpdate',
-      repeat: true,
-      interval: 2,                  // Run every 2 minutes
-      autoStart: true,
     },
   },
 };

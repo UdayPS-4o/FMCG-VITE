@@ -7,6 +7,7 @@ import Backdrop from "./Backdrop";
 import BottomNav from "../components/navigation/BottomNav";
 import useAttendanceCheck from "../hooks/useAttendanceCheck";
 import usePushSubscription from "../hooks/usePushSubscription";
+import useLiveLocationTracking from "../hooks/useLiveLocationTracking";
 import useSmoothScroll from "../hooks/useSmoothScroll";
 import GlobalMessageNotification from "../components/common/GlobalMessageNotification";
 import { PulseLoadAnimation } from "../components/ui/loading";
@@ -21,6 +22,7 @@ const LayoutContent: React.FC = () => {
   const { hasMarkedToday, isLoading, shouldHideNavigation, isNavigating } = useAttendanceCheck();
   usePushSubscription();
   useSmoothScroll();
+  useLiveLocationTracking(hasMarkedToday, isLoading);
 
   useEffect(() => {
     const handleResize = () => {
