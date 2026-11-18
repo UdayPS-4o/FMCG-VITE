@@ -19,10 +19,12 @@ interface AttendanceRecord {
     longitude: number;
     accuracy: number;
     timestamp: number;
-  };
+  } | null;
   selfieData: string;
   status: 'present' | 'absent' | 'half_day';
-  source?: 'app' | 'web';
+  source?: 'app' | 'web' | 'backfill';
+  backfilledByName?: string;
+  note?: string;
 }
 
 interface UserLocation {
@@ -346,6 +348,14 @@ const AdminAttendance: React.FC = () => {
   const [rotation, setRotation] = useState(0);
 
   const [activeTab, setActiveTab] = useState<'attendance' | 'locations'>('attendance');
+  const todayLocal = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const emptyBackfill = () => ({ userId: '', date: '', time: '10:00', status: 'present' as AttendanceRecord['status'], note: '', selfieData: '' });
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [backfillForm, setBackfillForm] = useState(emptyBackfill());
+  const [backfillSaving, setBackfillSaving] = useState(false);
   const [routeUser, setRouteUser] = useState<{ userId: number; userName: string } | null>(null);
   const [users, setUsers] = useState<{
     id: number;
@@ -592,7 +602,56 @@ const AdminAttendance: React.FC = () => {
   };
 
   const getLocationString = (location: AttendanceRecord['location']) => {
+    if (!location || typeof location.latitude !== 'number' || typeof location.longitude !== 'number') return '—';
     return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+  };
+
+  const openBackfill = () => {
+    setBackfillForm({ ...emptyBackfill(), userId: selectedUser, date: fromDate && fromDate === toDate ? fromDate : todayLocal() });
+    setBackfillOpen(true);
+  };
+
+  const handleBackfillPhoto = (file: File | undefined) => {
+    if (!file) { setBackfillForm(f => ({ ...f, selfieData: '' })); return; }
+    if (!file.type.startsWith('image/')) { setToast({ message: 'Please choose an image file', type: 'error' }); return; }
+    if (file.size > 5 * 1024 * 1024) { setToast({ message: 'Photo size must be less than 5MB', type: 'error' }); return; }
+    const reader = new FileReader();
+    reader.onload = () => setBackfillForm(f => ({ ...f, selfieData: String(reader.result || '') }));
+    reader.readAsDataURL(file);
+  };
+
+  const submitBackfill = async () => {
+    const { userId, date, time, status } = backfillForm;
+    if (!userId || !date || !time || !status) {
+      setToast({ message: 'User, date, time and status are required', type: 'error' });
+      return;
+    }
+    if (date > todayLocal()) {
+      setToast({ message: 'Cannot backfill a future date', type: 'error' });
+      return;
+    }
+    setBackfillSaving(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${constants.baseURL}/api/attendance/admin/backfill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ ...backfillForm, userId: Number(userId) })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.success) {
+        setToast({ message: `Attendance backfilled for ${data.record?.userName || 'user'} on ${date}`, type: 'success' });
+        setBackfillOpen(false);
+        fetchAttendanceRecords();
+      } else {
+        setToast({ message: data.message || 'Failed to backfill attendance', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error backfilling attendance:', error);
+      setToast({ message: 'Error backfilling attendance', type: 'error' });
+    } finally {
+      setBackfillSaving(false);
+    }
   };
 
   const openGallery = (index: number, items: { src: string; title: string }[]) => {
@@ -1485,6 +1544,20 @@ const AdminAttendance: React.FC = () => {
                       </button>
                     </div>
                   </div>
+
+                  {/* Backfill Attendance (admin only: this page and its API both require Admin) */}
+                  <div className="flex flex-col space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Attendance Entry
+                    </label>
+                    <button
+                      onClick={openBackfill}
+                      className="bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center space-x-1"
+                    >
+                      <span>📝</span>
+                      <span>Backfill Attendance</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1665,7 +1738,14 @@ const AdminAttendance: React.FC = () => {
                                   </td>
                                   <td className="px-6 py-4">
                                     {record.time}
-                                    {record.source && (
+                                    {record.source === 'backfill' ? (
+                                      <span
+                                        className="mt-1 block w-fit px-2 py-0.5 rounded-full text-[11px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
+                                        title={`Backfilled by admin${record.backfilledByName ? ` ${record.backfilledByName}` : ''}${record.note ? ` — ${record.note}` : ''}`}
+                                      >
+                                        📝 Backfilled
+                                      </span>
+                                    ) : record.source && (
                                       <span
                                         className={`mt-1 block w-fit px-2 py-0.5 rounded-full text-[11px] font-medium ${record.source === 'app' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}
                                         title={record.source === 'app' ? 'Marked from the mobile app' : 'Marked from the website'}
@@ -1689,12 +1769,16 @@ const AdminAttendance: React.FC = () => {
                                     </span>
                                   </td>
                                   <td className="px-6 py-4">
-                                    <button
-                                      onClick={() => openGallery(0, [{ src: record.selfieData, title: 'Attendance Selfie' }])}
-                                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-                                    >
-                                      📷 View
-                                    </button>
+                                    {record.selfieData ? (
+                                      <button
+                                        onClick={() => openGallery(0, [{ src: record.selfieData, title: 'Attendance Selfie' }])}
+                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                                      >
+                                        📷 View
+                                      </button>
+                                    ) : (
+                                      <span className="text-gray-400">—</span>
+                                    )}
                                   </td>
 
                                   <td className="px-6 py-4">
@@ -1715,12 +1799,14 @@ const AdminAttendance: React.FC = () => {
                                       >
                                         💬 Message
                                       </button>
-                                      <button
-                                        onClick={() => openLocationInMaps(record.location.latitude, record.location.longitude)}
-                                        className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 font-medium"
-                                      >
-                                        🗺️ Maps
-                                      </button>
+                                      {record.location && (
+                                        <button
+                                          onClick={() => openLocationInMaps(record.location!.latitude, record.location!.longitude)}
+                                          className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 font-medium"
+                                        >
+                                          🗺️ Maps
+                                        </button>
+                                      )}
                                       <button
                                         onClick={() => deleteAttendanceRecord(record.id)}
                                         className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium transition-colors"
@@ -2611,6 +2697,69 @@ const AdminAttendance: React.FC = () => {
           userName={routeUser.userName}
           onClose={() => setRouteUser(null)}
         />
+      )}
+
+      {/* Backfill Attendance Modal (admin only) */}
+      {backfillOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[99999] p-4" onClick={() => !backfillSaving && setBackfillOpen(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[90vh] overflow-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📝 Backfill Attendance</h3>
+                <button onClick={() => setBackfillOpen(false)} disabled={backfillSaving} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">✕</button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User *</label>
+                  <select value={backfillForm.userId} onChange={(e) => setBackfillForm(f => ({ ...f, userId: e.target.value }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">Select user</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id.toString()}>{u.name} {u.isAdmin ? '(admin)' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date *</label>
+                    <input type="date" max={todayLocal()} value={backfillForm.date} onChange={(e) => setBackfillForm(f => ({ ...f, date: e.target.value }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time *</label>
+                    <input type="time" value={backfillForm.time} onChange={(e) => setBackfillForm(f => ({ ...f, time: e.target.value }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status *</label>
+                  <select value={backfillForm.status} onChange={(e) => setBackfillForm(f => ({ ...f, status: e.target.value as AttendanceRecord['status'] }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="present">Present</option>
+                    <option value="half_day">Half Day</option>
+                    <option value="absent">Absent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason / note</label>
+                  <input type="text" maxLength={500} placeholder="e.g. phone not working, marked on call" value={backfillForm.note} onChange={(e) => setBackfillForm(f => ({ ...f, note: e.target.value }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Photo (optional)</label>
+                  <input type="file" accept="image/*" onChange={(e) => handleBackfillPhoto(e.target.files?.[0])} className="block w-full text-sm text-gray-700 dark:text-gray-300" />
+                  {backfillForm.selfieData && (
+                    <img src={backfillForm.selfieData} alt="Backfill photo preview" className="mt-2 h-24 rounded-md object-cover" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  The entry is tagged “Backfilled” with your name. If the user already has an entry on that date, edit or delete it instead.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 mt-5">
+                <button onClick={() => setBackfillOpen(false)} disabled={backfillSaving} className="px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200">Cancel</button>
+                <button onClick={submitBackfill} disabled={backfillSaving} className="px-4 py-2 text-sm rounded-lg bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-60">
+                  {backfillSaving ? 'Saving…' : 'Save Entry'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (

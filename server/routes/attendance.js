@@ -1112,6 +1112,92 @@ app.get('/api/attendance/admin/salary-slip-visibility', verifyToken, requireAdmi
   }
 });
 
+// Admin: backfill a missed attendance entry for any user (admin only).
+// Body: { userId, date: 'YYYY-MM-DD', time: 'HH:MM', status, note?, selfieData? }
+app.post('/api/attendance/admin/backfill', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId, date, time, status, note, selfieData } = req.body || {};
+
+    if (!userId || !date || !time || !status) {
+      return res.status(400).json({ success: false, message: 'User, date, time and status are required' });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(new Date(`${date}T00:00:00`).getTime())) {
+      return res.status(400).json({ success: false, message: 'Date must be YYYY-MM-DD' });
+    }
+    const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(time);
+    if (!timeMatch || Number(timeMatch[1]) > 23 || Number(timeMatch[2]) > 59) {
+      return res.status(400).json({ success: false, message: 'Time must be HH:MM' });
+    }
+    if (!['present', 'absent', 'half_day'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status. Must be present, absent, or half_day' });
+    }
+    // No future dates (compare against today in IST, the business timezone)
+    const todayIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (date > todayIST) {
+      return res.status(400).json({ success: false, message: 'Cannot backfill attendance for a future date' });
+    }
+    if (selfieData && (typeof selfieData !== 'string' || !selfieData.startsWith('data:image/'))) {
+      return res.status(400).json({ success: false, message: 'Photo must be an image' });
+    }
+
+    const usersData = await fs.readFile(path.join(__dirname, '..', 'db', 'users.json'), 'utf8');
+    const users = JSON.parse(usersData);
+    const targetUser = users.find(u => Number(u.id) === Number(userId));
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const adminUser = users.find(u => Number(u.id) === Number(req.user.userId));
+
+    const attendanceDir = path.join(__dirname, '..', 'db', 'attendance');
+    const attendanceFilePath = path.join(attendanceDir, 'records.json');
+    await fs.mkdir(attendanceDir, { recursive: true });
+
+    let attendanceRecords = [];
+    try {
+      attendanceRecords = JSON.parse(await fs.readFile(attendanceFilePath, 'utf8'));
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+
+    const existing = attendanceRecords.find(r => Number(r.userId) === Number(userId) && r.date === date);
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: `${targetUser.name} already has attendance on ${date} (${existing.status}). Edit or delete that entry instead.`
+      });
+    }
+
+    const h = Number(timeMatch[1]);
+    const m = timeMatch[2];
+    const displayTime = `${String(((h + 11) % 12) + 1).padStart(2, '0')}:${m}:00 ${h < 12 ? 'AM' : 'PM'}`;
+
+    const record = {
+      id: `backfill-${userId}-${date}-${Date.now()}`,
+      userId: Number(userId),
+      userName: targetUser.name,
+      date,
+      time: displayTime,
+      location: null,
+      selfieData: selfieData || '',
+      status,
+      source: 'backfill',
+      backfilledBy: Number(req.user.userId),
+      backfilledByName: adminUser ? adminUser.name : '',
+      note: typeof note === 'string' ? note.trim().slice(0, 500) : '',
+      timestamp: new Date().toISOString()
+    };
+
+    attendanceRecords.push(record);
+    await fs.writeFile(attendanceFilePath, JSON.stringify(attendanceRecords, null, 2));
+
+    console.log(`📝 Attendance backfilled: user ${record.userId} (${record.userName}) ${date} ${status} by admin ${record.backfilledBy}`);
+    res.json({ success: true, message: 'Attendance backfilled successfully', record });
+  } catch (error) {
+    console.error('Error backfilling attendance:', error);
+    res.status(500).json({ success: false, message: 'Failed to backfill attendance' });
+  }
+});
+
 // Admin endpoint to delete attendance record
 app.delete('/api/attendance/admin/delete-record', verifyToken, requireAdmin, async (req, res) => {
   try {
