@@ -6,6 +6,7 @@ import useAuth from "../../hooks/useAuth";
 import constants from '../../constants';
 import Toast from '../../components/ui/toast/Toast';
 import { PulseLoadAnimation } from '../../components/ui/loading';
+import UserRouteModal from '../../components/attendance/UserRouteModal';
 
 interface AttendanceRecord {
   id: string;
@@ -345,6 +346,7 @@ const AdminAttendance: React.FC = () => {
   const [rotation, setRotation] = useState(0);
 
   const [activeTab, setActiveTab] = useState<'attendance' | 'locations'>('attendance');
+  const [routeUser, setRouteUser] = useState<{ userId: number; userName: string } | null>(null);
   const [users, setUsers] = useState<{
     id: number;
     name: string;
@@ -672,6 +674,15 @@ const AdminAttendance: React.FC = () => {
     }
   };
 
+
+  // Keep Live Locations fresh while that tab is open
+  useEffect(() => {
+    if (activeTab !== 'locations') return;
+    fetchUserLocations();
+    const id = setInterval(fetchUserLocations, 30000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const refreshLocations = () => {
     fetchUserLocations();
@@ -1799,14 +1810,22 @@ const AdminAttendance: React.FC = () => {
                             {new Date(location.lastUpdated).toLocaleString()}
                           </td>
                           <td className="px-6 py-4">
-                            {location.currentLocation && (
+                            <div className="flex flex-col gap-1 items-start">
+                              {location.currentLocation && (
+                                <button
+                                  onClick={() => openLocationInMaps(location.currentLocation!.latitude, location.currentLocation!.longitude)}
+                                  className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 font-medium"
+                                >
+                                  🗺️ View on Maps
+                                </button>
+                              )}
                               <button
-                                onClick={() => openLocationInMaps(location.currentLocation!.latitude, location.currentLocation!.longitude)}
-                                className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 font-medium"
+                                onClick={() => setRouteUser({ userId: location.userId, userName: location.userName })}
+                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
                               >
-                                🗺️ View on Maps
+                                🛣️ Daily Route
                               </button>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2584,6 +2603,14 @@ const AdminAttendance: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {routeUser && (
+        <UserRouteModal
+          userId={routeUser.userId}
+          userName={routeUser.userName}
+          onClose={() => setRouteUser(null)}
+        />
       )}
 
       {toast && (

@@ -5,6 +5,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const { ensureDirectoryExistence } = require('./utilities');
 const { sendNotificationToAdmins } = require('./push');
+const locationStore = require('./locationStore');
 
 require('dotenv').config();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
@@ -285,7 +286,7 @@ app.post('/api/attendance/mark', verifyToken, async (req, res) => {
     // Update user's current location
     try {
       console.log('📍 Updating user location...');
-      await updateUserLocation(userId, userName, location);
+      await updateUserLocation(userId, userName, location, 'checkin');
       console.log('✅ User location updated successfully');
     } catch (error) {
       console.log('⚠️ Failed to update user location (attendance still recorded):', error.message);
@@ -516,17 +517,11 @@ app.post('/api/attendance/admin/user-history', verifyToken, requireAdmin, async 
 // Admin: Get all user locations
 app.get('/api/attendance/admin/locations', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const locationsFilePath = path.join(__dirname, '..', 'db', 'locations', 'current.json');
     const attendanceFilePath = path.join(__dirname, '..', 'db', 'attendance', 'records.json');
 
-    // Load current live location updates
-    let liveLocations = [];
-    try {
-      const data = await fs.readFile(locationsFilePath, 'utf8');
-      liveLocations = JSON.parse(data);
-    } catch (error) {
-      liveLocations = [];
-    }
+    // Current live positions (a position saved at check-in shows as "Check-in Only")
+    const liveLocations = locationStore.getCurrentLocations()
+      .map(l => (l.source === 'checkin' ? { ...l, source: 'attendance-checkin' } : l));
 
     // Build a map of userId → live location for quick lookup
     const liveLocationMap = {};
@@ -585,6 +580,22 @@ app.get('/api/attendance/admin/locations', verifyToken, requireAdmin, async (req
 });
 
 
+// Admin: one user's route for a day (IST). ?userId=10&date=YYYY-MM-DD (date defaults to today)
+app.get('/api/attendance/admin/route', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const date = req.query.date || locationStore.istDate();
+    if (!userId) return res.status(400).json({ success: false, message: 'userId is required' });
+    if (!/^d{4}-d{2}-d{2}$/.test(date)) return res.status(400).json({ success: false, message: 'date must be YYYY-MM-DD' });
+
+    const points = await locationStore.getRoute(userId, date);
+    res.status(200).json({ success: true, userId, date, points });
+  } catch (error) {
+    console.error('Error fetching user route:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch route' });
+  }
+});
+
 // Update user location (continuous tracking)
 app.post('/api/attendance/location/update', verifyToken, async (req, res) => {
   try {
@@ -625,87 +636,9 @@ app.post('/api/attendance/location/update', verifyToken, async (req, res) => {
   }
 });
 
-// Helper function to update user location
-const updateUserLocation = async (userId, userName, location, source = 'foreground') => {
-  try {
-    const locationsDir = path.join(__dirname, '..', 'db', 'locations');
-    const locationsFilePath = path.join(locationsDir, 'current.json');
-    const historyFilePath = path.join(locationsDir, 'history.json');
-    
-    // Ensure directory exists
-    await ensureDirectoryExistence(locationsDir);
-    
-    let locations = [];
-    
-    try {
-      const data = await fs.readFile(locationsFilePath, 'utf8');
-      locations = JSON.parse(data);
-    } catch (error) {
-      // File doesn't exist, start with empty array
-      locations = [];
-    }
-    
-    // Find existing location record for user
-    const existingIndex = locations.findIndex(loc => loc.userId === userId);
-    const now = new Date().toISOString();
-    
-    const locationRecord = {
-      userId,
-      userName,
-      currentLocation: location,
-      lastUpdated: now,
-      source: source,
-      isBackgroundTracking: source === 'background' || source === 'service-worker'
-    };
-    
-    if (existingIndex >= 0) {
-      // Update existing record
-      locations[existingIndex] = locationRecord;
-    } else {
-      // Add new record
-      locations.push(locationRecord);
-    }
-    
-    await fs.writeFile(locationsFilePath, JSON.stringify(locations, null, 2));
-    
-    // Also store in history for tracking patterns
-    let history = [];
-    try {
-      const historyData = await fs.readFile(historyFilePath, 'utf8');
-      history = JSON.parse(historyData);
-    } catch (error) {
-      // File doesn't exist, start with empty array
-      history = [];
-    }
-    
-    // Add to history (keep last 1000 entries per user to prevent file from growing too large)
-    const historyRecord = {
-      userId,
-      userName,
-      location,
-      timestamp: now,
-      source,
-      isBackgroundTracking: source === 'background' || source === 'service-worker'
-    };
-    
-    history.push(historyRecord);
-    
-    // Keep only last 1000 entries per user
-    const userHistory = history.filter(h => h.userId === userId);
-    if (userHistory.length > 1000) {
-      // Remove oldest entries for this user
-      const otherUsersHistory = history.filter(h => h.userId !== userId);
-      const recentUserHistory = userHistory.slice(-1000);
-      history = [...otherUsersHistory, ...recentUserHistory];
-    }
-    
-    await fs.writeFile(historyFilePath, JSON.stringify(history, null, 2));
-    
-  } catch (error) {
-    console.error('Error updating user location:', error);
-    throw error;
-  }
-};
+// Helper function to update user location (serialised + atomic, see locationStore.js)
+const updateUserLocation = (userId, userName, location, source = 'foreground') =>
+  locationStore.recordLocation(userId, userName, location, source);
 
 // Get users list (for admin)
 app.get('/api/users', verifyToken, requireAdmin, async (req, res) => {
