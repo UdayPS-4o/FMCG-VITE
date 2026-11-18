@@ -586,7 +586,7 @@ app.get('/api/attendance/admin/route', verifyToken, requireAdmin, async (req, re
     const { userId } = req.query;
     const date = req.query.date || locationStore.istDate();
     if (!userId) return res.status(400).json({ success: false, message: 'userId is required' });
-    if (!/^d{4}-d{2}-d{2}$/.test(date)) return res.status(400).json({ success: false, message: 'date must be YYYY-MM-DD' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, message: 'date must be YYYY-MM-DD' });
 
     const points = await locationStore.getRoute(userId, date);
     res.status(200).json({ success: true, userId, date, points });
