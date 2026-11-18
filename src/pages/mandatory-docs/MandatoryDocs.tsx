@@ -5,6 +5,7 @@ import constants from '../../constants';
 import Toast from '../../components/ui/toast/Toast';
 import PageMeta from '../../components/common/PageMeta';
 import { ChevronLeft, ChevronRight, Upload, X, Plus, Trash2 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 interface AttendanceRecord {
   date: string;
@@ -265,29 +266,117 @@ const MandatoryDocs: React.FC = () => {
   };
 
   // --- Camera Logic ---
+  const saveCapturedImage = (
+    target: { date: string; type: DocType; index?: number },
+    imageData: string
+  ) => {
+    const { date, type, index } = target;
+    setDocsByDay(prev => {
+      const day = { ...(prev[date] || { date, bankSlips: [] }) };
+      if (type === 'stockRegister') day.stockRegister = imageData;
+      if (type === 'cashBook') day.cashBook = imageData;
+      if (type === 'bankSlip') {
+        const slips = [...(day.bankSlips || [])];
+        if (typeof index === 'number' && index >= 0) {
+          slips[index] = imageData;
+        } else {
+          slips.push(imageData);
+        }
+        day.bankSlips = slips;
+      }
+      return { ...prev, [date]: day };
+    });
+  };
+
+  // In the Android/iOS app, live camera preview via getUserMedia inside the
+  // WebView is unreliable (often renders a black frame). Use the phone's own
+  // camera app instead through a file input with `capture`.
+  const nativeFileInputRef = useRef<HTMLInputElement>(null);
+  const nativeCaptureTarget = useRef<{ date: string; type: DocType; index?: number } | null>(null);
+
+  const handleNativeCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-capturing the same slot
+    const target = nativeCaptureTarget.current;
+    nativeCaptureTarget.current = null;
+    if (!file || !target) return;
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Could not read photo'));
+        img.src = url;
+      });
+      // Re-encode through a canvas so EXIF rotation is baked into the pixels.
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas unavailable');
+      ctx.drawImage(img, 0, 0);
+      saveCapturedImage(target, canvas.toDataURL('image/jpeg', 1.0));
+    } catch {
+      setToast({ message: 'Could not read the captured photo. Please try again.', type: 'error' });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const waitForVideoFrames = (video: HTMLVideoElement) =>
+    new Promise<void>((resolve, reject) => {
+      const started = Date.now();
+      const check = () => {
+        if (video.videoWidth > 0 && video.videoHeight > 0) return resolve();
+        if (Date.now() - started > 5000) return reject(new Error('No video frames'));
+        setTimeout(check, 100);
+      };
+      check();
+    });
+
   const startCamera = async (date: string, type: DocType, index?: number) => {
+    if (Capacitor.isNativePlatform() && nativeFileInputRef.current) {
+      nativeCaptureTarget.current = { date, type, index };
+      nativeFileInputRef.current.click();
+      return;
+    }
+
     setActiveCapture({ date, type, index });
     setIsCapturing(true);
     setIsVideoReady(false);
+    let mediaStream: MediaStream | null = null;
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 4096 },
-          height: { ideal: 3072 }
-        },
-        audio: false
-      });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        await videoRef.current.play();
-        setIsVideoReady(true);
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 4096 },
+            height: { ideal: 3072 }
+          },
+          audio: false
+        });
+      } catch {
+        // Some devices reject very high resolution constraints — retry with defaults.
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
       }
-    } catch (e) {
+      setStream(mediaStream);
+      const video = videoRef.current;
+      if (!video) throw new Error('Video element missing');
+      video.muted = true;
+      video.srcObject = mediaStream;
+      await video.play();
+      await waitForVideoFrames(video);
+      setIsVideoReady(true);
+    } catch {
+      mediaStream?.getTracks().forEach(t => t.stop());
+      setStream(null);
       setToast({ message: 'Camera access failed. Please allow camera permissions.', type: 'error' });
       setIsCapturing(false);
       setIsVideoReady(false);
+      setActiveCapture(null);
     }
   };
 
@@ -313,23 +402,7 @@ const MandatoryDocs: React.FC = () => {
     ctx.drawImage(video, 0, 0);
     // Use maximum quality (1.0) so text on documents is not degraded by JPEG compression
     const imageData = canvas.toDataURL('image/jpeg', 1.0);
-    const { date, type, index } = activeCapture;
-    
-    setDocsByDay(prev => {
-      const day = { ...(prev[date] || { date, bankSlips: [] }) };
-      if (type === 'stockRegister') day.stockRegister = imageData;
-      if (type === 'cashBook') day.cashBook = imageData;
-      if (type === 'bankSlip') {
-        const slips = [...(day.bankSlips || [])];
-        if (typeof index === 'number' && index >= 0) {
-          slips[index] = imageData;
-        } else {
-          slips.push(imageData);
-        }
-        day.bankSlips = slips;
-      }
-      return { ...prev, [date]: day };
-    });
+    saveCapturedImage(activeCapture, imageData);
     stopCamera();
   };
 
@@ -622,6 +695,16 @@ const MandatoryDocs: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Native camera (APK): opens the phone's camera app */}
+      <input
+        ref={nativeFileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleNativeCapture}
+      />
 
       {/* Camera Modal */}
       {isCapturing && (
