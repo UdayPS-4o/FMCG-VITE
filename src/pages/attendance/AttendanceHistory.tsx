@@ -7,14 +7,15 @@ import constants from '../../constants';
 import Toast from '../../components/ui/toast/Toast';
 import { PulseLoadAnimation } from '../../components/ui/loading';
 
-// ─── Attendance Calendar (reused in salary slip) ─────────────────────────────
+// ─── Attendance Calendar ─────────────────────────────────────────────────────
 interface CalendarProps {
   month: string; // 'YYYY-MM'
   records: AttendanceRecord[];
   weeklyOffDays: number[]; // 0=Sun … 6=Sat
+  onDayClick?: (dateStr: string, dayRecords: AttendanceRecord[]) => void;
 }
 
-const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, weeklyOffDays }) => {
+const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, weeklyOffDays, onDayClick }) => {
   const [year, mon] = month.split('-').map(Number);
   const daysInMonth = new Date(year, mon, 0).getDate();
   const startDow   = new Date(year, mon - 1, 1).getDay();
@@ -22,18 +23,18 @@ const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, wee
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
-  // Build record map (prefer 'present' over 'half_day' for the same date)
+  // Group records by date; the "primary" one prefers 'present' over 'half_day'
+  const recordsByDate: Record<string, AttendanceRecord[]> = {};
   const recordMap: Record<string, AttendanceRecord> = {};
   records.forEach(r => {
     const d = r.date.substring(0, 10);
+    if (!recordsByDate[d]) recordsByDate[d] = [];
+    recordsByDate[d].push(r);
     if (!recordMap[d] || r.status === 'present') recordMap[d] = r;
   });
 
-  const getDayStyle = (day: number) => {
-    const dateStr = `${year}-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const dow    = new Date(year, mon - 1, day).getDay();
+  const getDayStyle = (dateStr: string, dow: number) => {
     const record = recordMap[dateStr];
-
     if (weeklyOffDays.includes(dow))
       return { bg: 'bg-orange-400', text: 'text-white', label: 'Weekly Off' };
     if (record) {
@@ -53,39 +54,54 @@ const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, wee
                        'July','August','September','October','November','December'];
 
   return (
-    <div className="mt-4 pt-4 border-t border-blue-200 dark:border-gray-600">
-      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-        📅 Attendance Calendar — {monthNames[mon - 1]} {year}
-      </h4>
+    <div className="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
+        <span className="font-semibold text-gray-900 dark:text-white">
+          {monthNames[mon - 1]} {year}
+        </span>
+        {onDayClick && (
+          <span className="text-[11px] text-gray-500 dark:text-gray-400">Tap a date to view selfie</span>
+        )}
+      </div>
 
       {/* Day headers */}
       <div className="grid grid-cols-7 mb-1">
         {dayNames.map(d => (
-          <div key={d} className="text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400 py-0.5">
+          <div key={d} className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 py-0.5">
             {d}
           </div>
         ))}
       </div>
 
       {/* Day cells */}
-      <div className="grid grid-cols-7 gap-[3px]">
+      <div className="grid grid-cols-7 gap-1">
         {cells.map((day, idx) => {
           if (day === null) return <div key={`pad-${idx}`} />;
-          const style   = getDayStyle(day);
           const dateStr = `${year}-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+          const dow     = new Date(year, mon - 1, day).getDay();
+          const style   = getDayStyle(dateStr, dow);
           const isToday = dateStr === todayStr;
-          return (
-            <div
+          const dayRecords = recordsByDate[dateStr] || [];
+          const clickable = !!onDayClick && dayRecords.length > 0;
+          const base = `
+            flex items-center justify-center rounded-md h-9 sm:h-10
+            text-sm font-medium
+            ${style.bg} ${style.text}
+            ${isToday ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-800' : ''}
+            transition-transform hover:scale-110
+          `;
+          return clickable ? (
+            <button
               key={day}
-              title={style.label}
-              className={`
-                flex items-center justify-center rounded-md h-7
-                text-[11px] font-medium
-                ${style.bg} ${style.text}
-                ${isToday ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-800' : ''}
-                transition-transform hover:scale-110 cursor-default
-              `}
+              type="button"
+              title={`${style.label} — view selfie`}
+              onClick={() => onDayClick!(dateStr, dayRecords)}
+              className={`${base} cursor-pointer underline underline-offset-2`}
             >
+              {day}
+            </button>
+          ) : (
+            <div key={day} title={style.label} className={`${base} cursor-default`}>
               {day}
             </div>
           );
@@ -93,7 +109,7 @@ const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, wee
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2 border-t border-blue-100 dark:border-gray-700">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
         {[
           { color: 'bg-green-500',  label: 'Present'    },
           { color: 'bg-red-400',    label: 'Absent'     },
@@ -103,7 +119,7 @@ const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, wee
         ].map(item => (
           <div key={item.label} className="flex items-center gap-1">
             <span className={`w-2.5 h-2.5 rounded-sm inline-block ${item.color}`} />
-            <span className="text-[10px] text-gray-600 dark:text-gray-400">{item.label}</span>
+            <span className="text-[11px] text-gray-600 dark:text-gray-400">{item.label}</span>
           </div>
         ))}
       </div>
@@ -180,7 +196,7 @@ const AttendanceHistory: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<{ date: string; records: AttendanceRecord[] } | null>(null);
   const [visibleSalarySlip, setVisibleSalarySlip] = useState<VisibleSalarySlip | null>(null);
 
   useEffect(() => {
@@ -314,12 +330,10 @@ const AttendanceHistory: React.FC = () => {
     return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
   };
 
-  const openImageModal = (imageData: string) => {
-    setSelectedImage(imageData);
-  };
-
-  const closeImageModal = () => {
-    setSelectedImage(null);
+  const statusBadge = (status: AttendanceRecord['status']) => {
+    if (status === 'present')  return { cls: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300', label: '✅ Present' };
+    if (status === 'half_day') return { cls: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300',   label: '🌓 Half Day' };
+    return { cls: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300', label: '❌ Absent' };
   };
 
   const goBackToAttendance = () => {
@@ -458,13 +472,6 @@ const AttendanceHistory: React.FC = () => {
                       </span>
                     </div>
                   </div>
-
-                  {/* Attendance Calendar */}
-                  <AttendanceSalaryCalendar
-                    month={visibleSalarySlip.month}
-                    records={attendanceRecords}
-                    weeklyOffDays={visibleSalarySlip.weeklyOffDays}
-                  />
                 </div>
               )}
             </div>
@@ -499,53 +506,12 @@ const AttendanceHistory: React.FC = () => {
                     </p>
                   </div>
                   
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                      <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-                        <tr>
-                          <th scope="col" className="px-6 py-3">Date</th>
-                          <th scope="col" className="px-6 py-3">Time</th>
-                          <th scope="col" className="px-6 py-3">Status</th>
-                          <th scope="col" className="px-6 py-3">Location</th>
-                          <th scope="col" className="px-6 py-3">Selfie</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attendanceRecords.map((record) => (
-                          <tr key={record.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                              {formatDate(record.date)}
-                            </td>
-                            <td className="px-6 py-4">
-                              {record.time}
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                record.status === 'present' 
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-                              }`}>
-                                {record.status === 'present' ? '✅ Present' : '❌ Absent'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="text-xs font-mono">
-                                {getLocationString(record.location)}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <button
-                                onClick={() => openImageModal(record.selfieData)}
-                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-                              >
-                                📷 View
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <AttendanceSalaryCalendar
+                    month={`${selectedYear}-${selectedMonth}`}
+                    records={attendanceRecords}
+                    weeklyOffDays={visibleSalarySlip?.weeklyOffDays || []}
+                    onDayClick={(date, recs) => setSelectedDay({ date, records: recs })}
+                  />
                 </>
               )}
             </>
@@ -553,27 +519,62 @@ const AttendanceHistory: React.FC = () => {
         </div>
       </div>
 
-      {/* Image Modal */}
-      {selectedImage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl max-h-full overflow-auto">
+      {/* Day Selfie Modal */}
+      {selectedDay && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[99999] p-4"
+          onClick={() => setSelectedDay(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-lg max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Attendance Selfie
+                  {formatDate(selectedDay.date + 'T00:00:00')}
                 </h3>
                 <button
-                  onClick={closeImageModal}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  onClick={() => setSelectedDay(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none"
                 >
                   ✕
                 </button>
               </div>
-              <img
-                src={selectedImage}
-                alt="Attendance selfie"
-                className="w-full h-auto rounded-lg"
-              />
+              <div className="space-y-5">
+                {selectedDay.records.map((record) => {
+                  const badge = statusBadge(record.status);
+                  return (
+                    <div key={record.id}>
+                      <div className="flex flex-wrap items-center gap-2 mb-2 text-sm text-gray-700 dark:text-gray-300">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.cls}`}>
+                          {badge.label}
+                        </span>
+                        <span>🕒 {record.time}</span>
+                        {record.location && (
+                          <a
+                            href={`https://www.google.com/maps?q=${record.location.latitude},${record.location.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-mono text-blue-600 hover:underline dark:text-blue-400"
+                          >
+                            📍 {getLocationString(record.location)}
+                          </a>
+                        )}
+                      </div>
+                      {record.selfieData ? (
+                        <img
+                          src={record.selfieData}
+                          alt="Attendance selfie"
+                          className="w-full h-auto rounded-lg"
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">No selfie available.</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
