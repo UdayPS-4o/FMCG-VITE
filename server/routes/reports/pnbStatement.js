@@ -99,7 +99,7 @@ async function cleancsv(filepath, filename) {
     }
 }
 
-async function runDownload() {
+async function runDownload(onStep = () => {}) {
     let browser;
     try {
         console.log('Reading config from:', CONFIG_PATH);
@@ -141,6 +141,7 @@ async function runDownload() {
             console.log(`Using configured Chrome path: ${executablePath}`);
         }
 
+        onStep('Opening browser');
         console.log('Launching browser...');
         const launchOptions = {
             headless: false, 
@@ -161,6 +162,7 @@ async function runDownload() {
         });
 
         // Page logic from app.js
+        onStep('Logging in to PNB');
         console.log('Navigating to login page...');
         await page.goto(config.website);
 
@@ -181,6 +183,7 @@ async function runDownload() {
         // CAPTCHA
         const captchaImageSrc = await page.$eval('#dynamicImage', img => img.src);
         const base64Data = captchaImageSrc.split(',')[1];
+        onStep('Solving captcha');
         console.log("Solving Captcha...");
         
         const { data: { text } } = await Tesseract.recognize(`data:image/png;base64,${base64Data}`, 'eng');
@@ -246,6 +249,7 @@ async function runDownload() {
             document.querySelector('#TransactionHistoryFG\\.FROM_TXN_DATE').value = value;
         }, toDateValue);
 
+        onStep('Fetching statement');
         console.log('Searching statement...');
         await page.click("#SEARCH");
 
@@ -260,6 +264,7 @@ async function runDownload() {
         await page.click("#okButton");
 
         // Wait for download to finish
+        onStep('Downloading file');
         console.log('Waiting for file...');
         let newFile = null;
         let retries = 0;
@@ -276,6 +281,7 @@ async function runDownload() {
 
         if (newFile) {
             console.log('File downloaded:', newFile);
+            onStep('Processing file');
             await cleancsv(path.join(rawDownloadPath, newFile), newFile);
             return true;
         } else {
@@ -297,8 +303,16 @@ const WHATSAPP_DELAY_MS = 4000; // gap between WhatsApp messages to avoid spam d
 const SMS_DELAY_MS = 1000;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// txnNo -> { whatsapp, sms, mobile, updatedAt }  (pending | sent | failed | no-mobile | skipped)
+const notifyStatus = new Map();
+function setNotify(txnNo, patch) {
+    notifyStatus.set(txnNo, { ...(notifyStatus.get(txnNo) || {}), ...patch, updatedAt: Date.now() });
+    if (notifyStatus.size > 2000) notifyStatus.delete(notifyStatus.keys().next().value);
+}
+
 async function sendBankReceiptConfirmations(receipts) {
     if (!receipts.length) return;
+    receipts.forEach(r => setNotify(r.txnNo, { whatsapp: 'pending', sms: 'pending' }));
 
     let cmplData = [];
     try {
@@ -306,6 +320,7 @@ async function sendBankReceiptConfirmations(receipts) {
         cmplData = JSON.parse(await fs.readFile(cmplPath, 'utf8'));
     } catch (e) {
         console.error('[Bank Receipt Notify] Could not read CMPL.json, skipping confirmations:', e.message);
+        receipts.forEach(r => setNotify(r.txnNo, { whatsapp: 'failed', sms: 'failed', error: 'Party list unavailable' }));
         return;
     }
 
@@ -315,12 +330,14 @@ async function sendBankReceiptConfirmations(receipts) {
         const mobileNumber = String(party?.C_PHONE || party?.C_MOBILE || '').trim();
         if (!mobileNumber) {
             console.log(`[Bank Receipt Notify] No mobile for party ${r.partyCode} (txn ${r.txnNo}). Skipping.`);
+            setNotify(r.txnNo, { whatsapp: 'no-mobile', sms: 'no-mobile' });
             continue;
         }
 
         const rawMobile = mobileNumber.replace(/\D/g, '');
         const tenDigit = (rawMobile.startsWith('91') && rawMobile.length === 12) ? rawMobile.slice(2) : rawMobile;
         const recipientNumber = `+91${tenDigit}`;
+        setNotify(r.txnNo, { mobile: tenDigit });
         const m = moment(r.date, ['DD-MM-YYYY', 'DD/MM/YYYY', 'DD-MMM-YYYY', 'YYYY-MM-DD']);
         const formattedDate = m.isValid() ? m.format('DD-MM-YYYY') : String(r.date || '');
         const isCheque = /CHQ|CHEQUE|CLG|CLEARING/i.test(r.narration || '');
@@ -341,8 +358,10 @@ async function sendBankReceiptConfirmations(receipts) {
                 components: { body: { params: [r.amount.toFixed(2), ref, formattedDate] } },
             }, { headers: { 'Content-Type': 'application/json' }, timeout: 30000 });
             console.log(`[Bank Receipt Notify] WhatsApp sent for txn ${r.txnNo} to ${recipientNumber} (status ${waRes.status})`);
+            setNotify(r.txnNo, { whatsapp: 'sent' });
         } catch (err) {
             console.error(`[Bank Receipt Notify] WhatsApp failed for txn ${r.txnNo}: ${err.message}`);
+            setNotify(r.txnNo, { whatsapp: 'failed' });
         }
 
         // SMS — same DLT template text as Cash Receipts
@@ -362,433 +381,311 @@ async function sendBankReceiptConfirmations(receipts) {
             });
             if (smsRes.data && smsRes.data.statusCode == 200) {
                 console.log(`[Bank Receipt Notify] SMS sent for txn ${r.txnNo}`);
+                setNotify(r.txnNo, { sms: 'sent' });
             } else {
                 console.warn(`[Bank Receipt Notify] SMS failed for txn ${r.txnNo}: ${JSON.stringify(smsRes.data)}`);
+                setNotify(r.txnNo, { sms: 'failed' });
             }
         } catch (err) {
             console.error(`[Bank Receipt Notify] SMS error for txn ${r.txnNo}: ${err.message}`);
+            setNotify(r.txnNo, { sms: 'failed' });
         }
     }
 }
 
 
+
+
 // --- Routes ---
 
-// Trigger Download
-router.post('/pnb-statement/download', async (req, res) => {
-    // Instead of calling external service, we run it here.
-    // We send immediate response because it takes time, OR we wait?
-    // User interface says "Download started...". 
-    // If we run in background, user might not know if it failed.
-    // But keeping connection open for 30s+ might timeout.
-    // Let's run async and log.
-    
-    console.log('Received download request');
-    
-    // Fire and forget (or rather, fire and log)
-    runDownload()
-        .then(() => console.log('Download process completed successfully'))
-        .catch(err => console.error('Download process failed:', err));
+const {
+    PNB_BANK_CODE, scanCashDbf, invalidateCashCache, loadStore, saveStore, parseStatementCsv,
+    parseNarration, txnKeys, buildPartyIndex, buildBillIndex, matchParty, voucherTypeFor,
+} = require('./pnbHelpers');
 
-    res.json({ message: 'Download process initiated.', status: 'started' });
+const jsonDir = () => path.join(process.env.DBF_FOLDER_PATH, 'data', 'json');
+
+async function readJsonSafe(file, fallback = []) {
+    try {
+        return JSON.parse(await fs.readFile(path.join(jsonDir(), file), 'utf8'));
+    } catch (e) {
+        console.warn(`[PNB] Could not read ${file}: ${e.message}`);
+        return fallback;
+    }
+}
+
+async function findLatestStatementFile() {
+    let latest = null;
+    const consider = async (filePath) => {
+        const st = await fs.stat(filePath);
+        if (!latest || st.mtimeMs > latest.mtimeMs) latest = { path: filePath, mtimeMs: st.mtimeMs };
+    };
+    if (fsSync.existsSync(EDITED_DIR)) {
+        for (const file of await fs.readdir(EDITED_DIR)) {
+            if (file.startsWith('statement-') && file.endsWith('.csv')) await consider(path.join(EDITED_DIR, file));
+        }
+    }
+    const pnbCr = path.join(DOWNLOADS_DIR, 'pnbcr.csv');
+    if (fsSync.existsSync(pnbCr)) await consider(pnbCr);
+    return latest;
+}
+
+// ---- Download job (runs in background, polled by the page) ----
+
+const downloadJob = { status: 'idle', step: '', message: '', attempt: 0, startedAt: null, finishedAt: null };
+const MAX_DOWNLOAD_ATTEMPTS = 3; // captcha OCR is not always right first time
+
+async function runDownloadJob() {
+    Object.assign(downloadJob, { status: 'running', step: 'Starting', message: '', attempt: 0, startedAt: Date.now(), finishedAt: null });
+    for (let attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt++) {
+        downloadJob.attempt = attempt;
+        try {
+            await runDownload(step => { downloadJob.step = step; });
+            Object.assign(downloadJob, { status: 'done', step: 'Done', message: 'Statement downloaded', finishedAt: Date.now() });
+            return;
+        } catch (err) {
+            const retryable = /Login failed|captcha/i.test(err.message || '');
+            console.error(`[PNB] Download attempt ${attempt} failed:`, err.message);
+            if (!retryable || attempt === MAX_DOWNLOAD_ATTEMPTS) {
+                Object.assign(downloadJob, { status: 'failed', message: err.message || 'Download failed', finishedAt: Date.now() });
+                return;
+            }
+            downloadJob.step = `Retrying (captcha) ${attempt + 1}/${MAX_DOWNLOAD_ATTEMPTS}`;
+        }
+    }
+}
+
+router.post('/pnb-statement/download', (req, res) => {
+    if (downloadJob.status === 'running') {
+        return res.status(409).json({ message: 'A download is already running.', job: downloadJob });
+    }
+    runDownloadJob().catch(err => console.error('[PNB] Download job crashed:', err));
+    res.json({ message: 'Download started.', job: downloadJob });
 });
 
-// Get Pending Transactions
+router.get('/pnb-statement/download/status', (req, res) => {
+    res.json(downloadJob);
+});
+
+// ---- Pending transactions ----
+
 router.get('/pnb-statement/pending', async (req, res) => {
     try {
-        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
-        if (!DBF_FOLDER_PATH) {
-            return res.status(500).json({ message: 'DBF_FOLDER_PATH not set' });
-        }
+        if (!process.env.DBF_FOLDER_PATH) return res.status(500).json({ message: 'DBF_FOLDER_PATH not set' });
 
-        console.log('Searching for files in:', EDITED_DIR, 'and', DOWNLOADS_DIR);
+        const file = await findLatestStatementFile();
+        if (!file) return res.status(404).json({ message: 'No statement file found. Please download one first.' });
 
-        let latestTime = 0;
-        let latestFile = null;
+        const { meta, rows } = parseStatementCsv(await fs.readFile(file.path, 'utf8'));
 
-        if (fsSync.existsSync(EDITED_DIR)) {
-            const files = await fs.readdir(EDITED_DIR);
-            console.log('Files in EDITED_DIR:', files);
-            for (const file of files) {
-                if (file.endsWith('.csv') && file.startsWith('statement-')) {
-                    const filePath = path.join(EDITED_DIR, file);
-                    const stats = await fs.stat(filePath);
-                    if (stats.mtimeMs > latestTime) {
-                        latestTime = stats.mtimeMs;
-                        latestFile = filePath;
-                    }
-                }
-            }
-        }
-        
-        // Also check pnbcr.csv in downloads
-        if (fsSync.existsSync(path.join(DOWNLOADS_DIR, 'pnbcr.csv'))) {
-             const pnbPath = path.join(DOWNLOADS_DIR, 'pnbcr.csv');
-             console.log('Found pnbcr.csv at:', pnbPath);
-             const stats = await fs.stat(pnbPath);
-             if (stats.mtimeMs > latestTime) {
-                 latestFile = pnbPath;
-             }
-        }
-
-        if (!latestFile) {
-            console.error('No statement file found in search paths.');
-            return res.status(404).json({ message: 'No statement file found. Please download one first.' });
-        }
-
-        console.log('Reading statement file:', latestFile);
-        let csvContent = await fs.readFile(latestFile, 'utf8');
-        
-        // Clean content before parsing (remove top metadata)
-        // Check if 'Txn No.' exists
-        if (csvContent.includes('Txn No.')) {
-             // Split and take the part starting from 'Txn No.'
-             // But wait, 'Txn No.' is a header.
-             // We want the line containing 'Txn No.' to be the first line.
-             const parts = csvContent.split('Txn No.');
-             if (parts.length > 1) {
-                 // Reconstruct: "Txn No." + rest
-                 // Note: split consumes the separator.
-                 // We need to find the line index.
-                 const lines = csvContent.split(/\r?\n/);
-                 const headerIndex = lines.findIndex(line => line.includes('Txn No.'));
-                 if (headerIndex !== -1) {
-                     console.log(`Found 'Txn No.' at line index: ${headerIndex}`);
-                     csvContent = lines.slice(headerIndex).join('\n');
-                 }
-             }
-        } else {
-            console.warn("'Txn No.' header not found in file content. Parsing might fail.");
-        }
-
-        // Remove bottom metadata if present
-        if (csvContent.includes('Unless constituent notifies the bank')) {
-             const parts = csvContent.split('Unless constituent notifies the bank');
-             csvContent = parts[0];
-        }
-        
-        console.log('CSV Content Start (first 200 chars):', csvContent.substring(0, 200));
-
-        // Parse CSV
-        const parsedCsv = Papa.parse(csvContent, {
-            header: true,
-            skipEmptyLines: true,
-            dynamicTyping: true 
-        });
-
-        const csvData = parsedCsv.data;
-        console.log(`Parsed ${csvData.length} rows from CSV.`);
-        if (csvData.length > 0) {
-            console.log('First row sample:', JSON.stringify(csvData[0]));
-            console.log('Row keys:', Object.keys(csvData[0]));
-        }
-
-        // 2. Read CASH.DBF and Filter (Chunked to avoid OOM)
-        const existingTxns = new Set();
-        let realDbfPath = path.join(DBF_FOLDER_PATH, 'CASH.DBF');
-        // Try common paths
-        if (!fsSync.existsSync(realDbfPath)) realDbfPath = path.join(DBF_FOLDER_PATH, 'data', 'CASH.DBF');
-        if (!fsSync.existsSync(realDbfPath)) realDbfPath = path.join(DBF_FOLDER_PATH, 'DATA', 'CASH.DBF');
-
-        if (fsSync.existsSync(realDbfPath)) {
-            console.log('Reading CASH.DBF from:', realDbfPath);
-            try {
-                const dbf = await DBFFile.open(realDbfPath);
-                const CHUNK_SIZE = 2000; // Chunk size as requested (>= 1000)
-                let offset = 0;
-                let records = [];
-                
-                do {
-                    records = await dbf.readRecords(false, CHUNK_SIZE, offset);
-                    for (const row of records) {
-                        // Check BANK field regardless of VR type
-                        if (row.BANK && String(row.BANK).trim().length > 0) {
-                            existingTxns.add(String(row.BANK).trim().toUpperCase());
-                        }
-                    }
-                    offset += records.length;
-                    if (offset % 50000 === 0) {
-                        console.log(`Processed ${offset} records...`);
-                        // Force minor GC if possible? No, just rely on scope.
-                    }
-                } while (records.length > 0);
-                
-                // dbf.close() is not explicitly available in my previous read of dbffile.js unless I added it?
-                // Wait, dbffile.js has close() method?
-                // Let's check dbffile.js content again.
-                // Yes: async close() { if (this.fileHandle) ... }
-                await dbf.close();
-                console.log(`Found ${existingTxns.size} existing transactions in DBF.`);
-            } catch (err) {
-                console.error('Error reading CASH.DBF:', err);
-            }
-        } else {
-            console.warn('CASH.DBF not found, checking CASH.json as fallback...');
-            const cashPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CASH.json');
-            try {
-                const cashData = JSON.parse(await fs.readFile(cashPath, 'utf8'));
-                console.log(`Read ${cashData.length} records from CASH.json`);
-                cashData.forEach(row => {
-                    if (['BP', 'BR', 'CP'].includes(row.VR) && row.BANK) {
-                        existingTxns.add(String(row.BANK).trim());
-                    }
-                });
-            } catch (e) {
-                console.warn('Could not read CASH.json, assuming empty', e);
-            }
-        }
-        console.log(`Total existing transactions loaded: ${existingTxns.size}`);
-
-        // 3. Read Helper Files
-        const cmplPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'CMPL.json');
-        const bankDtlPath = path.join(DBF_FOLDER_PATH, 'data', 'json', 'BANKDTL.json');
-        
-        const cmplData = JSON.parse(await fs.readFile(cmplPath, 'utf8'));
-        let bankDtlData = [];
+        // Everything already in CASH.DBF (by bank txn no.) is not pending.
+        // If the scan fails we must NOT show everything as pending; report the error instead.
+        let cash;
         try {
-            bankDtlData = JSON.parse(await fs.readFile(bankDtlPath, 'utf8'));
-            console.log(`Loaded ${bankDtlData.length} entries from BANKDTL.json`);
-        } catch(e) { console.warn('No BANKDTL.json found at:', bankDtlPath); }
+            cash = await scanCashDbf();
+        } catch (err) {
+            console.error('[PNB] CASH.DBF scan failed:', err);
+            return res.status(500).json({ message: `Could not read CASH.DBF: ${err.message}` });
+        }
 
-        const phoneToCode = new Map();
-        cmplData.forEach(party => {
-            if (party.C_MOBILE) phoneToCode.set(String(party.C_MOBILE).trim(), party.C_CODE);
-            if (party.C_PHONE) phoneToCode.set(String(party.C_PHONE).trim(), party.C_CODE);
-        });
+        const [cmplData, bankDtlData, billData, store] = await Promise.all([
+            readJsonSafe('CMPL.json'), readJsonSafe('BANKDTL.json'), readJsonSafe('BILL.json'), loadStore(),
+        ]);
+        const ctx = {
+            partyIndex: buildPartyIndex(cmplData, bankDtlData),
+            billIndex: buildBillIndex(billData),
+            history: cash.history,
+            store,
+        };
 
+        let alreadyEntered = 0;
         const pendingTransactions = [];
-
-        // 4. Process CSV Rows
-        csvData.forEach((row, index) => {
-            // Cleaned CSV keys: 'Txn No.', 'Txn Date', 'Description', 'Dr Amount', 'Cr Amount'
-            // Papa parse might produce keys with quotes if not careful, but dynamicTyping handles values.
-            
-            const txnNo = String(row['Txn No.'] || row['Txn No'] || '').trim();
-            if (!txnNo) return;
-
-            if (existingTxns.has(txnNo.toUpperCase())) {
-                return; 
-            }
-
-            const narration = (row['Description'] || row['Narration'] || '').toString();
-            const drAmount = parseFloat(row['Dr Amount'] || 0);
-            const crAmount = parseFloat(row['Cr Amount'] || 0);
-            const date = row['Txn Date'] || row['Date']; 
-
-            let suggestedPartyCode = '';
-            let suggestedPartyName = '';
-            let matchReason = '';
-
-            // Match Logic 1: Phone
-            const numbersInNarration = narration.match(/\d{10}/g);
-            if (numbersInNarration) {
-                for (const num of numbersInNarration) {
-                    if (phoneToCode.has(num)) {
-                        suggestedPartyCode = phoneToCode.get(num);
-                        matchReason = 'Mobile Match';
-                        break;
-                    }
-                }
-            }
-
-            // Match Logic 2: BANKDTL
-            if (!suggestedPartyCode && bankDtlData.length > 0) {
-                // We check if BANKDTL.NARETAION is contained in current narration
-                const match = bankDtlData.find(dtl => {
-                     // Check if dtl.NARETAION is a valid string and matches
-                     const searchStr = (dtl.NARETAION || '').trim();
-                     return searchStr && narration.toUpperCase().includes(searchStr.toUpperCase());
-                });
-                if (match) {
-                    suggestedPartyCode = match.C_CODE;
-                    matchReason = 'Bank DTL Match';
-                }
-            }
-
-            if (suggestedPartyCode) {
-                const party = cmplData.find(p => p.C_CODE === suggestedPartyCode);
-                if (party) suggestedPartyName = party.C_NAME;
-            }
-
+        rows.forEach((row, index) => {
+            if (cash.bankSet.has(row.txnNo.toUpperCase())) { alreadyEntered++; return; }
+            const parsed = parseNarration(row.narration);
             pendingTransactions.push({
                 id: index,
-                txnNo,
-                date,
-                narration,
-                drAmount,
-                crAmount,
-                partyCode: suggestedPartyCode,
-                partyName: suggestedPartyName,
-                matchReason
+                ...row,
+                channel: parsed.channel,
+                senderName: parsed.name,
+                senderMobile: parsed.mobiles[0] || '',
+                vpa: parsed.vpa,
+                voucherType: voucherTypeFor(row),
+                ignored: Boolean(store.ignored[row.txnNo]),
+                ...matchParty(row, parsed, ctx),
             });
         });
 
         res.json({
             pendingTransactions,
-            parties: cmplData.map(p => ({ value: p.C_CODE, label: p.C_NAME }))
+            parties: cmplData.filter(p => p.C_CODE && !p._deleted)
+                .map(p => ({ value: p.C_CODE, label: `${p.C_NAME} (${p.C_CODE})` })),
+            summary: {
+                ...meta,
+                fileName: path.basename(file.path),
+                downloadedAt: file.mtimeMs,
+                statementRows: rows.length,
+                alreadyEntered,
+                cashScannedAt: cash.scannedAt,
+            },
         });
-
     } catch (error) {
         console.error('Error getting pending transactions:', error);
-        res.status(500).json({ message: 'Failed to get pending transactions', error: error.message });
+        res.status(500).json({ message: error.message || 'Failed to get pending transactions' });
     }
 });
 
-// Save Transactions
-router.post('/pnb-statement/save', async (req, res) => {
+// ---- Ignore / un-ignore (e.g. entries posted manually or not meant for the books) ----
+
+router.post('/pnb-statement/ignore', async (req, res) => {
     try {
-        const { transactions } = req.body;
-        if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
+        const { txnNos, ignore = true } = req.body || {};
+        if (!Array.isArray(txnNos) || !txnNos.length) return res.status(400).json({ message: 'txnNos required' });
+        const store = await loadStore();
+        for (const t of txnNos) {
+            if (ignore) store.ignored[t] = { at: new Date().toISOString() };
+            else delete store.ignored[t];
+        }
+        await saveStore(store);
+        res.json({ message: ignore ? `Ignored ${txnNos.length} transaction(s)` : `Restored ${txnNos.length} transaction(s)` });
+    } catch (error) {
+        console.error('[PNB] ignore failed:', error);
+        res.status(500).json({ message: 'Failed to update ignore list' });
+    }
+});
+
+// ---- Save selected transactions ----
+
+let saving = false;
+
+router.post('/pnb-statement/save', async (req, res) => {
+    if (saving) return res.status(409).json({ message: 'A save is already in progress. Please wait.' });
+    saving = true;
+    let dbf;
+    try {
+        const { transactions } = req.body || {};
+        if (!Array.isArray(transactions) || transactions.length === 0) {
             return res.status(400).json({ message: 'No transactions to save' });
         }
 
-        const DBF_FOLDER_PATH = process.env.DBF_FOLDER_PATH;
-        
-        let realDbfPath = path.join(DBF_FOLDER_PATH, 'CASH.DBF');
-        if (!fsSync.existsSync(realDbfPath)) {
-            realDbfPath = path.join(DBF_FOLDER_PATH, 'DATA', 'CASH.DBF');
-        }
-        if (!fsSync.existsSync(realDbfPath)) {
-             realDbfPath = path.join(DBF_FOLDER_PATH, 'CASH.DBF');
-        }
+        const cmplData = await readJsonSafe('CMPL.json');
+        const validCodes = new Set(cmplData.map(p => p.C_CODE));
 
-        console.log('Opening DBF:', realDbfPath);
-        const dbf = await DBFFile.open(realDbfPath);
-        
-        // Find max VR number by scanning chunks to avoid OOM
-        let maxBP = 0;
-        let maxBR = 0;
-        let maxCP = 0;
-        
-        const CHUNK_SIZE = 5000;
-        let offset = 0;
-        let chunkRecords = [];
-        
-        console.log('Scanning DBF for max VR numbers...');
-        do {
-            chunkRecords = await dbf.readRecords(false, CHUNK_SIZE, offset);
-            for (const r of chunkRecords) {
-                 if (!r.VR) continue;
-                 const vrStr = r.VR.trim();
-                 
-                 // Check format "XX-YYYYYY"
-                 if (vrStr.includes('-')) {
-                     const parts = vrStr.split('-');
-                     const type = parts[0];
-                     const numPart = parts[1];
-                     const num = parseInt(numPart, 10);
-                     
-                     if (!isNaN(num)) {
-                         if (type === 'BP' && num > maxBP) maxBP = num;
-                         if (type === 'BR' && num > maxBR) maxBR = num;
-                         if (type === 'CP' && num > maxCP) maxCP = num;
-                     }
-                 }
-            }
-            offset += chunkRecords.length;
-        } while (chunkRecords.length > 0);
-        
-        console.log(`Max VRs found: BP=${maxBP}, BR=${maxBR}, CP=${maxCP}`);
-
-        let nextBP = maxBP + 1;
-        let nextBR = maxBR + 1;
-        let nextCP = maxCP + 1;
+        // Fresh scan right before writing: catches entries made meanwhile and gives correct VR numbers
+        const cash = await scanCashDbf({ force: true });
+        const next = { BP: cash.maxVr.BP + 1, BR: cash.maxVr.BR + 1, CP: cash.maxVr.CP + 1 };
 
         const newRecords = [];
-        const bankReceipts = []; // BR entries -> customer confirmation on WA + SMS
+        const created = [];
+        const skipped = [];
+        const bankReceipts = [];
+        const seen = new Set();
 
         for (const txn of transactions) {
-            const { txnNo, date, narration, drAmount, crAmount, partyCode } = txn;
-            
-            let type = '';
-            let amount = 0;
-            
-            if (crAmount > 0) {
-                if (narration.toUpperCase().includes('BY CASH')) {
-                    type = 'CP'; 
-                } else {
-                    type = 'BR';
-                }
-                amount = crAmount;
-            } else if (drAmount > 0) {
-                type = 'BP';
-                amount = drAmount;
-            } else {
-                continue; 
-            }
+            const txnNo = String(txn.txnNo || '').trim();
+            const narration = String(txn.narration || '');
+            const drAmount = Number(txn.drAmount) || 0;
+            const crAmount = Number(txn.crAmount) || 0;
+            const partyCode = String(txn.partyCode || '').trim();
+            const date = moment(txn.date, ['DD-MM-YYYY', 'DD/MM/YYYY', 'DD-MMM-YYYY'], true);
 
-            let vrNum = 0;
-            if (type === 'BP') vrNum = nextBP++;
-            if (type === 'BR') vrNum = nextBR++;
-            if (type === 'CP') vrNum = nextCP++;
+            if (!txnNo) { skipped.push({ txnNo, reason: 'Missing txn no.' }); continue; }
+            if (cash.bankSet.has(txnNo.toUpperCase()) || seen.has(txnNo)) { skipped.push({ txnNo, reason: 'Already in CASH.DBF' }); continue; }
+            if (!partyCode || !validCodes.has(partyCode)) { skipped.push({ txnNo, reason: 'No valid party selected' }); continue; }
+            if (!date.isValid()) { skipped.push({ txnNo, reason: `Bad date "${txn.date}"` }); continue; }
 
-            // Format VR as XX-000000 (9 chars total)
-            const vrString = `${type}-${String(vrNum).padStart(6, '0')}`;
+            const type = voucherTypeFor({ crAmount, drAmount, narration });
+            if (!type) { skipped.push({ txnNo, reason: 'Zero amount' }); continue; }
+            const amount = type === 'BP' ? drAmount : crAmount;
+            seen.add(txnNo);
 
-            // Entry 1: Party Side
-            const partyRecord = {
-                VR: vrString,      
-                // VRNO field does not exist in DBF
-                DATE: moment(date, 'DD-MM-YYYY').toDate(), 
+            const vrString = `${type}-${String(next[type]++).padStart(6, '0')}`;
+            const remark = `${narration} / ${txnNo}`;
+
+            // Party side
+            newRecords.push({
+                VR: vrString,
+                DATE: date.toDate(),
                 C_CODE: partyCode,
-                REMARK: `${narration} / ${txnNo}`, 
-                BANK: txnNo,   
+                REMARK: remark,
+                BANK: txnNo,
                 DR: (type === 'BP' || type === 'CP') ? amount : 0,
                 CR: (type === 'BR') ? amount : 0,
-                M_GROUP1: '', 
-            };
-            newRecords.push(partyRecord);
+                M_GROUP1: '',
+            });
 
-            if (type === 'BR' && partyCode) {
-                bankReceipts.push({ txnNo, date, narration, partyCode, amount });
-            }
-
-            // Entry 2: Bank Side (Contra) - Only for BR and BP
+            // Bank side (contra) for BR / BP
             if (type === 'BR' || type === 'BP') {
-                const bankRecord = {
+                newRecords.push({
                     VR: vrString,
-                    DATE: moment(date, 'DD-MM-YYYY').toDate(),
-                    C_CODE: 'BB009', // PNB Bank Code
-                    REMARK: `${narration} / ${txnNo}`,
+                    DATE: date.toDate(),
+                    C_CODE: PNB_BANK_CODE,
+                    REMARK: remark,
                     BANK: txnNo,
-                    // Swap DR/CR for Bank side
-                    // BR: Party Credited -> Bank Debited
-                    // BP: Party Debited -> Bank Credited
                     DR: (type === 'BR') ? amount : 0,
                     CR: (type === 'BP') ? amount : 0,
                     M_GROUP1: '',
-                };
-                newRecords.push(bankRecord);
+                });
             }
+
+            const party = cmplData.find(p => p.C_CODE === partyCode);
+            created.push({ txnNo, vr: vrString, type, amount, partyCode, partyName: party ? party.C_NAME : '', narration });
+            if (type === 'BR') bankReceipts.push({ txnNo, date: txn.date, narration, partyCode, amount });
         }
 
-        await dbf.appendRecords(newRecords);
-        console.log(`Appended ${newRecords.length} records to CASH.DBF`);
+        if (newRecords.length) {
+            dbf = await DBFFile.open(cash.path);
+            await dbf.appendRecords(newRecords);
+            await dbf.close();
+            dbf = null;
+            invalidateCashCache();
+            console.log(`[PNB] Appended ${newRecords.length} records (${created.length} vouchers) to CASH.DBF`);
+        }
 
-        // Close DBF
-        await dbf.close();
-
-        // Delete pnbcr.csv to avoid processing same file again and unlock it
-        const pnbCrPath = path.join(DOWNLOADS_DIR, 'pnbcr.csv');
-        if (fsSync.existsSync(pnbCrPath)) {
+        // Learn narration -> party from what the user confirmed, and un-ignore saved txns
+        if (created.length) {
             try {
-                await fs.unlink(pnbCrPath);
-                console.log('Deleted pnbcr.csv after saving.');
-            } catch (err) {
-                console.error('Failed to delete pnbcr.csv:', err);
+                const store = await loadStore();
+                for (const c of created) {
+                    for (const k of txnKeys(parseNarration(c.narration))) {
+                        store.partyMap[k] = { code: c.partyCode, at: new Date().toISOString() };
+                    }
+                    delete store.ignored[c.txnNo];
+                }
+                await saveStore(store);
+            } catch (e) {
+                console.error('[PNB] Could not update learned mappings:', e.message);
             }
         }
 
-        res.json({ message: 'Transactions saved successfully', count: newRecords.length });
+        res.json({
+            message: created.length
+                ? `Saved ${created.length} voucher(s)${skipped.length ? `, skipped ${skipped.length}` : ''}`
+                : 'Nothing saved',
+            count: newRecords.length,
+            created: created.map(({ narration, ...c }) => c),
+            skipped,
+        });
 
         // Fire-and-forget: rate-limited sends can take a while, don't block the response
         sendBankReceiptConfirmations(bankReceipts)
             .catch(err => console.error('[Bank Receipt Notify] Unexpected error:', err));
-
     } catch (error) {
         console.error('Error saving transactions:', error);
-        res.status(500).json({ message: 'Failed to save transactions', error: error.message });
+        if (dbf) await dbf.close().catch(() => { });
+        res.status(500).json({ message: `Failed to save transactions: ${error.message}` });
+    } finally {
+        saving = false;
     }
+});
+
+// ---- WhatsApp / SMS confirmation status for saved receipts ----
+
+router.get('/pnb-statement/notify-status', (req, res) => {
+    const txnNos = String(req.query.txnNos || '').split(',').map(s => s.trim()).filter(Boolean);
+    const result = {};
+    for (const t of txnNos) result[t] = notifyStatus.get(t) || null;
+    res.json(result);
 });
 
 module.exports = router;

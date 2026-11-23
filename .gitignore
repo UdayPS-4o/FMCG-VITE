@@ -49,3 +49,6 @@ config.bat
 
 # Bizom auto-download browser profile (keeps login session)
 server/.bizom-profile
+
+# PNB reconciliation runtime data (learned party mappings, ignored txns)
+server/data/pnb-reconcile.json
