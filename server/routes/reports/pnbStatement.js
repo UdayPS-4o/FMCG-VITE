@@ -260,25 +260,34 @@ async function runDownload(onStep = () => {}, opts = {}) {
         console.log('Initiating download...');
         await page.select("#TransactionHistoryFG\\.OUTFORMAT", "3"); // 3 = CSV?
         
-        // Clear old files in raw folder to identify new one
-        const oldFiles = await fs.readdir(rawDownloadPath);
-        
+        // PNB names the file OpTransactionHistory<today>.csv, so a second download on the same
+        // day OVERWRITES the existing file. Detect by modification time, not by a new filename.
+        const clickedAt = Date.now() - 2000; // small allowance for clock/mtime granularity
         await page.click("#okButton");
 
-        // Wait for download to finish
+        // Wait for download to finish (longer ranges take longer)
         onStep('Downloading file');
         console.log('Waiting for file...');
         let newFile = null;
-        let retries = 0;
-        while (retries < 20) { // Wait up to 20 seconds
+        let lastSize = -1;
+        for (let waited = 0; waited < 90; waited++) {
             await new Promise(resolve => setTimeout(resolve, 1000));
             const currentFiles = await fs.readdir(rawDownloadPath);
-            const diff = currentFiles.filter(x => !oldFiles.includes(x) && x.endsWith('.csv'));
-            if (diff.length > 0) {
-                newFile = diff[0];
+            if (currentFiles.some(x => x.endsWith('.crdownload'))) continue; // still writing
+            let candidate = null;
+            for (const x of currentFiles.filter(f => f.toLowerCase().endsWith('.csv'))) {
+                const st = await fs.stat(path.join(rawDownloadPath, x));
+                if (st.mtimeMs >= clickedAt && (!candidate || st.mtimeMs > candidate.mtimeMs)) {
+                    candidate = { name: x, mtimeMs: st.mtimeMs, size: st.size };
+                }
+            }
+            if (!candidate) continue;
+            // accept once the size is stable across two checks
+            if (candidate.size > 0 && candidate.size === lastSize) {
+                newFile = candidate.name;
                 break;
             }
-            retries++;
+            lastSize = candidate.size;
         }
 
         if (newFile) {
