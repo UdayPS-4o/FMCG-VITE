@@ -98,15 +98,15 @@ const Invoicing: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Invoicing" />
       
-      <div className="container mx-auto px-4 py-6">
-        <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Invoicing Database</h2>
+      <div className="container mx-auto px-0 py-2 md:px-4 md:py-6">
+        <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-0 md:p-6 w-full">
+          <div className="flex justify-between items-center gap-2 px-3 pt-3 mb-2 md:px-0 md:pt-0 md:mb-6">
+            <h2 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-white">Invoicing<span className="hidden md:inline"> Database</span></h2>
             <div className="flex gap-3">
               {hasAccess('Admin') && (
                 <button
                   onClick={() => setIsEditOldBillsDialogOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
+                  className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
                   title="Edit old bills from previous system"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -119,7 +119,7 @@ const Invoicing: React.FC = () => {
               <button
                 onClick={handlePrintAllSelected}
                 disabled={selectedBills.length === 0}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${selectedBills.length === 0 ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700'}`}
+                className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${selectedBills.length === 0 ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700'}`}
                 title="Print all selected bills"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

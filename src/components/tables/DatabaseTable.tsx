@@ -9,6 +9,22 @@ import SalesmanFilterChips, { SalesmanOption, SalesmanStats } from './SalesmanFi
 import { useNavigate } from 'react-router-dom';
 import { TableSkeletonLoader } from '../ui/skeleton/SkeletonLoader';
 import useAuth from '../../hooks/useAuth';
+import MobileRecordList from './MobileRecordList';
+
+// Phones get the card view; the md breakpoint (768px) and up keep the table
+const MOBILE_QUERY = '(max-width: 767px)';
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(MOBILE_QUERY).matches
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(MOBILE_QUERY);
+    const onChange = () => setIsMobile(mql.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+};
 
 // Add formatItemsDisplay helper function
 const formatItemsDisplay = (items: any): string => {
@@ -187,6 +203,7 @@ const DatabaseTable = forwardRef<{ refreshData: () => Promise<void> }, DatabaseT
   const { user } = useAuth();
 
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     // Fetch data only when user is loaded
@@ -1333,6 +1350,42 @@ const tooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(nul
 
       {isTableLoading ? (
         <TableSkeletonLoader />
+      ) : isMobile ? (
+        <MobileRecordList
+          endpoint={endpoint}
+          isApproved={!!tableId?.includes('approved')}
+          rows={sortedRows}
+          detailHeaders={effectiveHeaders}
+          getRowId={getRowId}
+          selectedItems={selectedItems}
+          onSelectedItemsChange={setSelectedItems}
+          search={search}
+          onSearchChange={(value) => { setSearch(value); setPage(0); }}
+          dateFilter={dateFilter}
+          availableDateKeys={availableDateKeys}
+          onDateFilterChange={handleDateFilterChange}
+          smOptions={smOptions}
+          smStats={smStats}
+          smFilters={smFilters}
+          onSmFilterChange={handleSmFilterChange}
+          partyMap={partyMap}
+          productNameByCode={productNameByCode}
+          canPrint={endpoint !== 'account-master' && !!user?.powers.includes('Read') && !hideButtons.includes('print')}
+          canEdit={!!user?.powers.includes('Write') && !hideButtons.includes('edit')}
+          canDelete={!!user?.powers.includes('Delete') && !hideButtons.includes('delete')}
+          canApprove={!!user?.routeAccess.includes('Admin') && !hideApproveButton}
+          canRenumber={endpoint === 'invoicing' && !tableId?.includes('approved')}
+          onPrint={(row) => handlePrint(getRowId(row))}
+          onBulkPrint={endpoint === 'invoicing' && !hideButtons.includes('print') && user?.powers.includes('Read')
+            ? (selected) => {
+                const ids = selected.map(r => r.id || r._id).filter(Boolean).join(',');
+                if (ids) window.open(`/printInvoice?id=${ids}`, '_blank');
+              }
+            : undefined}
+          onEdit={handleEdit}
+          onDelete={(id, renumber) => confirmDelete(id, renumber)}
+          onApprove={handleApprove}
+        />
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm w-full overflow-hidden max-w-[95vw] mx-auto custom-scrollbar">
           {/* Toolbar */}
