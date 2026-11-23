@@ -1169,7 +1169,7 @@ Set invoice.date in dd-mm-yyyy. Do not include explanations.`;
       <PageMeta title="New Purchase Entry | FMCG Vite Admin Template" description="OCR Assisted Purchase Recording" />
       <PageBreadcrumb pageTitle="New Purchase Entry" />
 
-      <div className="container mx-auto px-4 py-2">
+      <div className="container mx-auto px-0 py-2 md:px-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2">
             <button onClick={() => navigate('/purchases')} className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300">

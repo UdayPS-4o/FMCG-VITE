@@ -822,7 +822,7 @@ const AppSidebar = React.forwardRef<HTMLElement>((_props, ref) => {
   return (
     <aside
       ref={ref}
-      className={`app-sidebar has-glisse fixed flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 dark:border-gray-800 text-gray-900 h-screen transition-all duration-300 ease-in-out z-[999] border-r border-gray-200 
+      className={`app-sidebar has-glisse fixed flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 dark:border-gray-800 text-gray-900 h-screen transition-all duration-300 ease-in-out z-[999] max-lg:z-[100001] max-lg:h-dvh max-lg:pt-[env(safe-area-inset-top)] max-lg:pb-[env(safe-area-inset-bottom)] border-r border-gray-200 
         ${
           isExpanded || isMobileOpen
             ? "w-[290px]"

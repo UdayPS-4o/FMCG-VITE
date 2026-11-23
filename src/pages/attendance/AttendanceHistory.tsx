@@ -364,8 +364,8 @@ const AttendanceHistory: React.FC = () => {
         pageTitle="Attendance History"
       />
       
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      <div className="max-w-6xl mx-auto px-0 py-2 md:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 md:p-6">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               My Attendance History

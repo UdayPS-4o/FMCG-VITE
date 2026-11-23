@@ -684,7 +684,7 @@ const EditGodownTransfer: React.FC = () => {
       )}
 
       <FormComponent onSubmit={handleSubmit} autoComplete="off">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
+        <div className="bg-white dark:bg-gray-800 p-3 md:p-6 rounded-lg shadow-sm mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div>
               <Input

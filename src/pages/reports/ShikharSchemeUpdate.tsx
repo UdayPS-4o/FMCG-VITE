@@ -303,7 +303,7 @@ const ShikharSchemeUpdate: React.FC = () => {
     };
 
     return (
-        <div className="container mx-auto p-4 max-w-7xl">
+        <div className="container mx-auto px-0 py-2 md:p-4 max-w-7xl">
             <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Shikhar Scheme Update Utility</h1>
 
             {/* Cookie Update Panel */}

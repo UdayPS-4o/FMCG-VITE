@@ -555,9 +555,9 @@ const AddUser: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Add User" />
 
-      <div className="container mx-auto px-4 py-6 max-w-full">
+      <div className="container mx-auto px-0 py-2 md:px-4 md:py-6 max-w-full">
         {/* User Form */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6 w-full">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 md:p-6 mb-6 w-full">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">
             {isEdit ? 'Edit User' : 'Create New User'}
           </h2>
@@ -866,7 +866,7 @@ const AddUser: React.FC = () => {
 
         {/* User Table */}
         {userData.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 md:p-6 w-full">
             <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">User List</h2>
             <UserTable data={userData} onUserDeleted={handleUserDeleted} baseURL={constants.baseURL} />
           </div>

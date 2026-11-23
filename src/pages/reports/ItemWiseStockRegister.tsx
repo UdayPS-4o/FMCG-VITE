@@ -504,7 +504,7 @@ const ItemWiseStockRegister: React.FC = () => {
         onClose={() => setToast({ ...toast, visible: false })}
       />
 
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6 no-print">
+      <div className="bg-white dark:bg-gray-800 p-3 md:p-6 rounded-lg shadow-sm mb-6 no-print">
         <h2 className="text-xl font-semibold mb-4 dark:text-white">Filters</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">

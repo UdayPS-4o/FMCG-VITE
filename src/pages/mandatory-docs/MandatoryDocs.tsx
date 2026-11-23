@@ -480,7 +480,7 @@ const MandatoryDocs: React.FC = () => {
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 px-0 py-2 md:p-6">
       <PageMeta title="Mandatory Docs" description="Upload mandatory documents" />
       
       <div className="max-w-4xl mx-auto">

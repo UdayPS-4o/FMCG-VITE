@@ -707,7 +707,7 @@ const EditAccountMaster: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Edit Account" />
       
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+      <div className="bg-white dark:bg-gray-800 p-3 md:p-6 rounded-lg shadow-sm">
         {error && (
           <div className="text-red-500 text-center p-4 mb-4">{error}</div>
         )}

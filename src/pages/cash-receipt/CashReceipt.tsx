@@ -1101,7 +1101,7 @@ const CashReceipt: React.FC = () => {
       <PageBreadcrumb pageTitle="Cash Receipts" />
       
       <div className="container mx-auto px-0 py-4 md:max-w-3xl">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 md:p-6">
           <h2 className="text-xl font-semibold mb-6 text-gray-800 dark:text-white">Cash Receipt Form</h2>
           
           <FormComponent onSubmit={(e) => e.preventDefault()}>

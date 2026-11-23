@@ -309,7 +309,7 @@ const PushNotifications: React.FC = () => {
     }
 
     return (
-        <div className="container mx-auto p-4 space-y-6">
+        <div className="container mx-auto px-0 py-2 md:p-4 space-y-6">
             <div className="flex flex-col md:flex-row justify-between md:items-center mb-2">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Notification Suite</h1>

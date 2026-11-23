@@ -1011,7 +1011,7 @@ const Gstr2aSection: React.FC = () => {
 
       {/* Step 1: Month Input */}
       {currentStep === 'input' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Step 1: Enter Month</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -1051,7 +1051,7 @@ const Gstr2aSection: React.FC = () => {
 
       {/* Step 2: OTP Input */}
       {currentStep === 'otp' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Step 2: Enter OTP</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -1083,7 +1083,7 @@ const Gstr2aSection: React.FC = () => {
 
       {/* Step 3: Section Selection and Download */}
       {currentStep === 'download' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Step 3: Select Sections and Download</h2>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1122,7 +1122,7 @@ const Gstr2aSection: React.FC = () => {
 
       {/* Step 4: Data Display */}
       {currentStep === 'display' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-white">GSTR2A Data</h2>
             <div className="flex space-x-2">
@@ -1314,7 +1314,7 @@ const Gstr2aSection: React.FC = () => {
 
       {/* Step 5: Comparison Results */}
       {currentStep === 'comparison' && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Comparison Results</h2>
 
           {/* Summary */}

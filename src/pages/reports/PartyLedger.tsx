@@ -484,7 +484,7 @@ const PartyLedger: React.FC = () => {
   );
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="container mx-auto px-0 py-2 md:p-4">
       <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Party Ledger Report</h1>
 
       <div className="bg-white dark:bg-gray-800 p-4 rounded shadow mb-6">

@@ -1047,7 +1047,7 @@ const InvoicingContent: React.FC = () => {
       />
       
       <FormComponent onSubmit={handleSubmit} autoComplete="off">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm mb-6">
+        <div className="bg-white dark:bg-gray-800 p-3 md:p-6 rounded-lg shadow-sm mb-6">
           <div className="flex flex-wrap items-center gap-6 mb-6">
             <div className="w-full sm:w-44">
               <DatePicker

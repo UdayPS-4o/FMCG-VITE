@@ -211,7 +211,7 @@ const AccountUpdateLog: React.FC = () => {
       <PageMeta title={`${pageTitle} | FMCG Vite Admin Template`} description="Who updated which account, and what changed" />
       <PageBreadcrumb pageTitle={pageTitle} />
 
-      <div className="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 p-3 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         {/* Summary */}
         <div className={`grid grid-cols-2 ${isAdmin ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-3 mb-6`}>
           {[

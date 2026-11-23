@@ -243,7 +243,7 @@ const BillsDeliveryRegister = () => {
   );
 
   return (
-    <div className="p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div className="px-0 py-2 md:p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
       <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">
         Bills Delivery Register
       </h1>

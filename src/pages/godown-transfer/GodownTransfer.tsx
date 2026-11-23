@@ -644,7 +644,7 @@ const GodownTransfer: React.FC = () => {
       )}
 
       <FormComponent onSubmit={handleSubmit} autoComplete="off">
-        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-sm mb-6">
+        <div className="bg-white dark:bg-gray-800 p-3 sm:p-6 rounded-lg shadow-sm mb-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6">
             <div>
               <DatePicker

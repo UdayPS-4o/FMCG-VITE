@@ -1060,7 +1060,7 @@ const AccountMaster: React.FC<AccountMasterProps> = ({ mode = 'create' }) => {
         description="Account Master page in FMCG Vite Admin Template"
       />
       <PageBreadcrumb pageTitle={isUpdate ? 'Update Account Master' : 'Account Master'} />
-      <div className="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 p-3 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         {/* Header: live initials + required-field progress */}
         <div className="am-enter flex items-center gap-4 mb-7">
           <div
