@@ -473,25 +473,14 @@ async function findLatestStatementFile() {
 // ---- Download job (runs in background, polled by the page) ----
 
 const downloadJob = { status: 'idle', step: '', message: '', attempt: 0, startedAt: null, finishedAt: null };
-const MAX_DOWNLOAD_ATTEMPTS = 3; // captcha OCR is not always right first time
-
 async function runDownloadJob(opts = {}) {
-    Object.assign(downloadJob, { status: 'running', step: 'Starting', message: '', attempt: 0, fromDate: opts.fromDate || '', startedAt: Date.now(), finishedAt: null });
-    for (let attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt++) {
-        downloadJob.attempt = attempt;
-        try {
-            await runDownload(step => { downloadJob.step = step; }, opts);
-            Object.assign(downloadJob, { status: 'done', step: 'Done', message: 'Statement downloaded', finishedAt: Date.now() });
-            return;
-        } catch (err) {
-            const retryable = /Login failed|captcha/i.test(err.message || '');
-            console.error(`[PNB] Download attempt ${attempt} failed:`, err.message);
-            if (!retryable || attempt === MAX_DOWNLOAD_ATTEMPTS) {
-                Object.assign(downloadJob, { status: 'failed', message: err.message || 'Download failed', finishedAt: Date.now() });
-                return;
-            }
-            downloadJob.step = `Retrying (captcha) ${attempt + 1}/${MAX_DOWNLOAD_ATTEMPTS}`;
-        }
+    Object.assign(downloadJob, { status: 'running', step: 'Starting', message: '', attempt: 1, fromDate: opts.fromDate || '', startedAt: Date.now(), finishedAt: null });
+    try {
+        await runDownload(step => { downloadJob.step = step; }, opts);
+        Object.assign(downloadJob, { status: 'done', step: 'Done', message: 'Statement downloaded', finishedAt: Date.now() });
+    } catch (err) {
+        console.error('[PNB] Download failed:', err.message);
+        Object.assign(downloadJob, { status: 'failed', message: err.message || 'Download failed', finishedAt: Date.now() });
     }
 }
 
