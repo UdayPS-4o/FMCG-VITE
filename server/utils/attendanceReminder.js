@@ -13,6 +13,8 @@ const REMINDER_DEADLINE_MINUTES = 13 * 60;
 const USERS_PATH = path.join(__dirname, '..', 'db', 'users.json');
 const RECORDS_PATH = path.join(__dirname, '..', 'db', 'attendance', 'records.json');
 const STATE_PATH = path.join(__dirname, '..', 'db', 'attendance', 'reminder_state.json');
+const SETTINGS_PATH = path.join(__dirname, '..', 'db', 'attendance', 'settings.json');
+const LEAVES_PATH = path.join(__dirname, '..', 'db', 'attendance', 'leaves.json');
 
 // { date: 'YYYY-MM-DD', minutes: minutes since midnight } in IST
 const nowIST = () => {
@@ -35,9 +37,21 @@ const sendAttendanceReminders = async (date) => {
   const users = await readJson(USERS_PATH, []);
   const records = await readJson(RECORDS_PATH, []);
 
+  const settings = await readJson(SETTINGS_PATH, {});
+  const leaves = await readJson(LEAVES_PATH, []);
+  const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+
   const markedIds = new Set(
     records.filter(r => r.date === date).map(r => Number(r.userId))
   );
+  // No reminder for users who are exempt, on their weekly off, or on approved leave today
+  const userSettingsMap = (settings && settings.users) || {};
+  for (const [id, s] of Object.entries(userSettingsMap)) {
+    if (s && (s.exempt || (Array.isArray(s.weeklyOffDays) && s.weeklyOffDays.includes(dow)))) markedIds.add(Number(id));
+  }
+  leaves
+    .filter(l => l.status === 'approved' && l.fromDate <= date && l.toDate >= date)
+    .forEach(l => markedIds.add(Number(l.userId)));
 
   const pending = users.filter(u =>
     Array.isArray(u.notificationAccess) &&

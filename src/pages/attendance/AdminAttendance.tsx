@@ -7,6 +7,18 @@ import constants from '../../constants';
 import Toast from '../../components/ui/toast/Toast';
 import { PulseLoadAnimation } from '../../components/ui/loading';
 import UserRouteModal from '../../components/attendance/UserRouteModal';
+import AttendanceSettingsModal from '../../components/attendance/AttendanceSettingsModal';
+import BackfillModal from '../../components/attendance/BackfillModal';
+import DaySummaryPanel from '../../components/attendance/DaySummaryPanel';
+import LeaveRequestsPanel from '../../components/attendance/LeaveRequestsPanel';
+import {
+  AttendanceSettings,
+  LeaveRequest,
+  attendanceApi,
+  formatLate,
+  minutesLate,
+  userSetting,
+} from '../../utils/attendance';
 
 interface AttendanceRecord {
   id: string;
@@ -347,15 +359,12 @@ const AdminAttendance: React.FC = () => {
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<'attendance' | 'locations'>('attendance');
-  const todayLocal = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-  const emptyBackfill = () => ({ userId: '', date: '', time: '10:00', status: 'present' as AttendanceRecord['status'], note: '', selfieData: '' });
-  const [backfillOpen, setBackfillOpen] = useState(false);
-  const [backfillForm, setBackfillForm] = useState(emptyBackfill());
-  const [backfillSaving, setBackfillSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'attendance' | 'leaves' | 'locations'>('attendance');
+  const [attSettings, setAttSettings] = useState<AttendanceSettings | null>(null);
+  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [leavesLoading, setLeavesLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [backfillFor, setBackfillFor] = useState<{ userId: string; date?: string } | null>(null);
   const [routeUser, setRouteUser] = useState<{ userId: number; userName: string } | null>(null);
   const [users, setUsers] = useState<{
     id: number;
@@ -606,52 +615,52 @@ const AdminAttendance: React.FC = () => {
     return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
   };
 
-  const openBackfill = () => {
-    setBackfillForm({ ...emptyBackfill(), userId: selectedUser, date: fromDate && fromDate === toDate ? fromDate : todayLocal() });
-    setBackfillOpen(true);
-  };
-
-  const handleBackfillPhoto = (file: File | undefined) => {
-    if (!file) { setBackfillForm(f => ({ ...f, selfieData: '' })); return; }
-    if (!file.type.startsWith('image/')) { setToast({ message: 'Please choose an image file', type: 'error' }); return; }
-    if (file.size > 5 * 1024 * 1024) { setToast({ message: 'Photo size must be less than 5MB', type: 'error' }); return; }
-    const reader = new FileReader();
-    reader.onload = () => setBackfillForm(f => ({ ...f, selfieData: String(reader.result || '') }));
-    reader.readAsDataURL(file);
-  };
-
-  const submitBackfill = async () => {
-    const { userId, date, time, status } = backfillForm;
-    if (!userId || !date || !time || !status) {
-      setToast({ message: 'User, date, time and status are required', type: 'error' });
-      return;
-    }
-    if (date > todayLocal()) {
-      setToast({ message: 'Cannot backfill a future date', type: 'error' });
-      return;
-    }
-    setBackfillSaving(true);
+  const fetchAttSettings = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${constants.baseURL}/api/attendance/admin/backfill`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ ...backfillForm, userId: Number(userId) })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.success) {
-        setToast({ message: `Attendance backfilled for ${data.record?.userName || 'user'} on ${date}`, type: 'success' });
-        setBackfillOpen(false);
-        fetchAttendanceRecords();
-      } else {
-        setToast({ message: data.message || 'Failed to backfill attendance', type: 'error' });
-      }
+      const data = await attendanceApi<{ settings: AttendanceSettings }>('/api/attendance/admin/settings');
+      setAttSettings(data.settings);
     } catch (error) {
-      console.error('Error backfilling attendance:', error);
-      setToast({ message: 'Error backfilling attendance', type: 'error' });
-    } finally {
-      setBackfillSaving(false);
+      console.error('Error loading attendance settings:', error);
     }
+  };
+
+  const fetchLeaves = async () => {
+    setLeavesLoading(true);
+    try {
+      const data = await attendanceApi<{ leaves: LeaveRequest[] }>('/api/attendance/admin/leaves?status=all');
+      setLeaves(data.leaves || []);
+    } catch (error) {
+      console.error('Error loading leave requests:', error);
+    } finally {
+      setLeavesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttSettings();
+    fetchLeaves();
+  }, []);
+
+  const sortedRecords = [...attendanceRecords].sort((a, b) => {
+    if (dateSortOrder === 'none') return 0;
+    const da = new Date(a.date).getTime();
+    const db = new Date(b.date).getTime();
+    return dateSortOrder === 'asc' ? da - db : db - da;
+  });
+
+  const pendingLeaves = leaves.filter(l => l.status === 'pending').length;
+
+  const openBackfill = (userId = selectedUser, date?: string) => {
+    setBackfillFor({ userId, date: date || (fromDate && fromDate === toDate ? fromDate : undefined) });
+  };
+
+  const lateTag = (record: AttendanceRecord) => {
+    const late = minutesLate(record.time, record.status, attSettings?.lateCutoff);
+    return late > 0 ? (
+      <span className="mt-1 block w-fit px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" title={`Late cut-off ${attSettings?.lateCutoff}`}>
+        ⏰ {formatLate(late)}
+      </span>
+    ) : null;
   };
 
   const openGallery = (index: number, items: { src: string; title: string }[]) => {
@@ -1388,7 +1397,7 @@ const AdminAttendance: React.FC = () => {
           {/* Tab Navigation */}
           <div className="mb-6">
             <div className="border-b border-gray-200 dark:border-gray-700">
-              <nav className="-mb-px flex space-x-8">
+              <nav className="-mb-px flex space-x-6 sm:space-x-8 overflow-x-auto whitespace-nowrap">
                 <button
                   onClick={() => setActiveTab('attendance')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'attendance'
@@ -1397,6 +1406,18 @@ const AdminAttendance: React.FC = () => {
                     }`}
                 >
                   📅 Attendance Records
+                </button>
+                <button
+                  onClick={() => setActiveTab('leaves')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'leaves'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                    }`}
+                >
+                  🌴 Leave Requests
+                  {pendingLeaves > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-semibold">{pendingLeaves}</span>
+                  )}
                 </button>
                 <button
                   onClick={() => setActiveTab('locations')}
@@ -1512,7 +1533,7 @@ const AdminAttendance: React.FC = () => {
                                 // Reset to default values with current month
                                 setSalaryData({
                                   monthlySalary: '',
-                                  weeklyOffDays: [],
+                                  weeklyOffDays: userSetting(attSettings, user.id, user.isAdmin).weeklyOffDays,
                                   month: currentMonth,
                                   additions: [],
                                   deductions: []
@@ -1550,13 +1571,23 @@ const AdminAttendance: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Attendance Entry
                     </label>
-                    <button
-                      onClick={openBackfill}
-                      className="bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center space-x-1"
-                    >
-                      <span>📝</span>
-                      <span>Backfill Attendance</span>
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => openBackfill()}
+                        className="bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center space-x-1"
+                      >
+                        <span>📝</span>
+                        <span>Backfill Attendance</span>
+                      </button>
+                      <button
+                        onClick={() => setShowSettings(true)}
+                        className="bg-gray-600 hover:bg-gray-700 text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center space-x-1"
+                        title="Weekly off per user, who must mark attendance, late cut-off"
+                      >
+                        <span>⚙️</span>
+                        <span>Settings</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1652,6 +1683,19 @@ const AdminAttendance: React.FC = () => {
                 </div>
               )}
 
+              {/* Day summary: counts, not marked, on leave, weekly off (single-day view) */}
+              {!loading && fromDate && fromDate === toDate && (
+                <DaySummaryPanel
+                  date={fromDate}
+                  users={selectedUser ? users.filter(u => u.id.toString() === selectedUser) : users}
+                  records={attendanceRecords}
+                  settings={attSettings}
+                  leaves={leaves}
+                  onBackfill={(userId) => openBackfill(String(userId), fromDate)}
+                  onMessage={handleSendMessageClick}
+                />
+              )}
+
               {/* Loading State */}
               {loading && (
                 <div className="text-center py-8">
@@ -1681,7 +1725,64 @@ const AdminAttendance: React.FC = () => {
                         </p>
                       </div>
 
-                      <div className="overflow-x-auto">
+                      {/* Phone: one card per record */}
+                      <div className="md:hidden space-y-3">
+                        {sortedRecords.map((record) => (
+                          <div key={record.id} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+                            <div className="flex gap-3">
+                              {record.selfieData ? (
+                                <button onClick={() => openGallery(0, [{ src: record.selfieData, title: 'Attendance Selfie' }])} className="shrink-0">
+                                  <img src={record.selfieData} alt="Selfie" className="w-16 h-16 rounded-lg object-cover" />
+                                </button>
+                              ) : (
+                                <div className="shrink-0 w-16 h-16 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400 text-xs">No photo</div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <button
+                                    onClick={() => handleUserActivityClick(record.userId, record.userName)}
+                                    className="text-blue-600 dark:text-blue-400 font-semibold text-left truncate"
+                                  >
+                                    {record.userName}
+                                  </button>
+                                  <span
+                                    className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${getStatusColor(record.status)}`}
+                                    onDoubleClick={() => handleStatusDoubleClick(record)}
+                                    title="Double-click to change status"
+                                  >
+                                    {getStatusText(record.status)}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                  {formatDate(record.date)} · {record.time}
+                                </div>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {record.source === 'backfill' ? (
+                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">📝 Backfilled</span>
+                                  ) : record.source && (
+                                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${record.source === 'app' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
+                                      {record.source === 'app' ? '📱 App' : '🌐 Web'}
+                                    </span>
+                                  )}
+                                  {lateTag(record)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 pt-2 border-t border-gray-100 dark:border-gray-700 text-sm font-medium">
+                              <button onClick={() => handleSendMessageClick(record.userId, record.userName)} className="text-blue-600 dark:text-blue-400">💬 Message</button>
+                              {record.location && (
+                                <button onClick={() => openLocationInMaps(record.location!.latitude, record.location!.longitude)} className="text-green-600 dark:text-green-400">🗺️ Maps</button>
+                              )}
+                              {users.find(u => u.id === record.userId)?.requireMandatoryDocs && (
+                                <button onClick={() => handleViewDocs(record.userId, record.userName, record.date)} className="text-purple-600 dark:text-purple-400">📄 Docs</button>
+                              )}
+                              <button onClick={() => deleteAttendanceRecord(record.id)} className="ml-auto text-red-600 dark:text-red-400">✕ Delete</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                           <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                             <tr>
@@ -1712,14 +1813,7 @@ const AdminAttendance: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {[...attendanceRecords]
-                              .sort((a, b) => {
-                                if (dateSortOrder === 'none') return 0;
-                                const da = new Date(a.date).getTime();
-                                const db = new Date(b.date).getTime();
-                                return dateSortOrder === 'asc' ? da - db : db - da;
-                              })
-                              .map((record) => (
+                            {sortedRecords.map((record) => (
                               <React.Fragment key={record.id}>
                                 <tr className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                   <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
@@ -1753,6 +1847,7 @@ const AdminAttendance: React.FC = () => {
                                         {record.source === 'app' ? '📱 App' : '🌐 Web'}
                                       </span>
                                     )}
+                                    {lateTag(record)}
                                   </td>
                                   <td className="px-6 py-4">
                                     <span
@@ -1828,6 +1923,16 @@ const AdminAttendance: React.FC = () => {
                 </>
               )}
             </>
+          )}
+
+          {/* Leave Requests Tab */}
+          {activeTab === 'leaves' && (
+            <LeaveRequestsPanel
+              leaves={leaves}
+              loading={leavesLoading}
+              onReload={fetchLeaves}
+              onToast={(message, type) => setToast({ message, type })}
+            />
           )}
 
           {/* Live Locations Tab */}
@@ -2700,66 +2805,27 @@ const AdminAttendance: React.FC = () => {
       )}
 
       {/* Backfill Attendance Modal (admin only) */}
-      {backfillOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[99999] p-4" onClick={() => !backfillSaving && setBackfillOpen(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[90vh] overflow-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📝 Backfill Attendance</h3>
-                <button onClick={() => setBackfillOpen(false)} disabled={backfillSaving} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">✕</button>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User *</label>
-                  <select value={backfillForm.userId} onChange={(e) => setBackfillForm(f => ({ ...f, userId: e.target.value }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                    <option value="">Select user</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id.toString()}>{u.name} {u.isAdmin ? '(admin)' : ''}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date *</label>
-                    <input type="date" max={todayLocal()} value={backfillForm.date} onChange={(e) => setBackfillForm(f => ({ ...f, date: e.target.value }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time *</label>
-                    <input type="time" value={backfillForm.time} onChange={(e) => setBackfillForm(f => ({ ...f, time: e.target.value }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status *</label>
-                  <select value={backfillForm.status} onChange={(e) => setBackfillForm(f => ({ ...f, status: e.target.value as AttendanceRecord['status'] }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                    <option value="present">Present</option>
-                    <option value="half_day">Half Day</option>
-                    <option value="absent">Absent</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason / note</label>
-                  <input type="text" maxLength={500} placeholder="e.g. phone not working, marked on call" value={backfillForm.note} onChange={(e) => setBackfillForm(f => ({ ...f, note: e.target.value }))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Photo (optional)</label>
-                  <input type="file" accept="image/*" onChange={(e) => handleBackfillPhoto(e.target.files?.[0])} className="block w-full text-sm text-gray-700 dark:text-gray-300" />
-                  {backfillForm.selfieData && (
-                    <img src={backfillForm.selfieData} alt="Backfill photo preview" className="mt-2 h-24 rounded-md object-cover" />
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  The entry is tagged “Backfilled” with your name. If the user already has an entry on that date, edit or delete it instead.
-                </p>
-              </div>
-              <div className="flex justify-end gap-2 mt-5">
-                <button onClick={() => setBackfillOpen(false)} disabled={backfillSaving} className="px-4 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200">Cancel</button>
-                <button onClick={submitBackfill} disabled={backfillSaving} className="px-4 py-2 text-sm rounded-lg bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-60">
-                  {backfillSaving ? 'Saving…' : 'Save Entry'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {backfillFor && (
+        <BackfillModal
+          users={users}
+          settings={attSettings}
+          initialUserId={backfillFor.userId}
+          initialDate={backfillFor.date}
+          onClose={() => setBackfillFor(null)}
+          onSaved={(message) => { setToast({ message, type: 'success' }); setBackfillFor(null); fetchAttendanceRecords(); }}
+          onError={(message) => setToast({ message, type: 'error' })}
+        />
+      )}
+
+      {/* Attendance Settings Modal (admin only) */}
+      {showSettings && (
+        <AttendanceSettingsModal
+          users={users}
+          settings={attSettings}
+          onClose={() => setShowSettings(false)}
+          onSaved={(next, message) => { setAttSettings(next); setShowSettings(false); setToast({ message, type: 'success' }); }}
+          onError={(message) => setToast({ message, type: 'error' })}
+        />
       )}
 
       {toast && (

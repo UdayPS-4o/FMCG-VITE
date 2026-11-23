@@ -10,6 +10,7 @@ import useLocationTracking from '../../hooks/useLocationTracking';
 import useAttendanceCheck from '../../hooks/useAttendanceCheck';
 import useBackgroundLocationTracking from '../../hooks/useBackgroundLocationTracking';
 import { PulseLoadAnimation } from '../../components/ui/loading';
+import ApplyLeaveModal from '../../components/attendance/ApplyLeaveModal';
 
 interface LocationData {
   latitude: number;
@@ -51,6 +52,7 @@ const Attendance: React.FC = () => {
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showLeave, setShowLeave] = useState(false);
   const { hasMarkedToday } = useAttendanceCheck();
 
   const { lastPosition, isTracking, startTracking, stopTracking, getCurrentLocation } = useLocationTracking();
@@ -502,12 +504,20 @@ const Attendance: React.FC = () => {
                   You have already marked your attendance for today.
                 </p>
               </div>
-              <button
-                onClick={viewPastAttendance}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-              >
-                View Past Attendance
-              </button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  onClick={viewPastAttendance}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                >
+                  View Past Attendance
+                </button>
+                <button
+                  onClick={() => setShowLeave(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                >
+                  🌴 Apply for Leave
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -700,11 +710,25 @@ const Attendance: React.FC = () => {
                 >
                   View Past Attendance
                 </button>
+                <span className="mx-3 text-gray-300 dark:text-gray-600">|</span>
+                <button
+                  onClick={() => setShowLeave(true)}
+                  className="text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 font-medium underline"
+                >
+                  🌴 Apply for Leave
+                </button>
               </div>
             </>
           )}
         </div>
       </div>
+
+      {showLeave && (
+        <ApplyLeaveModal
+          onClose={() => setShowLeave(false)}
+          onToast={(message, type) => setToast({ message, type })}
+        />
+      )}
 
       {toast && (
         <Toast

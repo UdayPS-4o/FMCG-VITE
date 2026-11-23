@@ -6,16 +6,18 @@ import useAuth from "../../hooks/useAuth";
 import constants from '../../constants';
 import Toast from '../../components/ui/toast/Toast';
 import { PulseLoadAnimation } from '../../components/ui/loading';
+import { LeaveRequest, LEAVE_TYPE_LABEL, attendanceApi } from '../../utils/attendance';
 
 // ─── Attendance Calendar ─────────────────────────────────────────────────────
 interface CalendarProps {
   month: string; // 'YYYY-MM'
   records: AttendanceRecord[];
   weeklyOffDays: number[]; // 0=Sun … 6=Sat
+  leaves?: LeaveRequest[];  // approved leaves are shown in purple
   onDayClick?: (dateStr: string, dayRecords: AttendanceRecord[]) => void;
 }
 
-const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, weeklyOffDays, onDayClick }) => {
+const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, weeklyOffDays, leaves = [], onDayClick }) => {
   const [year, mon] = month.split('-').map(Number);
   const daysInMonth = new Date(year, mon, 0).getDate();
   const startDow   = new Date(year, mon - 1, 1).getDay();
@@ -35,6 +37,9 @@ const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, wee
 
   const getDayStyle = (dateStr: string, dow: number) => {
     const record = recordMap[dateStr];
+    const leave = !record && leaves.find(l => l.status === 'approved' && l.fromDate <= dateStr && l.toDate >= dateStr);
+    if (leave)
+      return { bg: 'bg-purple-500', text: 'text-white', label: `${LEAVE_TYPE_LABEL[leave.type]} Leave` };
     if (weeklyOffDays.includes(dow))
       return { bg: 'bg-orange-400', text: 'text-white', label: 'Weekly Off' };
     if (record) {
@@ -115,6 +120,7 @@ const AttendanceSalaryCalendar: React.FC<CalendarProps> = ({ month, records, wee
           { color: 'bg-red-400',    label: 'Absent'     },
           { color: 'bg-orange-400', label: 'Weekly Off' },
           { color: 'bg-pink-400',   label: 'Half Day'   },
+          { color: 'bg-purple-500', label: 'Leave'      },
           { color: 'bg-gray-300 dark:bg-gray-600', label: 'Not Marked' },
         ].map(item => (
           <div key={item.label} className="flex items-center gap-1">
@@ -198,6 +204,14 @@ const AttendanceHistory: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [selectedDay, setSelectedDay] = useState<{ date: string; records: AttendanceRecord[] } | null>(null);
   const [visibleSalarySlip, setVisibleSalarySlip] = useState<VisibleSalarySlip | null>(null);
+  const [myWeeklyOff, setMyWeeklyOff] = useState<number[] | null>(null);
+  const [myLeaves, setMyLeaves] = useState<LeaveRequest[]>([]);
+
+  useEffect(() => {
+    attendanceApi<{ weeklyOffDays: number[]; leaves: LeaveRequest[] }>('/api/attendance/my-settings')
+      .then(d => { setMyWeeklyOff(d.weeklyOffDays || []); setMyLeaves(d.leaves || []); })
+      .catch(err => console.error('Error loading my attendance settings:', err));
+  }, []);
 
   useEffect(() => {
     const currentDate = new Date();
@@ -488,7 +502,11 @@ const AttendanceHistory: React.FC = () => {
           {/* Attendance Records */}
           {!loading && (
             <>
-              {attendanceRecords.length === 0 ? (
+              {attendanceRecords.length === 0 && !myLeaves.some(l =>
+                l.status === 'approved' &&
+                l.fromDate <= `${selectedYear}-${selectedMonth}-31` &&
+                l.toDate >= `${selectedYear}-${selectedMonth}-01`
+              ) ? (
                 <div className="text-center py-8">
                   <div className="text-gray-400 text-6xl mb-4">📅</div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -509,7 +527,8 @@ const AttendanceHistory: React.FC = () => {
                   <AttendanceSalaryCalendar
                     month={`${selectedYear}-${selectedMonth}`}
                     records={attendanceRecords}
-                    weeklyOffDays={visibleSalarySlip?.weeklyOffDays || []}
+                    weeklyOffDays={myWeeklyOff && myWeeklyOff.length ? myWeeklyOff : visibleSalarySlip?.weeklyOffDays || []}
+                    leaves={myLeaves}
                     onDayClick={(date, recs) => setSelectedDay({ date, records: recs })}
                   />
                 </>

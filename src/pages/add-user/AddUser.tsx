@@ -89,6 +89,7 @@ const AddUser: React.FC = () => {
   const availableNotifications = [
     { key: 'attendance-marked', label: 'Attendance Marked (by any user)' },
     { key: 'attendance-reminder', label: 'Attendance Reminder (12:45 PM if not marked)' },
+    { key: 'attendance-leave', label: 'Leave Requests (own request approved / rejected)' },
     { key: 'invoicing', label: 'Invoice Created / Modified' },
     { key: 'cash-receipts', label: 'Cash Receipt Created / Modified' },
     { key: 'cash-payments', label: 'Cash Payment Created / Modified' },

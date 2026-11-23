@@ -4,7 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const { ensureDirectoryExistence } = require('./utilities');
-const { sendNotificationToAdmins } = require('./push');
+const { sendNotificationToAdmins, sendNotificationToUsers } = require('./push');
 const locationStore = require('./locationStore');
 
 require('dotenv').config();
@@ -1112,17 +1112,284 @@ app.get('/api/attendance/admin/salary-slip-visibility', verifyToken, requireAdmi
   }
 });
 
-// Admin: backfill a missed attendance entry for any user (admin only).
-// Body: { userId, date: 'YYYY-MM-DD', time: 'HH:MM', status, note?, selfieData? }
+// ─── Attendance settings, leave requests and backfill ─────────────────────────
+const ATT_DIR = path.join(__dirname, '..', 'db', 'attendance');
+const SETTINGS_FILE = path.join(ATT_DIR, 'settings.json');
+const LEAVES_FILE = path.join(ATT_DIR, 'leaves.json');
+const RECORDS_FILE = path.join(ATT_DIR, 'records.json');
+const USERS_FILE = path.join(__dirname, '..', 'db', 'users.json');
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const LEAVE_TYPES = ['casual', 'sick', 'other'];
+
+const readJsonFile = async (file, fallback) => {
+  try {
+    return JSON.parse(await fs.readFile(file, 'utf8'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return fallback;
+    throw error;
+  }
+};
+const writeJsonFile = async (file, data) => {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, JSON.stringify(data, null, 2));
+};
+
+// Today's date in IST (the business timezone), as YYYY-MM-DD
+const istToday = () => new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const isValidDate = (d) => typeof d === 'string' && DATE_RE.test(d) && !isNaN(new Date(`${d}T00:00:00Z`).getTime());
+const dayOfWeek = (d) => new Date(`${d}T00:00:00Z`).getUTCDay();
+const datesBetween = (from, to) => {
+  const out = [];
+  const cur = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  while (cur <= end) {
+    out.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return out;
+};
+
+const DEFAULT_SETTINGS = { lateCutoff: '10:30', users: {} };
+const loadSettings = async () => {
+  const s = await readJsonFile(SETTINGS_FILE, {});
+  return { ...DEFAULT_SETTINGS, ...s, users: (s && s.users) || {} };
+};
+const userSettings = (settings, userId) => {
+  const u = settings.users[String(userId)] || {};
+  return {
+    weeklyOffDays: Array.isArray(u.weeklyOffDays) ? u.weeklyOffDays : [],
+    exempt: !!u.exempt
+  };
+};
+const findUser = async (userId) => {
+  const users = await readJsonFile(USERS_FILE, []);
+  return users.find(u => Number(u.id) === Number(userId)) || null;
+};
+
+// Admin: attendance settings (late cut-off, per-user weekly off / exempt)
+app.get('/api/attendance/admin/settings', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    res.json({ success: true, settings: await loadSettings() });
+  } catch (error) {
+    console.error('Error loading attendance settings:', error);
+    res.status(500).json({ success: false, message: 'Failed to load attendance settings' });
+  }
+});
+
+app.put('/api/attendance/admin/settings', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { lateCutoff, users } = req.body || {};
+    if (lateCutoff !== undefined && (typeof lateCutoff !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(lateCutoff))) {
+      return res.status(400).json({ success: false, message: 'Late cut-off must be HH:MM' });
+    }
+    if (users !== undefined && (typeof users !== 'object' || users === null || Array.isArray(users))) {
+      return res.status(400).json({ success: false, message: 'Invalid user settings' });
+    }
+    const current = await loadSettings();
+    const cleanUsers = { ...current.users };
+    if (users) {
+      for (const [id, val] of Object.entries(users)) {
+        if (!/^\d+$/.test(id) || !val || typeof val !== 'object') continue;
+        const offs = Array.isArray(val.weeklyOffDays)
+          ? [...new Set(val.weeklyOffDays.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))].sort()
+          : [];
+        cleanUsers[id] = { weeklyOffDays: offs, exempt: !!val.exempt };
+      }
+    }
+    const next = {
+      lateCutoff: lateCutoff || current.lateCutoff,
+      users: cleanUsers,
+      updatedAt: new Date().toISOString(),
+      updatedBy: Number(req.user.userId)
+    };
+    await writeJsonFile(SETTINGS_FILE, next);
+    res.json({ success: true, settings: next });
+  } catch (error) {
+    console.error('Error saving attendance settings:', error);
+    res.status(500).json({ success: false, message: 'Failed to save attendance settings' });
+  }
+});
+
+// User: own weekly off, late cut-off and leave requests (for the calendar)
+app.get('/api/attendance/my-settings', verifyToken, async (req, res) => {
+  try {
+    const settings = await loadSettings();
+    const leaves = (await readJsonFile(LEAVES_FILE, []))
+      .filter(l => Number(l.userId) === Number(req.user.userId))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    res.json({
+      success: true,
+      lateCutoff: settings.lateCutoff,
+      ...userSettings(settings, req.user.userId),
+      leaves
+    });
+  } catch (error) {
+    console.error('Error loading my attendance settings:', error);
+    res.status(500).json({ success: false, message: 'Failed to load settings' });
+  }
+});
+
+// User: apply for leave
+app.post('/api/attendance/leave/apply', verifyToken, async (req, res) => {
+  try {
+    const { fromDate, toDate, type, reason } = req.body || {};
+    if (!isValidDate(fromDate) || !isValidDate(toDate)) {
+      return res.status(400).json({ success: false, message: 'From and To dates are required (YYYY-MM-DD)' });
+    }
+    if (toDate < fromDate) {
+      return res.status(400).json({ success: false, message: 'To date cannot be before From date' });
+    }
+    if (datesBetween(fromDate, toDate).length > 60) {
+      return res.status(400).json({ success: false, message: 'Leave cannot be longer than 60 days' });
+    }
+    if (!LEAVE_TYPES.includes(type)) {
+      return res.status(400).json({ success: false, message: 'Leave type must be casual, sick or other' });
+    }
+    const cleanReason = typeof reason === 'string' ? reason.trim().slice(0, 500) : '';
+    if (!cleanReason) {
+      return res.status(400).json({ success: false, message: 'Please give a reason' });
+    }
+    const user = await findUser(req.user.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const leaves = await readJsonFile(LEAVES_FILE, []);
+    const overlap = leaves.find(l =>
+      Number(l.userId) === Number(user.id) &&
+      (l.status === 'pending' || l.status === 'approved') &&
+      l.fromDate <= toDate && l.toDate >= fromDate
+    );
+    if (overlap) {
+      return res.status(409).json({
+        success: false,
+        message: `You already have a ${overlap.status} leave from ${overlap.fromDate} to ${overlap.toDate}`
+      });
+    }
+
+    const leave = {
+      id: `leave-${user.id}-${Date.now()}`,
+      userId: Number(user.id),
+      userName: user.name,
+      fromDate,
+      toDate,
+      days: datesBetween(fromDate, toDate).length,
+      type,
+      reason: cleanReason,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    leaves.push(leave);
+    await writeJsonFile(LEAVES_FILE, leaves);
+
+    try {
+      sendNotificationToAdmins({
+        title: 'Leave Request',
+        message: `${user.name} requested ${leave.days} day(s) ${type} leave (${fromDate}${fromDate !== toDate ? ` to ${toDate}` : ''}): ${cleanReason}`,
+        data: { url: '/admin/attendance', endpoint: 'attendance-leave', id: leave.id }
+      }, 'attendance-leave', { ownerUserId: user.id });
+    } catch (e) {
+      console.log('⚠️ Leave request notification failed:', e.message);
+    }
+
+    res.json({ success: true, message: 'Leave request sent', leave });
+  } catch (error) {
+    console.error('Error applying for leave:', error);
+    res.status(500).json({ success: false, message: 'Failed to apply for leave' });
+  }
+});
+
+// User: cancel own pending leave request
+app.post('/api/attendance/leave/cancel', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    const leaves = await readJsonFile(LEAVES_FILE, []);
+    const leave = leaves.find(l => l.id === id && Number(l.userId) === Number(req.user.userId));
+    if (!leave) return res.status(404).json({ success: false, message: 'Leave request not found' });
+    if (leave.status !== 'pending') {
+      return res.status(400).json({ success: false, message: `This request is already ${leave.status}` });
+    }
+    leave.status = 'cancelled';
+    leave.decidedAt = new Date().toISOString();
+    await writeJsonFile(LEAVES_FILE, leaves);
+    res.json({ success: true, leave });
+  } catch (error) {
+    console.error('Error cancelling leave:', error);
+    res.status(500).json({ success: false, message: 'Failed to cancel leave' });
+  }
+});
+
+// Admin: list leave requests. ?status=pending|approved|rejected|cancelled|all
+//        &fromDate=&toDate= limits to leaves overlapping that range
+app.get('/api/attendance/admin/leaves', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { status = 'all', fromDate, toDate } = req.query;
+    let leaves = await readJsonFile(LEAVES_FILE, []);
+    if (status !== 'all') leaves = leaves.filter(l => l.status === status);
+    if (isValidDate(fromDate) && isValidDate(toDate)) {
+      leaves = leaves.filter(l => l.fromDate <= toDate && l.toDate >= fromDate);
+    }
+    leaves.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    res.json({ success: true, leaves });
+  } catch (error) {
+    console.error('Error listing leaves:', error);
+    res.status(500).json({ success: false, message: 'Failed to load leave requests' });
+  }
+});
+
+// Admin: approve / reject a leave request
+app.post('/api/attendance/admin/leaves/decide', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { id, decision, adminNote } = req.body || {};
+    if (!['approved', 'rejected'].includes(decision)) {
+      return res.status(400).json({ success: false, message: 'Decision must be approved or rejected' });
+    }
+    const leaves = await readJsonFile(LEAVES_FILE, []);
+    const leave = leaves.find(l => l.id === id);
+    if (!leave) return res.status(404).json({ success: false, message: 'Leave request not found' });
+    if (leave.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: 'The user cancelled this request' });
+    }
+    const admin = await findUser(req.user.userId);
+    leave.status = decision;
+    leave.decidedBy = Number(req.user.userId);
+    leave.decidedByName = admin ? admin.name : '';
+    leave.decidedAt = new Date().toISOString();
+    leave.adminNote = typeof adminNote === 'string' ? adminNote.trim().slice(0, 500) : '';
+    await writeJsonFile(LEAVES_FILE, leaves);
+
+    sendNotificationToUsers([leave.userId], {
+      title: `Leave ${decision === 'approved' ? 'Approved' : 'Rejected'}`,
+      message: `Your leave ${leave.fromDate}${leave.fromDate !== leave.toDate ? ` to ${leave.toDate}` : ''} was ${decision}${leave.adminNote ? `: ${leave.adminNote}` : ''}`,
+      data: { url: '/attendance/history', endpoint: 'attendance-leave', id: leave.id }
+    }, 'attendance-leave').catch(() => {});
+
+    res.json({ success: true, leave });
+  } catch (error) {
+    console.error('Error deciding leave:', error);
+    res.status(500).json({ success: false, message: 'Failed to update leave request' });
+  }
+});
+
+// Admin: backfill missed attendance for any user, for one day or a date range.
+// Body: { userId, date | (fromDate, toDate), time: 'HH:MM', status, note?, selfieData?, skipWeeklyOff? }
+// Days that already have an entry (or are in the future) are skipped, never overwritten.
 app.post('/api/attendance/admin/backfill', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { userId, date, time, status, note, selfieData } = req.body || {};
+    const { userId, time, status, note, selfieData, skipWeeklyOff } = req.body || {};
+    const fromDate = req.body.fromDate || req.body.date;
+    const toDate = req.body.toDate || fromDate;
 
-    if (!userId || !date || !time || !status) {
+    if (!userId || !fromDate || !time || !status) {
       return res.status(400).json({ success: false, message: 'User, date, time and status are required' });
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(new Date(`${date}T00:00:00`).getTime())) {
-      return res.status(400).json({ success: false, message: 'Date must be YYYY-MM-DD' });
+    if (!isValidDate(fromDate) || !isValidDate(toDate)) {
+      return res.status(400).json({ success: false, message: 'Dates must be YYYY-MM-DD' });
+    }
+    if (toDate < fromDate) {
+      return res.status(400).json({ success: false, message: 'To date cannot be before From date' });
+    }
+    const allDates = datesBetween(fromDate, toDate);
+    if (allDates.length > 62) {
+      return res.status(400).json({ success: false, message: 'Backfill at most 62 days at a time' });
     }
     const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(time);
     if (!timeMatch || Number(timeMatch[1]) > 23 || Number(timeMatch[2]) > 59) {
@@ -1131,67 +1398,68 @@ app.post('/api/attendance/admin/backfill', verifyToken, requireAdmin, async (req
     if (!['present', 'absent', 'half_day'].includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status. Must be present, absent, or half_day' });
     }
-    // No future dates (compare against today in IST, the business timezone)
-    const todayIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    if (date > todayIST) {
-      return res.status(400).json({ success: false, message: 'Cannot backfill attendance for a future date' });
-    }
     if (selfieData && (typeof selfieData !== 'string' || !selfieData.startsWith('data:image/'))) {
       return res.status(400).json({ success: false, message: 'Photo must be an image' });
     }
 
-    const usersData = await fs.readFile(path.join(__dirname, '..', 'db', 'users.json'), 'utf8');
-    const users = JSON.parse(usersData);
-    const targetUser = users.find(u => Number(u.id) === Number(userId));
-    if (!targetUser) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    const adminUser = users.find(u => Number(u.id) === Number(req.user.userId));
+    const targetUser = await findUser(userId);
+    if (!targetUser) return res.status(404).json({ success: false, message: 'User not found' });
+    const adminUser = await findUser(req.user.userId);
+    const { weeklyOffDays } = userSettings(await loadSettings(), userId);
 
-    const attendanceDir = path.join(__dirname, '..', 'db', 'attendance');
-    const attendanceFilePath = path.join(attendanceDir, 'records.json');
-    await fs.mkdir(attendanceDir, { recursive: true });
-
-    let attendanceRecords = [];
-    try {
-      attendanceRecords = JSON.parse(await fs.readFile(attendanceFilePath, 'utf8'));
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
-
-    const existing = attendanceRecords.find(r => Number(r.userId) === Number(userId) && r.date === date);
-    if (existing) {
-      return res.status(409).json({
-        success: false,
-        message: `${targetUser.name} already has attendance on ${date} (${existing.status}). Edit or delete that entry instead.`
-      });
-    }
+    const attendanceRecords = await readJsonFile(RECORDS_FILE, []);
+    const existingDates = new Set(
+      attendanceRecords.filter(r => Number(r.userId) === Number(userId)).map(r => r.date)
+    );
 
     const h = Number(timeMatch[1]);
     const m = timeMatch[2];
     const displayTime = `${String(((h + 11) % 12) + 1).padStart(2, '0')}:${m}:00 ${h < 12 ? 'AM' : 'PM'}`;
+    const today = istToday();
+    const cleanNote = typeof note === 'string' ? note.trim().slice(0, 500) : '';
+    const now = Date.now();
 
-    const record = {
-      id: `backfill-${userId}-${date}-${Date.now()}`,
-      userId: Number(userId),
-      userName: targetUser.name,
-      date,
-      time: displayTime,
-      location: null,
-      selfieData: selfieData || '',
-      status,
-      source: 'backfill',
-      backfilledBy: Number(req.user.userId),
-      backfilledByName: adminUser ? adminUser.name : '',
-      note: typeof note === 'string' ? note.trim().slice(0, 500) : '',
-      timestamp: new Date().toISOString()
-    };
+    const created = [];
+    const skipped = [];
+    allDates.forEach((date, i) => {
+      if (date > today) return skipped.push({ date, reason: 'future date' });
+      if (existingDates.has(date)) return skipped.push({ date, reason: 'already has an entry' });
+      if (skipWeeklyOff && weeklyOffDays.includes(dayOfWeek(date))) return skipped.push({ date, reason: 'weekly off' });
+      const record = {
+        id: `backfill-${userId}-${date}-${now + i}`,
+        userId: Number(userId),
+        userName: targetUser.name,
+        date,
+        time: displayTime,
+        location: null,
+        selfieData: selfieData || '',
+        status,
+        source: 'backfill',
+        backfilledBy: Number(req.user.userId),
+        backfilledByName: adminUser ? adminUser.name : '',
+        note: cleanNote,
+        timestamp: new Date().toISOString()
+      };
+      attendanceRecords.push(record);
+      created.push(record);
+    });
 
-    attendanceRecords.push(record);
-    await fs.writeFile(attendanceFilePath, JSON.stringify(attendanceRecords, null, 2));
+    if (created.length === 0) {
+      const reason = skipped.length === 1
+        ? `${targetUser.name} ${skipped[0].reason === 'already has an entry' ? `already has attendance on ${skipped[0].date}. Edit or delete that entry instead.` : `— ${skipped[0].date} is a ${skipped[0].reason}.`}`
+        : `Nothing to add: all ${skipped.length} days were skipped (existing entries, weekly offs or future dates).`;
+      return res.status(409).json({ success: false, message: reason, skipped });
+    }
 
-    console.log(`📝 Attendance backfilled: user ${record.userId} (${record.userName}) ${date} ${status} by admin ${record.backfilledBy}`);
-    res.json({ success: true, message: 'Attendance backfilled successfully', record });
+    await writeJsonFile(RECORDS_FILE, attendanceRecords);
+    console.log(`📝 Attendance backfilled: user ${userId} (${targetUser.name}) ${created.map(r => r.date).join(', ')} ${status} by admin ${req.user.userId}`);
+    res.json({
+      success: true,
+      message: `Backfilled ${created.length} day(s)${skipped.length ? `, skipped ${skipped.length}` : ''}`,
+      record: created[0],
+      created: created.map(r => ({ id: r.id, date: r.date })),
+      skipped
+    });
   } catch (error) {
     console.error('Error backfilling attendance:', error);
     res.status(500).json({ success: false, message: 'Failed to backfill attendance' });

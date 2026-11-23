@@ -7,6 +7,7 @@
 const NOTIFICATION_TYPES = {
   'attendance-marked':   { label: 'Attendance Marked (by any user)',      userUrl: '/attendance' },
   'attendance-reminder': { label: 'Attendance Reminder (12:45 PM if not marked)', userUrl: '/attendance' },
+  'attendance-leave':    { label: 'Leave Requests (own request approved / rejected)', userUrl: '/attendance/history' },
   'invoicing':           { label: 'Invoice Created / Modified',           userUrl: '/db/invoicing' },
   'cash-receipts':       { label: 'Cash Receipt Created / Modified',      userUrl: '/db/cash-receipts' },
   'cash-payments':       { label: 'Cash Payment Created / Modified',      userUrl: '/db/cash-payments' },
