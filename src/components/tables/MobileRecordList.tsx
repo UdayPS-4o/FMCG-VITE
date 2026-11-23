@@ -598,7 +598,7 @@ const MobileRecordList: React.FC<MobileRecordListProps> = (props) => {
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                        {info.ref && <span className="rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">{info.ref}</span>}
+                        {info.ref && <span className="shrink-0 whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">{info.ref}</span>}
                         <span className="truncate">{info.meta.join(' · ')}</span>
                         {isApproved && (
                           <span className="ml-auto shrink-0 rounded bg-green-100 px-1.5 py-0.5 text-[11px] text-green-700 dark:bg-green-900/40 dark:text-green-300">Approved</span>

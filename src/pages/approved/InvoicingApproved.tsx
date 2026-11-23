@@ -237,15 +237,15 @@ const InvoicingApproved: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Invoicing Approved" />
       
-      <div className="container mx-auto px-4 py-6 overflow-hidden">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Invoicing Approved Data</h2>
-            <div className="flex space-x-4">
+      <div className="container mx-auto px-0 py-2 md:px-4 md:py-6 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-0 md:p-6 w-full overflow-hidden">
+          <div className="flex flex-wrap justify-between items-center gap-2 px-3 pt-3 mb-2 md:px-0 md:pt-0 md:mb-6">
+            <h2 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-white">Invoicing Approved<span className="hidden md:inline"> Data</span></h2>
+            <div className="flex items-center gap-2 md:gap-4">
               <button
                 onClick={handleRevertSelected}
                 disabled={isReverting || selectedRecords.length === 0}
-                className={`px-4 py-2 rounded-md text-white ${
+                className={`px-3 py-1.5 text-sm md:px-4 md:py-2 md:text-base whitespace-nowrap rounded-md text-white ${
                   isReverting || selectedRecords.length === 0
                     ? 'bg-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700'
@@ -266,7 +266,7 @@ const InvoicingApproved: React.FC = () => {
                 <button
                   onClick={handleSyncToDbf}
                   disabled={isSyncing || selectedRecords.length === 0}
-                  className={`px-4 py-2 rounded-md text-white ${
+                  className={`px-3 py-1.5 text-sm md:px-4 md:py-2 md:text-base whitespace-nowrap rounded-md text-white ${
                     isSyncing || selectedRecords.length === 0
                       ? 'bg-gray-400 cursor-not-allowed'
                       : 'bg-green-600 hover:bg-green-700'

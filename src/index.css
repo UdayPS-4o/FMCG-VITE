@@ -458,6 +458,12 @@ layer(base);
   html {
     @apply h-full;
   }
+  /* Stop iOS rubber-band overscroll: in the installed app / WebView it drags the
+     whole page, fixed header and bottom nav included, past the screen edge. */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
 
   /* Custom scrollbar styles */
   .scrollbar-custom {
