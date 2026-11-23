@@ -99,7 +99,7 @@ async function cleancsv(filepath, filename) {
     }
 }
 
-async function runDownload(onStep = () => {}) {
+async function runDownload(onStep = () => {}, opts = {}) {
     let browser;
     try {
         console.log('Reading config from:', CONFIG_PATH);
@@ -243,7 +243,9 @@ async function runDownload(onStep = () => {}) {
         const fromDateValue = await page.$eval('#TransactionHistoryFG\\.TO_TXN_DATE', input => input.value);
         const fromDate = moment(fromDateValue, 'DD-MM-YYYY');
         const toDate = fromDate.clone().subtract(1, 'day');
-        const toDateValue = toDate.format('DD-MM-YYYY');
+        // default: yesterday..today; caller may ask for a longer range (e.g. to trace a balance difference)
+        const toDateValue = opts.fromDate || toDate.format('DD-MM-YYYY');
+        console.log(`Statement range: ${toDateValue} to ${fromDateValue}`);
 
         await page.evaluate((value) => {
             document.querySelector('#TransactionHistoryFG\\.FROM_TXN_DATE').value = value;
@@ -401,7 +403,36 @@ async function sendBankReceiptConfirmations(receipts) {
 const {
     PNB_BANK_CODE, scanCashDbf, invalidateCashCache, loadStore, saveStore, parseStatementCsv,
     parseNarration, txnKeys, buildPartyIndex, buildBillIndex, matchParty, voucherTypeFor,
+    computeBalanceRecon, dailyBalanceHistory,
 } = require('./pnbHelpers');
+
+// Day-end bank balances from every statement ever downloaded (cached on the folder's state)
+let statementHistoryCache = null;
+async function loadStatementDayEnds() {
+    if (!fsSync.existsSync(EDITED_DIR)) return new Map();
+    const files = (await fs.readdir(EDITED_DIR)).filter(f => f.startsWith('statement-') && f.endsWith('.csv'));
+    const stats = await Promise.all(files.map(async f => ({ f, mtimeMs: (await fs.stat(path.join(EDITED_DIR, f))).mtimeMs })));
+    const key = stats.map(x => `${x.f}:${x.mtimeMs}`).join('|');
+    if (statementHistoryCache && statementHistoryCache.key === key) return statementHistoryCache.dayEnds;
+
+    // oldest file first so later (more complete) downloads overwrite a day's closing balance
+    stats.sort((a, b) => a.mtimeMs - b.mtimeMs);
+    const dayEnds = new Map(); // YYYYMMDD -> owed at end of that day
+    for (const { f } of stats) {
+        try {
+            const { rows } = parseStatementCsv(await fs.readFile(path.join(EDITED_DIR, f), 'utf8'));
+            const seen = new Set();
+            for (const r of rows) { // newest first: first row of each date = that day's closing
+                const d = moment(r.date, 'DD-MM-YYYY').format('YYYYMMDD');
+                if (seen.has(d)) continue;
+                seen.add(d);
+                dayEnds.set(d, r.balanceSide === 'Cr' ? -r.balance : r.balance);
+            }
+        } catch { /* skip unreadable file */ }
+    }
+    statementHistoryCache = { key, dayEnds };
+    return dayEnds;
+}
 
 const jsonDir = () => path.join(process.env.DBF_FOLDER_PATH, 'data', 'json');
 
@@ -435,12 +466,12 @@ async function findLatestStatementFile() {
 const downloadJob = { status: 'idle', step: '', message: '', attempt: 0, startedAt: null, finishedAt: null };
 const MAX_DOWNLOAD_ATTEMPTS = 3; // captcha OCR is not always right first time
 
-async function runDownloadJob() {
-    Object.assign(downloadJob, { status: 'running', step: 'Starting', message: '', attempt: 0, startedAt: Date.now(), finishedAt: null });
+async function runDownloadJob(opts = {}) {
+    Object.assign(downloadJob, { status: 'running', step: 'Starting', message: '', attempt: 0, fromDate: opts.fromDate || '', startedAt: Date.now(), finishedAt: null });
     for (let attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt++) {
         downloadJob.attempt = attempt;
         try {
-            await runDownload(step => { downloadJob.step = step; });
+            await runDownload(step => { downloadJob.step = step; }, opts);
             Object.assign(downloadJob, { status: 'done', step: 'Done', message: 'Statement downloaded', finishedAt: Date.now() });
             return;
         } catch (err) {
@@ -459,7 +490,13 @@ router.post('/pnb-statement/download', (req, res) => {
     if (downloadJob.status === 'running') {
         return res.status(409).json({ message: 'A download is already running.', job: downloadJob });
     }
-    runDownloadJob().catch(err => console.error('[PNB] Download job crashed:', err));
+    let fromDate = '';
+    if (req.body && req.body.fromDate) {
+        const m = moment(String(req.body.fromDate), ['DD-MM-YYYY', 'YYYY-MM-DD'], true);
+        if (!m.isValid() || m.isAfter(moment())) return res.status(400).json({ message: 'Invalid from date' });
+        fromDate = m.format('DD-MM-YYYY');
+    }
+    runDownloadJob({ fromDate }).catch(err => console.error('[PNB] Download job crashed:', err));
     res.json({ message: 'Download started.', job: downloadJob });
 });
 
@@ -498,6 +535,14 @@ router.get('/pnb-statement/pending', async (req, res) => {
             store,
         };
 
+        let balance = null;
+        try {
+            balance = computeBalanceRecon(cash.bankLedger, meta, rows);
+            if (balance) balance.history = dailyBalanceHistory(cash.bankLedger, await loadStatementDayEnds());
+        } catch (err) {
+            console.error('[PNB] Balance reconciliation failed:', err);
+        }
+
         let alreadyEntered = 0;
         const pendingTransactions = [];
         rows.forEach((row, index) => {
@@ -520,6 +565,7 @@ router.get('/pnb-statement/pending', async (req, res) => {
             pendingTransactions,
             parties: cmplData.filter(p => p.C_CODE && !p._deleted)
                 .map(p => ({ value: p.C_CODE, label: `${p.C_NAME} (${p.C_CODE})` })),
+            balance,
             summary: {
                 ...meta,
                 fileName: path.basename(file.path),

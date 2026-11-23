@@ -67,6 +67,9 @@ async function scanCashDbf({ force = false } = {}) {
         const maxVr = { BP: 0, BR: 0, CP: 0 };
         // history: key -> { code -> count } built from party-side lines of past bank entries
         const historyVotes = new Map();
+        // every live line posted to the PNB account (for book balance / reconciliation)
+        const bankLedger = [];
+        const num = (base, f) => (f ? parseFloat(get(base, f)) || 0 : 0);
 
         const CHUNK = 4000;
         const buf = Buffer.alloc(CHUNK * recordLength);
@@ -88,10 +91,20 @@ async function scanCashDbf({ force = false } = {}) {
                 }
 
                 const bank = get(base, fields.BANK).toUpperCase();
+                const code = get(base, fields.C_CODE);
+                if (code === PNB_BANK_CODE) {
+                    bankLedger.push({
+                        vr,
+                        date: fields.DATE ? get(base, fields.DATE) : '', // YYYYMMDD
+                        dr: num(base, fields.DR),
+                        cr: num(base, fields.CR),
+                        bank,
+                        remark: fields.REMARK ? get(base, fields.REMARK) : '',
+                    });
+                }
                 if (!bank) continue;
                 bankSet.add(bank);
 
-                const code = get(base, fields.C_CODE);
                 if (!code || code === PNB_BANK_CODE || !fields.REMARK) continue;
                 const remark = get(base, fields.REMARK);
                 const truncated = remark.length >= remarkSize - 1;
@@ -112,7 +125,7 @@ async function scanCashDbf({ force = false } = {}) {
             if (entries[0][1] / total >= 0.8) history.set(k, { code: entries[0][0], count: entries[0][1] });
         }
 
-        cashCache = { key, path: dbfPath, bankSet, maxVr, history, recordCount, scannedAt: Date.now() };
+        cashCache = { key, path: dbfPath, bankSet, maxVr, history, bankLedger, recordCount, scannedAt: Date.now() };
         console.log(`[PNB] Scanned CASH.DBF: ${recordCount} records, ${bankSet.size} bank txns, ` +
             `${history.size} history keys, max BR=${maxVr.BR} BP=${maxVr.BP} CP=${maxVr.CP} in ${Date.now() - started}ms`);
         return cashCache;
@@ -189,6 +202,8 @@ function parseStatementCsv(content) {
             drAmount: toNumber(row['Dr Amount']),
             crAmount: toNumber(row['Cr Amount']),
             balance: toNumber(row['Balance']),
+            // PNB CC account: balance is "x Dr." (owed to bank). Cleaned files lose the suffix -> assume Dr.
+            balanceSide: /Cr\.?\s*$/i.test(String(row['Balance'] || '')) ? 'Cr' : 'Dr',
         });
     }
     // PNB lists newest first, so the first row carries the latest balance
@@ -459,6 +474,125 @@ function matchParty(txn, parsed, ctx) {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Book balance vs bank balance
+// ---------------------------------------------------------------------------
+// Everything is expressed as "owed to bank" (Dr balance on the PNB CC account):
+//   bank row effect  = dr - cr
+//   book line effect = CR - DR   (BB009 lines: receipts are DR, payments CR, opening in CR)
+
+const r2 = n => Math.round(n * 100) / 100;
+const ymd = d => moment(d, 'DD-MM-YYYY').format('YYYYMMDD');
+const fmtYmd = d => (d && d.length === 8 ? `${d.slice(6, 8)}-${d.slice(4, 6)}-${d.slice(0, 4)}` : d);
+
+function computeBalanceRecon(bankLedger, meta, rows) {
+    if (!rows.length) return null;
+    const owed = r => (r.balanceSide === 'Cr' ? -r.balance : r.balance);
+
+    // statement order: PNB lists newest first; detect and normalise to newest-first
+    let list = rows;
+    if (rows.length > 1) {
+        const [a, b] = rows;
+        const newestFirst = Math.abs(owed(a) - (owed(b) + a.drAmount - a.crAmount)) < 0.01;
+        if (!newestFirst) list = [...rows].reverse();
+    }
+    const newest = list[0];
+    const oldest = list[list.length - 1];
+    const bankClosing = owed(newest);
+    const bankOpening = owed(oldest) - (oldest.drAmount - oldest.crAmount);
+
+    const fromYmd = meta.periodFrom ? ymd(meta.periodFrom) : ymd(oldest.date);
+    const toYmd = meta.periodTo ? ymd(meta.periodTo) : ymd(newest.date);
+
+    let booksClosing = 0, booksOpening = 0;
+    const booksInWindow = []; // lines dated on/after the statement start
+    for (const l of bankLedger) {
+        const eff = l.cr - l.dr;
+        booksClosing += eff;
+        if (l.date && l.date < fromYmd) booksOpening += eff;
+        else booksInWindow.push(l);
+    }
+
+    // group book lines by bank txn no.
+    const booksByTxn = new Map();
+    const booksNoTxn = [];
+    for (const l of booksInWindow) {
+        if (!l.bank) { booksNoTxn.push(l); continue; }
+        if (!booksByTxn.has(l.bank)) booksByTxn.set(l.bank, []);
+        booksByTxn.get(l.bank).push(l);
+    }
+    const earlierTxn = new Map(); // txn posted in books before the statement window
+    for (const l of bankLedger) if (l.bank && l.date && l.date < fromYmd) earlierTxn.set(l.bank, l.date);
+
+    const notInBooks = [];
+    const mismatched = [];
+    for (const r of list) {
+        const bankEff = r.drAmount - r.crAmount;
+        const lines = booksByTxn.get(r.txnNo.toUpperCase());
+        if (!lines) {
+            notInBooks.push({
+                txnNo: r.txnNo, date: r.date, narration: r.narration, amount: r.crAmount || r.drAmount,
+                side: r.crAmount ? 'Cr' : 'Dr', impact: r2(-bankEff),
+                note: earlierTxn.has(r.txnNo.toUpperCase()) ? `posted in books on ${fmtYmd(earlierTxn.get(r.txnNo.toUpperCase()))}` : '',
+            });
+            continue;
+        }
+        booksByTxn.delete(r.txnNo.toUpperCase());
+        const bookEff = lines.reduce((s, l) => s + l.cr - l.dr, 0);
+        if (Math.abs(bookEff - bankEff) >= 0.01) {
+            mismatched.push({
+                txnNo: r.txnNo, date: r.date, narration: r.narration, vr: lines.map(l => l.vr).join(', '),
+                bankAmount: r2(Math.abs(bankEff)), booksAmount: r2(Math.abs(bookEff)), impact: r2(bookEff - bankEff),
+            });
+        }
+    }
+    const notInBank = [...[...booksByTxn.values()].flat(), ...booksNoTxn].map(l => ({
+        vr: l.vr, date: fmtYmd(l.date), txnNo: l.bank, narration: l.remark,
+        amount: r2(Math.abs(l.cr - l.dr)), side: l.dr ? 'Cr' : 'Dr', impact: r2(l.cr - l.dr),
+        note: l.date > toYmd ? 'after statement period' : (!l.bank ? 'no bank txn no.' : ''),
+    })).sort((a, b) => (a.date < b.date ? -1 : 1));
+
+    const sum = arr => r2(arr.reduce((s, x) => s + x.impact, 0));
+    const carriedForward = r2(booksOpening - bankOpening);
+    const difference = r2(booksClosing - bankClosing);
+    const explained = r2(carriedForward + sum(notInBooks) + sum(notInBank) + sum(mismatched));
+
+    return {
+        bankClosing: r2(bankClosing),
+        bankAsOf: newest.date,
+        booksClosing: r2(booksClosing),
+        difference,                                  // books - bank (owed basis)
+        periodFrom: fmtYmd(fromYmd),
+        periodTo: fmtYmd(toYmd),
+        bankOpening: r2(bankOpening),
+        booksOpening: r2(booksOpening),
+        carriedForward,                              // difference that already existed before periodFrom
+        notInBooks, notInBooksTotal: sum(notInBooks),
+        notInBank, notInBankTotal: sum(notInBank),
+        mismatched, mismatchedTotal: sum(mismatched),
+        unexplained: r2(difference - explained),     // should be 0; non-zero means a statement balance jump
+    };
+}
+
+/**
+ * Books vs bank at the end of every day we have a statement for.
+ * Returns the days where the difference changed (plus first/last), oldest first.
+ */
+function dailyBalanceHistory(bankLedger, dayEnds) {
+    const days = [...dayEnds.keys()].sort();
+    if (!days.length) return { firstDate: null, lastDate: null, changes: [] };
+    const lines = bankLedger.filter(l => l.date).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const undated = bankLedger.filter(l => !l.date).reduce((s, l) => s + l.cr - l.dr, 0);
+    let i = 0, books = undated;
+    const all = [];
+    for (const d of days) {
+        while (i < lines.length && lines[i].date <= d) { books += lines[i].cr - lines[i].dr; i++; }
+        all.push({ date: fmtYmd(d), bank: r2(dayEnds.get(d)), books: r2(books), difference: r2(books - dayEnds.get(d)) });
+    }
+    const changes = all.filter((x, k) => k === 0 || k === all.length - 1 || x.difference !== all[k - 1].difference);
+    return { firstDate: all[0].date, lastDate: all[all.length - 1].date, days: all.length, changes };
+}
+
 function voucherTypeFor(txn) {
     if (txn.crAmount > 0) return /BY CASH/i.test(txn.narration) ? 'CP' : 'BR';
     if (txn.drAmount > 0) return 'BP';
@@ -479,5 +613,7 @@ module.exports = {
     buildBillIndex,
     matchParty,
     voucherTypeFor,
+    computeBalanceRecon,
+    dailyBalanceHistory,
     toMobile,
 };

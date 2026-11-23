@@ -52,6 +52,44 @@ interface Summary {
   alreadyEntered: number;
 }
 
+interface ReconLine {
+  txnNo: string;
+  date: string;
+  narration: string;
+  impact: number;
+  vr?: string;
+  amount?: number;
+  side?: string;
+  note?: string;
+  bankAmount?: number;
+  booksAmount?: number;
+}
+
+interface BalanceRecon {
+  bankClosing: number;
+  bankAsOf: string;
+  booksClosing: number;
+  difference: number;
+  periodFrom: string;
+  periodTo: string;
+  bankOpening: number;
+  booksOpening: number;
+  carriedForward: number;
+  notInBooks: ReconLine[];
+  notInBooksTotal: number;
+  notInBank: ReconLine[];
+  notInBankTotal: number;
+  mismatched: ReconLine[];
+  mismatchedTotal: number;
+  unexplained: number;
+  history?: {
+    firstDate: string | null;
+    lastDate: string | null;
+    days?: number;
+    changes: { date: string; bank: number; books: number; difference: number }[];
+  };
+}
+
 interface DownloadJob {
   status: 'idle' | 'running' | 'done' | 'failed';
   step: string;
@@ -59,6 +97,7 @@ interface DownloadJob {
   attempt: number;
   startedAt: number | null;
   finishedAt: number | null;
+  fromDate?: string;
 }
 
 interface SaveResult {
@@ -107,6 +146,139 @@ const confidenceStyle = (c: number) =>
 const notifyLabel = (s?: string) =>
   s === 'sent' ? '✓ sent' : s === 'failed' ? '✗ failed' : s === 'no-mobile' ? 'no mobile' : s === 'pending' ? '… sending' : '–';
 
+const financialYearStart = () => {
+  const now = new Date();
+  const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${y}-04-01`;
+};
+
+const BalancePanel: React.FC<{
+  balance: BalanceRecon;
+  downloading: boolean;
+  onDownloadFrom: (isoDate: string) => void;
+}> = ({ balance, downloading, onDownloadFrom }) => {
+  const [open, setOpen] = useState(false);
+  const diff = balance.difference;
+  const ok = Math.abs(diff) < 0.01;
+  const h = balance.history;
+  const unchangedSince =
+    h && h.changes.length && h.changes.every(c => Math.abs(c.difference - diff) < 0.01) ? h.firstDate : null;
+  const fyStart = financialYearStart();
+
+  const line = (label: string, value: number) => (
+    <div className="flex justify-between gap-3 py-1 border-b border-gray-100 dark:border-gray-700">
+      <span className="text-gray-600 dark:text-gray-300">{label}</span>
+      <span className={`font-mono whitespace-nowrap ${Math.abs(value) < 0.01 ? 'text-gray-400' : 'text-gray-900 dark:text-gray-100 font-semibold'}`}>
+        {value < 0 ? '−' : ''}{inr(Math.abs(value))}
+      </span>
+    </div>
+  );
+
+  const list = (rows: ReconLine[], kind: 'bank' | 'books' | 'mismatch') =>
+    rows.length > 0 && (
+      <ul className="ml-3 my-1 text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
+        {rows.map((r, i) => (
+          <li key={`${r.txnNo}-${r.vr}-${i}`} className="flex justify-between gap-3">
+            <span className="truncate" title={r.narration}>
+              {r.date} · {kind !== 'bank' && r.vr ? `${r.vr} · ` : ''}{r.txnNo || '—'} · {r.narration}
+              {kind === 'mismatch' && ` (bank ${inr(r.bankAmount || 0)} vs books ${inr(r.booksAmount || 0)})`}
+              {r.note ? <i> · {r.note}</i> : null}
+            </span>
+            <span className="font-mono whitespace-nowrap">
+              {kind === 'mismatch' ? inr(r.impact) : `${inr(r.amount || 0)} ${r.side}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+
+  return (
+    <div className={`mx-2 md:mx-0 mb-4 rounded shadow p-4 ${ok ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Bank balance (statement, {balance.bankAsOf})</div>
+          <div className="text-lg font-bold text-gray-900 dark:text-white">{inr(balance.bankClosing)} Dr</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Books balance (BB009 in CASH.DBF)</div>
+          <div className="text-lg font-bold text-gray-900 dark:text-white">{inr(balance.booksClosing)} Cr</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Difference (books − bank)</div>
+          <div className={`text-lg font-bold ${ok ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+            {ok ? '✓ Matched' : `${diff > 0 ? '+' : '−'}${inr(Math.abs(diff))}`}
+          </div>
+        </div>
+      </div>
+
+      {!ok && (
+        <>
+          {unchangedSince && (
+            <p className="mt-3 text-sm text-red-800 dark:text-red-200">
+              The difference has been <b>{inr(Math.abs(diff))}</b> every day since <b>{unchangedSince}</b> (earliest
+              statement saved, {h?.days} days), so it comes from the opening balance or an entry <b>before {unchangedSince}</b>.
+              Download a statement from an earlier date to find it.
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-3 items-center">
+            <button onClick={() => setOpen(v => !v)} className="text-sm text-blue-700 dark:text-blue-300 underline">
+              {open ? 'Hide breakdown' : 'Show breakdown'}
+            </button>
+            {unchangedSince && (
+              <button
+                onClick={() => onDownloadFrom(fyStart)}
+                disabled={downloading}
+                className="text-sm px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300"
+              >
+                Download statement from {fyStart.split('-').reverse().join('-')}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {open && !ok && (
+        <div className="mt-3 bg-white dark:bg-gray-800 rounded p-3 text-sm">
+          {line(
+            `Already different before ${balance.periodFrom} (books ${inr(balance.booksOpening)} vs bank ${inr(balance.bankOpening)})`,
+            balance.carriedForward
+          )}
+          {line(`In bank, not in books (${balance.notInBooks.length})`, balance.notInBooksTotal)}
+          {list(balance.notInBooks, 'bank')}
+          {line(`In books, not in bank (${balance.notInBank.length})`, balance.notInBankTotal)}
+          {list(balance.notInBank, 'books')}
+          {line(`Amount different (${balance.mismatched.length})`, balance.mismatchedTotal)}
+          {list(balance.mismatched, 'mismatch')}
+          {Math.abs(balance.unexplained) >= 0.01 && line('Unexplained (statement balance jump)', balance.unexplained)}
+          {h && h.changes.length > 2 && (
+            <div className="mt-3">
+              <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Days the difference changed</div>
+              <table className="text-xs w-full">
+                <thead>
+                  <tr className="text-gray-500">
+                    <th className="text-left">Date</th><th className="text-right">Bank</th>
+                    <th className="text-right">Books</th><th className="text-right">Difference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {h.changes.map(c => (
+                    <tr key={c.date}>
+                      <td>{c.date}</td>
+                      <td className="text-right font-mono">{inr(c.bank)}</td>
+                      <td className="text-right font-mono">{inr(c.books)}</td>
+                      <td className="text-right font-mono">{inr(c.difference)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const PNBStatement: React.FC = () => {
   const { user } = useAuth();
   const { logActivity } = useActivityTracker();
@@ -116,6 +288,7 @@ const PNBStatement: React.FC = () => {
   const [transactions, setTransactions] = useState<PendingTransaction[]>([]);
   const [partyOptions, setPartyOptions] = useState<PartyOption[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [balance, setBalance] = useState<BalanceRecon | null>(null);  const [downloadFrom, setDownloadFrom] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
@@ -142,6 +315,7 @@ const PNBStatement: React.FC = () => {
       setTransactions(txns);
       setPartyOptions(data.parties);
       setSummary(data.summary);
+      setBalance(data.balance || null);
       // pre-select rows that already have a confident party
       setSelected(new Set(txns.filter(t => t.partyCode && !t.ignored && t.confidence >= 85).map(t => t.txnNo)));
     } catch (error: any) {
@@ -179,9 +353,9 @@ const PNBStatement: React.FC = () => {
     }, 2500);
   }, [fetchPending]);
 
-  const handleDownload = async () => {
+  const handleDownload = async (fromDate?: string) => {
     try {
-      const { data } = await axios.post(`${API}/download`);
+      const { data } = await axios.post(`${API}/download`, fromDate ? { fromDate } : {});
       setJob(data.job);
       logActivity({ page: 'PNB Reconciliation', action: 'Downloaded Statement', duration: 0 });
       pollJob();
@@ -434,12 +608,21 @@ const PNBStatement: React.FC = () => {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={handleDownload}
+            onClick={() => handleDownload(downloadFrom || undefined)}
             disabled={downloading}
+            title={downloadFrom ? `Download from ${downloadFrom} to today` : 'Download yesterday + today'}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-blue-300 transition-colors"
           >
-            {downloading ? 'Downloading…' : 'Download Statement'}
+            {downloading ? 'Downloading…' : downloadFrom ? 'Download from date' : 'Download Statement'}
           </button>
+          <input
+            type="date"
+            value={downloadFrom}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={e => setDownloadFrom(e.target.value)}
+            title="Optional: download a longer statement starting from this date"
+            className="px-2 py-2 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          />
           <button
             onClick={fetchPending}
             disabled={loading}
@@ -459,7 +642,7 @@ const PNBStatement: React.FC = () => {
             : 'bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'}`}>
           {job.status === 'running' && <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />}
           <span>
-            {job.status === 'running' && <>Downloading from PNB: <b>{job.step}</b>{job.attempt > 1 ? ` (attempt ${job.attempt})` : ''}</>}
+            {job.status === 'running' && <>Downloading from PNB{job.fromDate ? ` (from ${job.fromDate})` : ''}: <b>{job.step}</b>{job.attempt > 1 ? ` (attempt ${job.attempt})` : ''}</>}
             {job.status === 'done' && <>Statement downloaded {job.finishedAt ? timeAgo(job.finishedAt) : ''}.</>}
             {job.status === 'failed' && <>Download failed: <b>{job.message}</b>. Try again, or download the CSV from PNB manually.</>}
           </span>
@@ -490,11 +673,20 @@ const PNBStatement: React.FC = () => {
             <div className="text-[11px] text-gray-500">statement rows</div>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded shadow p-3 col-span-2 lg:col-span-1">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Bank balance (latest)</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Statement balance</div>
             <div className="text-lg font-bold text-gray-900 dark:text-white">{summary.latestBalance != null ? inr(summary.latestBalance) : '—'}</div>
             <div className="text-[11px] text-gray-500 truncate" title={summary.fileName}>{summary.fileName}</div>
           </div>
         </div>
+      )}
+
+      {/* Books vs bank balance */}
+      {balance && (
+        <BalancePanel
+          balance={balance}
+          downloading={downloading}
+          onDownloadFrom={from => { setDownloadFrom(from); handleDownload(from); }}
+        />
       )}
 
       {/* Save result */}
