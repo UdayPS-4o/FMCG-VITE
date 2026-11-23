@@ -206,21 +206,31 @@ const getProducts = () =>
   );
 
 // Monthly sales totals per FY for a year folder ({ 'YYYY-MM': amount })
+// Daily amounts are kept per month (31 slots) so "sales till day N" can be worked out for any
+// month on any day without re-reading the files.
+const newDays = () => Array(31).fill(0);
+// Sum of days 1..day (a month shorter than `day` simply gives its full total)
+const tillDay = (days, day) => (days ? days.slice(0, day).reduce((s, v) => s + v, 0) : 0);
+
+// Sales per month for a year folder: { 'YYYY-MM': { total, days: [31 daily amounts] } }
 const getMonthlyBillTotals = (folder) =>
-  loadProjected('bill-monthly', folder, 'BILL.json', (rows) => {
+  loadProjected('bill-daily', folder, 'BILL.json', (rows) => {
     const out = {};
     rows.forEach((r) => {
       const d = toIstDate(r.DATE);
       if (!d) return;
       const k = d.slice(0, 7);
-      out[k] = (out[k] || 0) + num(r.N_B_AMT);
+      const amt = num(r.N_B_AMT);
+      out[k] = out[k] || { total: 0, days: newDays() };
+      out[k].total += amt;
+      out[k].days[Number(d.slice(8, 10)) - 1] += amt;
     });
     return out;
   });
 
-// Monthly company-wise totals for a year folder ({ 'YYYY-MM': { CC: amount } })
+// Company-wise sales per month for a year folder: { 'YYYY-MM': { CC: { total, days } } }
 const getMonthlyCompanyTotals = (folder) =>
-  loadProjected('billdtl-monthly', folder, 'BILLDTL.json', (rows) => {
+  loadProjected('billdtl-daily', folder, 'BILLDTL.json', (rows) => {
     const out = {};
     rows.forEach((r) => {
       const net = num(r.NET10);
@@ -230,7 +240,9 @@ const getMonthlyCompanyTotals = (folder) =>
       const k = d.slice(0, 7);
       const cc = str(r.CODE).slice(0, 2).toUpperCase();
       out[k] = out[k] || {};
-      out[k][cc] = (out[k][cc] || 0) + net;
+      out[k][cc] = out[k][cc] || { total: 0, days: newDays() };
+      out[k][cc].total += net;
+      out[k][cc].days[Number(d.slice(8, 10)) - 1] += net;
     });
     return out;
   });
@@ -344,11 +356,18 @@ const handlers = {
     const folders = [prevYearFolder(2), prevYearFolder(1), process.env.DBF_FOLDER_PATH].filter(Boolean);
     const fyYears = [ref.fy - 2, ref.fy - 1, ref.fy];
 
+    // "Till day N" comparison: each month's sales from the 1st up to today's day-of-month
+    const mtdDay = Number(ref.today.slice(8, 10));
+
     const yearly = {}; // fy -> [12]
+    const yearlyMtd = {}; // fy -> [12] sales till mtdDay
     const yearlyCo = {}; // fy -> [12] of { CC: amt }
+    const yearlyCoMtd = {}; // fy -> [12] of { CC: amt till mtdDay }
     fyYears.forEach((fy) => {
       yearly[fy] = Array(12).fill(0);
+      yearlyMtd[fy] = Array(12).fill(0);
       yearlyCo[fy] = Array.from({ length: 12 }, () => ({}));
+      yearlyCoMtd[fy] = Array.from({ length: 12 }, () => ({}));
     });
 
     for (const folder of folders) {
@@ -356,15 +375,18 @@ const handlers = {
         getMonthlyBillTotals(folder),
         getMonthlyCompanyTotals(folder),
       ]);
-      Object.entries(monthTotals).forEach(([ym, amt]) => {
+      Object.entries(monthTotals).forEach(([ym, m]) => {
         const { fy, idx } = fyMonthIndex(ym);
-        if (yearly[fy]) yearly[fy][idx] += amt;
+        if (!yearly[fy]) return;
+        yearly[fy][idx] += m.total;
+        yearlyMtd[fy][idx] += tillDay(m.days, mtdDay);
       });
       Object.entries(coTotals).forEach(([ym, byCo]) => {
         const { fy, idx } = fyMonthIndex(ym);
         if (!yearlyCo[fy]) return;
-        Object.entries(byCo).forEach(([cc, amt]) => {
-          yearlyCo[fy][idx][cc] = (yearlyCo[fy][idx][cc] || 0) + amt;
+        Object.entries(byCo).forEach(([cc, m]) => {
+          yearlyCo[fy][idx][cc] = (yearlyCo[fy][idx][cc] || 0) + m.total;
+          yearlyCoMtd[fy][idx][cc] = (yearlyCoMtd[fy][idx][cc] || 0) + tillDay(m.days, mtdDay);
         });
       });
     }
@@ -385,13 +407,18 @@ const handlers = {
 
     // Full per-company monthly figures for the company comparison picker:
     // companySeries[code][fyLabel] = [12 monthly amounts, Apr..Mar]
+    // companySeriesMtd has the same shape, with each month's sales till mtdDay
     const companySeries = {};
+    const companySeriesMtd = {};
     const companyTotals = {};
+    const emptyFySeries = () => Object.fromEntries(fyYears.map((y) => [fyLabel(y), Array(12).fill(0)]));
     fyYears.forEach((fy) => {
       yearlyCo[fy].forEach((byCo, idx) => {
         Object.entries(byCo).forEach(([cc, amt]) => {
-          companySeries[cc] = companySeries[cc] || Object.fromEntries(fyYears.map((y) => [fyLabel(y), Array(12).fill(0)]));
+          companySeries[cc] = companySeries[cc] || emptyFySeries();
+          companySeriesMtd[cc] = companySeriesMtd[cc] || emptyFySeries();
           companySeries[cc][fyLabel(fy)][idx] = round2(companySeries[cc][fyLabel(fy)][idx] + amt);
+          companySeriesMtd[cc][fyLabel(fy)][idx] = round2(yearlyCoMtd[fy][idx][cc] || 0);
           companyTotals[cc] = (companyTotals[cc] || 0) + (fy === ref.fy ? amt : 0);
         });
       });
@@ -403,11 +430,16 @@ const handlers = {
 
     return {
       months: MONTHS,
+      // Day of month the *Mtd figures run up to, and today's position (FY index 0 = Apr)
+      mtdDay,
+      currentMonthIndex: fyMonthIndex(ref.today.slice(0, 7)).idx,
       companyList,
       companySeries,
+      companySeriesMtd,
       monthly: {
         fy: fyLabel(ref.fy),
         values: curValues,
+        mtdValues: yearlyMtd[ref.fy].map(round2),
         total: round2(sum(curValues.map((amount) => ({ amount })))),
         companies: yearlyCo[ref.fy].map((m) => topCompanies(m, 12)),
         totalCompanies: topCompanies(curTotalCo, 12),
@@ -415,6 +447,7 @@ const handlers = {
       yearly: fyYears.map((fy) => ({
         fy: fyLabel(fy),
         values: yearly[fy].map(round2),
+        mtdValues: yearlyMtd[fy].map(round2),
         total: round2(yearly[fy].reduce((s, v) => s + v, 0)),
         companies: yearlyCo[fy].map((m) => topCompanies(m, 10)),
       })),

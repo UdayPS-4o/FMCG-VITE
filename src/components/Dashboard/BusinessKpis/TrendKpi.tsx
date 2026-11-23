@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Chart from 'react-apexcharts';
 import { ApexOptions } from 'apexcharts';
 import { BarChart3, Building2, Check, ChevronDown, LineChart, X } from 'lucide-react';
@@ -27,17 +27,23 @@ interface CompanyInfo {
 }
 interface TrendData {
   months: string[];
+  // "Till day N" figures: each month's sales from the 1st to today's day-of-month.
+  // Optional so the card still works against a server without them.
+  mtdDay?: number;
+  currentMonthIndex?: number; // FY month index of today (0 = Apr)
   companyList: CompanyInfo[];
   // companySeries[code][fyLabel] = 12 monthly amounts (Apr..Mar)
   companySeries: Record<string, Record<string, number[]>>;
+  companySeriesMtd?: Record<string, Record<string, number[]>>;
   monthly: {
     fy: string;
     values: number[];
+    mtdValues?: number[];
     total: number;
     companies: CompanyAmount[][];
     totalCompanies: CompanyAmount[];
   };
-  yearly: { fy: string; values: number[]; total: number; companies: CompanyAmount[][] }[];
+  yearly: { fy: string; values: number[]; mtdValues?: number[]; total: number; companies: CompanyAmount[][] }[];
 }
 
 const YEAR_COLORS = ['#cbd5e1', '#94a3b8', '#8b5cf6'];
@@ -49,12 +55,40 @@ const MAX_COMPARE = COMPANY_COLORS.length;
 const STORAGE_KEY = 'dashboard-trend-companies';
 const yaxis = { labels: { formatter: (v: number) => inrAxis(v), style: { colors: '#94a3b8' } } };
 
-const tooltipHtml = (title: string, companies: CompanyAmount[] | undefined, total: number, color: string, totalLabel = 'TOTAL') => {
+const MARKER_COLOR = '#f97316';
+
+// 1 → 1st, 2 → 2nd, 23 → 23rd …
+const ordinal = (n: number) => {
+  const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] || 'th';
+  return `${n}${s}`;
+};
+
+interface TooltipExtra {
+  label: string;
+  value: string;
+  color?: string;
+}
+
+const tooltipHtml = (
+  title: string,
+  companies: CompanyAmount[] | undefined,
+  total: number,
+  color: string,
+  totalLabel = 'TOTAL',
+  extras: TooltipExtra[] = []
+) => {
   const rows = (companies ?? [])
     .map(
       (c) =>
         `<tr><td style="padding:2px 12px 2px 0;white-space:nowrap">${escapeHtml(c.company)}</td>` +
         `<td style="padding:2px 0;text-align:right;font-weight:600;color:#facc15">${inr(c.amount)}</td></tr>`
+    )
+    .join('');
+  const extraRows = extras
+    .map(
+      (x, i) =>
+        `<tr${i === 0 ? ' style="border-top:1px solid #475569"' : ''}><td style="padding-top:${i === 0 ? 5 : 2}px;color:#fdba74;white-space:nowrap">${escapeHtml(x.label)}</td>` +
+        `<td style="padding-top:${i === 0 ? 5 : 2}px;text-align:right;font-weight:700;color:${x.color || '#fdba74'}">${escapeHtml(x.value)}</td></tr>`
     )
     .join('');
   return (
@@ -63,11 +97,72 @@ const tooltipHtml = (title: string, companies: CompanyAmount[] | undefined, tota
     `<span style="width:8px;height:8px;border-radius:2px;background:${color}"></span>${escapeHtml(title)}</div>` +
     `<table style="width:100%;border-collapse:collapse">${rows}` +
     `<tr style="border-top:1px solid #475569"><td style="padding-top:5px;color:#cbd5e1;font-weight:700">${totalLabel}</td>` +
-    `<td style="padding-top:5px;text-align:right;font-weight:700;color:#4ade80">${inr(total)}</td></tr></table></div>`
+    `<td style="padding-top:5px;text-align:right;font-weight:700;color:#4ade80">${inr(total)}</td></tr>${extraRows}</table></div>`
   );
 };
 
+const pctChange = (now: number, before: number) => (before > 0 ? ((now - before) / before) * 100 : null);
+const pctText = (p: number | null) => (p === null ? '—' : `${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%`);
+
+/**
+ * Draws the "till day N" line inside each bar. ApexCharts has no per-bar marker, so after
+ * the chart draws we read each bar's drawn box and place the line at mtd/full of its height
+ * (bars start at ₹0, so the bar height is proportional to its value). Works for single,
+ * grouped and company bars alike. mtd[s][j] = null skips that bar.
+ */
+function drawTillDayMarkers(root: Element | null | undefined, full: number[][], mtd: (number | null)[][], labels: boolean) {
+  if (!root) return;
+  root.querySelectorAll('.till-day-markers').forEach((g) => g.remove());
+  const NS = 'http://www.w3.org/2000/svg';
+  root.querySelectorAll('.apexcharts-bar-series .apexcharts-series').forEach((seriesEl, seriesPos) => {
+    const s = Number(seriesEl.getAttribute('data:realIndex') ?? seriesPos);
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'till-day-markers');
+    g.setAttribute('pointer-events', 'none');
+    seriesEl.querySelectorAll('path.apexcharts-bar-area').forEach((path, pathPos) => {
+      const j = Number(path.getAttribute('j') ?? pathPos);
+      const v = mtd[s]?.[j];
+      const f = full[s]?.[j];
+      if (v == null || !f || f <= 0) return;
+      const box = (path as SVGGraphicsElement).getBBox();
+      if (box.height < 2) return;
+      const y = box.y + box.height - Math.min(v / f, 1) * box.height;
+      const line = document.createElementNS(NS, 'line');
+      line.setAttribute('x1', String(box.x - 2));
+      line.setAttribute('x2', String(box.x + box.width + 2));
+      line.setAttribute('y1', String(y));
+      line.setAttribute('y2', String(y));
+      line.setAttribute('stroke', MARKER_COLOR);
+      line.setAttribute('stroke-width', '2.5');
+      line.setAttribute('stroke-linecap', 'round');
+      g.appendChild(line);
+      if (labels && box.y + box.height - y > 26) {
+        const text = document.createElementNS(NS, 'text');
+        text.setAttribute('x', String(box.x + box.width / 2));
+        text.setAttribute('y', String(y + 12));
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-size', '10');
+        text.setAttribute('font-weight', '600');
+        text.setAttribute('fill', '#9a3412');
+        text.textContent = `${(v / 1e5).toFixed(1)}L`;
+        g.appendChild(text);
+      }
+    });
+    seriesEl.appendChild(g);
+  });
+}
+
 const sumArrays = (arrays: number[][]) => Array.from({ length: 12 }, (_, i) => arrays.reduce((s, a) => s + (a[i] || 0), 0));
+
+// The running month already *is* "till today", and future months have nothing yet
+const isSkippedBar = (fy: string, j: number, curFy: string, cmi: number) => fy === curFy && j >= cmi;
+const maskTill = (fy: string, values: number[] | undefined, curFy: string, cmi: number) =>
+  (values ?? []).map((v, j) => (isSkippedBar(fy, j, curFy, cmi) ? null : v));
+
+interface MarkerData {
+  full: number[][];
+  mtd: (number | null)[][];
+}
 
 // ---------- Company picker (searchable multi-select) ----------
 const CompanyPicker: React.FC<{
@@ -207,20 +302,105 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
   const colorOf = (code: string) => COMPANY_COLORS[Math.max(activeCodes.indexOf(code), 0) % COMPANY_COLORS.length];
   const curFy = data?.monthly.fy ?? '';
 
+  // ----- "Till day N" comparison -----
+  const mtdDay = data?.mtdDay ?? 0;
+  const cmi = data?.currentMonthIndex ?? -1;
+  const hasMtd = !!(data && mtdDay && cmi >= 0 && data.monthly.mtdValues);
+  const dayLabel = mtdDay ? ordinal(mtdDay) : '';
+
+  // Sales till day N for one FY month, following the company selection
+  const mtdOf = useCallback(
+    (fy: string, j: number) => {
+      if (!data) return 0;
+      if (comparing) return activeCodes.reduce((s, c) => s + (data.companySeriesMtd?.[c]?.[fy]?.[j] ?? 0), 0);
+      return data.yearly.find((y) => y.fy === fy)?.mtdValues?.[j] ?? 0;
+    },
+    [data, comparing, activeCodes]
+  );
+
+  // Tooltip rows: this bar's sales till day N, and how the running month compares with it
+  const tillExtras = useCallback(
+    (fy: string, j: number): TooltipExtra[] => {
+      if (!hasMtd || !data) return [];
+      if (fy === curFy && j === cmi) return [{ label: 'Month in progress', value: `till ${dayLabel}` }];
+      if (isSkippedBar(fy, j, curFy, cmi)) return [];
+      const v = mtdOf(fy, j);
+      const p = pctChange(mtdOf(curFy, cmi), v);
+      return [
+        { label: `Till ${dayLabel}`, value: inr(v) },
+        {
+          label: `${data.months[cmi]} till ${dayLabel} vs this`,
+          value: pctText(p),
+          color: p === null ? undefined : p >= 0 ? '#4ade80' : '#f87171',
+        },
+      ];
+    },
+    [hasMtd, data, curFy, cmi, dayLabel, mtdOf]
+  );
+
   // Yearly series: all sales, or the combined sales of the selected companies
   const yearlyView = useMemo(() => {
     if (!data) return [];
-    if (!comparing) return data.yearly.map((y) => ({ fy: y.fy, values: y.values, total: y.total, companies: y.companies }));
+    if (!comparing) {
+      return data.yearly.map((y) => ({
+        fy: y.fy,
+        values: y.values,
+        mtdValues: y.mtdValues ?? [],
+        total: y.total,
+        companies: y.companies,
+      }));
+    }
     return data.yearly.map((y, fyIdx) => {
       const values = sumArrays(activeCodes.map((c) => data.companySeries[c][y.fy] ?? []));
+      const mtdValues = sumArrays(activeCodes.map((c) => data.companySeriesMtd?.[c]?.[y.fy] ?? []));
       const companies = Array.from({ length: 12 }, (_, m) =>
         activeCodes
           .map((c) => ({ company: nameOf.get(c) ?? c, amount: data.companySeries[c][y.fy]?.[m] ?? 0 }))
           .sort((a, b) => b.amount - a.amount)
       );
-      return { fy: data.yearly[fyIdx].fy, values, total: values.reduce((s, v) => s + v, 0), companies };
+      return { fy: data.yearly[fyIdx].fy, values, mtdValues, total: values.reduce((s, v) => s + v, 0), companies };
     });
   }, [data, comparing, activeCodes, nameOf]);
+
+  // Bar values and their "till day N" values, per series, for the markers
+  const monthlyMarkers: MarkerData | null = useMemo(() => {
+    if (!data || !hasMtd) return null;
+    if (!comparing) return { full: [data.monthly.values], mtd: [maskTill(curFy, data.monthly.mtdValues, curFy, cmi)] };
+    return {
+      full: activeCodes.map((c) => data.companySeries[c][curFy] ?? []),
+      mtd: activeCodes.map((c) => maskTill(curFy, data.companySeriesMtd?.[c]?.[curFy], curFy, cmi)),
+    };
+  }, [data, hasMtd, comparing, activeCodes, curFy, cmi]);
+  const yearlyMarkers: MarkerData | null = useMemo(
+    () =>
+      hasMtd
+        ? { full: yearlyView.map((y) => y.values), mtd: yearlyView.map((y) => maskTill(y.fy, y.mtdValues, curFy, cmi)) }
+        : null,
+    [hasMtd, yearlyView, curFy, cmi]
+  );
+
+  // Running month till today vs last month till the same day (and same month last FY)
+  const summary = useMemo(() => {
+    if (!data || !hasMtd) return null;
+    const fys = data.yearly.map((y) => y.fy);
+    const ci = fys.indexOf(curFy);
+    const prevFy = cmi > 0 ? curFy : fys[ci - 1];
+    const prevJ = cmi > 0 ? cmi - 1 : 11;
+    const lastFy = fys[ci - 1];
+    const cur = mtdOf(curFy, cmi);
+    const prev = prevFy ? mtdOf(prevFy, prevJ) : 0;
+    const lastYear = lastFy ? mtdOf(lastFy, cmi) : 0;
+    return {
+      curName: data.months[cmi],
+      prevName: data.months[prevJ],
+      lastFy,
+      cur,
+      prev,
+      lastYear,
+      change: pctChange(cur, prev),
+      lastYearChange: pctChange(cur, lastYear),
+    };
+  }, [data, hasMtd, curFy, cmi, mtdOf]);
 
   // ----- Chart options -----
   const xaxis = useMemo(
@@ -233,14 +413,39 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
     [data]
   );
 
+  // Bar mode: draw the "till day N" lines after every draw (the bars animate in, so the
+  // final positions are only known at animationEnd; updated covers resizes and data changes)
+  const markerEvents = useCallback(
+    (m: MarkerData | null, labels: boolean) => {
+      if (chartType !== 'bar' || !m) return {};
+      const draw = (c: { el?: Element }) => drawTillDayMarkers(c?.el, m.full, m.mtd, labels);
+      return { events: { mounted: draw, updated: draw, animationEnd: draw } };
+    },
+    [chartType]
+  );
+  // Line mode: each line gets a dashed partner showing its "till day N" values
+  const withTillLines = chartType === 'line';
+  const lineStroke = (n: number, companions: boolean) =>
+    companions
+      ? { curve: 'smooth' as const, width: [...Array(n).fill(3), ...Array(n).fill(2)], dashArray: [...Array(n).fill(0), ...Array(n).fill(5)] }
+      : { width: 3, curve: 'smooth' as const };
+
   const monthlyOptions: ApexOptions | null = useMemo(() => {
     if (!data) return null;
+    const companions = withTillLines && !!monthlyMarkers;
     if (comparing) {
+      const cols = activeCodes.map(colorOf);
       return {
-        chart: { type: chartType, fontFamily: 'Outfit, sans-serif', toolbar: { show: false }, animations: CHART_ANIMATIONS },
-        colors: activeCodes.map(colorOf),
+        chart: {
+          type: chartType,
+          fontFamily: 'Outfit, sans-serif',
+          toolbar: { show: false },
+          animations: CHART_ANIMATIONS,
+          ...markerEvents(monthlyMarkers, false),
+        },
+        colors: companions ? [...cols, ...cols] : cols,
         plotOptions: { bar: { columnWidth: activeCodes.length > 3 ? '80%' : '60%', borderRadius: 3, borderRadiusApplication: 'end' } },
-        stroke: chartType === 'line' ? { width: 3, curve: 'smooth' } : { width: 0 },
+        stroke: chartType === 'line' ? lineStroke(cols.length, companions) : { width: 0 },
         markers: { size: chartType === 'line' ? 4 : 0, hover: { size: 6 } },
         dataLabels: { enabled: false },
         legend: { show: false },
@@ -259,18 +464,26 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
               rows,
               rows.reduce((s, r) => s + r.amount, 0),
               color,
-              'SELECTED'
+              'SELECTED',
+              tillExtras(curFy, dataPointIndex)
             );
           },
         },
       };
     }
     return {
-      chart: { type: chartType, fontFamily: 'Outfit, sans-serif', toolbar: { show: false }, animations: CHART_ANIMATIONS },
-      colors: [color],
+      chart: {
+        type: chartType,
+        fontFamily: 'Outfit, sans-serif',
+        toolbar: { show: false },
+        animations: CHART_ANIMATIONS,
+        ...markerEvents(monthlyMarkers, true),
+      },
+      colors: companions ? [color, MARKER_COLOR] : [color],
       plotOptions: { bar: { columnWidth: '55%', borderRadius: 6, borderRadiusApplication: 'end', dataLabels: { position: 'top' } } },
-      stroke: chartType === 'line' ? { width: 3, curve: 'smooth' } : { width: 0 },
+      stroke: chartType === 'line' ? lineStroke(1, companions) : { width: 0 },
       markers: { size: chartType === 'line' ? 4 : 0, hover: { size: 6 } },
+      legend: { show: false },
       dataLabels: {
         enabled: chartType === 'bar',
         formatter: (v: number) => (v > 0 ? `${(v / 1e5).toFixed(1)}L` : ''),
@@ -290,21 +503,31 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
             `${data.months[dataPointIndex]} · FY ${data.monthly.fy}`,
             data.monthly.companies[dataPointIndex],
             data.monthly.values[dataPointIndex],
-            color
+            color,
+            'TOTAL',
+            tillExtras(curFy, dataPointIndex)
           ),
       },
     };
-    // colorOf derives from activeCodes, which is already a dependency
+    // colorOf and lineStroke derive from activeCodes / chartType, which are already dependencies
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, color, comparing, activeCodes, chartType, nameOf, curFy, xaxis]);
+  }, [data, color, comparing, activeCodes, chartType, nameOf, curFy, xaxis, monthlyMarkers, markerEvents, tillExtras, withTillLines]);
 
   const yearlyOptions: ApexOptions | null = useMemo(() => {
     if (!data) return null;
+    const n = yearlyView.length;
+    const companions = withTillLines && !!yearlyMarkers;
     return {
-      chart: { type: chartType, fontFamily: 'Outfit, sans-serif', toolbar: { show: false }, animations: CHART_ANIMATIONS },
-      colors: YEAR_COLORS,
+      chart: {
+        type: chartType,
+        fontFamily: 'Outfit, sans-serif',
+        toolbar: { show: false },
+        animations: CHART_ANIMATIONS,
+        ...markerEvents(yearlyMarkers, false),
+      },
+      colors: companions ? [...YEAR_COLORS, ...YEAR_COLORS] : YEAR_COLORS,
       plotOptions: { bar: { columnWidth: '70%', borderRadius: 4, borderRadiusApplication: 'end' } },
-      stroke: chartType === 'line' ? { width: 3, curve: 'smooth' } : { width: 0 },
+      stroke: chartType === 'line' ? lineStroke(n, companions) : { width: 0 },
       markers: { size: chartType === 'line' ? 4 : 0, hover: { size: 6 } },
       dataLabels: { enabled: false },
       legend: { position: 'top', horizontalAlign: 'right', fontSize: '12px', labels: { colors: '#64748b' } },
@@ -315,27 +538,44 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
         shared: false,
         intersect: chartType === 'bar',
         custom: ({ seriesIndex, dataPointIndex }: { seriesIndex: number; dataPointIndex: number }) => {
-          const y = yearlyView[seriesIndex];
+          const s = seriesIndex % n; // dashed "till day" lines map back to their FY
+          const y = yearlyView[s];
           return tooltipHtml(
             `${data.months[dataPointIndex]} · FY ${y.fy}`,
             y.companies[dataPointIndex],
             y.values[dataPointIndex],
-            YEAR_COLORS[seriesIndex],
-            comparing ? 'SELECTED' : 'TOTAL'
+            YEAR_COLORS[s],
+            comparing ? 'SELECTED' : 'TOTAL',
+            tillExtras(y.fy, dataPointIndex)
           );
         },
       },
     };
-  }, [data, chartType, yearlyView, comparing, xaxis]);
+  }, [data, chartType, yearlyView, comparing, xaxis, yearlyMarkers, markerEvents, tillExtras, withTillLines]);
 
   // Stable series references: react-apexcharts redraws the chart (closing any open tooltip)
   // whenever it receives a new series array, so only rebuild these when their inputs change.
+  // In line mode, months of the current FY that haven't happened yet are left out (null)
+  // instead of being drawn as a drop to ₹0
+  const futureAsGap = useCallback(
+    (fy: string, values: number[]): (number | null)[] =>
+      withTillLines && fy === curFy && cmi >= 0 ? values.map((v, j) => (j > cmi ? null : v)) : values,
+    [withTillLines, curFy, cmi]
+  );
+
   const monthlySeries = useMemo(() => {
     if (!data) return [];
-    if (!comparing) return [{ name: 'Sales', data: data.monthly.values }];
-    return activeCodes.map((c) => ({ name: nameOf.get(c) ?? c, data: data.companySeries[c][curFy] ?? Array(12).fill(0) }));
-  }, [data, comparing, activeCodes, nameOf, curFy]);
-  const yearlySeries = useMemo(() => yearlyView.map((y) => ({ name: `FY ${y.fy}`, data: y.values })), [yearlyView]);
+    const base = comparing
+      ? activeCodes.map((c) => ({ name: nameOf.get(c) ?? c, data: futureAsGap(curFy, data.companySeries[c][curFy] ?? Array(12).fill(0)) }))
+      : [{ name: 'Sales', data: futureAsGap(curFy, data.monthly.values) }];
+    if (!withTillLines || !monthlyMarkers) return base;
+    return [...base, ...base.map((b, i) => ({ name: `${b.name} · till ${dayLabel}`, data: monthlyMarkers.mtd[i] }))];
+  }, [data, comparing, activeCodes, nameOf, curFy, withTillLines, monthlyMarkers, dayLabel, futureAsGap]);
+  const yearlySeries = useMemo(() => {
+    const base = yearlyView.map((y) => ({ name: `FY ${y.fy}`, data: futureAsGap(y.fy, y.values) }));
+    if (!withTillLines || !yearlyMarkers) return base;
+    return [...base, ...base.map((b, i) => ({ name: `${b.name} · till ${dayLabel}`, data: yearlyMarkers.mtd[i] }))];
+  }, [yearlyView, withTillLines, yearlyMarkers, dayLabel, futureAsGap]);
 
   // ----- Header figures (follow the company selection) -----
   const cur = yearlyView[yearlyView.length - 1];
@@ -426,6 +666,57 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
             <span className="text-[11px] text-gray-400">· yearly bars show the selected companies combined</span>
           )}
         </div>
+      )}
+
+      {summary && (
+        <>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="rounded-xl border border-gray-100 px-3 py-2 dark:border-gray-800">
+              <div className="text-[11px] text-gray-500">
+                {summary.curName} till {dayLabel} (this month){comparing && ' · selected'}
+              </div>
+              <div className="text-base font-bold text-gray-800 dark:text-white/90">
+                <CountUp value={summary.cur} format={inrCompact} />
+              </div>
+            </div>
+            <div className="rounded-xl border border-gray-100 px-3 py-2 dark:border-gray-800">
+              <div className="text-[11px] text-gray-500">
+                {summary.prevName} till {dayLabel} (last month)
+              </div>
+              <div className="text-base font-bold text-gray-800 dark:text-white/90">
+                <CountUp value={summary.prev} format={inrCompact} />
+              </div>
+            </div>
+            <div className="rounded-xl border border-gray-100 px-3 py-2 dark:border-gray-800">
+              <div className="text-[11px] text-gray-500">
+                {summary.curName} vs {summary.prevName}, same days
+              </div>
+              <div
+                className={`text-base font-bold ${
+                  summary.change === null ? 'text-gray-400' : summary.change >= 0 ? 'text-green-600' : 'text-red-500'
+                }`}
+              >
+                {pctText(summary.change)}
+              </div>
+              {summary.lastFy && summary.lastYearChange !== null && (
+                <div className="text-[11px] text-gray-500">
+                  vs {summary.curName} FY {summary.lastFy} till {dayLabel}:{' '}
+                  <span className={summary.lastYearChange >= 0 ? 'text-green-600' : 'text-red-500'}>
+                    {pctText(summary.lastYearChange)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500">
+            {chartType === 'bar' ? (
+              <span className="inline-block h-0 w-4 border-t-[2.5px]" style={{ borderColor: MARKER_COLOR }} />
+            ) : (
+              <span className="inline-block h-0 w-4 border-t-2 border-dashed" style={{ borderColor: MARKER_COLOR }} />
+            )}
+            {chartType === 'bar' ? 'Line inside each bar' : 'Dashed lines'} = that month&apos;s sales from the 1st to the {dayLabel}
+          </div>
+        </>
       )}
 
       {!data ? (
