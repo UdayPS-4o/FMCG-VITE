@@ -14,10 +14,10 @@ const Purchases: React.FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <PageMeta title="Purchases | FMCG Vite Admin Template" description="Purchases database page in FMCG Vite Admin Template" />
       <PageBreadcrumb pageTitle="Purchases" />
-      <div className="container mx-auto px-4 py-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Purchases Database</h2>
+      <div className="container mx-auto px-0 py-2 md:px-4 md:py-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-2 md:p-6 w-full">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-3 md:mb-6">
+            <h2 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-white">Purchases Database</h2>
             <div className="flex gap-3">
               
             </div>

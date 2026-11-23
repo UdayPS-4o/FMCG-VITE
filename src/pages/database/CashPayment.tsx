@@ -29,10 +29,10 @@ const CashPayment: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Cash Payments" />
       
-      <div className="container mx-auto px-4 py-6 overflow-hidden">
-        <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Cash Payments Database</h2>
+      <div className="container mx-auto px-0 py-2 md:px-4 md:py-6 overflow-hidden">
+        <div className="bg-white  dark:bg-gray-800 rounded-lg shadow-sm p-2 md:p-6 w-full overflow-hidden">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-3 md:mb-6">
+            <h2 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-white">Cash Payments Database</h2>
             {/* Remove Sync to DBF button logic */}
             {/* {hasApprovedItems && (
               <button

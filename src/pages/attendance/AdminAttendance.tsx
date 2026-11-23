@@ -1386,8 +1386,8 @@ const AdminAttendance: React.FC = () => {
         pageTitle="Admin Attendance Portal"
       />
 
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      <div className="max-w-7xl mx-auto px-0 py-2 md:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 md:p-6">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               Admin Attendance Portal
@@ -1438,17 +1438,17 @@ const AdminAttendance: React.FC = () => {
               {/* Filters */}
               <div className="mb-6">
                 <div className="flex flex-wrap gap-4 items-end">
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 w-full md:w-auto">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Select Date
                     </label>
-                    <div className="flex gap-2 items-center">
+                    <div className="flex flex-wrap md:flex-nowrap gap-2 items-center">
                       {/* Preset quick-select — custom dropdown (Chrome ignores CSS on native <option>) */}
-                      <div className="relative">
+                      <div className="relative w-full md:w-auto">
                         <button
                           type="button"
                           onClick={() => setIsPresetOpen(o => !o)}
-                          className="flex items-center justify-between gap-2 min-w-[130px] bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="flex items-center justify-between gap-2 w-full md:w-auto min-w-[130px] bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                           <span>{({ today: 'Today', yesterday: 'Yesterday', thisMonth: 'This Month', lastMonth: 'Last Month', custom: 'Custom Date' } as Record<string,string>)[datePreset] ?? 'Select'}</span>
                           <svg className={`w-4 h-4 ml-1 transition-transform ${isPresetOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -1472,25 +1472,27 @@ const AdminAttendance: React.FC = () => {
                           </div>
                         )}
                       </div>
+                      <div className="flex flex-1 min-w-0 items-center gap-1.5 md:gap-2">
                       {/* Raw date picker (From) — always visible */}
                       <input
                         type="date"
                         value={fromDate}
                         onChange={(e) => { setDatePreset('custom'); setFromDate(e.target.value); }}
-                        className={`bg-gray-50 dark:bg-gray-700 border text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 ${
+                        className={`bg-gray-50 dark:bg-gray-700 border text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 px-1.5 py-2.5 md:p-2.5 min-w-0 flex-1 md:flex-none ${
                           datePreset === 'custom' ? 'border-blue-400 dark:border-blue-500' : 'border-gray-300 dark:border-gray-600 opacity-75'
                         }`}
                       />
-                      <span className="text-gray-500 dark:text-gray-400 font-medium px-1">to</span>
+                      <span className="text-gray-500 dark:text-gray-400 font-medium md:px-1">to</span>
                       {/* Raw date picker (To) — always visible */}
                       <input
                         type="date"
                         value={toDate}
                         onChange={(e) => { setDatePreset('custom'); setToDate(e.target.value); }}
-                        className={`bg-gray-50 dark:bg-gray-700 border text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 ${
+                        className={`bg-gray-50 dark:bg-gray-700 border text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 px-1.5 py-2.5 md:p-2.5 min-w-0 flex-1 md:flex-none ${
                           datePreset === 'custom' ? 'border-blue-400 dark:border-blue-500' : 'border-gray-300 dark:border-gray-600 opacity-75'
                         }`}
                       />
+                      </div>
                     </div>
                   </div>
 

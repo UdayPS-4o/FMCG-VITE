@@ -42,10 +42,10 @@ const CashReceipt: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Cash Receipts" />
       
-      <div className="container mx-auto px-4 py-6 overflow-hidden">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
+      <div className="container mx-auto px-0 py-2 md:px-4 md:py-6 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-2 md:p-6 w-full overflow-hidden">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Cash Receipts Database</h2>
+            <h2 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-white">Cash Receipts Database</h2>
           </div>
 
           <div className="flex justify-end items-center mb-4">

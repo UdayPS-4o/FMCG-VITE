@@ -3,10 +3,10 @@ import { Skeleton } from './SkeletonLoader';
 
 const TableSkeletonLoader: React.FC = () => {
   return (
-    <div className="container mx-auto px-4 py-6 overflow-hidden">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
+    <div className="container mx-auto px-0 py-2 md:px-4 md:py-6 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-2 md:p-6 w-full overflow-hidden">
         {/* Table header section */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-3 md:mb-6">
           <Skeleton height="h-8" width="w-48" />
           <div className="flex space-x-3">
             <Skeleton height="h-10" width="w-32" rounded="rounded-md" />

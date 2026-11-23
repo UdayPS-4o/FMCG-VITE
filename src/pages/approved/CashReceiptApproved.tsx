@@ -286,11 +286,11 @@ const CashReceiptApproved: React.FC = () => {
       />
       <PageBreadcrumb pageTitle="Cash Receipts Approved" />
       
-      <div className="container mx-auto px-4 py-6 overflow-hidden">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 w-full overflow-hidden">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Cash Receipts Approved Data</h2>
-            <div className="flex space-x-4">
+      <div className="container mx-auto px-0 py-2 md:px-4 md:py-6 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-2 md:p-6 w-full overflow-hidden">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-3 md:mb-6">
+            <h2 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-white">Cash Receipts Approved Data</h2>
+            <div className="flex flex-wrap gap-2 md:gap-4">
               <button
                 onClick={() => setShowHistory(true)}
                 className="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
