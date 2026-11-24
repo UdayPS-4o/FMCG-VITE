@@ -231,7 +231,12 @@ async function cashSummaries(file) {
     const p = get(`${String(d.getUTCMonth() + 1).padStart(2, '0')}${d.getUTCFullYear()}`);
     const dr = num(r.DR), cr = num(r.CR);
     const k = code === 'GG' ? 'goods' : code.toLowerCase();
-    if (vt === 'SB') { p[k].s += cr; p[k].sr += dr; }
+    if (vt === 'SB') {
+      // P series (SB-P…) are purchase returns booked through sales; the supplier reports them as its own
+      // credit note, so they are not our outward supply and stay out of the 3.1(a) books figure.
+      if (/^SB-P/i.test(String(r.VR || '').trim())) continue;
+      p[k].s += cr; p[k].sr += dr;
+    }
     else if (vt === 'PB' || vt === 'PD' || vt === 'JB') { if (k !== 'goods') p[k].p += dr - cr; }
   }
   cashMonthly.set(file, { mtime, periods });

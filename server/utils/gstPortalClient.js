@@ -21,8 +21,12 @@ function dataDir() {
   return path.dirname(path.resolve(dbf));
 }
 // System-side CSV exports (B2B.CSV, b2cs.csv, cdnr.csv, DOC.CSV, hsn(b2b).csv, hsn(b2c).csv, GSTR-3.csv)
+// live in the GST folder of the FY data folder, e.g. ...\fmcg\D01-2627\GST
 function csvDir() {
-  return process.env.GST_CSV_DIR || dataDir();
+  if (process.env.GST_CSV_DIR) return process.env.GST_CSV_DIR;
+  const dbf = process.env.DBF_FOLDER_PATH;
+  if (!dbf) return dataDir();
+  return path.join(path.resolve(dbf), 'GST');
 }
 
 // case-insensitive file lookup so B2B.CSV / b2b.csv both work
