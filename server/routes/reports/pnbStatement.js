@@ -351,8 +351,10 @@ async function sendBankReceiptConfirmations(receipts) {
         setNotify(r.txnNo, { mobile: tenDigit });
         const m = moment(r.date, ['DD-MM-YYYY', 'DD/MM/YYYY', 'DD-MMM-YYYY', 'YYYY-MM-DD']);
         const formattedDate = m.isValid() ? m.format('DD-MM-YYYY') : String(r.date || '');
-        const isCheque = /CHQ|CHEQUE|CLG|CLEARING/i.test(r.narration || '');
-        const ref = `BY ${isCheque ? 'CHQ' : 'BANK'} ${r.txnNo}`;
+        // "BY <bank narration>" so the customer sees how the money came (NEFT/UPI/IMPS... and sender).
+        // WhatsApp template params can't contain newlines/tabs or long runs of spaces, so collapse whitespace.
+        const narration = String(r.narration || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+        const ref = `BY ${narration || r.txnNo}`;
 
         if (sent > 0) await sleep(WHATSAPP_DELAY_MS);
         sent++;
@@ -473,14 +475,25 @@ async function findLatestStatementFile() {
 // ---- Download job (runs in background, polled by the page) ----
 
 const downloadJob = { status: 'idle', step: '', message: '', attempt: 0, startedAt: null, finishedAt: null };
+const MAX_DOWNLOAD_ATTEMPTS = 3; // captcha OCR is not always right first time
+
 async function runDownloadJob(opts = {}) {
-    Object.assign(downloadJob, { status: 'running', step: 'Starting', message: '', attempt: 1, fromDate: opts.fromDate || '', startedAt: Date.now(), finishedAt: null });
-    try {
-        await runDownload(step => { downloadJob.step = step; }, opts);
-        Object.assign(downloadJob, { status: 'done', step: 'Done', message: 'Statement downloaded', finishedAt: Date.now() });
-    } catch (err) {
-        console.error('[PNB] Download failed:', err.message);
-        Object.assign(downloadJob, { status: 'failed', message: err.message || 'Download failed', finishedAt: Date.now() });
+    Object.assign(downloadJob, { status: 'running', step: 'Starting', message: '', attempt: 0, fromDate: opts.fromDate || '', startedAt: Date.now(), finishedAt: null });
+    for (let attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt++) {
+        downloadJob.attempt = attempt;
+        try {
+            await runDownload(step => { downloadJob.step = step; }, opts);
+            Object.assign(downloadJob, { status: 'done', step: 'Done', message: 'Statement downloaded', finishedAt: Date.now() });
+            return;
+        } catch (err) {
+            const retryable = /Login failed|captcha/i.test(err.message || '');
+            console.error(`[PNB] Download attempt ${attempt} failed:`, err.message);
+            if (!retryable || attempt === MAX_DOWNLOAD_ATTEMPTS) {
+                Object.assign(downloadJob, { status: 'failed', message: err.message || 'Download failed', finishedAt: Date.now() });
+                return;
+            }
+            downloadJob.step = `Retrying (captcha) ${attempt + 1}/${MAX_DOWNLOAD_ATTEMPTS}`;
+        }
     }
 }
 
