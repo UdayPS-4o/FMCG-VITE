@@ -274,9 +274,9 @@ const gstr1Url = (ctx, fp, pathPart, params) => `${gsp.GSP_BASE}/taxpayerapi/dec
 })}`;
 const RET1 = { api_version: '4.1', userrole: 'GSTR1', rtn_typ: 'GSTR1' };
 
-async function gstr1Call(fp, { method, pathPart, params, body }) {
+async function gstr1Call(fp, { method, pathPart, params, body, headers }) {
   const ctx = await gsp.getContext();
-  const text = await gsp.gspRequest({ method, url: gstr1Url(ctx, fp, pathPart, params), headers: gstr1Headers(ctx, fp), body });
+  const text = await gsp.gspRequest({ method, url: gstr1Url(ctx, fp, pathPart, params), headers: { ...gstr1Headers(ctx, fp), ...headers }, body });
   return { text, pack: await gsp.packResponse(text), ctx };
 }
 const sendPack = (res, pack, extra = {}) => {
@@ -324,7 +324,11 @@ router.post('/gst/gstr1/status', handle(async (req, res) => {
 router.post('/gst/gstr1/proceed', handle(async (req, res) => {
   const fp = fpOf(req.body);
   const ctx = await gsp.getContext();
-  const { pack } = await gstr1Call(fp, { method: 'POST', pathPart: 'v1.1/returns/gstrptf', params: { action: 'RETNEWPTF' }, body: { gstin: ctx.gstin, ret_period: fp } });
+  // api_version header must match the v1.1 path, else GSTN rejects with RETHV001 "Invalid api_version"
+  const { pack } = await gstr1Call(fp, {
+    method: 'POST', pathPart: 'v1.1/returns/gstrptf', params: { action: 'RETNEWPTF' },
+    headers: { api_version: '1.1' }, body: { gstin: ctx.gstin, ret_period: fp },
+  });
   sendPack(res, pack);
 }));
 
