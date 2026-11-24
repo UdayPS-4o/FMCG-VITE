@@ -6,6 +6,7 @@ import useActivityTracker from '../../../hooks/useActivityTracker';
 import usePartyNames from './usePartyNames';
 import { gstApi, notifyError, notifySuccess, notifyWarn } from './gstApi';
 import { CreatePartyDialog, ExpenseJournalDialog, JournalDraftsPanel, MissingInvoice, useBooksMasters, useMissingSelection } from './BooksActions';
+import { ComparisonCards, ReturnCards } from './Gstr2aMobileList';
 
 // Define interfaces for GSTR2A data structures
 interface GSTR2AB2BRecord {
@@ -1123,7 +1124,7 @@ const Gstr2aSection: React.FC = () => {
       {/* Step 4: Data Display */}
       {currentStep === 'display' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 md:p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-white">GSTR2A Data</h2>
             <div className="flex space-x-2">
               {hiddenColumns.length > 0 && (
@@ -1172,8 +1173,15 @@ const Gstr2aSection: React.FC = () => {
             </nav>
           </div>
 
+          {/* Phones: one card per invoice instead of the wide table */}
+          <ReturnCards
+            key={activeTab}
+            records={activeTab === 'b2b' ? gstr2aB2BData : gstr2aCDNData}
+            partyName={partyName}
+          />
+
           {/* Table Display */}
-          <div className="overflow-x-auto max-h-screen">
+          <div className="hidden md:block overflow-x-auto max-h-screen">
             {activeTab === 'b2b' && (
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                 <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
@@ -1318,49 +1326,49 @@ const Gstr2aSection: React.FC = () => {
           <h2 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Comparison Results</h2>
 
           {/* Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4 mb-4 md:mb-6">
             <div 
               onClick={() => setStatusFilter(statusFilter === 'Matched' ? 'All' : 'Matched')}
-              className={`bg-green-100 dark:bg-green-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Matched' ? 'ring-2 ring-green-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+              className={`bg-green-100 dark:bg-green-900 p-3 md:p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Matched' ? 'ring-2 ring-green-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
             >
               <div className="text-green-800 dark:text-green-200 text-sm font-medium">Matched</div>
-              <div className="text-green-900 dark:text-green-100 text-2xl font-bold">
+              <div className="text-green-900 dark:text-green-100 text-xl md:text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Matched').length}
               </div>
             </div>
             <div 
               onClick={() => setStatusFilter(statusFilter === 'Mismatched' ? 'All' : 'Mismatched')}
-              className={`bg-yellow-100 dark:bg-yellow-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Mismatched' ? 'ring-2 ring-yellow-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+              className={`bg-yellow-100 dark:bg-yellow-900 p-3 md:p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Mismatched' ? 'ring-2 ring-yellow-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
             >
               <div className="text-yellow-800 dark:text-yellow-200 text-sm font-medium">Mismatched</div>
-              <div className="text-yellow-900 dark:text-yellow-100 text-2xl font-bold">
+              <div className="text-yellow-900 dark:text-yellow-100 text-xl md:text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Mismatched').length}
               </div>
             </div>
             <div 
               onClick={() => setStatusFilter(statusFilter === 'Missing in GSTR2A' ? 'All' : 'Missing in GSTR2A')}
-              className={`bg-red-100 dark:bg-red-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Missing in GSTR2A' ? 'ring-2 ring-red-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+              className={`bg-red-100 dark:bg-red-900 p-3 md:p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Missing in GSTR2A' ? 'ring-2 ring-red-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
             >
               <div className="text-red-800 dark:text-red-200 text-sm font-medium">Missing in GSTR2A</div>
-              <div className="text-red-900 dark:text-red-100 text-2xl font-bold">
+              <div className="text-red-900 dark:text-red-100 text-xl md:text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Missing in GSTR2A').length}
               </div>
             </div>
             <div 
               onClick={() => setStatusFilter(statusFilter === 'Missing in Purchase' ? 'All' : 'Missing in Purchase')}
-              className={`bg-blue-100 dark:bg-blue-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Missing in Purchase' ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+              className={`bg-blue-100 dark:bg-blue-900 p-3 md:p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Missing in Purchase' ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
             >
               <div className="text-blue-800 dark:text-blue-200 text-sm font-medium">Missing in Purchase</div>
-              <div className="text-blue-900 dark:text-blue-100 text-2xl font-bold">
+              <div className="text-blue-900 dark:text-blue-100 text-xl md:text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Missing in Purchase').length}
               </div>
             </div>
             <div
               onClick={() => setStatusFilter(statusFilter === 'Booked in other month' ? 'All' : 'Booked in other month')}
-              className={`bg-purple-100 dark:bg-purple-900 p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Booked in other month' ? 'ring-2 ring-purple-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
+              className={`col-span-2 md:col-span-1 bg-purple-100 dark:bg-purple-900 p-3 md:p-4 rounded cursor-pointer transition-all hover:shadow-md ${statusFilter === 'Booked in other month' ? 'ring-2 ring-purple-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
             >
               <div className="text-purple-800 dark:text-purple-200 text-sm font-medium">Booked in other month</div>
-              <div className="text-purple-900 dark:text-purple-100 text-2xl font-bold">
+              <div className="text-purple-900 dark:text-purple-100 text-xl md:text-2xl font-bold">
                 {comparisonResults.filter(r => r.status === 'Booked in other month').length}
               </div>
             </div>
@@ -1395,8 +1403,28 @@ const Gstr2aSection: React.FC = () => {
             </button>
           </div>
 
+          {/* Phones: invoice cards (tap a status tile above to filter) */}
+          <ComparisonCards
+            rows={comparisonResults.filter(r => statusFilter === 'All' || r.status === statusFilter)}
+            partyName={partyName}
+            rowKey={rowKey}
+            isMissing={isMissing}
+            isSelected={sel.has}
+            onToggle={sel.toggle}
+            onSelectAll={sel.set}
+            renderActions={(result) => (
+              <>
+                {booksMasters && !knownParty(result.partyGST) && (
+                  <button onClick={() => setPartyFor(result.partyGST)} className="rounded bg-amber-500 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-600">Create party</button>
+                )}
+                <button onClick={() => setExpenseFor([toMissing(result)])} disabled={!booksMasters} className="rounded bg-indigo-600 px-2 py-1 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">Add as expense</button>
+                <button onClick={() => openPurchaseBill(result)} disabled={!booksMasters} className="rounded bg-teal-600 px-2 py-1 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50">Add purchase bill</button>
+              </>
+            )}
+          />
+
           {/* Results Table */}
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
