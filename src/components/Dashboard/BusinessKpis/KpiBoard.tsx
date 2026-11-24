@@ -251,23 +251,25 @@ const KpiBoard: React.FC = () => {
   return (
     <BoardContext.Provider value={{ refreshKey }}>
       {/* Header / control bar */}
-      <div className="has-glisse relative mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-white/[0.03]">
+      <div className="has-glisse relative mb-3 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm sm:mb-5 dark:border-gray-800 dark:bg-white/[0.03]">
         <GlassSurface />
-        <div className="flex flex-wrap items-center gap-4 bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-500 px-5 py-4 text-white">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
-            <LayoutDashboard className="h-6 w-6" />
+        {/* Phone: [icon][title + date][Refresh] on one row, refresh info on a full-width row below.
+            sm and up: everything on one row with the refresh info right-aligned. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-500 px-3 py-3 text-white sm:gap-4 sm:px-5 sm:py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur sm:h-11 sm:w-11">
+            <LayoutDashboard className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-bold tracking-wide sm:text-xl">Business Dashboard</h2>
-            <p className="text-xs text-white/80 sm:text-sm">
+            <h2 className="truncate text-base leading-tight font-bold tracking-wide sm:text-xl">Business Dashboard</h2>
+            <p className="truncate text-xs text-white/80 sm:text-sm">
               {now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}
             </p>
           </div>
-          <div className="text-right text-xs leading-5 text-white/85">
-            <div>
+          <div className="order-last flex w-full flex-wrap gap-x-3 text-xs leading-5 text-white/85 sm:order-none sm:block sm:w-auto sm:text-right">
+            <div className="whitespace-nowrap">
               Refreshed <span className="font-semibold text-white">{lastRefreshed.toLocaleTimeString('en-IN')}</span>
             </div>
-            <div>
+            <div className="whitespace-nowrap">
               Auto-refresh in <AutoRefreshCountdown resetKey={refreshKey} onExpire={refreshNow} />
             </div>
           </div>
@@ -279,15 +281,15 @@ const KpiBoard: React.FC = () => {
             <button
               type="button"
               onClick={refreshNow}
-              className="flex items-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/25"
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-white/15 px-3 py-1.5 text-sm font-semibold backdrop-blur transition hover:bg-white/25 sm:px-4 sm:py-2"
             >
               <RefreshCw className="h-4 w-4" /> Refresh
             </button>
           )}
         </div>
 
-        <div className="px-5 py-4">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="px-3 py-3 sm:px-5 sm:py-4">
+          <div className="mb-2 flex flex-wrap items-center gap-2 sm:mb-3">
             <SlidersHorizontal className="h-4 w-4 text-gray-400" />
             <span className="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">Select KPIs</span>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -318,21 +320,21 @@ const KpiBoard: React.FC = () => {
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2 lg:grid-cols-4 xl:grid-cols-6">
             {layout.order.map((id) => {
               const k = KPI_MAP.get(id)!;
               const on = !hiddenSet.has(id);
               return (
                 <label
                   key={id}
-                  className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-all duration-200 select-none hover:-translate-y-0.5 hover:shadow-md ${
+                  className={`flex cursor-pointer items-center gap-2 rounded-xl border px-2 py-1.5 transition-all duration-200 select-none hover:-translate-y-0.5 hover:shadow-md sm:gap-2.5 sm:px-2.5 sm:py-2 ${
                     on ? 'shadow-sm' : 'border-gray-200 opacity-60 hover:opacity-100 dark:border-gray-700'
                   }`}
                   style={on ? { background: `${k.color}14`, borderColor: `${k.color}66` } : undefined}
                 >
                   <input type="checkbox" checked={on} onChange={(e) => setVisible(id, e.target.checked)} className="sr-only" />
                   <span
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors sm:h-8 sm:w-8 ${
                       on ? 'text-white' : 'bg-gray-100 text-gray-400 dark:bg-gray-800'
                     }`}
                     style={on ? { background: `linear-gradient(135deg, ${k.color}, ${k.color}cc)` } : undefined}
@@ -375,7 +377,7 @@ const KpiBoard: React.FC = () => {
           All KPIs are hidden. Tick one above to show it.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:gap-5 lg:grid-cols-2">
           {visibleIds.map((id, index) => {
             const k = KPI_MAP.get(id)!;
             const isFull = layout.widths[id] === 'full';

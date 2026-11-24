@@ -409,6 +409,68 @@ const BalanceUddhari: React.FC = () => {
     }).format(amount);
   };
 
+  // Party list: compact rows on phones, a table from sm up
+  const renderParties = (parties: PartyBalance[]) => (
+    <>
+      <ul className="divide-y divide-gray-100 sm:hidden dark:divide-gray-800">
+        {parties.map((party) => (
+          <li key={party.partyCode} className="px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => handlePartyClick(party.partyCode, party.partyName)}
+                className="min-w-0 text-left"
+              >
+                <div className="text-sm font-medium text-gray-800 dark:text-white/90">{party.partyName}</div>
+                <div className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{party.partyCode}</div>
+              </button>
+              <div className="shrink-0 text-right text-sm font-semibold whitespace-nowrap text-orange-600 dark:text-orange-400">
+                {formatCurrency(party.balance)}
+              </div>
+            </div>
+            <div className="mt-1.5">
+              <ReminderButtons party={party} reminders={reminders} />
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden sm:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-gray-600 dark:text-gray-400">Party Code</TableHead>
+              <TableHead className="text-gray-600 dark:text-gray-400">Party Name</TableHead>
+              <TableHead className="text-gray-600 dark:text-gray-400">Reminder</TableHead>
+              <TableHead className="text-right text-gray-600 dark:text-gray-400">Outstanding Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {parties.map((party) => (
+              <TableRow key={party.partyCode}>
+                <TableCell className="font-mono text-sm text-gray-600 dark:text-gray-400">{party.partyCode}</TableCell>
+                <TableCell className="font-medium text-gray-800 dark:text-white/90">
+                  <button
+                    type="button"
+                    onClick={() => handlePartyClick(party.partyCode, party.partyName)}
+                    className="cursor-pointer text-left transition-colors hover:text-blue-600 hover:underline"
+                  >
+                    {party.partyName}
+                  </button>
+                </TableCell>
+                <TableCell>
+                  <ReminderButtons party={party} reminders={reminders} />
+                </TableCell>
+                <TableCell className="text-right font-medium text-orange-600 dark:text-orange-400">
+                  {formatCurrency(party.balance)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -456,128 +518,68 @@ const BalanceUddhari: React.FC = () => {
               </div>
             ) : (
               <div>
-                <div className="mb-4 p-3 bg-orange-50 rounded-lg border border-orange-200">
-                  <div className="text-sm text-orange-700">
+                <div className="mb-3 rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-500/30 dark:bg-orange-500/10">
+                  <div className="text-sm text-orange-700 dark:text-orange-300">
                     Total Outstanding: <span className="font-bold">{formatCurrency(totalBalance)}</span>
                   </div>
-                  <div className="text-xs text-orange-600 mt-1">
+                  <div className="mt-1 text-xs text-orange-600 dark:text-orange-400">
                     {partyBalances.length} parties with outstanding balances
                   </div>
                 </div>
-                
-                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+
+                <div className="max-h-[70vh] overflow-y-auto sm:max-h-96">
                   {(hasMultipleSubgroups(user) || (user.routeAccess && user.routeAccess.includes('Admin'))) && subgroupBalances.length > 0 ? (
                     // Render collapsible subgroup view
                     <div className="space-y-2">
-                      {subgroupBalances.map((subgroup) => (
-                        <div key={subgroup.subgroupCode} className="border rounded-lg">
-                          {/* Subgroup Header */}
-                          <div 
-                            className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 cursor-pointer border-b"
-                            onClick={() => toggleSubgroup(subgroup.subgroupCode)}
-                          >
-                            <div className="flex items-center space-x-2">
-                              {expandedSubgroups.has(subgroup.subgroupCode) ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                              <span className="font-medium">{subgroup.subgroupName} ({subgroup.subgroupCode})</span>
-                              <span className="text-sm text-gray-500">({subgroup.parties.length} parties)</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <SendAllButtons
-                                groupKey={subgroup.subgroupCode}
-                                groupName={subgroup.subgroupName}
-                                parties={subgroup.parties}
-                                reminders={reminders}
-                              />
-                              <div className="font-bold text-orange-600">
-                                {formatCurrency(subgroup.totalBalance)}
+                      {subgroupBalances.map((subgroup) => {
+                        const open = expandedSubgroups.has(subgroup.subgroupCode);
+                        return (
+                          <div key={subgroup.subgroupCode} className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+                            {/* Subgroup header: stacked on phones, one row from sm up */}
+                            <div
+                              className="flex cursor-pointer flex-col gap-2 bg-gray-50 p-3 hover:bg-gray-100 sm:flex-row sm:items-center sm:justify-between dark:bg-white/[0.04] dark:hover:bg-white/[0.07]"
+                              onClick={() => toggleSubgroup(subgroup.subgroupCode)}
+                            >
+                              <div className="flex min-w-0 items-start gap-2">
+                                <span className="mt-0.5 text-gray-500 dark:text-gray-400">
+                                  {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-medium break-words text-gray-800 sm:text-base dark:text-white/90">
+                                    {subgroup.subgroupName} ({subgroup.subgroupCode})
+                                  </div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">{subgroup.parties.length} parties</div>
+                                </div>
+                                {/* Amount sits next to the name on phones */}
+                                <div className="shrink-0 font-bold whitespace-nowrap text-orange-600 sm:hidden dark:text-orange-400">
+                                  {formatCurrency(subgroup.totalBalance)}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 pl-6 sm:pl-0">
+                                <SendAllButtons
+                                  groupKey={subgroup.subgroupCode}
+                                  groupName={subgroup.subgroupName}
+                                  parties={subgroup.parties}
+                                  reminders={reminders}
+                                />
+                                <div className="hidden font-bold whitespace-nowrap text-orange-600 sm:block dark:text-orange-400">
+                                  {formatCurrency(subgroup.totalBalance)}
+                                </div>
                               </div>
                             </div>
+
+                            {open && <div className="border-t border-gray-200 dark:border-gray-800">{renderParties(subgroup.parties)}</div>}
                           </div>
-                          
-                          {/* Subgroup Details */}
-                          {expandedSubgroups.has(subgroup.subgroupCode) && (
-                            <div className="p-0">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Party Code</TableHead>
-                                    <TableHead>Party Name</TableHead>
-                                    <TableHead>Reminder</TableHead>
-                                    <TableHead className="text-right">Outstanding Amount</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {subgroup.parties.map((party) => (
-                                    <TableRow key={party.partyCode}>
-                                      <TableCell className="font-mono text-sm">
-                                        {party.partyCode}
-                                      </TableCell>
-                                      <TableCell className="font-medium">
-                                        <button
-                                          onClick={() => handlePartyClick(party.partyCode, party.partyName)}
-                                          className="text-left hover:text-blue-600 hover:underline cursor-pointer transition-colors"
-                                        >
-                                          {party.partyName}
-                                        </button>
-                                      </TableCell>
-                                      <TableCell>
-                                        <ReminderButtons party={party} reminders={reminders} />
-                                      </TableCell>
-                                      <TableCell className="text-right font-medium text-orange-600">
-                                        {formatCurrency(party.balance)}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     // Render regular table view for single subgroup users
                     <>
-                    <div className="flex justify-end p-2">
-                      <SendAllButtons groupKey="all" groupName="all parties" parties={partyBalances} reminders={reminders} />
-                    </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Party Code</TableHead>
-                          <TableHead>Party Name</TableHead>
-                                    <TableHead>Reminder</TableHead>
-                          <TableHead className="text-right">Outstanding Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {partyBalances.map((party, index) => (
-                          <TableRow key={party.partyCode}>
-                            <TableCell className="font-mono text-sm">
-                              {party.partyCode}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              <button
-                                onClick={() => handlePartyClick(party.partyCode, party.partyName)}
-                                className="text-left hover:text-blue-600 hover:underline cursor-pointer transition-colors"
-                              >
-                                {party.partyName}
-                              </button>
-                            </TableCell>
-                            <TableCell>
-                              <ReminderButtons party={party} reminders={reminders} />
-                            </TableCell>
-                            <TableCell className="text-right font-medium text-orange-600">
-                              {formatCurrency(party.balance)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                      <div className="flex justify-end p-2">
+                        <SendAllButtons groupKey="all" groupName="all parties" parties={partyBalances} reminders={reminders} />
+                      </div>
+                      {renderParties(partyBalances)}
                     </>
                   )}
                 </div>

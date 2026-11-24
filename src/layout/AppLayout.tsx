@@ -117,9 +117,11 @@ const LayoutContent: React.FC = () => {
             and whenever the sidebar is hidden (attendance not marked) so logout stays reachable. */}
         {showHeader && <AppHeader />}
         <div className={`mx-auto w-full max-w-(--breakpoint-2xl) flex-1
-          ${isDesktop ? "p-4 md:p-6 pb-16 lg:pb-4" : "p-2 pt-0 pb-20"}
+          ${isDesktop ? "p-4 md:p-6 pb-16 lg:pb-4" : "p-2 pb-20"}
           ${!shouldHideNavigation && (isExpanded || isHovered) ? "lg:pt-6" : "lg:pt-4"}`}
-          style={showHeader ? { paddingTop: '4rem' } : undefined}
+          // Room for the header only on desktop, where it is fixed over the content.
+          // On mobile it is sticky and already takes its own space.
+          style={showHeader && isDesktop ? { paddingTop: '4rem' } : undefined}
         >
           <Outlet />
         </div>

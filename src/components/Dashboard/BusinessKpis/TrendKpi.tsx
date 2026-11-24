@@ -4,6 +4,7 @@ import { ApexOptions } from 'apexcharts';
 import { BarChart3, Building2, Check, ChevronDown, LineChart, X } from 'lucide-react';
 import {
   CHART_ANIMATIONS,
+  useIsNarrow,
   CountUp,
   EmptyState,
   KpiCard,
@@ -75,24 +76,30 @@ const tooltipHtml = (
   total: number,
   color: string,
   totalLabel = 'TOTAL',
-  extras: TooltipExtra[] = []
+  extras: TooltipExtra[] = [],
+  maxCompanies?: number // phones: keep the box short enough to fit inside the chart
 ) => {
-  const rows = (companies ?? [])
+  const list = companies ?? [];
+  const shown = maxCompanies && list.length > maxCompanies ? list.slice(0, maxCompanies) : list;
+  const hidden = list.length - shown.length;
+  // Names may wrap and amounts never do, so the box fits a phone screen (width capped below)
+  const rows = shown
     .map(
       (c) =>
-        `<tr><td style="padding:2px 12px 2px 0;white-space:nowrap">${escapeHtml(c.company)}</td>` +
-        `<td style="padding:2px 0;text-align:right;font-weight:600;color:#facc15">${inr(c.amount)}</td></tr>`
+        `<tr><td style="padding:2px 10px 2px 0;white-space:normal;word-break:break-word">${escapeHtml(c.company)}</td>` +
+        `<td style="padding:2px 0;text-align:right;font-weight:600;color:#facc15;white-space:nowrap;vertical-align:top">${inr(c.amount)}</td></tr>`
     )
-    .join('');
+    .join('') +
+    (hidden > 0 ? `<tr><td colspan="2" style="padding:2px 0;color:#94a3b8">+${hidden} more</td></tr>` : '');
   const extraRows = extras
     .map(
       (x, i) =>
-        `<tr${i === 0 ? ' style="border-top:1px solid #475569"' : ''}><td style="padding-top:${i === 0 ? 5 : 2}px;color:#fdba74;white-space:nowrap">${escapeHtml(x.label)}</td>` +
-        `<td style="padding-top:${i === 0 ? 5 : 2}px;text-align:right;font-weight:700;color:${x.color || '#fdba74'}">${escapeHtml(x.value)}</td></tr>`
+        `<tr${i === 0 ? ' style="border-top:1px solid #475569"' : ''}><td style="padding-top:${i === 0 ? 5 : 2}px;padding-right:10px;color:#fdba74">${escapeHtml(x.label)}</td>` +
+        `<td style="padding-top:${i === 0 ? 5 : 2}px;text-align:right;font-weight:700;white-space:nowrap;vertical-align:top;color:${x.color || '#fdba74'}">${escapeHtml(x.value)}</td></tr>`
     )
     .join('');
   return (
-    `<div style="background:rgba(15,23,42,.96);color:#fff;padding:10px 12px;border-radius:10px;font-size:11px;min-width:220px">` +
+    `<div style="background:rgba(15,23,42,.96);color:#fff;padding:8px 10px;border-radius:10px;font-size:11px;min-width:min(220px,calc(100vw - 40px));max-width:min(380px,calc(100vw - 40px))">` +
     `<div style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:12px;margin-bottom:6px">` +
     `<span style="width:8px;height:8px;border-radius:2px;background:${color}"></span>${escapeHtml(title)}</div>` +
     `<table style="width:100%;border-collapse:collapse">${rows}` +
@@ -403,14 +410,23 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
   }, [data, hasMtd, curFy, cmi, mtdOf]);
 
   // ----- Chart options -----
+  // Phones: slant month labels so all 12 fit, and pin the tooltip to the chart's top-left
+  // corner (next to the bar it would run off the screen edge)
+  const narrow = useIsNarrow();
   const xaxis = useMemo(
     () => ({
       categories: data?.months ?? [],
       axisBorder: { show: false },
       axisTicks: { show: false },
-      labels: { style: { colors: '#64748b' } },
+      labels: narrow
+        ? { rotate: -45, rotateAlways: true, hideOverlappingLabels: false, style: { colors: '#64748b', fontSize: '10px' } }
+        : { style: { colors: '#64748b' } },
     }),
-    [data]
+    [data, narrow]
+  );
+  const tooltipPlacement = useMemo(
+    () => ({ fixed: { enabled: narrow, position: 'topLeft', offsetX: 0, offsetY: 0 } }),
+    [narrow]
   );
 
   // Bar mode: draw the "till day N" lines after every draw (the bars animate in, so the
@@ -453,6 +469,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
         xaxis,
         yaxis,
         tooltip: {
+          ...tooltipPlacement,
           shared: true,
           intersect: false,
           custom: ({ dataPointIndex }: { dataPointIndex: number }) => {
@@ -465,7 +482,8 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
               rows.reduce((s, r) => s + r.amount, 0),
               color,
               'SELECTED',
-              tillExtras(curFy, dataPointIndex)
+              tillExtras(curFy, dataPointIndex),
+              narrow ? 6 : undefined
             );
           },
         },
@@ -477,7 +495,8 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
         fontFamily: 'Outfit, sans-serif',
         toolbar: { show: false },
         animations: CHART_ANIMATIONS,
-        ...markerEvents(monthlyMarkers, true),
+        // Value labels inside the bars are too crowded on phones; the tooltip shows them there
+        ...markerEvents(monthlyMarkers, !narrow),
       },
       colors: companions ? [color, MARKER_COLOR] : [color],
       plotOptions: { bar: { columnWidth: '55%', borderRadius: 6, borderRadiusApplication: 'end', dataLabels: { position: 'top' } } },
@@ -485,7 +504,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
       markers: { size: chartType === 'line' ? 4 : 0, hover: { size: 6 } },
       legend: { show: false },
       dataLabels: {
-        enabled: chartType === 'bar',
+        enabled: chartType === 'bar' && !narrow,
         formatter: (v: number) => (v > 0 ? `${(v / 1e5).toFixed(1)}L` : ''),
         offsetY: -18,
         style: { fontSize: '10px', colors: ['#64748b'], fontWeight: 500 },
@@ -498,6 +517,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
           ? { type: 'gradient', gradient: { shade: 'light', type: 'vertical', opacityFrom: 1, opacityTo: 0.75, stops: [0, 100] } }
           : { type: 'solid' },
       tooltip: {
+        ...tooltipPlacement,
         custom: ({ dataPointIndex }: { dataPointIndex: number }) =>
           tooltipHtml(
             `${data.months[dataPointIndex]} · FY ${data.monthly.fy}`,
@@ -505,13 +525,14 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
             data.monthly.values[dataPointIndex],
             color,
             'TOTAL',
-            tillExtras(curFy, dataPointIndex)
+            tillExtras(curFy, dataPointIndex),
+            narrow ? 6 : undefined
           ),
       },
     };
     // colorOf and lineStroke derive from activeCodes / chartType, which are already dependencies
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, color, comparing, activeCodes, chartType, nameOf, curFy, xaxis, monthlyMarkers, markerEvents, tillExtras, withTillLines]);
+  }, [data, color, comparing, activeCodes, chartType, nameOf, curFy, xaxis, monthlyMarkers, markerEvents, tillExtras, withTillLines, tooltipPlacement, narrow]);
 
   const yearlyOptions: ApexOptions | null = useMemo(() => {
     if (!data) return null;
@@ -535,6 +556,7 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
       xaxis,
       yaxis,
       tooltip: {
+        ...tooltipPlacement,
         shared: false,
         intersect: chartType === 'bar',
         custom: ({ seriesIndex, dataPointIndex }: { seriesIndex: number; dataPointIndex: number }) => {
@@ -546,12 +568,13 @@ const TrendKpi: React.FC<{ title: string; color: string; icon: React.ReactNode }
             y.values[dataPointIndex],
             YEAR_COLORS[s],
             comparing ? 'SELECTED' : 'TOTAL',
-            tillExtras(y.fy, dataPointIndex)
+            tillExtras(y.fy, dataPointIndex),
+            narrow ? 6 : undefined
           );
         },
       },
     };
-  }, [data, chartType, yearlyView, comparing, xaxis, yearlyMarkers, markerEvents, tillExtras, withTillLines]);
+  }, [data, chartType, yearlyView, comparing, xaxis, yearlyMarkers, markerEvents, tillExtras, withTillLines, tooltipPlacement, narrow]);
 
   // Stable series references: react-apexcharts redraws the chart (closing any open tooltip)
   // whenever it receives a new series array, so only rebuild these when their inputs change.

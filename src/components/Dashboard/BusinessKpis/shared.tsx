@@ -3,6 +3,19 @@ import { ChevronLeft, ChevronRight, EyeOff, GripVertical, Loader2, Maximize2, Mi
 import { fetchWithAuth } from '@/lib/api';
 import GlassSurface from '@/components/glass/GlassSurface';
 
+// True on phone-width screens (below Tailwind's sm breakpoint)
+const NARROW_QUERY = '(max-width: 639px)';
+export const useIsNarrow = () => {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY);
+    const onChange = () => setNarrow(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+};
+
 // ---------- Formatting ----------
 const inrFormatter = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 const inrFormatter2 = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -201,7 +214,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
     <div className="has-glisse relative flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-gray-800 dark:bg-white/[0.03]">
       <GlassSurface />
       <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${color}, ${color}55)` }} />
-      <div className="flex flex-wrap items-center gap-3 px-4 pt-4 pb-3 sm:px-5">
+      <div className="flex flex-wrap items-center gap-2 px-3 pt-3 pb-2 sm:gap-3 sm:px-5 sm:pt-4 sm:pb-3">
         {controls && (
           <button
             type="button"
@@ -264,7 +277,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
           </div>
         )}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 sm:px-5">
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 sm:px-5 sm:pb-4">
         {loading && !hasData ? (
           <div className="flex flex-1 flex-col gap-3 py-2">
             <div className="h-8 w-1/3 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" />
