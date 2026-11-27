@@ -3,14 +3,12 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs').promises;
 const { DbfORM } = require('../../dbf-orm');
+const { runAppendJob, vrPlaceholders } = require('../../lib/vfpSync');
 
 const dbfFolderPath = process.env.DBF_FOLDER_PATH;
 const purDbfPath = path.join(dbfFolderPath, 'data', 'PUR.DBF');
-const purDtlDbfPath = path.join(dbfFolderPath, 'data', 'PURDTL.DBF');
 const pmplDbfPath = path.join(dbfFolderPath, 'data', 'PMPL.DBF');
 const cmplDbfPath = path.join(dbfFolderPath, 'data', 'CMPL.DBF');
-const cashDbfPath = path.join(dbfFolderPath, 'data', 'CASH.DBF');
-const purTranDbfPath = path.join(dbfFolderPath, 'data', 'PURTRAN.DBF');
 
 // Firm's own GST state; purchases from other states post tax to IGST accounts (VIxxx) like the DOS software
 const FIRM_STATE_CODE = process.env.FIRM_STATE_CODE || '23';
@@ -251,12 +249,9 @@ function mapToPURDTLRecords(purchase, supplier, productMap) {
 }
 
 router.post('/sync', async (req, res) => {
-  const purDbf = new DbfORM(purDbfPath, { autoCreate: true });
-  const purDtlDbf = new DbfORM(purDtlDbfPath, { autoCreate: true });
+  const purDbf = new DbfORM(purDbfPath);
   const pmplDbf = new DbfORM(pmplDbfPath);
   const cmplDbf = new DbfORM(cmplDbfPath);
-  const cashDbf = new DbfORM(cashDbfPath, { autoCreate: true });
-  const purTranDbf = new DbfORM(purTranDbfPath);
 
   try {
     const { records } = req.body || {};
@@ -266,11 +261,8 @@ router.post('/sync', async (req, res) => {
 
     await Promise.all([
       purDbf.open(),
-      purDtlDbf.open(),
       pmplDbf.open(),
-      cmplDbf.open(),
-      cashDbf.open(),
-      purTranDbf.open()
+      cmplDbf.open()
     ]);
 
     const pmplRecords = await pmplDbf.findAll();
@@ -284,292 +276,294 @@ router.post('/sync', async (req, res) => {
       return acc;
     }, {});
 
-    const cashRecords = await cashDbf.findAll();
-    let maxJb = 0;
-    let maxCp = 0;
-    for (const rec of cashRecords) {
-        if (rec.VR && typeof rec.VR === 'string') {
-            if (rec.VR.startsWith('JB-')) {
-                const num = parseInt(rec.VR.replace('JB-', ''), 10);
-                if (!isNaN(num) && num > maxJb) maxJb = num;
-            } else if (rec.VR.startsWith('CP-')) {
-                const num = parseInt(rec.VR.replace('CP-', ''), 10);
-                if (!isNaN(num) && num > maxCp) maxCp = num;
-            }
-        }
-    }
-
+    // PUR is small; filter known duplicates here. SYNCAPPEND.EXE re-checks with the tables locked.
     const existingPur = await purDbf.findAll();
     const existingKeys = new Set(existingPur.map(r => `${r.SERIES}-${r.BILL}`));
+    await Promise.allSettled([purDbf.close(), pmplDbf.close(), cmplDbf.close()]);
 
-    const purToInsert = [];
-    const purDtlToInsert = [];
-    const cashToInsert = [];
-    const purTranToInsert = [];
-    const processed = [];
-    const processedCreatedAt = [];
-    const skipped = [];
+    let purToInsert, purDtlToInsert, cashToInsert, purTranToInsert, processed, processedCreatedAt, skipped;
 
-    for (const purchase of records) {
-      const billNo = toInt(purchase.bill || purchase.BILL);
-      const key = `P-${billNo}`;
-      if (existingKeys.has(key)) {
-        skipped.push({ key, reason: 'Duplicate' });
-        continue;
-      }
-      const supplier = partyMap[purchase.supplierCode || purchase.party || ''] || null;
-      const purRecord = mapToPURRecord(purchase, supplier);
-      const purDtlRecords = mapToPURDTLRecords(purchase, supplier, productMap);
+    // Maps the purchases to DBF rows. JB / CP voucher numbers are placeholders,
+    // numbered by SYNCAPPEND.EXE.
+    function buildRows(purchases) {
+      const vrFor = vrPlaceholders();
+      const batchKeys = new Set();
+      purToInsert = [];
+      purDtlToInsert = [];
+      cashToInsert = [];
+      purTranToInsert = [];
+      processed = [];
+      processedCreatedAt = [];
+      skipped = [];
 
-      purToInsert.push(purRecord);
-      purDtlToInsert.push(...purDtlRecords);
+      for (const purchase of purchases) {
+        const billNo = toInt(purchase.bill || purchase.BILL);
+        const key = `P-${billNo}`;
+        if (existingKeys.has(key) || batchKeys.has(key)) {
+          skipped.push({ key, reason: 'Duplicate' });
+          continue;
+        }
+        const supplier = partyMap[purchase.supplierCode || purchase.party || ''] || null;
+        const purRecord = mapToPURRecord(purchase, supplier);
+        const purDtlRecords = mapToPURDTLRecords(purchase, supplier, productMap);
 
-      // --- Cash Book Entry Logic ---
-      const gstBreakdown = purchase.gstBreakdown || []; // Should be present from frontend
-      const invoiceNo = purchase.invoice?.number || '';
-      const invoiceDate = parseDDMMYYYYToUTC(purchase.invoice?.date || '');
-      const entryDate = parseDDMMYYYYToUTC(purchase.entryDate || purchase.date);
-      const supplierCode = purchase.supplierCode || purchase.party || '';
-      const vrNo = padBillVRNo(billNo);
-      const bill2 = padBillNumber('P', billNo);
-      const supplierState = extractStateCode(purchase.state) || String(supplier?.C_STATE || '').trim();
-      const interState = !!supplierState && supplierState !== FIRM_STATE_CODE;
+        purToInsert.push(purRecord);
+        purDtlToInsert.push(...purDtlRecords);
 
-      // If gstBreakdown is missing (legacy?), we could try to rebuild it, but for now we rely on it.
-      // If missing, we might skip cash entries or try to group from items.
-      // Let's assume it's there or we group from items if empty.
-      let breakdownToUse = gstBreakdown;
-      if (!breakdownToUse || breakdownToUse.length === 0) {
-          // Fallback: Group by item tax
-          const breakdown = {};
-          for (const it of purchase.items || []) {
-              const code = it.itemCode || it.CODE || '';
-              const product = productMap[code] || {};
-              // Logic similar to frontend to find GST Code
-              let gstCode = it.gstCode;
-              if (!gstCode && code) {
-                 gstCode = String(product.GST_CODE || product.G_CODE || '').trim();
-              }
-              const p = toFloat(it.gstPercent, 2);
-              const label = gstCode || `GST ${p}%`; // Fallback label if no code
+        // --- Cash Book Entry Logic ---
+        const gstBreakdown = purchase.gstBreakdown || []; // Should be present from frontend
+        const invoiceNo = purchase.invoice?.number || '';
+        const invoiceDate = parseDDMMYYYYToUTC(purchase.invoice?.date || '');
+        const entryDate = parseDDMMYYYYToUTC(purchase.entryDate || purchase.date);
+        const supplierCode = purchase.supplierCode || purchase.party || '';
+        const vrNo = padBillVRNo(billNo);
+        const bill2 = padBillNumber('P', billNo);
+        const supplierState = extractStateCode(purchase.state) || String(supplier?.C_STATE || '').trim();
+        const interState = !!supplierState && supplierState !== FIRM_STATE_CODE;
+
+        // If gstBreakdown is missing (legacy?), we could try to rebuild it, but for now we rely on it.
+        // If missing, we might skip cash entries or try to group from items.
+        // Let's assume it's there or we group from items if empty.
+        let breakdownToUse = gstBreakdown;
+        if (!breakdownToUse || breakdownToUse.length === 0) {
+            // Fallback: Group by item tax
+            const breakdown = {};
+            for (const it of purchase.items || []) {
+                const code = it.itemCode || it.CODE || '';
+                const product = productMap[code] || {};
+                // Logic similar to frontend to find GST Code
+                let gstCode = it.gstCode;
+                if (!gstCode && code) {
+                   gstCode = String(product.GST_CODE || product.G_CODE || '').trim();
+                }
+                const p = toFloat(it.gstPercent, 2);
+                const label = gstCode || `GST ${p}%`; // Fallback label if no code
               
-              if (!breakdown[label]) breakdown[label] = { taxable: 0, gst: 0, code: gstCode, rate: p };
+                if (!breakdown[label]) breakdown[label] = { taxable: 0, gst: 0, code: gstCode, rate: p };
               
-              // Recalculate item taxable/tax
-              const qty = toFloat(it.qty, 3);
-              const rate = toFloat(it.rate, 2);
-              const isInclusive = purchase.rateInclusiveOfGst === 'Y';
+                // Recalculate item taxable/tax
+                const qty = toFloat(it.qty, 3);
+                const rate = toFloat(it.rate, 2);
+                const isInclusive = purchase.rateInclusiveOfGst === 'Y';
               
-              // Simplified calc for fallback (ignoring complex discounts if not available easily here without full logic re-run)
-              // But we can use the mapToPURDTLRecords logic if we refactor. 
-              // For now, let's just use what we have or skip fallback if risky.
-              // Given the user instruction "do the same for webapp", we assume webapp sends correct data.
-              // We'll proceed with breakdownToUse.
-          }
-      }
+                // Simplified calc for fallback (ignoring complex discounts if not available easily here without full logic re-run)
+                // But we can use the mapToPURDTLRecords logic if we refactor. 
+                // For now, let's just use what we have or skip fallback if risky.
+                // Given the user instruction "do the same for webapp", we assume webapp sends correct data.
+                // We'll proceed with breakdownToUse.
+            }
+        }
 
-      let totalDebits = 0;
+        let totalDebits = 0;
 
-      for (const item of breakdownToUse) {
-          const taxable = toFloat(item.taxable, 2);
-          const tax = toFloat(item.tax, 2);
-          const code = item.code; // e.g. GG010
+        for (const item of breakdownToUse) {
+            const taxable = toFloat(item.taxable, 2);
+            const tax = toFloat(item.tax, 2);
+            const code = item.code; // e.g. GG010
           
-          if (!code) continue; // Skip if no code (shouldn't happen for valid items)
+            if (!code) continue; // Skip if no code (shouldn't happen for valid items)
 
-          // 1. Debit Goods Account
-          cashToInsert.push({
-              DATE: entryDate,
-              VR: vrNo,
-              C_CODE: code,
-              CR: 0,
-              DR: taxable,
-              REMARK: `BY GOODS BILL NO.${invoiceNo}`,
-              BILL: invoiceNo,
-              DT_BILL: invoiceDate,
-              E_TYPE: 'G',
-              PUR_CODE: supplierCode,
-              BILL2: bill2,
-              QDR: 0
-          });
-          totalDebits += taxable;
+            // 1. Debit Goods Account
+            cashToInsert.push({
+                DATE: entryDate,
+                VR: vrNo,
+                C_CODE: code,
+                CR: 0,
+                DR: taxable,
+                REMARK: `BY GOODS BILL NO.${invoiceNo}`,
+                BILL: invoiceNo,
+                DT_BILL: invoiceDate,
+                E_TYPE: 'G',
+                PUR_CODE: supplierCode,
+                BILL2: bill2,
+                QDR: 0
+            });
+            totalDebits += taxable;
 
-          // 2. Debit Tax Account
-          if (tax > 0) {
-              const taxCode = taxAccountFor(code, interState);
-              cashToInsert.push({
-                  DATE: entryDate,
-                  VR: vrNo,
-                  C_CODE: taxCode,
-                  CR: 0,
-                  DR: tax,
-                  REMARK: `BY TAX BILL NO.${invoiceNo}`,
-                  BILL: invoiceNo,
-                  DT_BILL: invoiceDate,
-                  E_TYPE: 'G',
-                  PUR_CODE: supplierCode,
-                  BILL2: bill2,
-                  QDR: 0
-              });
-              totalDebits += tax;
-          }
-      }
+            // 2. Debit Tax Account
+            if (tax > 0) {
+                const taxCode = taxAccountFor(code, interState);
+                cashToInsert.push({
+                    DATE: entryDate,
+                    VR: vrNo,
+                    C_CODE: taxCode,
+                    CR: 0,
+                    DR: tax,
+                    REMARK: `BY TAX BILL NO.${invoiceNo}`,
+                    BILL: invoiceNo,
+                    DT_BILL: invoiceDate,
+                    E_TYPE: 'G',
+                    PUR_CODE: supplierCode,
+                    BILL2: bill2,
+                    QDR: 0
+                });
+                totalDebits += tax;
+            }
+        }
 
-      // 3. Round Off (if any)
-      const grandTotal = toFloat(purchase.totals?.total || 0, 2);
-      const roundOff = toFloat(grandTotal - totalDebits, 2);
+        // 3. Round Off (if any)
+        const grandTotal = toFloat(purchase.totals?.total || 0, 2);
+        const roundOff = toFloat(grandTotal - totalDebits, 2);
 
-      if (Math.abs(roundOff) > 0.001) {
-          // If roundOff is positive (e.g. 0.4), it means Total > (Taxable+Tax).
-          // We Credit Supplier with Total.
-          // We Debit Goods+Tax with (Taxable+Tax).
-          // Difference is Round Off.
-          // To balance: Total (CR) = Goods+Tax (DR) + RoundOff (DR).
-          // So if roundOff > 0, it is a DR.
-          // If roundOff < 0, it is a CR.
+        if (Math.abs(roundOff) > 0.001) {
+            // If roundOff is positive (e.g. 0.4), it means Total > (Taxable+Tax).
+            // We Credit Supplier with Total.
+            // We Debit Goods+Tax with (Taxable+Tax).
+            // Difference is Round Off.
+            // To balance: Total (CR) = Goods+Tax (DR) + RoundOff (DR).
+            // So if roundOff > 0, it is a DR.
+            // If roundOff < 0, it is a CR.
           
-          cashToInsert.push({
-              DATE: entryDate,
-              VR: vrNo,
-              C_CODE: 'EE001', // Round Off A/c
-              CR: roundOff < 0 ? Math.abs(roundOff) : 0,
-              DR: roundOff > 0 ? roundOff : 0,
-              REMARK: 'ROUND OFF',
-              BILL: invoiceNo,
-              DT_BILL: invoiceDate,
-              E_TYPE: 'G',
-              PUR_CODE: supplierCode,
-              BILL2: bill2,
-              QDR: 0
-          });
-      }
+            cashToInsert.push({
+                DATE: entryDate,
+                VR: vrNo,
+                C_CODE: 'EE001', // Round Off A/c
+                CR: roundOff < 0 ? Math.abs(roundOff) : 0,
+                DR: roundOff > 0 ? roundOff : 0,
+                REMARK: 'ROUND OFF',
+                BILL: invoiceNo,
+                DT_BILL: invoiceDate,
+                E_TYPE: 'G',
+                PUR_CODE: supplierCode,
+                BILL2: bill2,
+                QDR: 0
+            });
+        }
 
-      // PURTRAN (bill-wise GST summary, as the DOS software keeps it):
-      // one goods row per GST code (taxable) then one tax row (VGxxx local / VIxxx inter-state),
-      // round off of the bill in RF_AMT of the first row
-      const purTranBase = { BILL2: bill2, DATE: entryDate, PBILL: invoiceNo, PBILLDATE: invoiceDate, GR_CODE: '', GD_ADJ: 0, VT_ADJ: 0, FRGT: 0, TCS_AMT: 0 };
-      const coded = breakdownToUse.filter((b) => b.code);
-      coded.forEach((b, i) => {
-          purTranToInsert.push({ ...purTranBase, C_CODE: b.code, DR: toFloat(b.taxable, 2), RF_AMT: i === 0 ? roundOff : 0 });
-      });
-      coded.filter((b) => toFloat(b.tax, 2) > 0).forEach((b) => {
-          purTranToInsert.push({ ...purTranBase, C_CODE: taxAccountFor(b.code, interState), DR: toFloat(b.tax, 2), RF_AMT: 0 });
-      });
+        // PURTRAN (bill-wise GST summary, as the DOS software keeps it):
+        // one goods row per GST code (taxable) then one tax row (VGxxx local / VIxxx inter-state),
+        // round off of the bill in RF_AMT of the first row
+        const purTranBase = { BILL2: bill2, DATE: entryDate, PBILL: invoiceNo, PBILLDATE: invoiceDate, GR_CODE: '', GD_ADJ: 0, VT_ADJ: 0, FRGT: 0, TCS_AMT: 0 };
+        const coded = breakdownToUse.filter((b) => b.code);
+        coded.forEach((b, i) => {
+            purTranToInsert.push({ ...purTranBase, C_CODE: b.code, DR: toFloat(b.taxable, 2), RF_AMT: i === 0 ? roundOff : 0 });
+        });
+        coded.filter((b) => toFloat(b.tax, 2) > 0).forEach((b) => {
+            purTranToInsert.push({ ...purTranBase, C_CODE: taxAccountFor(b.code, interState), DR: toFloat(b.tax, 2), RF_AMT: 0 });
+        });
 
-      // 4. Credit Supplier
-      cashToInsert.push({
-          DATE: entryDate,
-          VR: vrNo,
-          C_CODE: supplierCode,
-          CR: grandTotal,
-          DR: 0,
-          REMARK: `TO BILL NO. ${invoiceNo}`,
-          BILL: invoiceNo,
-          DT_BILL: invoiceDate,
-          E_TYPE: 'G',
-          PUR_CODE: supplierCode,
-          BILL2: bill2,
-          QDR: 0
-      });
+        // 4. Credit Supplier
+        cashToInsert.push({
+            DATE: entryDate,
+            VR: vrNo,
+            C_CODE: supplierCode,
+            CR: grandTotal,
+            DR: 0,
+            REMARK: `TO BILL NO. ${invoiceNo}`,
+            BILL: invoiceNo,
+            DT_BILL: invoiceDate,
+            E_TYPE: 'G',
+            PUR_CODE: supplierCode,
+            BILL2: bill2,
+            QDR: 0
+        });
 
-      // 5. Cash Discount (if any)
-      const cashDiscount = toFloat(purchase.totals?.cashDiscount || 0, 2);
-      if (cashDiscount > 0) {
-          const suppName = purchase.supplierName || supplier?.C_NAME || '';
-          const remarkCd = `BY CD ON INV#${invoiceNo} ${suppName} ON ${grandTotal}`.substring(0, 50).trim(); // Keep within typical DBF field length limit
-          // Journal Voucher number for Cash Discount
-          maxJb += 1;
-          const jbVrNo = `JB-${String(maxJb).padStart(6, '0')}`;
+        // 5. Cash Discount (if any)
+        const cashDiscount = toFloat(purchase.totals?.cashDiscount || 0, 2);
+        if (cashDiscount > 0) {
+            const suppName = purchase.supplierName || supplier?.C_NAME || '';
+            const remarkCd = `BY CD ON INV#${invoiceNo} ${suppName} ON ${grandTotal}`.substring(0, 50).trim(); // Keep within typical DBF field length limit
+            // Journal Voucher number for Cash Discount
+            const jbVrNo = vrFor('JB');
           
-          // Credit Cash Discount Income Account
-          cashToInsert.push({
-              DATE: entryDate,
-              VR: jbVrNo,
-              C_CODE: 'EE084',
-              CR: cashDiscount,
-              DR: 0,
-              REMARK: remarkCd,
-              BILL: invoiceNo,
-              DT_BILL: invoiceDate,
-              E_TYPE: 'G',
-              PUR_CODE: supplierCode,
-              BILL2: bill2,
-              QDR: 0
-          });
+            // Credit Cash Discount Income Account
+            cashToInsert.push({
+                DATE: entryDate,
+                VR: jbVrNo,
+                C_CODE: 'EE084',
+                CR: cashDiscount,
+                DR: 0,
+                REMARK: remarkCd,
+                BILL: invoiceNo,
+                DT_BILL: invoiceDate,
+                E_TYPE: 'G',
+                PUR_CODE: supplierCode,
+                BILL2: bill2,
+                QDR: 0
+            });
 
-          // Debit Supplier Account
-          cashToInsert.push({
-              DATE: entryDate,
-              VR: jbVrNo,
-              C_CODE: supplierCode,
-              CR: 0,
-              DR: cashDiscount,
-              REMARK: remarkCd,
-              BILL: invoiceNo,
-              DT_BILL: invoiceDate,
-              E_TYPE: 'G',
-              PUR_CODE: supplierCode,
-              BILL2: bill2,
-              QDR: 0
-          });
+            // Debit Supplier Account
+            cashToInsert.push({
+                DATE: entryDate,
+                VR: jbVrNo,
+                C_CODE: supplierCode,
+                CR: 0,
+                DR: cashDiscount,
+                REMARK: remarkCd,
+                BILL: invoiceNo,
+                DT_BILL: invoiceDate,
+                E_TYPE: 'G',
+                PUR_CODE: supplierCode,
+                BILL2: bill2,
+                QDR: 0
+            });
+        }
+
+        // 6. Unloading Charges (₹1.50 per BOX)
+        // BOX units count directly; PCS units are converted to boxes via MULT_F (pcs-per-box)
+        const totalBoxes = Math.round((purchase.items || []).reduce((sum, it) => {
+            const unit = String(it.unit || 'BOX').toUpperCase();
+            const qty = toFloat(it.qty, 3);
+            if (unit === 'BOX') {
+                // BOX quantity is already in boxes — count directly
+                return sum + qty;
+            } else if (unit === 'PCS') {
+                const code = it.itemCode || it.CODE || '';
+                const product = productMap[code] || {};
+                const multF = toFloat(product.MULT_F || product.PCBX || 1, 0) || 1;
+                // Convert PCS → boxes
+                return sum + (multF > 1 ? qty / multF : qty);
+            }
+            return sum;
+        }, 0));
+        const unloadingAmt = toFloat(totalBoxes * 1.5, 2);
+        if (unloadingAmt > 0) {
+            const cpVrNo = vrFor('CP');
+            const suppName = (purchase.supplierName || supplier?.C_NAME || '').toUpperCase().substring(0, 20).trim();
+            const unloadRemark = `UNLOAD CHARGES ${invoiceNo} ${suppName}`.substring(0, 40).trim(); // REMARK is C(40)
+            // Standalone cash voucher: must NOT carry BILL/BILL2/PUR_CODE, otherwise the DOS software
+            // deletes it along with the purchase voucher when the bill is re-saved/renumbered there.
+            cashToInsert.push({
+                DATE: entryDate,
+                VR: cpVrNo,
+                C_CODE: 'EE093',
+                CR: 0,
+                DR: unloadingAmt,
+                REMARK: unloadRemark,
+                BOOK: 'CB',
+                E_TYPE: 'G',
+                AC_NAME: (partyMap['EE093']?.C_NAME || '').substring(0, 40),
+                CODE_ORG: 'EE093',
+                PRINT: 'N'
+            });
+        }
+
+        processed.push(key);
+        if (purchase.createdAt) processedCreatedAt.push(purchase.createdAt);
+        batchKeys.add(key);
       }
+    }
 
-      // 6. Unloading Charges (₹1.50 per BOX)
-      // BOX units count directly; PCS units are converted to boxes via MULT_F (pcs-per-box)
-      const totalBoxes = Math.round((purchase.items || []).reduce((sum, it) => {
-          const unit = String(it.unit || 'BOX').toUpperCase();
-          const qty = toFloat(it.qty, 3);
-          if (unit === 'BOX') {
-              // BOX quantity is already in boxes — count directly
-              return sum + qty;
-          } else if (unit === 'PCS') {
-              const code = it.itemCode || it.CODE || '';
-              const product = productMap[code] || {};
-              const multF = toFloat(product.MULT_F || product.PCBX || 1, 0) || 1;
-              // Convert PCS → boxes
-              return sum + (multF > 1 ? qty / multF : qty);
-          }
-          return sum;
-      }, 0));
-      const unloadingAmt = toFloat(totalBoxes * 1.5, 2);
-      if (unloadingAmt > 0) {
-          maxCp += 1;
-          const cpVrNo = `CP-${String(maxCp).padStart(6, '0')}`;
-          const suppName = (purchase.supplierName || supplier?.C_NAME || '').toUpperCase().substring(0, 20).trim();
-          const unloadRemark = `UNLOAD CHARGES ${invoiceNo} ${suppName}`.substring(0, 40).trim(); // REMARK is C(40)
-          // Standalone cash voucher: must NOT carry BILL/BILL2/PUR_CODE, otherwise the DOS software
-          // deletes it along with the purchase voucher when the bill is re-saved/renumbered there.
-          cashToInsert.push({
-              DATE: entryDate,
-              VR: cpVrNo,
-              C_CODE: 'EE093',
-              CR: 0,
-              DR: unloadingAmt,
-              REMARK: unloadRemark,
-              BOOK: 'CB',
-              E_TYPE: 'G',
-              AC_NAME: (partyMap['EE093']?.C_NAME || '').substring(0, 40),
-              CODE_ORG: 'EE093',
-              PRINT: 'N'
-          });
+    for (let attempt = 1; ; attempt++) {
+      buildRows(records);
+      if (purToInsert.length === 0) break;
+      const result = await runAppendJob({
+        label: 'purchases',
+        tables: [
+          { name: 'PUR', rows: purToInsert },
+          { name: 'PURDTL', rows: purDtlToInsert },
+          { name: 'CASH', rows: cashToInsert },
+          { name: 'PURTRAN', rows: purTranToInsert }
+        ],
+        vrTable: 'CASH',
+        dupRules: [{ table: 'PUR', key: 'ALLTRIM(SERIES)+"-"+ALLTRIM(STR(BILL))' }]
+      });
+      if (result.status === 'OK') break;
+      if (result.status !== 'DUPLICATE' || attempt >= 3) {
+        throw new Error(`DBF append failed: ${result.message}`);
       }
-
-      processed.push(key);
-      if (purchase.createdAt) processedCreatedAt.push(purchase.createdAt);
-      existingKeys.add(key);
-    }
-
-    if (purToInsert.length > 0) {
-      await purDbf.insertMany(purToInsert);
-    }
-    if (purDtlToInsert.length > 0) {
-      await purDtlDbf.insertMany(purDtlToInsert);
-    }
-    if (cashToInsert.length > 0) {
-        await cashDbf.insertMany(cashToInsert);
-    }
-    if (purTranToInsert.length > 0) {
-        await purTranDbf.insertMany(purTranToInsert);
+      // Entered in the DBF since we read PUR: skip those and retry the rest
+      result.duplicates.forEach((k) => existingKeys.add(k));
     }
 
     return res.json({
@@ -587,17 +581,7 @@ router.post('/sync', async (req, res) => {
       error: error.message
     });
   } finally {
-    try {
-      await Promise.allSettled([
-        purDbf.close(),
-        purDtlDbf.close(),
-        pmplDbf.close(),
-        cmplDbf.close(),
-        cashDbf.close(),
-        purTranDbf.close()
-      ]);
-    } catch (e) {
-    }
+    await Promise.allSettled([purDbf.close(), pmplDbf.close(), cmplDbf.close()]);
   }
 });
 

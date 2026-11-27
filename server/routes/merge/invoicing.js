@@ -5,6 +5,7 @@ const fs = require('fs').promises; // To read the JSON file
 const crypto = require('crypto'); // Added for hashing
 const axios = require('axios'); // Added for API calls
 const { DbfORM } = require('../../dbf-orm');
+const { runAppendJob, vrPlaceholders } = require('../../lib/vfpSync');
 const { getPartyByCode } = require('../utilities');
 
 // --- WhatsApp Rate Limiter ---
@@ -22,10 +23,8 @@ function sleep(ms) {
 // Define DBF file paths using environment variable
 const dbfFolderPath = process.env.DBF_FOLDER_PATH;
 const billDbfPath = path.join(dbfFolderPath, 'data', 'BILL.DBF');
-const billDtlDbfPath = path.join(dbfFolderPath, 'data', 'BILLDTL.DBF');
 const pmplDbfPath = path.join(dbfFolderPath, 'data', 'PMPL.DBF'); // Product Master
 const cmplDbfPath = path.join(dbfFolderPath, 'data', 'CMPL.DBF'); // Customer Master
-const cashDbfPath = path.join(dbfFolderPath, 'data', 'CASH.DBF'); // Cash Ledger
 
 // Source JSON data
 const invoicingJsonPath = path.resolve(__dirname, '..', '..', 'db', 'approved', 'invoicing.json');
@@ -112,41 +111,158 @@ async function loadSetInChunks(dbfOrm, keyFn, set = new Set(), label = 'keys') {
   return set;
 }
 
-// Helper function to get the next VR number for Cash Receipts (CR)
-async function getNextCrVrNumber(dbfOrm) {
-  await dbfOrm.ensureOpen();
-  const recordCount = dbfOrm.dbf.recordCount;
-  const chunkSize = 1000;
-  let offset = 0;
-  let maxVrNum = 0;
-  let found = false;
+// Sends the PDF on WhatsApp and an SMS for one synced bill. Updates the counters in stats.
+async function sendInvoiceMessage({ invoice, billKey, customerData, netAmountRounded }, stats) {
+  try {
+    const hash = crypto.createHash('md5').update(JSON.stringify(invoice)).digest('hex');
+    const PdfFilename = `${invoice.series}-${invoice.billNo}-${hash}.pdf`;
+    const pdfFullPath = path.join(pdfBaseDir, PdfFilename);
 
-  console.log(`Scanning for max CR VR number in ${recordCount} records...`);
+    try {
+      await fs.access(pdfFullPath, fs.constants.F_OK); // Check if file exists
+      console.log(`[Invoicing Sync] PDF found for bill ${billKey}: ${pdfFullPath}`);
 
-  while (offset < recordCount) {
-    const records = await dbfOrm.dbf.readRecords(false, chunkSize, offset);
-    for (const r of records) {
-        if (r.VR && r.VR.startsWith('CR-')) {
-            const part = r.VR.split('-')[1];
-            if (part) {
-                const num = parseInt(part, 10);
-                if (!isNaN(num) && num > maxVrNum) {
-                    maxVrNum = num;
-                    found = true;
-                }
+      const mobileNumber = customerData?.C_MOBILE; // Using C_MOBILE from existing customerData
+
+      if (mobileNumber && mobileNumber.trim() !== "") {
+        // const apiFilePath = `db/pdfs/${PdfFilename}`; // Path for the API as per user spec
+        const apiFilePath = path.join(pdfBaseDir, PdfFilename);
+        const apiFileName = `${invoice.series}-${invoice.billNo}.pdf`;
+
+        console.log(`[Invoicing Sync] Attempting to send WhatsApp message for ${apiFileName} (Bill: ${billKey}), Mobile: ${mobileNumber}`);
+        stats.messagesAttempted++;
+        try {
+          // --- Rate limit: wait before sending to avoid WhatsApp spam detection ---
+          if (stats.messagesAttempted > 1) {
+            console.log(`[Invoicing Sync] Rate limiter: waiting ${WHATSAPP_DELAY_MS}ms before next WhatsApp message (message #${stats.messagesAttempted})...`);
+            await sleep(WHATSAPP_DELAY_MS);
+          }
+          // --- End Rate limit ---
+
+          // ── Build public PDF URL ────────────────────────────────────────
+          // The AOC API needs an internet-accessible HTTPS link for the PDF.
+          // We expose db/pdfs/ at /api/invoice-pdfs/ (see app.js).
+          const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://server.ekta-enterprises.com').replace(/\/$/, '');
+          const publicPdfUrl = `${PUBLIC_BASE_URL}/api/invoice-pdfs/${PdfFilename}`;
+
+          // ── Format recipient number ─────────────────────────────────────
+          // AOC API expects E.164 format with country code (e.g. +919377888899)
+          const rawMobile = mobileNumber.replace(/\D/g, ''); // strip non-digits
+          // Guard: only treat as already-prefixed if it is exactly 12 digits (91 + 10).
+          // A 10-digit number that happens to start with "91" (e.g. 9179174888) would
+          // otherwise be forwarded as +919179174888 → AOC "No Valid Numbers Found".
+          const recipientNumber = (rawMobile.startsWith('91') && rawMobile.length === 12) ? `+${rawMobile}` : `+91${rawMobile}`;
+
+          // ── Build body params ───────────────────────────────────────────
+          // Template: "Dear {{1}} . Thank you for Purchasing Bill No. {{2}} For Amount : {{3}} Regards Ekta Enterprises"
+          let customerName = customerData?.C_NAME || invoice.partyName || '';
+          customerName = customerName.substring(0, 30);
+          const billNumberFormatted = `${invoice.series}-${invoice.billNo}`;
+          const billAmount = netAmountRounded.toFixed(2);
+
+          // ── AOC WhatsApp API payload ────────────────────────────────────
+          const aocPayload = {
+            from: process.env.AOC_WA_FROM || '+15554884507',
+            campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
+            to: recipientNumber,
+            type: 'template',
+            templateName: process.env.AOC_WA_TEMPLATE || 'invoice_genrated',
+            language: { code: 'en' }, // Required by AOC API — must be object format
+            components: {
+              body: {
+                params: [customerName, billNumberFormatted, billAmount],
+              },
+              header: {
+                type: 'document',
+                document: {
+                  link: publicPdfUrl,
+                  filename: apiFileName,
+                },
+              },
+            },
+          };
+
+          console.log(`[Invoicing Sync] Calling WhatsApp for bill ${billKey}. Recipient: ${recipientNumber}`);
+
+          // Route through whatsapp.js /send — writes JSONL entry and creates inbox
+          // thread immediately, with PDF attachment info included.
+          const WA_SEND_URL = `http://127.0.0.1:${process.env.WHATSAPP_PORT || 4292}/send`;
+
+          const sendMessageResponse = await axios.post(
+            WA_SEND_URL,
+            {
+              to: recipientNumber,
+              type: 'template',
+              templateName: aocPayload.templateName,
+              language: { code: 'en' },
+              components: aocPayload.components,
+            },
+            { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+          );
+
+          if (sendMessageResponse.status === 200 || sendMessageResponse.status === 201) {
+            console.log(`[Invoicing Sync] WhatsApp sent successfully for ${apiFileName} (Bill: ${billKey}). MessageId: ${sendMessageResponse.data?.data?.[0]?.messageId || sendMessageResponse.data?.id || ''}`);
+            stats.messagesSent++;
+          } else {
+            console.warn(`[Invoicing Sync] WhatsApp send for ${apiFileName} (Bill: ${billKey}) returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
+          }
+          
+          // Send SMS using TextLocal API
+          try {
+            // --- Rate limit: short pause before SMS to avoid back-to-back bursts ---
+            console.log(`[Invoicing Sync] Rate limiter: waiting ${SMS_DELAY_MS}ms before SMS for ${billKey}...`);
+            await sleep(SMS_DELAY_MS);
+            // --- End Rate limit ---
+
+            // Format the SMS message
+            let customerName = customerData?.C_NAME || invoice.partyName || '';
+            customerName = customerName.substring(0, 30);
+            const billNumberFormatted = `${invoice.series}- ${invoice.billNo}`;
+            const billAmount = netAmountRounded.toFixed(2);
+            
+            const smsMessage = `Dear ${customerName} Thank you for Purchasing Bill No. ${billNumberFormatted} For Amount : ${billAmount} Regards Ekta Enterprises`;
+            
+            // Make TextLocal API call
+            const textLocalResponse = await axios.get('https://control.arihantglobal.in/fe/api/v1/send', {
+              params: {
+                username: 'ektaenterprises.trans',
+                password: 'sbe3d',
+                dltPrincipalEntityId: '1501397800000015092',
+                from: 'EKTAEN',
+                to: "91" + mobileNumber.replace(/\D/g, ''), // Remove non-digit characters
+                text: smsMessage,
+                unicode: false,
+              }
+            });
+
+            
+            if (textLocalResponse.data && textLocalResponse.data.statusCode == 200) {
+              console.log(`[Invoicing Sync] SMS sent successfully for ${billKey}. Response: ${JSON.stringify(textLocalResponse.data)}`);
+            } else {
+              console.warn(`[Invoicing Sync] TextLocal SMS API call for ${billKey} failed. Response: ${JSON.stringify(textLocalResponse.data)}`);
             }
+          } catch (smsError) {
+            console.error(`[Invoicing Sync] Error sending SMS via TextLocal for ${billKey}:`, smsError.message || smsError);
+          }
+        } catch (apiError) {
+          console.error(`[Invoicing Sync] Error calling sendMessage API for ${apiFileName} (Bill: ${billKey}):`, apiError.message || apiError);
         }
+      } else {
+        console.log(`[Invoicing Sync] Mobile number not found or empty for party ${invoice.party} in bill ${billKey}. Skipping message send.`);
+        stats.messagesSkippedNoMobile++;
+      }
+    } catch (fileError) {
+      if (fileError.code === 'ENOENT') {
+        console.log(`[Invoicing Sync] PDF not found for bill ${billKey}: ${pdfFullPath}. Skipping message send.`);
+        stats.messagesSkippedPdfNotFound++;
+      } else {
+        console.warn(`[Invoicing Sync] Error checking PDF file ${pdfFullPath} for bill ${billKey}:`, fileError.message);
+      }
     }
-    offset += chunkSize;
+  } catch (hashOrPdfError) {
+    console.error(`[Invoicing Sync] Error during hashing or PDF processing for bill ${billKey}:`, hashOrPdfError.message);
   }
-
-  if (!found) {
-    return 'CR-000001';
-  }
-  const nextNum = maxVrNum + 1;
-  return `CR-${String(nextNum).padStart(6, '0')}`;
 }
-// --- End Helper function ---
 
 function mapToBillDbfFormat(parsedUtcDate, invoice, customerData, calculatedTotals, billCreatorUserId) {
   console.log("Mapping BILL for:", invoice.billNo, "Customer:", customerData?.C_NAME);
@@ -365,10 +481,8 @@ function mapToBillDtlDbfFormat(parsedUtcDate, invoice, item, sno, productData, c
 
 router.post('/sync', async (req, res) => {
   const billDbf = new DbfORM(billDbfPath, { autoCreate: true });
-  const billDtlDbf = new DbfORM(billDtlDbfPath, { autoCreate: true });
   const pmplDbf = new DbfORM(pmplDbfPath);
   const cmplDbf = new DbfORM(cmplDbfPath);
-  const cashDbf = new DbfORM(cashDbfPath, { autoCreate: true });
 
   try {
     console.log('[Invoicing Handler] Request received. req.user:', JSON.stringify(req.user));
@@ -413,35 +527,10 @@ router.post('/sync', async (req, res) => {
     // Use the records from the request body instead of reading from file
     const invoicesData = req.body.records;
 
-    // 2. Open DBFs
-    await Promise.all([
-      billDbf.open(),
-      billDtlDbf.open(),
-      pmplDbf.open(),
-      cmplDbf.open(),
-      cashDbf.open()
-    ]).catch(async (openError) => {
-        if (openError.message.includes(path.basename(billDbfPath)) || openError.message.includes(path.basename(billDtlDbfPath)) || openError.message.includes(path.basename(cashDbfPath))) {
-            console.log('BILL/BILLDTL/CASH DBF not found, attempting to create...');
-            try {
-                await billDbf.create();
-                await billDtlDbf.create();
-                await cashDbf.create();
-                await pmplDbf.open();
-                await cmplDbf.open();
-            } catch (createError) {
-                console.error('Error creating or opening DBF files:', createError);
-                throw new Error(`Failed to open/create required DBF files: ${createError.message}`);
-            }
-        } else {
-             console.error('Error opening DBF files:', openError);
-             throw new Error(`Failed to open required DBF files (PMPL/CMPL might be missing): ${openError.message}`);
-        }
-    });
-
-    // Get next CR VR number
-    const nextVrStart = await getNextCrVrNumber(cashDbf);
-    let currentVrCounter = parseInt(nextVrStart.split('-')[1], 10);
+    // 2. Open the DBFs read here (BILL keys, product and customer masters).
+    //    BILL, BILLDTL and CASH are written by SYNCAPPEND.EXE.
+    await Promise.all([billDbf.open(), pmplDbf.open(), cmplDbf.open()]);
+    const vrFor = vrPlaceholders(); // CR voucher placeholders, numbered by SYNCAPPEND.EXE
 
     // 3. Load PMPL, CMPL into maps
     console.log('Loading PMPL data...');
@@ -465,10 +554,7 @@ router.post('/sync', async (req, res) => {
     const cashRecordsToInsert = [];
     const skippedInvoices = [];
     const processedInvoices = [];
-    let messagesAttempted = 0;
-    let messagesSent = 0;
-    let messagesSkippedPdfNotFound = 0;
-    let messagesSkippedNoMobile = 0;
+    const messageJobs = []; // sent after the DBF append succeeds
 
     for (const invoice of invoicesData) {
       const billKey = `${invoice.series}-${invoice.billNo}`;
@@ -769,11 +855,11 @@ router.post('/sync', async (req, res) => {
 
       // 2. CR Record (Cash Receipt) if CASH='Y'
       if (invoice.cash === 'Y') {
-          const crVr = `CR-${String(currentVrCounter++).padStart(6, '0')}`;
+          const crVr = vrFor('CR');
           const crRecordFinal = {
               VR: crVr,
               DATE: combinedDate,
-              AC_CODE: invoice.party,
+              C_CODE: invoice.party || "", // CASH.DBF has no AC_CODE column
               AC_NAME: customerData?.C_NAME || invoice.partyName || "",
               DR: 0,
               CR: netAmountRounded,
@@ -796,177 +882,44 @@ router.post('/sync', async (req, res) => {
       // Add the processed details to the main list
       billDtlRecordsToInsert.push(...currentBillDetails);
 
-      // --- New logic for PDF hash, existence check, and API call ---
-      try {
-        const hash = crypto.createHash('md5').update(JSON.stringify(invoice)).digest('hex');
-        const PdfFilename = `${invoice.series}-${invoice.billNo}-${hash}.pdf`;
-        const pdfFullPath = path.join(pdfBaseDir, PdfFilename);
-
-        try {
-          await fs.access(pdfFullPath, fs.constants.F_OK); // Check if file exists
-          console.log(`[Invoicing Sync] PDF found for bill ${billKey}: ${pdfFullPath}`);
-
-          const mobileNumber = customerData?.C_MOBILE; // Using C_MOBILE from existing customerData
-
-          if (mobileNumber && mobileNumber.trim() !== "") {
-            // const apiFilePath = `db/pdfs/${PdfFilename}`; // Path for the API as per user spec
-            const apiFilePath = path.join(pdfBaseDir, PdfFilename);
-            const apiFileName = `${invoice.series}-${invoice.billNo}.pdf`;
-
-            console.log(`[Invoicing Sync] Attempting to send WhatsApp message for ${apiFileName} (Bill: ${billKey}), Mobile: ${mobileNumber}`);
-            messagesAttempted++;
-            try {
-              // --- Rate limit: wait before sending to avoid WhatsApp spam detection ---
-              if (messagesAttempted > 1) {
-                console.log(`[Invoicing Sync] Rate limiter: waiting ${WHATSAPP_DELAY_MS}ms before next WhatsApp message (message #${messagesAttempted})...`);
-                await sleep(WHATSAPP_DELAY_MS);
-              }
-              // --- End Rate limit ---
-
-              // ── Build public PDF URL ────────────────────────────────────────
-              // The AOC API needs an internet-accessible HTTPS link for the PDF.
-              // We expose db/pdfs/ at /api/invoice-pdfs/ (see app.js).
-              const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://server.ekta-enterprises.com').replace(/\/$/, '');
-              const publicPdfUrl = `${PUBLIC_BASE_URL}/api/invoice-pdfs/${PdfFilename}`;
-
-              // ── Format recipient number ─────────────────────────────────────
-              // AOC API expects E.164 format with country code (e.g. +919377888899)
-              const rawMobile = mobileNumber.replace(/\D/g, ''); // strip non-digits
-              // Guard: only treat as already-prefixed if it is exactly 12 digits (91 + 10).
-              // A 10-digit number that happens to start with "91" (e.g. 9179174888) would
-              // otherwise be forwarded as +919179174888 → AOC "No Valid Numbers Found".
-              const recipientNumber = (rawMobile.startsWith('91') && rawMobile.length === 12) ? `+${rawMobile}` : `+91${rawMobile}`;
-
-              // ── Build body params ───────────────────────────────────────────
-              // Template: "Dear {{1}} . Thank you for Purchasing Bill No. {{2}} For Amount : {{3}} Regards Ekta Enterprises"
-              let customerName = customerData?.C_NAME || invoice.partyName || '';
-              customerName = customerName.substring(0, 30);
-              const billNumberFormatted = `${invoice.series}-${invoice.billNo}`;
-              const billAmount = netAmountRounded.toFixed(2);
-
-              // ── AOC WhatsApp API payload ────────────────────────────────────
-              const aocPayload = {
-                from: process.env.AOC_WA_FROM || '+15554884507',
-                campaignName: process.env.AOC_WA_CAMPAIGN || 'invoice-notification',
-                to: recipientNumber,
-                type: 'template',
-                templateName: process.env.AOC_WA_TEMPLATE || 'invoice_genrated',
-                language: { code: 'en' }, // Required by AOC API — must be object format
-                components: {
-                  body: {
-                    params: [customerName, billNumberFormatted, billAmount],
-                  },
-                  header: {
-                    type: 'document',
-                    document: {
-                      link: publicPdfUrl,
-                      filename: apiFileName,
-                    },
-                  },
-                },
-              };
-
-              console.log(`[Invoicing Sync] Calling WhatsApp for bill ${billKey}. Recipient: ${recipientNumber}`);
-
-              // Route through whatsapp.js /send — writes JSONL entry and creates inbox
-              // thread immediately, with PDF attachment info included.
-              const WA_SEND_URL = `http://127.0.0.1:${process.env.WHATSAPP_PORT || 4292}/send`;
-
-              const sendMessageResponse = await axios.post(
-                WA_SEND_URL,
-                {
-                  to: recipientNumber,
-                  type: 'template',
-                  templateName: aocPayload.templateName,
-                  language: { code: 'en' },
-                  components: aocPayload.components,
-                },
-                { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
-              );
-
-              if (sendMessageResponse.status === 200 || sendMessageResponse.status === 201) {
-                console.log(`[Invoicing Sync] WhatsApp sent successfully for ${apiFileName} (Bill: ${billKey}). MessageId: ${sendMessageResponse.data?.data?.[0]?.messageId || sendMessageResponse.data?.id || ''}`);
-                messagesSent++;
-              } else {
-                console.warn(`[Invoicing Sync] WhatsApp send for ${apiFileName} (Bill: ${billKey}) returned status ${sendMessageResponse.status}. Response: ${JSON.stringify(sendMessageResponse.data)}`);
-              }
-              
-              // Send SMS using TextLocal API
-              try {
-                // --- Rate limit: short pause before SMS to avoid back-to-back bursts ---
-                console.log(`[Invoicing Sync] Rate limiter: waiting ${SMS_DELAY_MS}ms before SMS for ${billKey}...`);
-                await sleep(SMS_DELAY_MS);
-                // --- End Rate limit ---
-
-                // Format the SMS message
-                let customerName = customerData?.C_NAME || invoice.partyName || '';
-                customerName = customerName.substring(0, 30);
-                const billNumberFormatted = `${invoice.series}- ${invoice.billNo}`;
-                const billAmount = netAmountRounded.toFixed(2);
-                
-                const smsMessage = `Dear ${customerName} Thank you for Purchasing Bill No. ${billNumberFormatted} For Amount : ${billAmount} Regards Ekta Enterprises`;
-                
-                // Make TextLocal API call
-                const textLocalResponse = await axios.get('https://control.arihantglobal.in/fe/api/v1/send', {
-                  params: {
-                    username: 'ektaenterprises.trans',
-                    password: 'sbe3d',
-                    dltPrincipalEntityId: '1501397800000015092',
-                    from: 'EKTAEN',
-                    to: "91" + mobileNumber.replace(/\D/g, ''), // Remove non-digit characters
-                    text: smsMessage,
-                    unicode: false,
-                  }
-                });
-
-                
-                if (textLocalResponse.data && textLocalResponse.data.statusCode == 200) {
-                  console.log(`[Invoicing Sync] SMS sent successfully for ${billKey}. Response: ${JSON.stringify(textLocalResponse.data)}`);
-                } else {
-                  console.warn(`[Invoicing Sync] TextLocal SMS API call for ${billKey} failed. Response: ${JSON.stringify(textLocalResponse.data)}`);
-                }
-              } catch (smsError) {
-                console.error(`[Invoicing Sync] Error sending SMS via TextLocal for ${billKey}:`, smsError.message || smsError);
-              }
-            } catch (apiError) {
-              console.error(`[Invoicing Sync] Error calling sendMessage API for ${apiFileName} (Bill: ${billKey}):`, apiError.message || apiError);
-            }
-          } else {
-            console.log(`[Invoicing Sync] Mobile number not found or empty for party ${invoice.party} in bill ${billKey}. Skipping message send.`);
-            messagesSkippedNoMobile++;
-          }
-        } catch (fileError) {
-          if (fileError.code === 'ENOENT') {
-            console.log(`[Invoicing Sync] PDF not found for bill ${billKey}: ${pdfFullPath}. Skipping message send.`);
-            messagesSkippedPdfNotFound++;
-          } else {
-            console.warn(`[Invoicing Sync] Error checking PDF file ${pdfFullPath} for bill ${billKey}:`, fileError.message);
-          }
-        }
-      } catch (hashOrPdfError) {
-        console.error(`[Invoicing Sync] Error during hashing or PDF processing for bill ${billKey}:`, hashOrPdfError.message);
-      }
-      // --- End new logic ---
+      // WhatsApp/SMS go out only after the bills are in the DBF (see sendInvoiceMessage)
+      messageJobs.push({ invoice, billKey, customerData, netAmountRounded });
 
       processedInvoices.push(billKey);
       existingBillKeys.add(billKey); // Add to set to prevent duplicates within the same batch
     }
 
-    // 6. Insert into BILL and BILLDTL
+    // 6. Append to BILL, BILLDTL and CASH through SYNCAPPEND.EXE (locks the tables, numbers the
+    //    CR vouchers, re-checks bill numbers; all or nothing on a duplicate)
     if (billRecordsToInsert.length > 0) {
-      console.log(`Inserting ${billRecordsToInsert.length} new records into BILL.DBF...`);
-      await billDbf.insertMany(billRecordsToInsert);
-    }
-     if (billDtlRecordsToInsert.length > 0) {
-      console.log(`Inserting ${billDtlRecordsToInsert.length} new records into BILLDTL.DBF...`);
-      await billDtlDbf.insertMany(billDtlRecordsToInsert);
-    }
-    
-    if (cashRecordsToInsert.length > 0) {
-      console.log(`Inserting ${cashRecordsToInsert.length} new records into CASH.DBF...`);
-      await cashDbf.insertMany(cashRecordsToInsert);
+      await Promise.allSettled([billDbf.close(), pmplDbf.close(), cmplDbf.close()]);
+      const result = await runAppendJob({
+        label: 'invoicing',
+        tables: [
+          { name: 'BILL', rows: billRecordsToInsert },
+          { name: 'BILLDTL', rows: billDtlRecordsToInsert },
+          { name: 'CASH', rows: cashRecordsToInsert }
+        ],
+        vrTable: 'CASH',
+        dupRules: [{ table: 'BILL', key: 'ALLTRIM(SERIES)+"-"+ALLTRIM(STR(BILL))' }]
+      });
+      if (result.status === 'DUPLICATE') {
+        return res.status(409).json({
+          success: false,
+          message: `Bill(s) ${result.duplicates.join(', ')} were entered in the DBF during this sync. Nothing was written; sync again to skip them.`,
+          duplicates: result.duplicates
+        });
+      }
+      if (result.status !== 'OK') {
+        throw new Error(`DBF append failed: ${result.message}`);
+      }
     }
 
+    // 7. WhatsApp/SMS for the bills now in the DBF
+    const stats = { messagesAttempted: 0, messagesSent: 0, messagesSkippedPdfNotFound: 0, messagesSkippedNoMobile: 0 };
+    for (const job of messageJobs) {
+      await sendInvoiceMessage(job, stats);
+    }
 
     // 8. Return response
     return res.json({
@@ -974,10 +927,7 @@ router.post('/sync', async (req, res) => {
       message: `Sync completed. Processed: ${processedInvoices.length}, Skipped: ${skippedInvoices.length}`,
       processed: processedInvoices,
       skipped: skippedInvoices,
-      messagesAttempted: messagesAttempted,
-      messagesSent: messagesSent,
-      messagesSkippedPdfNotFound: messagesSkippedPdfNotFound,
-      messagesSkippedNoMobile: messagesSkippedNoMobile
+      ...stats
     });
 
 
@@ -989,21 +939,7 @@ router.post('/sync', async (req, res) => {
       error: error.message
     });
   } finally {
-    // 7. Close DBFs
-    console.log('Closing DBF files...');
-    try {
-        await Promise.allSettled([
-            billDbf.close(),
-            billDtlDbf.close(),
-            pmplDbf.close(),
-            cmplDbf.close(),
-            cashDbf.close()
-        ]);
-        console.log('DBF files closed.');
-    } catch (closeError) {
-        // Log errors during close but don't crash the response
-        console.error('Error closing DBF files:', closeError);
-    }
+    await Promise.allSettled([billDbf.close(), pmplDbf.close(), cmplDbf.close()]);
   }
 });
 

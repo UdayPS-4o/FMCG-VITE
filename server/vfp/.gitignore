@@ -1,0 +1,10 @@
+# Build output and VFP runtime (copied from the fmcg folder); rebuild with: python build.py
+*.EXE
+*.exe
+*.DLL
+*.dll
+*.PJX
+*.PJT
+*.FXP
+*.ERR
+*.BAK

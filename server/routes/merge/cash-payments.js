@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { DbfORM } = require('../../dbf-orm'); // Assuming dbf-orm is correctly set up
 const { format } = require('date-fns'); // For date formatting
+const { runAppendJob, vrPlaceholders } = require('../../lib/vfpSync');
 
 // --- Helper function to format date and time ---
 function formatUserTime(date) {
@@ -18,51 +19,15 @@ function formatUserTime(date) {
 }
 // --- End Helper function ---
 
-// --- Helpers for checking existing records in CASH.DBF ---
-// Key matches the old strict-equality check (R_NO === voucherNo && SERIES === series),
-// so the type is part of the key: numeric 12 and string "12" stay distinct.
-function voucherKey(voucherNo, series) {
-  return `${typeof voucherNo}:${voucherNo}|${series}`;
+// Duplicate key for a voucher, as SYNCAPPEND.EXE builds it from CASH.DBF (R_NO is N(15,0)):
+// VFP_VOUCHER_KEY on the DBF side, vfpVoucherKey() on the JS side. Must produce equal strings.
+const VFP_VOUCHER_KEY = 'ALLTRIM(TRANSFORM(R_NO))+"|"+UPPER(ALLTRIM(SERIES))';
+function vfpVoucherKey(voucherNo, series) {
+  const no = String(voucherNo ?? '').trim();
+  return `${/^\d+$/.test(no) ? String(parseInt(no, 10)) : no}|${String(series ?? '').trim().toUpperCase()}`;
 }
-
-// Normalizes a payment's voucherNo/series the same way R_NO/SERIES are compared.
-// Returns null when either is empty (such records are never treated as duplicates).
-function normalizedVoucherKey(voucherNo, series) {
-  let normalizedVoucherNo = typeof voucherNo === 'string' ? voucherNo.trim() : voucherNo;
-  const normalizedSeries = typeof series === 'string' ? series.trim().toUpperCase() : series;
-
-  // Convert voucherNo to number if it's a numeric string, as R_NO is often numeric in DBF or treated as such
-  if (typeof normalizedVoucherNo === 'string' && /^\d+$/.test(normalizedVoucherNo)) {
-    normalizedVoucherNo = parseInt(normalizedVoucherNo, 10);
-  }
-
-  if ((normalizedVoucherNo === null || normalizedVoucherNo === undefined || normalizedVoucherNo === '') ||
-      (normalizedSeries === null || normalizedSeries === undefined || normalizedSeries === '')) {
-    return null;
-  }
-  return voucherKey(normalizedVoucherNo, normalizedSeries);
-}
-
-// Reads CASH.DBF once (it is large and a full read takes several seconds) and collects
-// everything the sync needs: existing CP voucher keys and the next CP voucher number.
-async function scanCashDbf(dbfOrm) {
-  const allRecords = await dbfOrm.findAll();
-  const existingCpKeys = new Set();
-  let maxCp = 0;
-
-  for (const r of allRecords) {
-    if (!r.VR || !r.VR.startsWith('CP-')) continue;
-    existingCpKeys.add(voucherKey(r.R_NO, r.SERIES));
-    const num = parseInt(r.VR.split('-')[1], 10);
-    if (num > maxCp) maxCp = num;
-  }
-
-  return { existingCpKeys, nextCpNumber: maxCp + 1 };
-}
-// --- End Helpers ---
 
 // Paths
-const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CASH.dbf');
 const cmplDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CMPL.dbf');
 const approvedJsonPath = path.join(__dirname, '..', '..', 'db', 'approved', 'cash-payments.json');
 const dbJsonPath = path.join(__dirname, '..', '..', 'db', 'database', 'cash-payments.json'); // Path for reverting
@@ -277,87 +242,82 @@ router.post('/sync', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Selected records not found in approved list.' });
     }
 
-    const cashDbfOrm = new DbfORM(cashDbfPath, { autoCreate: true, includeDeletedRecords: false });
     const cmplDbfOrm = new DbfORM(cmplDbfPath, { includeDeletedRecords: false });
-
-    await cashDbfOrm.open();
     await cmplDbfOrm.open();
-
-    // --- Check for existing records ---
-    const duplicateRecords = [];
-    const validRecords = [];
-
-    console.log('Scanning CASH.DBF for existing vouchers and next CP number...');
-    const { existingCpKeys, nextCpNumber } = await scanCashDbf(cashDbfOrm);
-
-    for (const record of selectedApprovedRecords) {
-      const key = normalizedVoucherKey(record.voucherNo, record.series);
-      if (key && existingCpKeys.has(key)) {
-        duplicateRecords.push(record);
-      } else {
-        validRecords.push(record);
-      }
-    }
-
-    if (validRecords.length === 0) {
-      cashDbfOrm.close();
-      cmplDbfOrm.close();
-      return res.status(400).json({ 
-        success: false, 
-        message: 'All selected records have voucher numbers and series that already exist in the database.',
-        duplicateRecords
-      });
-    }
-    // --- End Check for existing records ---
-
-    let currentVrCounter = nextCpNumber;
-
-    const dbfRecords = [];
     const customerCache = new Map();
     console.log('Reading all customers from CMPL.DBF...');
     const allCustomers = await cmplDbfOrm.findAll(); // Read all customers once
     console.log(`Found ${allCustomers.length} customers.`);
-
-    for (const record of validRecords) {
-        let customerData = customerCache.get(record.party);
-        if (!customerData) {
-            // Find customer in the manually fetched list
-            console.log(`Searching for customer C_CODE: ${record.party}`);
-            customerData = allCustomers.find(cust => cust.C_CODE === record.party);
-
-            if (customerData) {
-                console.log(`Found customer data for ${record.party}`);
-                customerCache.set(record.party, customerData);
-            } else {
-                console.warn(`Customer data not found for C_CODE: ${record.party}`);
-                customerData = {};
-            }
-        }
-
-        const vr = `CP-${String(currentVrCounter++).padStart(6, '0')}`;
-        
-        // --- Determine User ID based on SM Code ---
-        const smCode = record.sm; // Default SM is already applied to selectedApprovedRecords
-        let userIdToUse = null; // Default to null (blank)
-        if (smCode && userMapBySmCode[smCode] !== undefined) {
-          userIdToUse = userMapBySmCode[smCode];
-        } else {
-          console.warn(`Cash Payment Sync: User ID not found for SM Code: '${smCode}' on record. USER_ID will be blank (null).`);
-          // userIdToUse remains null
-        }
-        // --- End Determine User ID ---
-
-        // Pass the resolved user ID to the mapping function
-        const dbfRecord = await mapToCashDbfFormat(record, vr, userIdToUse, customerData);
-        dbfRecords.push(dbfRecord);
-    }
-
-    if (dbfRecords.length > 0) {
-      await cashDbfOrm.insertMany(dbfRecords);
-    }
-
-    cashDbfOrm.close();
     cmplDbfOrm.close();
+
+    // CP numbers and the duplicate check (same voucher no + series already in CASH.DBF) are
+    // done by SYNCAPPEND.EXE with CASH.DBF locked. On duplicates nothing is written, so drop
+    // them and retry with the rest.
+    const duplicateRecords = [];
+    let validRecords = selectedApprovedRecords;
+    let dbfRecords = [];
+    for (let attempt = 1; ; attempt++) {
+      if (validRecords.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'All selected records have voucher numbers and series that already exist in the database.',
+          duplicateRecords
+        });
+      }
+      dbfRecords = await buildCashRecords(validRecords);
+      const result = await runAppendJob({
+        label: 'cash-payments',
+        tables: [{ name: 'CASH', rows: dbfRecords }],
+        vrTable: 'CASH',
+        dupRules: [{ table: 'CASH', key: VFP_VOUCHER_KEY, filter: 'LEFT(VR,3)=="CP-" AND !EMPTY(SERIES) AND !EMPTY(R_NO)' }]
+      });
+      if (result.status === 'OK') break;
+      if (result.status !== 'DUPLICATE' || attempt >= 3) {
+        throw new Error(`CASH.DBF append failed: ${result.message}`);
+      }
+      const dupKeys = new Set(result.duplicates);
+      duplicateRecords.push(...validRecords.filter(r => dupKeys.has(vfpVoucherKey(r.voucherNo, r.series))));
+      validRecords = validRecords.filter(r => !dupKeys.has(vfpVoucherKey(r.voucherNo, r.series)));
+    }
+
+    async function buildCashRecords(records) {
+      const vrFor = vrPlaceholders();
+      const out = [];
+      for (const record of records) {
+          let customerData = customerCache.get(record.party);
+          if (!customerData) {
+              // Find customer in the manually fetched list
+              console.log(`Searching for customer C_CODE: ${record.party}`);
+              customerData = allCustomers.find(cust => cust.C_CODE === record.party);
+
+              if (customerData) {
+                  console.log(`Found customer data for ${record.party}`);
+                  customerCache.set(record.party, customerData);
+              } else {
+                  console.warn(`Customer data not found for C_CODE: ${record.party}`);
+                  customerData = {};
+              }
+          }
+
+          const vr = vrFor('CP'); // placeholder, numbered by SYNCAPPEND.EXE
+        
+          // --- Determine User ID based on SM Code ---
+          const smCode = record.sm; // Default SM is already applied to selectedApprovedRecords
+          let userIdToUse = null; // Default to null (blank)
+          if (smCode && userMapBySmCode[smCode] !== undefined) {
+            userIdToUse = userMapBySmCode[smCode];
+          } else {
+            console.warn(`Cash Payment Sync: User ID not found for SM Code: '${smCode}' on record. USER_ID will be blank (null).`);
+            // userIdToUse remains null
+          }
+          // --- End Determine User ID ---
+
+          // Pass the resolved user ID to the mapping function
+          const dbfRecord = await mapToCashDbfFormat(record, vr, userIdToUse, customerData);
+          out.push(dbfRecord);
+      }
+      return out;
+    }
 
     // --- Update JSON File ---
     // Remove synced records from approved JSON (only the valid ones)

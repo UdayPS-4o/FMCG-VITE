@@ -5,6 +5,7 @@ const fs = require('fs').promises;
 const { DbfORM, DataTypes } = require('../../dbf-orm'); // Assuming dbf-orm is correctly set up
 const { format } = require('date-fns'); // For date formatting
 const axios = require('axios'); // Added for API calls
+const { runAppendJob, vrPlaceholders } = require('../../lib/vfpSync');
 
 // --- WhatsApp Rate Limiter ---
 // Delay between messages to avoid spam detection (milliseconds).
@@ -50,57 +51,15 @@ function formatUserTime(date) {
 }
 // --- End Helper function ---
 
-// --- Helpers for checking existing records in CASH.DBF ---
-// Key matches the old strict-equality check (R_NO === receiptNo && SERIES === series),
-// so the type is part of the key: numeric 12 and string "12" stay distinct.
-function receiptKey(receiptNo, series) {
-  return `${typeof receiptNo}:${receiptNo}|${series}`;
+// Duplicate key for a receipt, as SYNCAPPEND.EXE builds it from CASH.DBF (R_NO is N(15,0)):
+// VFP_RECEIPT_KEY on the DBF side, vfpReceiptKey() on the JS side. Must produce equal strings.
+const VFP_RECEIPT_KEY = 'ALLTRIM(TRANSFORM(R_NO))+"|"+UPPER(ALLTRIM(SERIES))';
+function vfpReceiptKey(receiptNo, series) {
+  const no = String(receiptNo ?? '').trim();
+  return `${/^\d+$/.test(no) ? String(parseInt(no, 10)) : no}|${String(series ?? '').trim().toUpperCase()}`;
 }
-
-// Normalizes a receipt's receiptNo/series the same way R_NO/SERIES are compared.
-// Returns null when either is empty (such records are never treated as duplicates).
-function normalizedReceiptKey(receiptNo, series) {
-  let normalizedReceiptNo = typeof receiptNo === 'string' ? receiptNo.trim() : receiptNo;
-  const normalizedSeries = typeof series === 'string' ? series.trim().toUpperCase() : series;
-
-  // Convert receiptNo to number if it's a numeric string, as R_NO is often numeric in DBF or treated as such
-  if (typeof normalizedReceiptNo === 'string' && /^\d+$/.test(normalizedReceiptNo)) {
-    normalizedReceiptNo = parseInt(normalizedReceiptNo, 10);
-  }
-
-  if ((normalizedReceiptNo === null || normalizedReceiptNo === undefined || normalizedReceiptNo === '') ||
-      (normalizedSeries === null || normalizedSeries === undefined || normalizedSeries === '')) {
-    return null;
-  }
-  return receiptKey(normalizedReceiptNo, normalizedSeries);
-}
-
-// Reads CASH.DBF once (it is large and a full read takes several seconds) and collects
-// everything the sync needs: existing CR receipt keys and the next CR / JB voucher numbers.
-async function scanCashDbf(dbfOrm) {
-  const allRecords = await dbfOrm.findAll();
-  const existingCrKeys = new Set();
-  let maxCr = 0;
-  let maxJb = 0;
-
-  for (const r of allRecords) {
-    if (!r.VR) continue;
-    if (r.VR.startsWith('CR-')) {
-      existingCrKeys.add(receiptKey(r.R_NO, r.SERIES));
-      const num = parseInt(r.VR.split('-')[1], 10);
-      if (num > maxCr) maxCr = num;
-    } else if (r.VR.startsWith('JB-')) {
-      const num = parseInt(r.VR.split('-')[1], 10);
-      if (num > maxJb) maxJb = num;
-    }
-  }
-
-  return { existingCrKeys, nextCrNumber: maxCr + 1, nextJbNumber: maxJb + 1 };
-}
-// --- End Helpers ---
 
 // Paths
-const cashDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CASH.dbf');
 const cmplDbfPath = path.join(process.env.DBF_FOLDER_PATH, 'data', 'CMPL.dbf');
 const approvedJsonPath = path.join(__dirname, '..', '..', 'db', 'approved', 'cash-receipts.json');
 const dbJsonPath = path.join(__dirname, '..', '..', 'db', 'cash-receipts.json'); // Path for reverting
@@ -674,109 +633,101 @@ router.post('/sync', async (req, res) => {
     }
 
     // --- DBF Operations ---
-    const cashDbfOrm = new DbfORM(cashDbfPath, { autoCreate: true, includeDeletedRecords: false });
     const cmplDbfOrm = new DbfORM(cmplDbfPath, { includeDeletedRecords: false }); // Don't autocreate CMPL
-
-    await cashDbfOrm.open(); // Open CASH.DBF
-    await cmplDbfOrm.open(); // Open CMPL.DBF
-
-    // --- Check for existing records ---
-    const duplicateRecords = [];
-    const validRecords = [];
-
-    console.log('Scanning CASH.DBF for existing receipts and voucher numbers...');
-    const { existingCrKeys, nextCrNumber, nextJbNumber } = await scanCashDbf(cashDbfOrm);
-
-    for (const record of selectedApprovedRecords) {
-      const key = normalizedReceiptKey(record.receiptNo, record.series);
-      if (key && existingCrKeys.has(key)) {
-        duplicateRecords.push(record);
-      } else {
-        validRecords.push(record);
-      }
-    }
-
-    if (validRecords.length === 0) {
-      cashDbfOrm.close();
-      cmplDbfOrm.close();
-      return res.status(400).json({ 
-        success: false, 
-        message: 'All selected records have receipt numbers and series that already exist in the database.',
-        duplicateRecords
-      });
-    }
-    // --- End Check for existing records ---
-
-    let currentVrCounter = nextCrNumber;
-    // Next JB voucher number for discount entries
-    let currentJbCounter = nextJbNumber;
-
-    const dbfRecords = [];
-    const notificationJobs = []; // WhatsApp/SMS to send after the DBF write succeeds
+    await cmplDbfOrm.open();
     const customerCache = new Map(); // Cache for customer data
     console.log('Reading all customers from CMPL.DBF...');
     const allCustomers = await cmplDbfOrm.findAll(); // Read all customers once
     console.log(`Found ${allCustomers.length} customers.`);
+    cmplDbfOrm.close();
 
-    for (const record of validRecords) {
-      let customerData = customerCache.get(record.party);
-      if (!customerData) {
-        // Find customer in the manually fetched list
-        console.log(`Searching for customer C_CODE: ${record.party}`);
-        customerData = allCustomers.find(cust => cust.C_CODE === record.party);
+    // CR/JB numbers and the duplicate check (same receipt no + series already in CASH.DBF) are
+    // done by SYNCAPPEND.EXE with CASH.DBF locked. On duplicates nothing is written, so drop
+    // them and retry with the rest.
+    const duplicateRecords = [];
+    let validRecords = selectedApprovedRecords;
+    let dbfRecords = [];
+    let notificationJobs = []; // WhatsApp/SMS to send after the DBF write succeeds
+    for (let attempt = 1; ; attempt++) {
+      if (validRecords.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'All selected records have receipt numbers and series that already exist in the database.',
+          duplicateRecords
+        });
+      }
+      ({ dbfRecords, notificationJobs } = await buildCashRecords(validRecords));
+      const result = await runAppendJob({
+        label: 'cash-receipts',
+        tables: [{ name: 'CASH', rows: dbfRecords }],
+        vrTable: 'CASH',
+        dupRules: [{ table: 'CASH', key: VFP_RECEIPT_KEY, filter: 'LEFT(VR,3)=="CR-" AND !EMPTY(SERIES) AND !EMPTY(R_NO)' }]
+      });
+      if (result.status === 'OK') break;
+      if (result.status !== 'DUPLICATE' || attempt >= 3) {
+        throw new Error(`CASH.DBF append failed: ${result.message}`);
+      }
+      const dupKeys = new Set(result.duplicates);
+      duplicateRecords.push(...validRecords.filter(r => dupKeys.has(vfpReceiptKey(r.receiptNo, r.series))));
+      validRecords = validRecords.filter(r => !dupKeys.has(vfpReceiptKey(r.receiptNo, r.series)));
+    }
 
-        if (customerData) {
-            console.log(`Found customer data for ${record.party}`);
-            customerCache.set(record.party, customerData);
+    async function buildCashRecords(records) {
+      const vrFor = vrPlaceholders();
+      const dbfRecords = [];
+      const notificationJobs = [];
+      for (const record of records) {
+        let customerData = customerCache.get(record.party);
+        if (!customerData) {
+          // Find customer in the manually fetched list
+          console.log(`Searching for customer C_CODE: ${record.party}`);
+          customerData = allCustomers.find(cust => cust.C_CODE === record.party);
+
+          if (customerData) {
+              console.log(`Found customer data for ${record.party}`);
+              customerCache.set(record.party, customerData);
+          } else {
+              console.warn(`Customer data not found for C_CODE: ${record.party}`);
+              customerData = {}; // Use empty object to avoid errors later
+          }
+        }
+
+        // WhatsApp/SMS are sent in the background after the response (see queueReceiptNotifications)
+        notificationJobs.push({ record, customerData });
+
+        const vr = vrFor('CR'); // placeholder, numbered by SYNCAPPEND.EXE
+      
+        // --- Determine User ID based on SM Code ---
+        const smCode = record.sm; // Default SM is already applied to selectedApprovedRecords
+        let userIdToUse = null; // Default to null (blank)
+        if (smCode && userMapBySmCode[smCode] !== undefined) {
+          userIdToUse = userMapBySmCode[smCode];
         } else {
-            console.warn(`Customer data not found for C_CODE: ${record.party}`);
-            customerData = {}; // Use empty object to avoid errors later
+          console.warn(`Cash Receipt Sync: User ID not found for SM Code: '${smCode}' on record. USER_ID will be blank (null).`);
+          // userIdToUse remains null
+        }
+        // --- End Determine User ID ---
+
+        // Pass the resolved user ID to the mapping function
+        const dbfRecord = await mapToCashDbfFormat(record, vr, userIdToUse, customerData);
+        dbfRecords.push(dbfRecord);
+
+        // If discount amount exists and is greater than 0, create additional entries
+        const discount = parseFloat(record.discount) || 0;
+        if (discount > 0) {
+          const jbVr = vrFor('JB'); // placeholder; CD_VRNO's CR placeholder is replaced too
+        
+          // Create discount account debit entry
+          const discountDebitRecord = await mapToDiscountDebitDbfFormat(record, jbVr, vr, userIdToUse, customerData);
+          dbfRecords.push(discountDebitRecord);
+        
+          // Create party credit entry for discount
+          const partyCreditRecord = await mapToPartyCreditDbfFormat(record, jbVr, vr, userIdToUse, customerData);
+          dbfRecords.push(partyCreditRecord);
         }
       }
-
-      // WhatsApp/SMS are sent in the background after the response (see queueReceiptNotifications)
-      notificationJobs.push({ record, customerData });
-
-      const vr = `CR-${String(currentVrCounter++).padStart(6, '0')}`;
-      
-      // --- Determine User ID based on SM Code ---
-      const smCode = record.sm; // Default SM is already applied to selectedApprovedRecords
-      let userIdToUse = null; // Default to null (blank)
-      if (smCode && userMapBySmCode[smCode] !== undefined) {
-        userIdToUse = userMapBySmCode[smCode];
-      } else {
-        console.warn(`Cash Receipt Sync: User ID not found for SM Code: '${smCode}' on record. USER_ID will be blank (null).`);
-        // userIdToUse remains null
-      }
-      // --- End Determine User ID ---
-
-      // Pass the resolved user ID to the mapping function
-      const dbfRecord = await mapToCashDbfFormat(record, vr, userIdToUse, customerData);
-      dbfRecords.push(dbfRecord);
-
-      // If discount amount exists and is greater than 0, create additional entries
-      const discount = parseFloat(record.discount) || 0;
-      if (discount > 0) {
-        const jbVr = `JB-${String(currentJbCounter++).padStart(6, '0')}`;
-        
-        // Create discount account debit entry
-        const discountDebitRecord = await mapToDiscountDebitDbfFormat(record, jbVr, vr, userIdToUse, customerData);
-        dbfRecords.push(discountDebitRecord);
-        
-        // Create party credit entry for discount
-        const partyCreditRecord = await mapToPartyCreditDbfFormat(record, jbVr, vr, userIdToUse, customerData);
-        dbfRecords.push(partyCreditRecord);
-      }
+      return { dbfRecords, notificationJobs };
     }
-
-    // Append the records to the CASH.DBF file
-    if (dbfRecords.length > 0) {
-      await cashDbfOrm.insertMany(dbfRecords);
-    }
-
-    // Close DBF files
-    cashDbfOrm.close();
-    cmplDbfOrm.close();
 
     // --- Update JSON File ---
     // Remove synced records from approved JSON (only the valid ones)
