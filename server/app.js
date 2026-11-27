@@ -681,6 +681,10 @@ const initServer = () => {
     // longer than such clients do.
     httpsServer.keepAliveTimeout = 65 * 1000;
     httpsServer.headersTimeout = 66 * 1000; // must exceed keepAliveTimeout
+    // Node aborts any request still running after 5 min by default. DBF syncs (invoicing scans all of
+    // CASH.DBF) can take 4-17 min under load; when cut off, the browser shows "Failed to fetch" while the sync keeps
+    // running server-side, so users retry and customers get duplicate WhatsApp invoices.
+    httpsServer.requestTimeout = 30 * 60 * 1000;
     httpsServer.listen(443, '0.0.0.0', () => {
       console.log('HTTPS server running on port 443');
       // Initialize automated background SSL renewal (checks every 12h, hot-reloads TLS context)
@@ -730,6 +734,7 @@ const initServer = () => {
     console.warn(`       Looked for key:  ${SSL_KEY_PATH}`);
     console.warn(`       Looked for cert: ${SSL_CERT_PATH}`);
     const httpFallback = http.createServer(app);
+    httpFallback.requestTimeout = 30 * 60 * 1000; // see httpsServer.requestTimeout above
     httpFallback.listen(PORT, '0.0.0.0', () => {
       console.log(`HTTP server running on port ${PORT}`);
     });
